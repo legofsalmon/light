@@ -3,15 +3,29 @@ import type { HeadSnap } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 
-const WORLD_W = 11; // metres shown horizontally
-const WORLD_Z0 = -3; // top of view
-const WORLD_D = 9; // metres shown vertically
+const WORLD_W = 11; // metres shown horizontally (both views)
+// plan: depth axis (z), audience at the bottom
+const PLAN_Z0 = -3;
+const PLAN_D = 9;
+// front: height axis (y), floor near the bottom
+const FRONT_Y_TOP = 6.5;
+const FRONT_H = 7;
+const TRUSS_Y = 3.05; // matches the 3D scene truss
 
-/** Top-down plan: stage-left→right on X, audience toward the bottom. */
+type ViewKind = 'plan' | 'front';
+
+/** 2D previz: top-down plan (drag places x/z) or front elevation (drag sets x/height). */
 export function Previz2D() {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dragRef = useRef<{ id: string; lastSend: number } | null>(null);
+  const dragRef = useRef<{
+    id: string;
+    kind: 'move' | 'rotate';
+    lastSend: number;
+    x: number;
+    v: number;
+    rot: number;
+  } | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -31,50 +45,81 @@ export function Previz2D() {
     });
     ro.observe(host);
 
-    const mapping = () => {
-      const scale = Math.min(w / WORLD_W, h / WORLD_D);
+    const mapping = (view: ViewKind) => {
+      const depth = view === 'plan' ? PLAN_D : FRONT_H;
+      const scale = Math.min(w / WORLD_W, h / depth);
       const mx = (w - WORLD_W * scale) / 2;
-      const my = (h - WORLD_D * scale) / 2;
+      const my = (h - depth * scale) / 2;
+      const toY = (v: number) =>
+        view === 'plan' ? my + (v - PLAN_Z0) * scale : my + (FRONT_Y_TOP - v) * scale;
       return {
         scale,
         toX: (x: number) => mx + (x + WORLD_W / 2) * scale,
-        toY: (z: number) => my + (z - WORLD_Z0) * scale,
+        toY,
         fromPx: (px: number, py: number) => ({
           x: (px - mx) / scale - WORLD_W / 2,
-          z: (py - my) / scale + WORLD_Z0,
+          v: view === 'plan' ? (py - my) / scale + PLAN_Z0 : FRONT_Y_TOP - (py - my) / scale,
         }),
       };
     };
 
+    /** the world coordinate shown on this view's vertical axis */
+    const vertOf = (pos: { y: number; z: number }, view: ViewKind) =>
+      view === 'plan' ? pos.z : pos.y;
+
     const draw = () => {
       raf = requestAnimationFrame(draw);
-      const { project, snap } = useStore.getState();
+      const { project, snap, previz2dView: view } = useStore.getState();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = '#101013';
       ctx.fillRect(0, 0, w, h);
       if (!project) return;
-      const m = mapping();
+      const m = mapping(view);
       const t = performance.now();
 
       // 1 m grid
       ctx.strokeStyle = 'rgba(255,255,255,0.045)';
       ctx.lineWidth = 1;
+      const vTop = view === 'plan' ? PLAN_Z0 : FRONT_Y_TOP - FRONT_H;
+      const vBot = view === 'plan' ? PLAN_Z0 + PLAN_D : FRONT_Y_TOP;
       for (let gx = -Math.floor(WORLD_W / 2); gx <= WORLD_W / 2; gx++) {
         ctx.beginPath();
-        ctx.moveTo(m.toX(gx), m.toY(WORLD_Z0));
-        ctx.lineTo(m.toX(gx), m.toY(WORLD_Z0 + WORLD_D));
+        ctx.moveTo(m.toX(gx), m.toY(vTop));
+        ctx.lineTo(m.toX(gx), m.toY(vBot));
         ctx.stroke();
       }
-      for (let gz = WORLD_Z0; gz <= WORLD_Z0 + WORLD_D; gz++) {
+      for (let gv = Math.ceil(Math.min(vTop, vBot)); gv <= Math.max(vTop, vBot); gv++) {
         ctx.beginPath();
-        ctx.moveTo(m.toX(-WORLD_W / 2), m.toY(gz));
-        ctx.lineTo(m.toX(WORLD_W / 2), m.toY(gz));
+        ctx.moveTo(m.toX(-WORLD_W / 2), m.toY(gv));
+        ctx.lineTo(m.toX(WORLD_W / 2), m.toY(gv));
         ctx.stroke();
       }
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+
       ctx.font = '10px -apple-system, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('A U D I E N C E', w / 2, m.toY(WORLD_Z0 + WORLD_D) - 8);
+      if (view === 'plan') {
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillText('A U D I E N C E', w / 2, m.toY(PLAN_Z0 + PLAN_D) - 8);
+      } else {
+        // floor + truss reference lines
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(m.toX(-WORLD_W / 2), m.toY(0));
+        ctx.lineTo(m.toX(WORLD_W / 2), m.toY(0));
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(m.toX(-3.5), m.toY(TRUSS_Y));
+        ctx.lineTo(m.toX(3.5), m.toY(TRUSS_Y));
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.14)';
+        ctx.textAlign = 'left';
+        ctx.fillText('floor', m.toX(-WORLD_W / 2) + 6, m.toY(0) - 5);
+        ctx.fillText(`truss ${TRUSS_Y} m`, m.toX(-3.5) + 6, m.toY(TRUSS_Y) - 6);
+        ctx.textAlign = 'center';
+      }
 
       const headMap = new Map<string, HeadSnap>();
       for (const hs of snap?.heads ?? []) headMap.set(`${hs.f}:${hs.h}`, hs);
@@ -83,11 +128,12 @@ export function Previz2D() {
         const prof = profileMeta(project, f.profileId);
         if (!prof) continue;
         const fx = m.toX(f.pos.x);
-        const fy = m.toY(f.pos.z);
-        const cos = Math.cos(f.rotY);
-        const sin = Math.sin(f.rotY);
+        const fy = m.toY(vertOf(f.pos, view));
+        // head offsets fan out along local X; in plan view they rotate with
+        // rotY, in front view they project onto X directly
+        const cos = view === 'plan' ? Math.cos(f.rotY) : 1;
+        const sin = view === 'plan' ? Math.sin(f.rotY) : 0;
 
-        // body
         if (prof.heads.length > 1) {
           const half = 0.55 * m.scale;
           ctx.strokeStyle = '#3c3c44';
@@ -112,7 +158,6 @@ export function Previz2D() {
           const alpha = 0.18 + 0.82 * i * strobeGate;
           const rad = (hd.kind === 'derby' ? 0.17 : hd.kind === 'hazer' ? 0.14 : 0.11) * m.scale;
 
-          // glow
           if (i > 0.03) {
             const glow = ctx.createRadialGradient(hx, hy, rad * 0.4, hx, hy, rad * 3.2);
             glow.addColorStop(0, `rgba(${r},${g},${b},${0.4 * i * strobeGate})`);
@@ -131,7 +176,6 @@ export function Previz2D() {
           ctx.lineWidth = 1;
           ctx.stroke();
 
-          // derby spokes + ring
           if (hd.kind === 'derby' && hs) {
             const spin = hs.mm === 'rotate' ? (t / 1000) * hs.mv * 4 : hs.mv * Math.PI;
             ctx.strokeStyle = `rgba(${r},${g},${b},${0.25 + 0.75 * i})`;
@@ -154,50 +198,86 @@ export function Previz2D() {
           }
         }
 
-        // name
         ctx.fillStyle = 'rgba(255,255,255,0.28)';
         ctx.textAlign = 'center';
         ctx.font = '9px -apple-system, sans-serif';
-        ctx.fillText(f.name, fx, fy + 0.42 * m.scale + 8);
+        const label = view === 'front' ? `${f.name} · ${f.pos.y.toFixed(1)}m` : f.name;
+        ctx.fillText(label, fx, fy + 0.42 * m.scale + 8);
       }
     };
     raf = requestAnimationFrame(draw);
 
+    const applyDrag = (id: string, x: number, v: number) => {
+      const view = useStore.getState().previz2dView;
+      useStore.getState().mutate((p) => {
+        const f = p.fixtures.find((fx) => fx.id === id);
+        if (!f) return;
+        f.pos.x = Math.round(x * 20) / 20;
+        if (view === 'plan') {
+          f.pos.z = Math.round(v * 20) / 20;
+        } else {
+          f.pos.y = Math.round(Math.min(6, Math.max(0, v)) * 20) / 20;
+        }
+      });
+    };
+
+    const applyRotate = (id: string, rot: number) => {
+      useStore.getState().mutate((p) => {
+        const f = p.fixtures.find((fx) => fx.id === id);
+        if (f) f.rotY = rot;
+      });
+    };
+
     const onPointerDown = (e: PointerEvent) => {
-      const { project } = useStore.getState();
+      if (e.button !== 0) return;
+      const { project, previz2dView: view } = useStore.getState();
       if (!project) return;
       const rect = canvas.getBoundingClientRect();
-      const m = mapping();
+      const m = mapping(view);
       const pos = m.fromPx(e.clientX - rect.left, e.clientY - rect.top);
       let best: { id: string; d: number } | null = null;
       for (const f of project.fixtures) {
-        const d = Math.hypot(f.pos.x - pos.x, f.pos.z - pos.z);
+        const d = Math.hypot(f.pos.x - pos.x, vertOf(f.pos, view) - pos.v);
         if (d < 0.6 && (!best || d < best.d)) best = { id: f.id, d };
       }
       if (best) {
-        dragRef.current = { id: best.id, lastSend: 0 };
+        // ⌥-drag rotates (plan view only — yaw isn't meaningful in elevation)
+        const kind = e.altKey && view === 'plan' ? 'rotate' : 'move';
+        dragRef.current = { id: best.id, kind, lastSend: 0, x: pos.x, v: pos.v, rot: 0 };
         canvas.setPointerCapture(e.pointerId);
       }
     };
     const onPointerMove = (e: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag || !(e.buttons & 1)) return;
+      const view = useStore.getState().previz2dView;
       const rect = canvas.getBoundingClientRect();
-      const m = mapping();
+      const m = mapping(view);
       const pos = m.fromPx(e.clientX - rect.left, e.clientY - rect.top);
+      if (drag.kind === 'rotate') {
+        const f = useStore.getState().project?.fixtures.find((fx) => fx.id === drag.id);
+        if (!f) return;
+        const raw = Math.atan2(pos.v - f.pos.z, pos.x - f.pos.x);
+        // snap to 5° so bars land on tidy angles
+        const step = (5 * Math.PI) / 180;
+        drag.rot = Math.round(raw / step) * step;
+      } else {
+        drag.x = pos.x;
+        drag.v = pos.v;
+      }
       const now = performance.now();
       if (now - drag.lastSend < 90) return;
       drag.lastSend = now;
-      useStore.getState().mutate((p) => {
-        const f = p.fixtures.find((x) => x.id === drag.id);
-        if (f) {
-          f.pos.x = Math.round(pos.x * 20) / 20;
-          f.pos.z = Math.round(pos.z * 20) / 20;
-        }
-      });
+      if (drag.kind === 'rotate') applyRotate(drag.id, drag.rot);
+      else applyDrag(drag.id, drag.x, drag.v);
     };
     const onPointerUp = () => {
+      const drag = dragRef.current;
       dragRef.current = null;
+      // flush the final value — the move throttle must not drop it
+      if (!drag) return;
+      if (drag.kind === 'rotate') applyRotate(drag.id, drag.rot);
+      else applyDrag(drag.id, drag.x, drag.v);
     };
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);

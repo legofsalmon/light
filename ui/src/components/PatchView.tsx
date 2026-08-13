@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Project } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { PROFILES } from '../../../shared/profiles.ts';
@@ -37,11 +37,50 @@ function nextFreeAddress(p: Project, universeId: string, channels: number): numb
   return 1;
 }
 
+/** DMX address editor that commits on blur/Enter — not per keystroke — so
+ *  half-typed addresses never hit the live rig, and sorted rows don't jump
+ *  mid-edit. */
+function AddressInput({ value, conflict, onCommit }: {
+  value: number;
+  conflict: boolean;
+  onCommit: (v: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const v = Math.max(1, Math.min(512, Number(draft) || 1));
+    setDraft(String(v));
+    if (v !== value) onCommit(v);
+  };
+  return (
+    <input
+      className={`num ${conflict ? 'conflict' : ''}`}
+      type="number"
+      min={1}
+      max={512}
+      value={draft}
+      title={conflict ? 'address overlap!' : ''}
+      style={conflict ? { borderColor: 'var(--hot)', color: 'var(--hot)' } : undefined}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+    />
+  );
+}
+
 export function PatchView() {
   const project = useStore((s) => s.project)!;
   const mutate = useStore((s) => s.mutate);
   const importMsg = useStore((s) => s.importMsg);
   const conflicts = findConflicts(project);
+  const uniOrder = new Map(project.universes.map((u, i) => [u.id, i]));
+  const sortedFixtures = [...project.fixtures].sort(
+    (a, b) =>
+      (uniOrder.get(a.universeId) ?? 99) - (uniOrder.get(b.universeId) ?? 99) ||
+      a.address - b.address
+  );
 
   return (
     <div className="col" style={{ gap: 14 }}>
@@ -51,11 +90,11 @@ export function PatchView() {
           <thead>
             <tr>
               <th>Fixture</th><th>Profile</th><th>Universe</th><th>Address</th><th>Ch</th>
-              <th>X</th><th>Y</th><th>Z</th><th></th>
+              <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th></th>
             </tr>
           </thead>
           <tbody>
-            {project.fixtures.map((f) => {
+            {sortedFixtures.map((f) => {
               const prof = profileMeta(project, f.profileId);
               return (
                 <tr key={f.id}>
@@ -101,19 +140,19 @@ export function PatchView() {
                     </select>
                   </td>
                   <td>
-                    <input
-                      className={`num ${conflicts.has(f.id) ? 'conflict' : ''}`}
-                      type="number"
-                      min={1}
-                      max={512}
-                      value={f.address}
-                      title={conflicts.has(f.id) ? 'address overlap!' : ''}
-                      style={conflicts.has(f.id) ? { borderColor: 'var(--hot)', color: 'var(--hot)' } : undefined}
-                      onChange={(e) => mutate((p) => {
-                        const x = p.fixtures.find((y) => y.id === f.id);
-                        if (x) x.address = Math.max(1, Math.min(512, Number(e.target.value) || 1));
-                      })}
-                    />
+                    <div className="row" style={{ gap: 4 }}>
+                      <AddressInput
+                        value={f.address}
+                        conflict={conflicts.has(f.id)}
+                        onCommit={(v) => mutate((p) => {
+                          const x = p.fixtures.find((y) => y.id === f.id);
+                          if (x) x.address = v;
+                        })}
+                      />
+                      <span className="label" style={{ fontFamily: 'var(--mono)' }}>
+                        –{f.address + (prof?.channels ?? 1) - 1}
+                      </span>
+                    </div>
                   </td>
                   <td className="mono">{prof?.channels ?? '?'}</td>
                   {(['x', 'y', 'z'] as const).map((axis) => (
@@ -131,6 +170,19 @@ export function PatchView() {
                       />
                     </td>
                   ))}
+                  <td>
+                    <input
+                      className="num"
+                      style={{ width: 52 }}
+                      type="number"
+                      step="5"
+                      value={Math.round((f.rotY * 180) / Math.PI)}
+                      onChange={(e) => mutate((p) => {
+                        const x = p.fixtures.find((y) => y.id === f.id);
+                        if (x) x.rotY = ((Number(e.target.value) || 0) * Math.PI) / 180;
+                      })}
+                    />
+                  </td>
                   <td>
                     <button
                       className="btn small ghost"
@@ -193,6 +245,32 @@ export function PatchView() {
               }}
             />
           </label>
+          <button
+            className="btn small ghost"
+            title="re-address every fixture sequentially per universe, keeping the current order"
+            onClick={() => {
+              if (!window.confirm('Re-address all fixtures sequentially per universe (keeps current order)?')) return;
+              mutate((p) => {
+                for (const u of p.universes) {
+                  let addr = 1;
+                  const inU = p.fixtures
+                    .filter((f) => f.universeId === u.id)
+                    .sort((a, b) => a.address - b.address);
+                  for (const f of inU) {
+                    f.address = addr;
+                    addr += profileMeta(p, f.profileId)?.channels ?? 1;
+                  }
+                }
+              });
+            }}
+          >
+            auto-pack addresses
+          </button>
+          {conflicts.size > 0 && (
+            <span className="label" style={{ color: 'var(--hot)' }}>
+              {conflicts.size} address conflict{conflicts.size > 1 ? 's' : ''}
+            </span>
+          )}
           <span className="label">drag fixtures in the 2D previz to place them</span>
           {importMsg && (
             <span className="label" style={{ color: importMsg.ok ? 'var(--good)' : 'var(--hot)' }}>

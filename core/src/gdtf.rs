@@ -107,6 +107,8 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
         let mut has_rgb = false;
         let mut has_dimmer = false;
 
+        let mut chan_geom: Vec<String> = Vec::new();
+        let mut chan_color: Vec<Option<char>> = Vec::new(); // 'r','g','b','w' colour channels
         for ch in mode.descendants().filter(|n| n.has_tag_name("DMXChannel")) {
             let Some(offset_attr) = ch.attribute("Offset") else { continue };
             if offset_attr.trim().is_empty() || offset_attr == "None" {
@@ -229,8 +231,20 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
                 _ => {} // unmapped: hold default
             }
 
+            chan_geom.push(ch.attribute("Geometry").unwrap_or("").to_string());
+            chan_color.push(match attr_name.as_str() {
+                "ColorAdd_R" | "ColorRGB_Red" => Some('r'),
+                "ColorAdd_G" | "ColorRGB_Green" => Some('g'),
+                "ColorAdd_B" | "ColorRGB_Blue" => Some('b'),
+                "ColorAdd_W" | "ColorAdd_WW" | "ColorAdd_CW" => Some('w'),
+                _ => None,
+            });
             channels.push(CChannel { offsets, head: 0, cases, default, name });
         }
+
+        // Multi-pixel fixtures (strips, bars): synthesize one head per pixel
+        // group so the previz shows a strip and chases can run across it.
+        let head_count = synthesize_heads(&mut channels, &chan_geom, &chan_color);
 
         if channels.is_empty() {
             continue;
@@ -241,6 +255,18 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             HeadKind::Rgb
         } else {
             HeadKind::Dimmer
+        };
+        let heads: Vec<CHead> = if head_count > 1 {
+            let width = if head_count >= 4 { 1.0 } else { 0.3 * head_count as f64 };
+            (0..head_count)
+                .map(|i| CHead {
+                    kind: HeadKind::Rgb,
+                    offset: (i as f64 / (head_count - 1) as f64 - 0.5) * width,
+                    label: format!("Px {}", i + 1),
+                })
+                .collect()
+        } else {
+            vec![CHead { kind, offset: 0.0, label: model.clone() }]
         };
         let slug: String = format!("{manufacturer}-{model}-{mode_name}")
             .to_lowercase()
@@ -253,7 +279,7 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             model: model.clone(),
             mode: mode_name,
             footprint,
-            heads: vec![CHead { kind, offset: 0.0, label: model.clone() }],
+            heads,
             channels,
             beam_deg,
             virtual_dimmer: !has_dimmer,
@@ -352,4 +378,49 @@ fn wheel_sets_from_functions(
             }
         })
         .collect()
+}
+
+/// Assign channels to per-pixel heads. Strategy 1: distinct `Geometry`
+/// attributes that each carry colour channels (well-formed pixel fixtures).
+/// Strategy 2: repeated colour cycles — every repeated red channel starts a
+/// new pixel. Non-colour channels stay on head 0 (globals). Returns the head
+/// count (1 = leave single-head).
+fn synthesize_heads(
+    channels: &mut [CChannel],
+    geoms: &[String],
+    colors: &[Option<char>],
+) -> usize {
+    // Strategy 1: geometry grouping
+    let mut geom_order: Vec<&String> = Vec::new();
+    for (g, c) in geoms.iter().zip(colors) {
+        if c.is_some() && !g.is_empty() && !geom_order.contains(&g) {
+            geom_order.push(g);
+        }
+    }
+    if geom_order.len() > 1 {
+        for (i, ch) in channels.iter_mut().enumerate() {
+            if let Some(pos) = geom_order.iter().position(|g| *g == &geoms[i]) {
+                ch.head = pos;
+            }
+        }
+        return geom_order.len();
+    }
+
+    // Strategy 2: repeated colour cycles (e.g. R,G,B,R,G,B,…)
+    let reds = colors.iter().filter(|c| **c == Some('r')).count();
+    if reds < 2 {
+        return 1;
+    }
+    let mut head: isize = -1;
+    let mut seen_in_head: Vec<char> = Vec::new();
+    for (i, ch) in channels.iter_mut().enumerate() {
+        let Some(c) = colors[i] else { continue };
+        if head < 0 || seen_in_head.contains(&c) {
+            head += 1;
+            seen_in_head.clear();
+        }
+        seen_in_head.push(c);
+        ch.head = head.max(0) as usize;
+    }
+    (head + 1).max(1) as usize
 }

@@ -90,3 +90,59 @@ fn renders_expected_bytes() {
 fn rejects_garbage() {
     assert!(parse_gdtf(b"not a zip at all").is_err());
 }
+
+#[test]
+fn pixel_bar_synthesizes_heads() {
+    // 8 × RGB enumerated channels, no distinct geometries — the repeated
+    // colour-cycle fallback must yield 8 heads (one per pixel).
+    let mut xml = String::from(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<GDTF DataVersion="1.2"><FixtureType Name="PixelBar 8" Manufacturer="ACME">
+<DMXModes><DMXMode Name="24ch" Geometry="Base"><DMXChannels>"#,
+    );
+    for i in 0..8 {
+        for (c, attr) in [("R", "ColorAdd_R"), ("G", "ColorAdd_G"), ("B", "ColorAdd_B")] {
+            xml.push_str(&format!(
+                r#"<DMXChannel DMXBreak="1" Offset="{}"><LogicalChannel Attribute="{attr}"><ChannelFunction Attribute="{attr}" DMXFrom="0/1" Default="0/1"/></LogicalChannel></DMXChannel>"#,
+                i * 3 + match c { "R" => 1, "G" => 2, _ => 3 } + i * 0,
+            ));
+        }
+    }
+    xml.push_str("</DMXChannels></DMXMode></DMXModes></FixtureType></GDTF>");
+
+    let mut buf = Vec::new();
+    {
+        let mut z = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        z.start_file::<_, ()>("description.xml", zip::write::SimpleFileOptions::default()).unwrap();
+        z.write_all(xml.as_bytes()).unwrap();
+        z.finish().unwrap();
+    }
+    let profiles = parse_gdtf(&buf).expect("parses");
+    let p = &profiles[0];
+    assert_eq!(p.footprint, 24);
+    assert_eq!(p.heads.len(), 8, "one head per pixel");
+    assert!(p.heads.iter().all(|h| h.kind == HeadKind::Rgb));
+    // heads spread across ~1 m
+    assert!((p.heads[0].offset + 0.5).abs() < 1e-9 && (p.heads[7].offset - 0.5).abs() < 1e-9);
+    // channel→head assignment: pixel 3's red is channel index 6 (offset 7)
+    let ch = p.channels.iter().find(|c| c.offsets == vec![6]).unwrap();
+    assert_eq!(ch.head, 2);
+
+    // render: distinct colours per pixel head
+    let mut heads: Vec<light_core::profiles::ResolvedParams> = (0..8)
+        .map(|i| light_core::profiles::ResolvedParams {
+            dimmer: 1.0,
+            r: if i % 2 == 0 { 1.0 } else { 0.0 },
+            g: 0.0,
+            b: if i % 2 == 0 { 0.0 } else { 1.0 },
+            ..Default::default()
+        })
+        .collect();
+    heads[0].dimmer = 1.0;
+    let refs: Vec<&light_core::profiles::ResolvedParams> = heads.iter().collect();
+    let mut out = [0u8; 32];
+    render_compiled(p, &refs, &mut out, 0);
+    assert_eq!([out[0], out[1], out[2]], [255, 0, 0], "pixel 1 red");
+    assert_eq!([out[3], out[4], out[5]], [0, 0, 255], "pixel 2 blue");
+    assert_eq!([out[21], out[22], out[23]], [0, 0, 255], "pixel 8 blue");
+}

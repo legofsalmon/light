@@ -38,7 +38,12 @@ function basicBox(w: number, h: number, d: number, color: number): THREE.Mesh {
 }
 
 function fixtureSignature(p: Project): string {
-  return JSON.stringify(p.fixtures.map((f) => [f.id, f.profileId, f.pos, f.rotY]));
+  return JSON.stringify([
+    p.fixtures.map((f) => [f.id, f.profileId, f.pos, f.rotY]),
+    // imported profiles can change shape (e.g. pixel-head upgrades) without
+    // any fixture field changing
+    Object.entries(p.profiles ?? {}).map(([id, cp]) => [id, cp.heads.length, cp.beamDeg]),
+  ]);
 }
 
 function buildRig(project: Project): { group: THREE.Group; handles: HeadHandle[] } {

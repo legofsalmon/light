@@ -14,7 +14,7 @@ pub fn drain_ws(rx: Res<WsReceiver>, mut live: ResMut<Live>) {
             WsEvent::Project(p) => {
                 // Only rebuild the scene when the patch itself changed — the
                 // engine echoes the whole project on every edit.
-                let sig = p
+                let mut sig = p
                     .fixtures
                     .iter()
                     .map(|f| {
@@ -24,6 +24,11 @@ pub fn drain_ws(rx: Res<WsReceiver>, mut live: ResMut<Live>) {
                         )
                     })
                     .collect::<String>();
+                let mut prof_ids: Vec<_> = p.profiles.iter().collect();
+                prof_ids.sort_by_key(|(id, _)| id.clone());
+                for (id, cp) in prof_ids {
+                    sig.push_str(&format!("{}#{};", id, cp.heads.len()));
+                }
                 if sig != live.fixture_sig {
                     live.fixture_sig = sig;
                     live.project_rev += 1;
