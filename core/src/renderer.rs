@@ -103,7 +103,7 @@ impl Renderer {
         let mut layer_snaps: Vec<LayerSnap> = Vec::new();
         let layer_ids: Vec<String> = st.project.layers.iter().map(|l| l.id.clone()).collect();
         for layer_id in &layer_ids {
-            let layer = st.project.layers.iter().find(|l| &l.id == layer_id).unwrap().clone();
+            let Some(layer) = st.project.layers.iter().find(|l| &l.id == layer_id).cloned() else { continue };
             let live = st.layer_live(layer_id);
             let tau = if live.fade_dur <= 0.0 {
                 1.0
@@ -256,15 +256,18 @@ impl Renderer {
                 continue;
             }
             let hp: Vec<&ResolvedParams> = (0..prof.heads.len())
-                .map(|i| heads.get(&(f.id.clone(), i)).unwrap())
+                .filter_map(|i| heads.get(&(f.id.clone(), i)))
                 .collect();
+            if hp.len() != prof.heads.len() {
+                continue; // duplicate fixture ids or corrupt patch — skip, never panic
+            }
             (prof.render)(&hp, buf, f.address - 1);
         }
 
         // --- previz snapshot ---
         let mut head_snaps: Vec<HeadSnap> = Vec::with_capacity(head_order.len());
         for ho in &head_order {
-            let o = &heads[&ho.key];
+            let Some(o) = heads.get(&ho.key) else { continue };
             let (mut r, mut g, mut b, mut i) = (o.r, o.g, o.b, o.dimmer);
             let mut mc: Option<Vec<[u8; 3]>> = None;
             if ho.kind == HeadKind::Derby {

@@ -22,6 +22,7 @@ pub enum EngineMsg {
     Midi(u8, u8, u8),
     MidiPorts(Vec<String>),
     ClientConnected(ClientId),
+    ClientDisconnected,
 }
 
 pub struct EngineConfig {
@@ -261,6 +262,13 @@ fn handle_msg(
         EngineMsg::ClientConnected(id) => {
             bc.send_to(id, project_event(state));
             bc.send_to(id, json!({ "type": "midiInputs", "names": midi_names }).to_string());
+        }
+        EngineMsg::ClientDisconnected => {
+            // No client left to release a held flash look — never leave a
+            // blinder latched on stage.
+            if bc.count() == 0 {
+                state.release_all_held(t);
+            }
         }
     }
 }

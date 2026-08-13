@@ -46,6 +46,12 @@ server.onConnect = (ws) => {
   server.send(ws, { type: 'midiInputs', names: [] }); // Node dev engine has no native MIDI
 };
 
+// If the client holding a flash look crashes, nothing will ever release it —
+// drop all held flash looks once no client is connected.
+server.onDisconnect = () => {
+  if (server.clientCount === 0) state.releaseAllHeld();
+};
+
 state.onLearned = (mapping) => {
   server.broadcast({ type: 'learned', mapping });
 };

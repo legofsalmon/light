@@ -140,6 +140,7 @@ fn handle_ws(stream: TcpStream, tx: Sender<EngineMsg>, bc: Broadcaster) -> std::
         }
     }
     bc.remove(id);
+    let _ = tx.send(EngineMsg::ClientDisconnected);
     Ok(())
 }
 

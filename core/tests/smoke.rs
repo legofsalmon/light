@@ -100,6 +100,14 @@ fn merge_to_dmx() {
     );
     assert_eq!(st.layer_live("layer-derby").look_id, None, "column clears empty layer");
 
+    // Held flash must drop when the last client disconnects.
+    st.trigger("layer-strobe", 1, t0 + 8000.0);
+    let b9 = r.tick(&mut st, t0 + 8050.0).buffers["u1"];
+    assert_eq!(b9[3], 220, "held blinder on before disconnect");
+    st.release_all_held(t0 + 8100.0);
+    let b10 = r.tick(&mut st, t0 + 8400.0).buffers["u1"];
+    assert_eq!(b10[3], 0, "release_all_held drops blinder");
+
     // Manual haze reaches the buffer.
     st.project.settings.haze = 0.5;
     let b8 = r.tick(&mut st, t0 + 7000.0).buffers["u1"];

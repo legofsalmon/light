@@ -88,6 +88,22 @@ export class EngineState {
     live.held = false;
   }
 
+  /** Gig safety: if the client holding a momentary flash look vanishes, its
+   *  release will never arrive — drop all held flash looks. */
+  releaseAllHeld(t = performance.now()): void {
+    for (const [layerId, live] of this.live) {
+      if (!live.held || !live.lookId) continue;
+      const look = this.project.looks[live.lookId];
+      live.prevId = live.lookId;
+      live.lookId = null;
+      live.col = null;
+      live.fadeStart = t;
+      live.fadeDur = Math.max(0.02, look?.fade ?? 0.05);
+      live.held = false;
+      void layerId;
+    }
+  }
+
   /** Column = cue: layers with a look in this column fire it, empty cells clear the layer.
    *  Flash (momentary) looks are skipped — a cue must never latch a blinder on. */
   triggerColumn(col: number, t = performance.now()): void {

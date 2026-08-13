@@ -21,6 +21,7 @@ export class Server {
   private httpServer: http.Server;
   private wss: WebSocketServer;
   onConnect: ((ws: WebSocket) => void) | null = null;
+  onDisconnect: (() => void) | null = null;
 
   constructor(port: number, distDir: string, onCommand: (cmd: Command, ws: WebSocket) => void) {
     this.httpServer = http.createServer((req, res) => {
@@ -51,6 +52,7 @@ export class Server {
     this.wss = new WebSocketServer({ server: this.httpServer });
     this.wss.on('connection', (ws) => {
       this.onConnect?.(ws);
+      ws.on('close', () => this.onDisconnect?.());
       ws.on('message', (data) => {
         let cmd: Command;
         try {

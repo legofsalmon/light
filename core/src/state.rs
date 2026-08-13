@@ -112,6 +112,29 @@ impl EngineState {
         live.held = false;
     }
 
+    /// Gig safety: if the client holding a momentary flash look vanishes, its
+    /// release will never arrive — drop all held flash looks.
+    pub fn release_all_held(&mut self, t: f64) {
+        for live in self.live.values_mut() {
+            if !live.held {
+                continue;
+            }
+            let Some(look_id) = live.look_id.take() else { continue };
+            let fade = self
+                .project
+                .looks
+                .get(&look_id)
+                .and_then(|l| l.fade)
+                .unwrap_or(0.05)
+                .max(0.02);
+            live.prev_id = Some(look_id);
+            live.col = None;
+            live.fade_start = t;
+            live.fade_dur = fade;
+            live.held = false;
+        }
+    }
+
     /// Column = cue: fire non-flash cells, clear empty ones. Flash looks are
     /// skipped so a cue can never latch a blinder on.
     pub fn trigger_column(&mut self, col: usize, t: f64) {

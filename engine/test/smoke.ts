@@ -111,6 +111,14 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
   const derbyLive = st.layerLive('layer-derby');
   check('column clears empty layer', derbyLive.lookId === null);
 
+  // Held flash must drop when the last client disconnects.
+  st.trigger('layer-strobe', 1, t0 + 8000);
+  const b9 = r.tick(t0 + 8050).buffers.get('u1')!;
+  check('held blinder on before disconnect', b9[3] === 220, `got ${b9[3]}`);
+  st.releaseAllHeld(t0 + 8100);
+  const b10 = r.tick(t0 + 8400).buffers.get('u1')!;
+  check('releaseAllHeld drops blinder', b10[3] === 0, `got ${b10[3]}`);
+
   // Hazer manual settings reach the buffer.
   st.project.settings.haze = 0.5;
   const b8 = r.tick(t0 + 7000).buffers.get('u1')!;
