@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Layer, LayerSnap } from '../../../shared/types.ts';
+import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
 import { Fader } from './Fader.tsx';
 import { lookSwatch } from '../lookColors.ts';
@@ -67,7 +68,7 @@ function LayerHead({ layer }: { layer: Layer }) {
         <div className="name grow">{layer.name}</div>
         <span className="chip">{layer.blend}</span>
         <button
-          className="btn small ghost"
+          className="btn small ghost clearbtn"
           title="clear layer"
           onClick={() => {
             if (!useStore.getState().armLearn({ kind: 'layerClear', layerId: layer.id })) {
@@ -89,6 +90,69 @@ function LayerHead({ layer }: { layer: Layer }) {
   );
 }
 
+function DeckBar() {
+  const project = useStore((s) => s.project)!;
+  const send = useStore((s) => s.send);
+  const mutate = useStore((s) => s.mutate);
+  const decks = project.decks ?? [];
+  if (decks.length === 0) return null;
+
+  return (
+    <div className="deckbar">
+      <span className="label">deck</span>
+      {decks.map((d) => (
+        <div
+          key={d.id}
+          className={`deckchip ${d.id === project.activeDeckId ? 'on' : ''}`}
+          title="click to switch · double-click to rename"
+          onClick={() => send({ type: 'switchDeck', deckId: d.id })}
+          onDoubleClick={() => {
+            const name = window.prompt('Deck name', d.name);
+            if (!name) return;
+            mutate((p) => {
+              const dk = p.decks?.find((x) => x.id === d.id);
+              if (dk) dk.name = name;
+            });
+          }}
+        >
+          {d.name}
+          {decks.length > 1 && d.id !== project.activeDeckId && (
+            <span
+              className="deckx"
+              title="delete deck"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!window.confirm(`Delete deck "${d.name}"? Its cell layout is lost (looks are kept).`)) return;
+                mutate((p) => {
+                  p.decks = (p.decks ?? []).filter((x) => x.id !== d.id);
+                });
+              }}
+            >
+              ×
+            </span>
+          )}
+        </div>
+      ))}
+      <button
+        className="btn small ghost"
+        onClick={() =>
+          mutate((p) => {
+            p.decks ??= [];
+            p.decks.push({
+              id: uid('deck'),
+              name: `Song ${p.decks.length + 1}`,
+              columns: [...p.columns],
+              cells: {},
+            });
+          })
+        }
+      >
+        + deck
+      </button>
+    </div>
+  );
+}
+
 export function LookGrid() {
   const project = useStore((s) => s.project)!;
   const liveLayers = useStore((s) => s.snap?.layers);
@@ -100,6 +164,8 @@ export function LookGrid() {
   const layers = [...project.layers].reverse(); // top of stack first
 
   return (
+    <>
+    <DeckBar />
     <div
       className="lookgrid"
       style={{ gridTemplateColumns: `168px repeat(${cols.length}, 108px)` }}
@@ -134,5 +200,6 @@ export function LookGrid() {
         );
       })}
     </div>
+    </>
   );
 }

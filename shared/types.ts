@@ -92,6 +92,16 @@ export type Look = {
 
 export type LayerBlend = 'normal' | 'multiply' | 'htp';
 
+/** A page of the grid — one per song. Looks are shared across decks; a deck
+ *  is just cell assignments (per layer) + column names. `layer.cells` always
+ *  holds the ACTIVE deck; switching swaps pages in and out. */
+export type Deck = {
+  id: string;
+  name: string;
+  columns: string[];
+  cells: Record<string, (string | null)[]>;
+};
+
 export type Layer = {
   id: string;
   name: string;
@@ -112,7 +122,9 @@ export type MidiAction =
   | { kind: 'speed' }
   | { kind: 'haze' }
   | { kind: 'tap' }
-  | { kind: 'blackout' };
+  | { kind: 'blackout' }
+  | { kind: 'deckNext' }
+  | { kind: 'deckPrev' };
 
 export type MidiMapping = {
   id: string;
@@ -166,6 +178,9 @@ export type Project = {
   settings: Settings;
   /** imported fixture profiles, keyed by profile id — travel with the project */
   profiles?: Record<string, CompiledProfile>;
+  /** grid pages (one per song); layer.cells mirrors the active deck */
+  decks?: Deck[];
+  activeDeckId?: string;
 };
 
 // ---------- live wire types ----------
@@ -242,6 +257,8 @@ export type Command =
   | { type: 'importMvr'; name: string; data: string; replace: boolean }
   /** spawn the native previz window next to the engine */
   | { type: 'launchPreviz' }
+  /** switch the active grid page (deck) */
+  | { type: 'switchDeck'; deckId: string }
   | { type: 'save' };
 
 // ---------- events (engine → ui) ----------
@@ -320,6 +337,18 @@ export function sanitizeProject(p: Project): Project | null {
     if (!Number.isFinite(layer.master)) layer.master = 1;
     if (!Number.isFinite(layer.fade)) layer.fade = 0.5;
   }
+  // decks migration: older projects have no pages — the current grid becomes
+  // deck 1, and the active deck id must always resolve
+  if (!Array.isArray(p.decks) || p.decks.length === 0) {
+    p.decks = [{
+      id: 'deck-1',
+      name: 'Song 1',
+      columns: [...p.columns],
+      cells: Object.fromEntries(p.layers.map((l) => [l.id, [...l.cells]])),
+    }];
+    p.activeDeckId = 'deck-1';
+  }
+  if (!p.decks.some((d) => d.id === p.activeDeckId)) p.activeDeckId = p.decks[0].id;
   for (const g of p.groups) {
     if (!Array.isArray(g.heads)) g.heads = [];
   }

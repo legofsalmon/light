@@ -111,7 +111,7 @@ export function TopBar() {
         learn={{ kind: 'grand' }}
       />
       <button
-        className={`btn ${snap?.blackout ? 'hot' : ''}`}
+        className={`btn blackout ${snap?.blackout ? 'hot' : ''}`}
         onClick={() => {
           if (!useStore.getState().armLearn({ kind: 'blackout' })) send({ type: 'setBlackout', v: !snap?.blackout });
         }}

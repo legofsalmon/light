@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { Command, Snapshot } from '../shared/types.ts';
-import { WS_PORT, clamp } from '../shared/types.ts';
+import { WS_PORT, clamp, sanitizeProject } from '../shared/types.ts';
 import { EngineState } from './state.ts';
 import { Renderer } from './renderer.ts';
 import { ArtnetOut } from './artnet.ts';
@@ -99,7 +99,7 @@ const PORT = Number(process.env.LIGHT_PORT ?? WS_PORT);
 // --- boot ---
 let project = loadProject();
 if (!project) {
-  project = defaultProject();
+  project = sanitizeProject(defaultProject())!;
   try {
     saveProjectNow(project);
     console.log(`[light] created default project at ${projectPath()}`);
@@ -234,6 +234,9 @@ function handleCommand(cmd: Command): void {
       }
       break;
     }
+    case 'switchDeck':
+      state.switchDeck(cmd.deckId);
+      break;
     case 'launchPreviz': {
       const [ok, message] = spawnPreviz();
       server.broadcast({ type: 'toast', ok, message });

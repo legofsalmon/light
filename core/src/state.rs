@@ -88,8 +88,90 @@ impl EngineState {
             blackout: false,
             learn_target: None,
         };
+        st.ensure_decks();
         st.reconcile();
         st
+    }
+
+    /// Older projects have no pages — the current grid becomes deck 1, and
+    /// the active deck id must always resolve. Mirrors the Node sanitiser.
+    fn ensure_decks(&mut self) {
+        if self.project.decks.is_empty() {
+            let cells: HashMap<String, Vec<Option<String>>> = self
+                .project
+                .layers
+                .iter()
+                .map(|l| (l.id.clone(), l.cells.clone()))
+                .collect();
+            self.project.decks.push(crate::types::Deck {
+                id: "deck-1".into(),
+                name: "Song 1".into(),
+                columns: self.project.columns.clone(),
+                cells,
+            });
+            self.project.active_deck_id = Some("deck-1".into());
+        }
+        let active_ok = self
+            .project
+            .active_deck_id
+            .as_ref()
+            .map(|id| self.project.decks.iter().any(|d| &d.id == id))
+            .unwrap_or(false);
+        if !active_ok {
+            self.project.active_deck_id = Some(self.project.decks[0].id.clone());
+        }
+    }
+
+    /// Switch the active grid page: store the current cells into the outgoing
+    /// deck, load the target's. Playing looks keep playing.
+    pub fn switch_deck(&mut self, deck_id: &str) -> bool {
+        if self.project.active_deck_id.as_deref() == Some(deck_id) {
+            return false;
+        }
+        if !self.project.decks.iter().any(|d| d.id == deck_id) {
+            return false;
+        }
+        let current_id = self.project.active_deck_id.clone();
+        if let Some(cur) = self
+            .project
+            .decks
+            .iter_mut()
+            .find(|d| Some(&d.id) == current_id.as_ref())
+        {
+            cur.columns = self.project.columns.clone();
+            cur.cells = self
+                .project
+                .layers
+                .iter()
+                .map(|l| (l.id.clone(), l.cells.clone()))
+                .collect();
+        }
+        let target = self.project.decks.iter().find(|d| d.id == deck_id).unwrap().clone();
+        self.project.columns = target.columns.clone();
+        let n = self.project.columns.len();
+        for l in &mut self.project.layers {
+            let mut cells = target.cells.get(&l.id).cloned().unwrap_or_default();
+            cells.resize(n, None);
+            l.cells = cells;
+        }
+        self.project.active_deck_id = Some(deck_id.to_string());
+        true
+    }
+
+    pub fn deck_step(&mut self, dir: i32) -> bool {
+        if self.project.decks.len() < 2 {
+            return false;
+        }
+        let i = self
+            .project
+            .decks
+            .iter()
+            .position(|d| Some(&d.id) == self.project.active_deck_id.as_ref())
+            .unwrap_or(0) as i32;
+        let n = self.project.decks.len() as i32;
+        let j = ((i + dir) % n + n) % n;
+        let id = self.project.decks[j as usize].id.clone();
+        self.switch_deck(&id)
     }
 
     pub fn layer_live(&mut self, layer_id: &str) -> &mut LayerLive {
@@ -309,11 +391,14 @@ impl EngineState {
                 }
                 false
             }
+            MidiAction::DeckNext => pressed && self.deck_step(1),
+            MidiAction::DeckPrev => pressed && self.deck_step(-1),
         }
     }
 
     pub fn update_project(&mut self, p: Project) {
         self.project = p;
+        self.ensure_decks();
         self.reconcile();
     }
 
@@ -460,6 +545,11 @@ impl EngineState {
             Command::UpdateProject { project } => {
                 self.update_project(*project);
                 out.project_changed = true;
+            }
+            Command::SwitchDeck { deck_id } => {
+                if self.switch_deck(&deck_id) {
+                    out.project_changed = true;
+                }
             }
             Command::Midi { status, d1, d2 } => {
                 let midi_out = self.apply_midi(status, d1, d2, t);

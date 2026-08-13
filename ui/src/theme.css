@@ -100,6 +100,12 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 .btn:active { transform: translateY(0.5px); }
 .btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .btn.hot { background: rgba(255, 77, 77, 0.15); border-color: var(--hot); color: var(--hot); }
+/* layer clear: lighter red identity */
+.btn.clearbtn { color: #ff9d9d; border-color: #6e3a3a; }
+.btn.clearbtn:hover { color: #ffb5b5; border-color: #9a4a4a; }
+/* blackout: deep, unmissable red — brighter when armed */
+.btn.blackout { color: #d84040; border-color: #7a2424; background: rgba(160, 30, 30, 0.10); }
+.btn.blackout.hot { background: rgba(255, 45, 45, 0.28); border-color: #ff2d2d; color: #ff5252; box-shadow: 0 0 10px rgba(255, 45, 45, 0.35); }
 .btn.warn.on { background: rgba(255, 179, 71, 0.14); border-color: var(--warn); color: var(--warn); }
 .btn.small { padding: 2px 7px; font-size: 9.5px; }
 .btn.ghost { background: transparent; border-color: var(--line); color: var(--text-dim); }
@@ -503,3 +509,27 @@ table.tbl td.mono { font-family: var(--mono); font-size: 11px; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--raise2); border-radius: 5px; border: 2px solid var(--panel); }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- deck bar (grid pages, one per song) ---------- */
+
+.deckbar { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.deckbar .label { margin-right: 4px; }
+.deckchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.deckchip:hover { color: var(--text); border-color: var(--line2); }
+.deckchip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.deckchip .deckx { color: var(--text-faint); font-size: 12px; padding: 0 2px; }
+.deckchip .deckx:hover { color: var(--hot); }

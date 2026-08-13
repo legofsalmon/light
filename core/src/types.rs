@@ -174,6 +174,16 @@ pub enum LayerBlend {
     Htp,
 }
 
+/// A page of the grid — one per song. `layer.cells` always holds the ACTIVE
+/// deck; switching swaps pages in and out.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Deck {
+    pub id: String,
+    pub name: String,
+    pub columns: Vec<String>,
+    pub cells: HashMap<String, Vec<Option<String>>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Layer {
     pub id: String,
@@ -196,6 +206,8 @@ pub enum MidiAction {
     Haze,
     Tap,
     Blackout,
+    DeckNext,
+    DeckPrev,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -247,6 +259,11 @@ pub struct Project {
     /// imported (GDTF-compiled) fixture profiles — travel with the project
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub profiles: HashMap<String, crate::cprofile::CompiledProfile>,
+    /// grid pages (one per song); layer.cells mirrors the active deck
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decks: Vec<Deck>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_deck_id: Option<String>,
 }
 
 // ---------- live wire types (engine → ui) ----------
@@ -330,6 +347,7 @@ pub enum Command {
     Learn { action: Option<MidiAction> },
     ImportGdtf { name: String, data: String },
     ImportMvr { name: String, data: String, replace: bool },
+    SwitchDeck { deck_id: String },
     LaunchPreviz,
     Save,
 }

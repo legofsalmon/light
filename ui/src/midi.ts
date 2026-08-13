@@ -1,4 +1,5 @@
 import { useStore } from './store.ts';
+import { attachApcOutput, scheduleFeedback } from './apcFeedback.ts';
 
 /**
  * WebMIDI input for browser-hosted sessions. In the Tauri app MIDI arrives
@@ -27,9 +28,12 @@ export function initMidi(): void {
           };
         });
         if (!useStore.getState().engineMidi) useStore.getState().setMidiInputs(names);
+        attachApcOutput(access);
       };
       access.onstatechange = attach;
       attach();
+      // LED feedback follows engine state (throttled + diffed internally)
+      useStore.subscribe(() => scheduleFeedback());
     })
     .catch(() => {
       // no MIDI permission — the Sync panel explains how to enable it

@@ -91,6 +91,37 @@ export class EngineState {
     live.held = false;
   }
 
+  /** Switch the active grid page: store the current cells into the outgoing
+   *  deck, load the target's. Playing looks keep playing (live state holds
+   *  look ids, not cells) — exactly like switching decks in Resolume. */
+  switchDeck(deckId: string): boolean {
+    const decks = this.project.decks ?? [];
+    const target = decks.find((d) => d.id === deckId);
+    if (!target || deckId === this.project.activeDeckId) return false;
+    const current = decks.find((d) => d.id === this.project.activeDeckId);
+    if (current) {
+      current.columns = [...this.project.columns];
+      current.cells = Object.fromEntries(this.project.layers.map((l) => [l.id, [...l.cells]]));
+    }
+    this.project.columns = [...target.columns];
+    for (const l of this.project.layers) {
+      const cells = [...(target.cells[l.id] ?? [])];
+      while (cells.length < this.project.columns.length) cells.push(null);
+      cells.length = this.project.columns.length;
+      l.cells = cells;
+    }
+    this.project.activeDeckId = deckId;
+    this.notify();
+    return true;
+  }
+
+  deckStep(dir: 1 | -1): void {
+    const decks = this.project.decks ?? [];
+    if (decks.length < 2) return;
+    const i = decks.findIndex((d) => d.id === this.project.activeDeckId);
+    this.switchDeck(decks[(i + dir + decks.length) % decks.length].id);
+  }
+
   /** Gig safety: if the client holding a momentary flash look vanishes, its
    *  release will never arrive — drop all held flash looks. */
   releaseAllHeld(t = performance.now()): void {
@@ -191,6 +222,12 @@ export class EngineState {
         break;
       case 'blackout':
         if (pressed) this.blackout = !this.blackout;
+        break;
+      case 'deckNext':
+        if (pressed) this.deckStep(1);
+        break;
+      case 'deckPrev':
+        if (pressed) this.deckStep(-1);
         break;
     }
   }

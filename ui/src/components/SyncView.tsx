@@ -33,6 +33,8 @@ function apc40Mk2Mappings(p: Project): MidiMapping[] {
   }
   add('note', 0, 86, { kind: 'blackout' }); // scene 5, beside the cue row
   add('note', 0, 99, { kind: 'tap' }); // dedicated TAP TEMPO button
+  add('note', 0, 97, { kind: 'deckPrev' }); // bank ◀ = previous song page
+  add('note', 0, 96, { kind: 'deckNext' }); // bank ▶ = next song page
   p.layers.slice(0, 4).forEach((layer, i) => add('cc', i, 7, { kind: 'layerMaster', layerId: layer.id }));
   add('cc', 4, 7, { kind: 'haze' }); // track 5 fader
   add('cc', 5, 7, { kind: 'speed' }); // track 6 fader
@@ -99,6 +101,10 @@ function describeAction(p: Project, a: MidiAction): string {
       return 'Tap tempo';
     case 'blackout':
       return 'Blackout';
+    case 'deckNext':
+      return 'Next deck (song page)';
+    case 'deckPrev':
+      return 'Previous deck (song page)';
   }
 }
 
