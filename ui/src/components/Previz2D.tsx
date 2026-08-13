@@ -413,6 +413,8 @@ export function Previz2D() {
       else applyDrag(drag.id, drag.x, drag.v, drag.others);
     };
     const onKeyDown = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
       if (e.key === 'Escape') useStore.getState().setFxSel([]);
     };
     window.addEventListener('keydown', onKeyDown);

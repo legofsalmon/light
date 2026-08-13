@@ -151,7 +151,18 @@ function connect(): void {
     } catch {
       return;
     }
-    if (ev.type === 'project') useStore.setState({ project: ev.project });
+    if (ev.type === 'project') {
+      // authoritative patch may have dropped fixtures (delete elsewhere, MVR
+      // replace) — a selection of dangling ids would lie about its count
+      const ids = new Set(ev.project.fixtures.map((f) => f.id));
+      const cur = useStore.getState().fxSel;
+      const pruned = cur.filter((id) => ids.has(id));
+      useStore.setState(
+        pruned.length === cur.length
+          ? { project: ev.project }
+          : { project: ev.project, fxSel: pruned },
+      );
+    }
     else if (ev.type === 'snap') useStore.setState({ snap: ev as Snapshot });
     else if (ev.type === 'osc') {
       useStore.setState((s) => ({ oscLog: [ev.entry, ...s.oscLog].slice(0, 40) }));

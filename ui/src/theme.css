@@ -444,6 +444,8 @@ table.tbl th {
 }
 table.tbl td { padding: 4px 8px; border-bottom: 1px solid var(--line); }
 table.tbl td.mono { font-family: var(--mono); font-size: 11px; }
+table.tbl tr.rowsel td { background: var(--accent-soft); }
+table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 .conflict { color: var(--hot); }
 
 .headchip {

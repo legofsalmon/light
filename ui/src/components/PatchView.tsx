@@ -1,9 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { Project } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { PROFILES } from '../../../shared/profiles.ts';
 import { allProfileMetas, profileMeta } from '../profileInfo.ts';
+import { createGroupFromSelection } from '../selection.ts';
 import { useStore } from '../store.ts';
+
+/** true when the pointer event originated inside an editing control */
+function onControl(target: EventTarget | null): boolean {
+  return target instanceof Element && !!target.closest('input,select,button,label,option');
+}
 
 /** fixture id → true when its address range overlaps another fixture on the same universe */
 function findConflicts(p: Project): Set<string> {
@@ -74,6 +80,7 @@ export function PatchView() {
   const project = useStore((s) => s.project)!;
   const mutate = useStore((s) => s.mutate);
   const importMsg = useStore((s) => s.importMsg);
+  const fxSel = useStore((s) => s.fxSel);
   const conflicts = findConflicts(project);
   const uniOrder = new Map(project.universes.map((u, i) => [u.id, i]));
   const sortedFixtures = [...project.fixtures].sort(
@@ -82,9 +89,154 @@ export function PatchView() {
       a.address - b.address
   );
 
+  // -- fixture selection: click / ⇧-range / ⌘-toggle / drag-marquee, shared
+  //    with the 2D previz through the store's fxSel --
+  const tbodyRef = useRef<HTMLTableSectionElement>(null);
+  const anchorRef = useRef<string | null>(null);
+  const sortedIdsRef = useRef<string[]>([]);
+  sortedIdsRef.current = sortedFixtures.map((f) => f.id);
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [marqueeHit, setMarqueeHit] = useState<string[]>([]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+      if (e.key === 'Escape') useStore.getState().setFxSel([]);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // an unmount mid-drag (tab switch) must not leak the window drag listeners
+  const dragTeardownRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragTeardownRef.current?.(), []);
+
+  /** the marquee box clamped to the scrolling tab body — rows scrolled out
+   *  of view must never be selectable by an overshooting drag */
+  const clampBox = (x0: number, y0: number, x1: number, y1: number) => {
+    let box = {
+      left: Math.min(x0, x1), right: Math.max(x0, x1),
+      top: Math.min(y0, y1), bottom: Math.max(y0, y1),
+    };
+    const c = tbodyRef.current?.closest('.tabbody')?.getBoundingClientRect();
+    if (c) {
+      box = {
+        left: Math.max(box.left, c.left), right: Math.min(box.right, c.right),
+        top: Math.max(box.top, c.top), bottom: Math.min(box.bottom, c.bottom),
+      };
+    }
+    return box;
+  };
+
+  const rowsInBox = (x0: number, y0: number, x1: number, y1: number): string[] => {
+    const box = clampBox(x0, y0, x1, y1);
+    if (box.right <= box.left || box.bottom <= box.top) return [];
+    const hit: string[] = [];
+    tbodyRef.current?.querySelectorAll('tr[data-fxid]').forEach((tr) => {
+      const r = tr.getBoundingClientRect();
+      if (r.left < box.right && r.right > box.left && r.top < box.bottom && r.bottom > box.top) {
+        hit.push(tr.getAttribute('data-fxid')!);
+      }
+    });
+    return hit;
+  };
+
+  const onTablePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 || onControl(e.target)) return;
+    // NO preventDefault here: the native mousedown must still blur a focused
+    // input — AddressInput commits on blur, and hotkeys stay dead while an
+    // input keeps focus. Text selection is already off (body user-select).
+    const rowEl = (e.target as Element).closest?.('tr[data-fxid]');
+    const startId = rowEl?.getAttribute('data-fxid') ?? null;
+    const st = {
+      startId,
+      shift: e.shiftKey,
+      meta: e.metaKey || e.ctrlKey,
+      moved: false,
+      base: useStore.getState().fxSel,
+      x0: e.clientX,
+      y0: e.clientY,
+    };
+    const teardown = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      dragTeardownRef.current = null;
+      setMarquee(null);
+      setMarqueeHit([]);
+    };
+    const onCancel = () => teardown();
+    const onMove = (me: PointerEvent) => {
+      if (!(me.buttons & 1)) {
+        // missed pointerup (window lost focus mid-drag) — abort cleanly
+        teardown();
+        return;
+      }
+      if (!st.moved && Math.hypot(me.clientX - st.x0, me.clientY - st.y0) > 4) st.moved = true;
+      if (st.moved) {
+        setMarquee({ x0: st.x0, y0: st.y0, x1: me.clientX, y1: me.clientY });
+        setMarqueeHit(rowsInBox(st.x0, st.y0, me.clientX, me.clientY));
+      }
+    };
+    const onUp = (ue: PointerEvent) => {
+      teardown();
+      const { fxSel: cur, setFxSel } = useStore.getState();
+      if (st.moved) {
+        const hit = rowsInBox(st.x0, st.y0, ue.clientX, ue.clientY);
+        setFxSel(st.shift || st.meta ? [...new Set([...st.base, ...hit])] : hit);
+        return;
+      }
+      if (!st.startId) {
+        if (!st.shift && !st.meta) setFxSel([]);
+        return;
+      }
+      if (st.meta) {
+        setFxSel(cur.includes(st.startId) ? cur.filter((i) => i !== st.startId) : [...cur, st.startId]);
+        anchorRef.current = st.startId;
+      } else if (st.shift && anchorRef.current) {
+        const ids = sortedIdsRef.current;
+        const a = ids.indexOf(anchorRef.current);
+        const b = ids.indexOf(st.startId);
+        if (a >= 0 && b >= 0) {
+          const [lo, hi] = a < b ? [a, b] : [b, a];
+          setFxSel(ids.slice(lo, hi + 1));
+        } else {
+          setFxSel([st.startId]);
+        }
+      } else {
+        setFxSel([st.startId]);
+        anchorRef.current = st.startId;
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    dragTeardownRef.current = teardown;
+  };
+
   return (
     <div className="col" style={{ gap: 14 }}>
-      <div>
+      {marquee && (() => {
+        const box = clampBox(marquee.x0, marquee.y0, marquee.x1, marquee.y1);
+        if (box.right <= box.left || box.bottom <= box.top) return null;
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              left: box.left,
+              top: box.top,
+              width: box.right - box.left,
+              height: box.bottom - box.top,
+              background: 'rgba(57,194,255,0.08)',
+              border: '1px dashed rgba(57,194,255,0.7)',
+              pointerEvents: 'none',
+              zIndex: 30,
+            }}
+          />
+        );
+      })()}
+      <div onPointerDown={onTablePointerDown}>
         <div className="sectionhead">Patch</div>
         <table className="tbl">
           <thead>
@@ -93,11 +245,12 @@ export function PatchView() {
               <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody ref={tbodyRef}>
             {sortedFixtures.map((f) => {
               const prof = profileMeta(project, f.profileId);
+              const selected = fxSel.includes(f.id) || marqueeHit.includes(f.id);
               return (
-                <tr key={f.id}>
+                <tr key={f.id} data-fxid={f.id} className={selected ? 'rowsel' : ''}>
                   <td>
                     <input
                       className="text"
@@ -186,10 +339,14 @@ export function PatchView() {
                   <td>
                     <button
                       className="btn small ghost"
-                      onClick={() => mutate((p) => {
-                        p.fixtures = p.fixtures.filter((x) => x.id !== f.id);
-                        for (const g of p.groups) g.heads = g.heads.filter((h) => h.fixtureId !== f.id);
-                      })}
+                      onClick={() => {
+                        mutate((p) => {
+                          p.fixtures = p.fixtures.filter((x) => x.id !== f.id);
+                          for (const g of p.groups) g.heads = g.heads.filter((h) => h.fixtureId !== f.id);
+                        });
+                        const { fxSel: cur, setFxSel } = useStore.getState();
+                        if (cur.includes(f.id)) setFxSel(cur.filter((i) => i !== f.id));
+                      }}
                     >
                       ✕
                     </button>
@@ -266,12 +423,21 @@ export function PatchView() {
           >
             auto-pack addresses
           </button>
+          {fxSel.length > 0 && (
+            <button
+              className="btn small"
+              onClick={createGroupFromSelection}
+              title="Create a group from the selected fixtures"
+            >
+              ⊕ group from {fxSel.length} selected
+            </button>
+          )}
           {conflicts.size > 0 && (
             <span className="label" style={{ color: 'var(--hot)' }}>
               {conflicts.size} address conflict{conflicts.size > 1 ? 's' : ''}
             </span>
           )}
-          <span className="label">drag fixtures in the 2D previz to place them</span>
+          <span className="label">click / ⇧-range / drag-box selects rows · drag fixtures in the 2D previz to place them</span>
           {importMsg && (
             <span className="label" style={{ color: importMsg.ok ? 'var(--good)' : 'var(--hot)' }}>
               {importMsg.text}
