@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GDTF DataVersion="1.2">
+  <FixtureType Name="TestSpot 100" Manufacturer="ACME" Description="synthetic test fixture">
+    <Wheels>
+      <Wheel Name="ColorWheel1">
+        <Slot Name="Open" Color="0.3127,0.3290,100.0"/>
+        <Slot Name="Red" Color="0.6400,0.3300,21.26"/>
+        <Slot Name="Blue" Color="0.1500,0.0600,7.22"/>
+      </Wheel>
+    </Wheels>
+    <Geometries>
+      <Geometry Name="Base">
+        <Beam Name="Beam1" BeamAngle="11.5" FieldAngle="14" LuminousFlux="9000"/>
+      </Geometry>
+    </Geometries>
+    <DMXModes>
+      <DMXMode Name="Standard" Geometry="Base">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1,2" Geometry="Base">
+            <LogicalChannel Attribute="Pan">
+              <ChannelFunction Attribute="Pan" DMXFrom="0/1" Default="32768/2" PhysicalFrom="-270" PhysicalTo="270"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="3,4" Geometry="Base">
+            <LogicalChannel Attribute="Tilt">
+              <ChannelFunction Attribute="Tilt" DMXFrom="0/1" Default="32768/2"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="5" Geometry="Base">
+            <LogicalChannel Attribute="Dimmer">
+              <ChannelFunction Attribute="Dimmer" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="6" Geometry="Base">
+            <LogicalChannel Attribute="Shutter1">
+              <ChannelFunction Attribute="Shutter1" DMXFrom="0/1" Default="8/1"/>
+              <ChannelFunction Attribute="Shutter1Strobe" DMXFrom="16/1"/>
+              <ChannelFunction Attribute="Shutter1StrobePulse" DMXFrom="200/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="7" Geometry="Base">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="8" Geometry="Base">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="9" Geometry="Base">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="10" Geometry="Base">
+            <LogicalChannel Attribute="Zoom">
+              <ChannelFunction Attribute="Zoom" DMXFrom="0/1" Default="128/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="11" Geometry="Base">
+            <LogicalChannel Attribute="Color1">
+              <ChannelFunction Attribute="Color1" DMXFrom="0/1" Default="0/1" Wheel="ColorWheel1">
+                <ChannelSet Name="Open" DMXFrom="0/1"/>
+                <ChannelSet Name="Red" DMXFrom="16/1"/>
+                <ChannelSet Name="Blue" DMXFrom="32/1"/>
+              </ChannelFunction>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+    </DMXModes>
+  </FixtureType>
+</GDTF>
