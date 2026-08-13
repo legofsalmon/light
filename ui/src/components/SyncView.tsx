@@ -4,6 +4,43 @@ import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
 
 /**
+ * Akai APC40 mk2 (generic mode 0):
+ * clip grid 5×8, notes 0–39 (bottom-left = 0, rows ascend); scene launch
+ * column notes 82–86 (top→bottom); track faders CC 7 on channels 0–7 (the
+ * channel is the track!); master fader CC 14 ch 0; tap tempo note 99.
+ *
+ * Mapping: top four grid rows mirror the on-screen grid (top row = STROBE),
+ * the fifth (bottom) row fires columns as cues; scene buttons 1–4 clear the
+ * matching layer, scene 5 = blackout; track faders 1–4 = layer masters
+ * (WASH→STROBE), 5 = haze, 6 = effect speed; master fader = grand master;
+ * TAP TEMPO button = tap.
+ */
+function apc40Mk2Mappings(p: Project): MidiMapping[] {
+  const maps: MidiMapping[] = [];
+  const add = (type: 'note' | 'cc', channel: number, number: number, action: MidiAction) =>
+    maps.push({ id: uid('midi'), type, channel, number, action });
+
+  const visual = [...p.layers].reverse(); // top grid row = top layer
+  visual.slice(0, 4).forEach((layer, row) => {
+    const base = 32 - row * 8; // top row = notes 32–39
+    for (let col = 0; col < Math.min(8, p.columns.length); col++) {
+      add('note', 0, base + col, { kind: 'cell', layerId: layer.id, col });
+    }
+    add('note', 0, 82 + row, { kind: 'layerClear', layerId: layer.id });
+  });
+  for (let col = 0; col < Math.min(8, p.columns.length); col++) {
+    add('note', 0, col, { kind: 'column', col }); // bottom grid row = cues
+  }
+  add('note', 0, 86, { kind: 'blackout' }); // scene 5, beside the cue row
+  add('note', 0, 99, { kind: 'tap' }); // dedicated TAP TEMPO button
+  p.layers.slice(0, 4).forEach((layer, i) => add('cc', i, 7, { kind: 'layerMaster', layerId: layer.id }));
+  add('cc', 4, 7, { kind: 'haze' }); // track 5 fader
+  add('cc', 5, 7, { kind: 'speed' }); // track 6 fader
+  add('cc', 0, 14, { kind: 'grand' }); // master fader
+  return maps;
+}
+
+/**
  * Akai APC mini mk2 factory layout (channel 0):
  * pads 0–63 (bottom-left = 0, rows ascend), scene column 112–119,
  * track faders CC 48–55, master fader CC 56.
@@ -135,15 +172,26 @@ export function SyncView() {
           <button
             className="btn small"
             onClick={() => {
+              if (!window.confirm('Load the APC40 mk2 preset? This replaces all current MIDI mappings.')) return;
+              mutate((p) => {
+                p.midi = apc40Mk2Mappings(p);
+              });
+            }}
+          >
+            load APC40 mk2 preset
+          </button>
+          <button
+            className="btn small ghost"
+            onClick={() => {
               if (!window.confirm('Load the APC mini mk2 preset? This replaces all current MIDI mappings.')) return;
               mutate((p) => {
                 p.midi = apcMiniMk2Mappings(p);
               });
             }}
           >
-            load APC mini mk2 preset
+            APC mini mk2
           </button>
-          <span className="label">pads = grid · bottom row = cues · scene col = clears/tap/blackout · faders = masters</span>
+          <span className="label">grid rows = layers · bottom row = cues · scene col = clears + blackout · faders = masters</span>
         </div>
         <table className="tbl">
           <thead>
