@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LIGHT — the look engine for Resolume</title>
+<meta name="description" content="LIGHT sits between Resolume Arena and your lighting rig. Clip-grid looks, beat-synced effects, 2D/3D previz, Art-Net out. Built to survive the booth.">
+<meta property="og:title" content="LIGHT — the look engine for Resolume">
+<meta property="og:description" content="Clip-grid looks, beat-synced effects, real previz, Art-Net out. Free and open source.">
+<meta property="og:url" content="https://light.letissier.ie">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#141415">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23111'/%3E%3Cpath d='M8 2 L4 9 H7.2 L6.4 14 L12 6.5 H8.6 L10 2 Z' fill='%2339c2ff'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0f0f11; --bg2: #141416; --panel: #1c1c1f; --panel2: #212125;
+    --line: #2c2c31; --line2: #3a3a41;
+    --text: #d6d6dc; --dim: #8e8e98; --faint: #5b5b64;
+    --accent: #39c2ff; --accent-soft: rgba(57,194,255,.14);
+    --good: #3fd97a; --amber: #ffb347;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.6; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+
+  /* nav */
+  nav { position: sticky; top: 0; z-index: 10; background: rgba(15,15,17,.86); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  nav .wrap { display: flex; align-items: center; gap: 28px; height: 56px; }
+  .wordmark { font-weight: 700; letter-spacing: .42em; font-size: 15px; color: var(--text); }
+  .wordmark b { color: var(--accent); font-weight: 700; }
+  nav .links { margin-left: auto; display: flex; gap: 22px; }
+  nav .links a { color: var(--dim); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+  nav .links a:hover { color: var(--text); text-decoration: none; }
+
+  /* hero */
+  header { padding: 84px 0 40px; background:
+    radial-gradient(60% 50% at 70% 0%, rgba(57,194,255,.07), transparent 70%), var(--bg); }
+  h1 { font-size: clamp(34px, 5.4vw, 58px); line-height: 1.08; letter-spacing: -.015em; font-weight: 700; max-width: 720px; }
+  h1 em { font-style: normal; color: var(--accent); }
+  .sub { margin: 20px 0 30px; color: var(--dim); font-size: 17px; max-width: 620px; }
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn { display: inline-block; padding: 11px 22px; border-radius: 5px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; border: 1px solid var(--line2); color: var(--text); }
+  .btn:hover { text-decoration: none; border-color: var(--dim); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #06131a; font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.1); }
+
+  /* app mock */
+  .mock { margin: 56px 0 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg2); box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+  .mock-top { display: flex; align-items: center; gap: 14px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .mock-top .wordmark { font-size: 11px; letter-spacing: .35em; }
+  .beatled { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: beat .5s infinite; }
+  @keyframes beat { 0%,20% { opacity: 1; box-shadow: 0 0 8px var(--accent); } 60%,100% { opacity: .18; box-shadow: none; } }
+  .bpm { font-family: var(--mono); font-size: 14px; margin-left: auto; }
+  .bpm small { color: var(--faint); font-size: 9px; letter-spacing: .1em; }
+  .mock-body { display: grid; grid-template-columns: 1fr 220px; }
+  @media (max-width: 760px) { .mock-body { grid-template-columns: 1fr; } .previzmock { display: none; } }
+
+  .gridmock { position: relative; padding: 14px; overflow: hidden; }
+  .gcols { position: relative; display: grid; grid-template-columns: 92px repeat(8, 1fr); gap: 3px; }
+  .ghead { height: 20px; display: flex; align-items: center; justify-content: center; font-size: 8.5px; letter-spacing: .12em; color: var(--faint); text-transform: uppercase; background: var(--panel2); border-radius: 3px; }
+  .glayer { height: 40px; display: flex; flex-direction: column; justify-content: center; padding: 0 8px; gap: 4px; background: var(--panel); border-radius: 3px; font-size: 9px; letter-spacing: .12em; color: var(--dim); text-transform: uppercase; }
+  .glayer i { display: block; height: 3px; border-radius: 2px; background: linear-gradient(90deg, rgba(57,194,255,.5) 70%, var(--panel2) 70%); }
+  .gcell { height: 40px; background: var(--panel2); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; position: relative; }
+  .gcell .sw { display: flex; height: 12px; }
+  .gcell .sw i { flex: 1; }
+  .gcell .nm { position: absolute; bottom: 3px; left: 6px; font-size: 8px; color: var(--dim); letter-spacing: .04em; }
+  .sweep { position: absolute; top: 14px; bottom: 14px; left: calc(14px + 92px + 3px); width: calc((100% - 28px - 92px - 3px * 8) / 8); border: 1px solid var(--accent); border-radius: 4px; background: var(--accent-soft); pointer-events: none; animation: sweep 16s steps(8, jump-none) infinite; box-shadow: 0 0 18px rgba(57,194,255,.25); }
+  @keyframes sweep { from { transform: translateX(0); } to { transform: translateX(calc((100% + 3px) * 7)); } }
+
+  .previzmock { position: relative; border-left: 1px solid var(--line); background: #101013; min-height: 240px; overflow: hidden; }
+  .beam { position: absolute; bottom: -20%; width: 34%; height: 120%; opacity: .5; filter: blur(2px); transform-origin: top center; }
+  .beam.b1 { left: 2%; background: conic-gradient(from 178deg at 50% 0%, transparent 0deg, rgba(255,64,64,.55) 4deg, transparent 8deg); animation: bpulse 4s ease-in-out infinite; }
+  .beam.b2 { left: 22%; background: conic-gradient(from 176deg at 50% 0%, transparent 0deg, rgba(57,194,255,.55) 5deg, transparent 10deg); animation: bpulse 4s ease-in-out -1s infinite; }
+  .beam.b3 { left: 42%; background: conic-gradient(from 180deg at 50% 0%, transparent 0deg, rgba(255,64,200,.5) 4deg, transparent 8deg); animation: bpulse 4s ease-in-out -2s infinite; }
+  .beam.b4 { left: 62%; background: conic-gradient(from 182deg at 50% 0%, transparent 0deg, rgba(255,179,71,.5) 5deg, transparent 10deg); animation: bpulse 4s ease-in-out -3s infinite; }
+  @keyframes bpulse { 0%,100% { opacity: .18; } 50% { opacity: .6; } }
+  .truss { position: absolute; top: 26px; left: 8%; right: 8%; height: 3px; background: var(--line2); border-radius: 2px; }
+  .previzmock .label { position: absolute; top: 8px; left: 10px; font-size: 9px; }
+
+  /* sections */
+  section { padding: 72px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 26px; letter-spacing: -.01em; margin-bottom: 8px; }
+  .lede { color: var(--dim); max-width: 640px; margin-bottom: 36px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 820px) { .cards { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+  .card { background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 20px; }
+  .card h3 { font-size: 14px; letter-spacing: .04em; margin-bottom: 8px; }
+  .card h3::before { content: "■ "; color: var(--accent); font-size: 10px; vertical-align: 2px; }
+  .card p { font-size: 13.5px; color: var(--dim); }
+
+  .term { background: #0b0b0d; border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; font-family: var(--mono); font-size: 12.5px; line-height: 1.75; overflow-x: auto; }
+  .term .ok { color: var(--good); }
+  .term .c { color: var(--faint); }
+  .term .p { color: var(--accent); }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+  @media (max-width: 820px) { .split { grid-template-columns: 1fr; } }
+  .checks { list-style: none; display: flex; flex-direction: column; gap: 12px; font-size: 14.5px; color: var(--dim); }
+  .checks b { color: var(--text); font-weight: 600; }
+  .checks li::before { content: "✓"; color: var(--good); margin-right: 10px; font-weight: 700; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; counter-reset: step; }
+  @media (max-width: 700px) { .steps { grid-template-columns: 1fr; } }
+  .step { background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 20px; counter-increment: step; }
+  .step::before { content: "0" counter(step); font-family: var(--mono); color: var(--accent); font-size: 12px; letter-spacing: .2em; }
+  .step h3 { font-size: 15px; margin: 8px 0 6px; }
+  .step p { font-size: 13.5px; color: var(--dim); }
+
+  .doclinks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-width: 760px; }
+  @media (max-width: 620px) { .doclinks { grid-template-columns: 1fr; } }
+  .doclinks a { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 13px 16px; color: var(--text); font-size: 14px; }
+  .doclinks a:hover { text-decoration: none; border-color: var(--line2); background: var(--panel); }
+  .doclinks a span { color: var(--faint); font-size: 12px; }
+
+  footer { border-top: 1px solid var(--line); padding: 36px 0 48px; color: var(--faint); font-size: 13px; display: block; }
+  footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: baseline; }
+  footer .wordmark { font-size: 12px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="wordmark">LIGHT<b>■</b></div>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#reliability">Reliability</a>
+      <a href="#start">Get started</a>
+      <a href="#docs">Docs</a>
+      <a href="https://github.com/legofsalmon/light">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header>
+  <div class="wrap">
+    <div class="label" style="margin-bottom:18px">Free · Open source · macOS</div>
+    <h1>The <em>look engine</em> for Resolume.</h1>
+    <p class="sub">LIGHT sits between Arena and your lighting rig. Build looks in a clip grid,
+    fire them from columns, MIDI pads, or Resolume itself — with beat-synced effects,
+    real 3D previz, and rock-solid Art-Net output at 40&nbsp;Hz.</p>
+    <div class="cta">
+      <a class="btn primary" href="#start">Get started</a>
+      <a class="btn" href="https://github.com/legofsalmon/light">View on GitHub</a>
+    </div>
+
+    <div class="mock" aria-hidden="true">
+      <div class="mock-top">
+        <div class="wordmark">LIGHT<b>■</b></div>
+        <div class="beatled"></div>
+        <div class="bpm">128.0 <small>BPM</small></div>
+      </div>
+      <div class="mock-body">
+        <div class="gridmock">
+          <div class="gcols">
+            <div class="ghead" style="background:none"></div>
+            <div class="ghead">Intro</div><div class="ghead">Build</div><div class="ghead">Peak</div><div class="ghead">Groove</div>
+            <div class="ghead">Break</div><div class="ghead">Drop</div><div class="ghead">Outro</div><div class="ghead">Chill</div>
+
+            <div class="glayer">Strobe<i></i></div>
+            <div class="gcell"><div class="sw"><i style="background:#eee"></i></div><div class="nm">Full Strobe</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#f5f5f0"></i></div><div class="nm">Blinder</div></div>
+            <div class="gcell"></div><div class="gcell"></div><div class="gcell"></div>
+            <div class="gcell"><div class="sw"><i style="background:#eee"></i></div><div class="nm">Ring FX</div></div>
+            <div class="gcell"></div><div class="gcell"></div>
+
+            <div class="glayer">FX<i></i></div>
+            <div class="gcell"></div>
+            <div class="gcell"><div class="sw"><i style="background:#9a9aa4"></i></div><div class="nm">Beat Pulse</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#9a9aa4"></i></div><div class="nm">Par Chase</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#9a9aa4"></i></div><div class="nm">Slow Swell</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#9a9aa4"></i></div><div class="nm">Odd / Even</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#9a9aa4"></i></div><div class="nm">Flicker</div></div>
+            <div class="gcell"></div><div class="gcell"></div>
+
+            <div class="glayer">Derby<i></i></div>
+            <div class="gcell"></div>
+            <div class="gcell"><div class="sw"><i style="background:#f33"></i></div><div class="nm">Red Spin</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#f33"></i><i style="background:#33f"></i></div><div class="nm">R+B Spin</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#3f6"></i><i style="background:#33f"></i></div><div class="nm">G+B Slow</div></div>
+            <div class="gcell"></div>
+            <div class="gcell"><div class="sw"><i style="background:#f33"></i><i style="background:#3f6"></i><i style="background:#33f"></i><i style="background:#fff"></i></div><div class="nm">RGBW Fast</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#fff"></i></div><div class="nm">White Aim</div></div>
+            <div class="gcell"></div>
+
+            <div class="glayer">Wash<i></i></div>
+            <div class="gcell"><div class="sw"><i style="background:#ff9d2e"></i></div><div class="nm">Amber</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#ff2e2e"></i></div><div class="nm">Red</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#2e50ff"></i></div><div class="nm">Deep Blue</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#ff2ec8"></i></div><div class="nm">Magenta</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#2ee6d0"></i></div><div class="nm">Teal</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#ff2e2e"></i><i style="background:#2e50ff"></i></div><div class="nm">R/B Split</div></div>
+            <div class="gcell"><div class="sw"><i style="background:linear-gradient(90deg,#f33,#fc0,#3f6,#3cf,#63f,#f3c)"></i></div><div class="nm">Rainbow</div></div>
+            <div class="gcell"><div class="sw"><i style="background:#f2f2ee"></i></div><div class="nm">White</div></div>
+          </div>
+          <div class="sweep"></div>
+        </div>
+        <div class="previzmock">
+          <div class="label">Previz · 3D</div>
+          <div class="truss"></div>
+          <div class="beam b1"></div><div class="beam b2"></div><div class="beam b3"></div><div class="beam b4"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Lighting that plays like Resolume.</h2>
+    <p class="lede">No cue stacks, no virtual consoles, no channel spreadsheets mid-set.
+    Looks live in a grid of layers × columns — a column is a cue, a cell is a look, and everything follows the beat.</p>
+    <div class="cards">
+      <div class="card"><h3>Clip-grid looks</h3><p>Layers stack bottom-to-top with blend modes: washes replace, FX multiply over whatever colour is up, strobes ride on top. Crossfades per layer or per look. Flash cells are momentary — hold to hit.</p></div>
+      <div class="card"><h3>Beat-synced effects</h3><p>Sine, saws, square, chase, and random waves in musical units — from 1/4 beat to 8 bars — with size, phase-spread, and width per fixture group. Tap tempo, drag the BPM, or let Arena drive it.</p></div>
+      <div class="card"><h3>Real previz</h3><p>A 3D beam view with spinning derby fans in true macro colours, plus a 2D plan where you drag fixtures to place them. See the show without powering the rig.</p></div>
+      <div class="card"><h3>Art-Net + sACN out</h3><p>Continuous 40 Hz output, broadcast or unicast per universe, with live DMX meters and engine health (refresh rate, tick jitter) always visible.</p></div>
+      <div class="card"><h3>MIDI learn everywhere</h3><p>Arm learn, click any cell, column, or fader, touch your controller — done. Mappings live in the project. Native CoreMIDI in the app keeps pads working even with the window closed.</p></div>
+      <div class="card"><h3>Follows Resolume</h3><p>Point Arena's OSC output at LIGHT: column launches fire matching light cues and Arena's BPM drives every effect. One clip grid runs video and lights together.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="reliability">
+  <div class="wrap split">
+    <div>
+      <h2>Two engines. One truth.</h2>
+      <p class="lede" style="margin-bottom:20px">The DMX core is written twice — a TypeScript reference and the
+      production Rust engine — speaking one protocol. A differential test boots both and requires
+      <b>byte-identical output on all 512 channels</b> before anything ships.</p>
+      <ul class="checks">
+        <li><b>Engine ≠ UI.</b> DMX renders in its own real-time process. Close the window, kill the browser — output never stutters.</li>
+        <li><b>7.9 MB native app.</b> Tauri 2 + Rust core. No Electron, no garbage-collector pauses in the hot path.</li>
+        <li><b>Cues can't misfire.</b> Columns skip momentary flash looks by design — a cue can never latch a blinder on.</li>
+        <li><b>Autosave with rotating backups.</b> Every edit persists within seconds, five generations deep.</li>
+      </ul>
+    </div>
+    <div class="term">
+      <div class="c">$ npm run test:parity</div>
+      <div>both engines up</div>
+      <div><span class="ok">ok</span>&nbsp;&nbsp; idle output identical</div>
+      <div><span class="ok">ok</span>&nbsp;&nbsp; column 1 (amber wash)</div>
+      <div><span class="ok">ok</span>&nbsp;&nbsp; derby macro + motor</div>
+      <div><span class="ok">ok</span>&nbsp;&nbsp; grand master 50%</div>
+      <div><span class="ok">ok</span>&nbsp;&nbsp; blackout</div>
+      <div><span class="ok">ok</span>&nbsp;&nbsp; manual haze</div>
+      <div><span class="ok">ok</span>&nbsp;&nbsp; bpm parity</div>
+      <div><span class="ok">ok</span>&nbsp;&nbsp; blinder held</div>
+      <div><span class="ok">ok</span>&nbsp;&nbsp; blinder released</div>
+      <div><span class="ok">ok</span>&nbsp;&nbsp; live column state parity</div>
+      <div class="p">Parity: Rust core matches the Node reference.</div>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <h2>Up in three steps.</h2>
+    <p class="lede">One patch, a bank of looks, and Arena talking to it — the default project ships with a
+    working rig and looks so there's something moving the moment it opens.</p>
+    <div class="steps">
+      <div class="step"><h3>Patch</h3><p>Pick fixture profiles, set universe and address, drag fixtures into place on the 2D plan. Address conflicts light up red.</p></div>
+      <div class="step"><h3>Build looks</h3><p>Select a cell, pick a fixture group, set colour and intensity, stack effects. Everything edits live — if the look is playing, the rig follows your faders.</p></div>
+      <div class="step"><h3>Play</h3><p>Fire cells and columns from the grid, keys 1–8, MIDI pads, or Arena's own clip grid over OSC. Tap tempo or let Resolume set the pace.</p></div>
+    </div>
+    <div class="term" style="margin-top:28px">
+      <div class="c"># run from source</div>
+      <div>git clone https://github.com/legofsalmon/light && cd light</div>
+      <div>npm install</div>
+      <div>npm run dev&nbsp;&nbsp;&nbsp;&nbsp;<span class="c"># engine + UI → http://localhost:5173</span></div>
+      <div class="c" style="margin-top:10px"># build the macOS app (needs Rust)</div>
+      <div>npm run app:build&nbsp;&nbsp;<span class="c"># → target/release/bundle/macos/LIGHT.app</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="docs">
+  <div class="wrap">
+    <h2>Documentation.</h2>
+    <p class="lede">Everything lives in the repo and reads well on GitHub.</p>
+    <div class="doclinks">
+      <a href="https://github.com/legofsalmon/light/blob/main/docs/user-guide.md">User guide <span>looks, layers, effects, cues</span></a>
+      <a href="https://github.com/legofsalmon/light/blob/main/docs/resolume-and-midi.md">Resolume &amp; MIDI <span>OSC sync, MIDI learn</span></a>
+      <a href="https://github.com/legofsalmon/light/blob/main/docs/fixtures-and-patch.md">Fixtures &amp; patch <span>profiles, channel maps</span></a>
+      <a href="https://github.com/legofsalmon/light/blob/main/docs/architecture.md">Architecture <span>engines, protocol, packets</span></a>
+      <a href="https://github.com/legofsalmon/light/blob/main/docs/development.md">Development <span>build, test, extend</span></a>
+      <a href="https://github.com/legofsalmon/light/blob/main/ROADMAP.md">Roadmap <span>where this is going</span></a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="wordmark">LIGHT<b>■</b></div>
+    <span>Built by Colm Hewson for the booth.</span>
+    <span><a href="https://github.com/legofsalmon/light">github.com/legofsalmon/light</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
