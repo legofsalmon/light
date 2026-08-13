@@ -108,6 +108,9 @@ let pending = false;
 
 export function scheduleFeedback(): void {
   if (!output || pending) return;
+  // when the engine owns native MIDI (Rust core / packaged app), it also
+  // drives the LEDs — two writers with independent diff caches would fight
+  if (useStore.getState().engineMidi) return;
   pending = true;
   setTimeout(() => {
     pending = false;

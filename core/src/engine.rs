@@ -86,6 +86,9 @@ pub fn run(cfg: EngineConfig) {
     let mut artnet = ArtnetOut::new();
     let mut sacn = SacnOut::new();
     let mut osc = OscIn::new();
+    // APC40 LED feedback shares the with_midi gate — the parity harness runs
+    // with LIGHT_NO_MIDI and must never touch a controller
+    let mut apc = cfg.with_midi.then(crate::apc::ApcOut::new);
     ensure_osc(&mut osc, &state, &tx);
 
     let mut midi_names: Vec<String> = Vec::new();
@@ -189,6 +192,10 @@ pub fn run(cfg: EngineConfig) {
             window_ticks = 0;
             jitter_max = 0.0;
             window_start = t;
+        }
+
+        if let Some(apc) = apc.as_mut() {
+            apc.update(&state); // self-throttled to ~15 Hz, diff-only sends
         }
 
         // Snapshots to the UI at 20 fps.

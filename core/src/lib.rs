@@ -10,6 +10,8 @@ pub mod types;
 
 // OS-bound engine internals (sockets, MIDI, filesystem, timers).
 #[cfg(feature = "engine")]
+pub mod apc;
+#[cfg(feature = "engine")]
 pub mod artnet;
 #[cfg(feature = "engine")]
 pub mod clock;
