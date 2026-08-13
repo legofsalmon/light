@@ -28,8 +28,15 @@ not speed).
 | Profile render, compiled interpreter — same profiles | 69 / 95 / 30 ns | 2–4× the hand-written code, still noise: 100 imported fixtures ≈ 10 µs/tick |
 | GDTF parse (synthetic 11-ch spot) | 28.8 µs | import-time only |
 
-Verdict: the data-driven interpreter costs nothing measurable at rig scale.
-No tick-path regression from v0.4.
+WASM bridge (same interpreter compiled for the Node engine; Node 25):
+
+| Bench | Result | Notes |
+|---|---|---|
+| Imported-profile render via WASM | 243 ns | ~3–8× native Rust, incl. param marshalling — 100 imported fixtures ≈ 24 µs/tick |
+| GDTF parse via WASM | 32.8 µs | vs 28.8 µs native |
+
+Verdict: the data-driven interpreter costs nothing measurable at rig scale,
+in either engine. No tick-path regression from v0.4.
 
 ## 2026-08-13 — v0.3 B1: native previz (Bevy 0.16.1, release)
 

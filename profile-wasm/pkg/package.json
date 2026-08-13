@@ -1,0 +1,12 @@
+{
+  "name": "light-profile-wasm",
+  "description": "LIGHT's compiled-profile interpreter + GDTF parser for the Node engine — one Rust implementation everywhere",
+  "version": "0.1.0",
+  "files": [
+    "light_profile_wasm_bg.wasm",
+    "light_profile_wasm.js",
+    "light_profile_wasm.d.ts"
+  ],
+  "main": "light_profile_wasm.js",
+  "types": "light_profile_wasm.d.ts"
+}

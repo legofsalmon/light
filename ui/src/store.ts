@@ -23,6 +23,8 @@ type Store = {
   /** true when the engine owns native MIDI (Rust core) — the browser must not double-forward */
   engineMidi: boolean;
   lastMidi: string | null;
+  /** last GDTF import outcome, shown in the Fixtures tab */
+  importMsg: { ok: boolean; text: string } | null;
 
   send: (cmd: Command) => void;
   /** Clone-mutate-commit a project edit; optimistic locally, authoritative echo follows. */
@@ -61,6 +63,7 @@ export const useStore = create<Store>()((set, get) => ({
   midiInputs: [],
   engineMidi: false,
   lastMidi: null,
+  importMsg: null,
 
   send: (cmd) => wsSend(JSON.stringify(cmd)),
 
@@ -132,6 +135,8 @@ function connect(): void {
       else useStore.setState({ engineMidi: false });
     } else if (ev.type === 'learned') {
       useStore.setState({ learnMode: false, learnTarget: null, lastMidi: 'mapped ✓' });
+    } else if (ev.type === 'importResult') {
+      useStore.setState({ importMsg: { ok: ev.ok, text: ev.message } });
     }
   };
   ws.onclose = () => {

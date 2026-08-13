@@ -9,6 +9,7 @@ import { OscIn, type OscMessage } from './osc.ts';
 import { Server } from './server.ts';
 import { defaultProject } from './defaultProject.ts';
 import { loadProject, projectPath, saveProjectDebounced, saveProjectNow } from './persist.ts';
+import { parseGdtfBase64 } from './wasmProfiles.ts';
 
 const TICK_MS = 25; // 40 Hz DMX refresh
 const PORT = Number(process.env.LIGHT_PORT ?? WS_PORT);
@@ -115,6 +116,28 @@ function handleCommand(cmd: Command): void {
     case 'learn':
       state.learnTarget = cmd.action;
       break;
+    case 'importGdtf': {
+      try {
+        const profiles = parseGdtfBase64(cmd.data);
+        state.project.profiles ??= {};
+        for (const p of profiles) state.project.profiles[p.id] = p;
+        state.onChange?.();
+        server.broadcast({
+          type: 'importResult',
+          ok: true,
+          message: `${cmd.name}: imported ${profiles.length} mode(s)`,
+          profileIds: profiles.map((p) => p.id),
+        });
+      } catch (err) {
+        server.broadcast({
+          type: 'importResult',
+          ok: false,
+          message: `${cmd.name}: ${(err as Error).message}`,
+          profileIds: [],
+        });
+      }
+      break;
+    }
     case 'save': {
       const p = saveProjectNow(state.project);
       server.broadcast({ type: 'saved', path: p });

@@ -4082,6 +4082,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "light-profile-wasm"
+version = "0.1.0"
+dependencies = [
+ "light-core",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"

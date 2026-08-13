@@ -217,6 +217,12 @@ fn apply_outcome(
     if let Some(mapping) = out.learned {
         bc.broadcast(&json!({ "type": "learned", "mapping": mapping }).to_string());
     }
+    if let Some((ok, message, profile_ids)) = out.import_result {
+        bc.broadcast(
+            &json!({ "type": "importResult", "ok": ok, "message": message, "profileIds": profile_ids })
+                .to_string(),
+        );
+    }
     if out.save_requested {
         match persist::save_project(dir, &state.project) {
             Ok(path) => bc.broadcast(

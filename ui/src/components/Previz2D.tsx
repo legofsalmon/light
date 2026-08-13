@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { HeadSnap } from '../../../shared/types.ts';
-import { PROFILES } from '../../../shared/profiles.ts';
+import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 
 const WORLD_W = 11; // metres shown horizontally
@@ -80,7 +80,7 @@ export function Previz2D() {
       for (const hs of snap?.heads ?? []) headMap.set(`${hs.f}:${hs.h}`, hs);
 
       for (const f of project.fixtures) {
-        const prof = PROFILES[f.profileId];
+        const prof = profileMeta(project, f.profileId);
         if (!prof) continue;
         const fx = m.toX(f.pos.x);
         const fy = m.toY(f.pos.z);

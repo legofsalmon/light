@@ -31,6 +31,37 @@ pub struct Outcome {
     pub project_changed: bool,
     pub learned: Option<MidiMapping>,
     pub save_requested: bool,
+    /// (ok, message, imported profile ids)
+    pub import_result: Option<(bool, String, Vec<String>)>,
+}
+
+/// Minimal base64 decode (standard alphabet, padding optional) — the import
+/// path only; not worth a dependency.
+fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
+    const ALPHA: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut rev = [255u8; 256];
+    for (i, &c) in ALPHA.iter().enumerate() {
+        rev[c as usize] = i as u8;
+    }
+    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    let mut acc: u32 = 0;
+    let mut bits = 0;
+    for c in s.bytes() {
+        if c == b'=' || c == b'\n' || c == b'\r' {
+            continue;
+        }
+        let v = rev[c as usize];
+        if v == 255 {
+            return Err("invalid base64".into());
+        }
+        acc = (acc << 6) | v as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    Ok(out)
 }
 
 pub struct EngineState {
@@ -324,6 +355,26 @@ impl EngineState {
                 out.learned = midi_out.learned;
             }
             Command::Learn { action } => self.learn_target = action,
+            Command::ImportGdtf { name, data } => {
+                let result = base64_decode(&data).and_then(|bytes| crate::gdtf::parse_gdtf(&bytes));
+                match result {
+                    Ok(profiles) => {
+                        let ids: Vec<String> = profiles.iter().map(|p| p.id.clone()).collect();
+                        for p in profiles {
+                            self.project.profiles.insert(p.id.clone(), p);
+                        }
+                        out.project_changed = true;
+                        out.import_result = Some((
+                            true,
+                            format!("{name}: imported {} mode(s)", ids.len()),
+                            ids,
+                        ));
+                    }
+                    Err(e) => {
+                        out.import_result = Some((false, format!("{name}: {e}"), vec![]));
+                    }
+                }
+            }
             Command::Save => out.save_requested = true,
         }
         out

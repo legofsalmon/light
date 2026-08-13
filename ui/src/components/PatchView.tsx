@@ -1,14 +1,15 @@
 import React from 'react';
 import type { Project } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
-import { PROFILES, PROFILE_LIST } from '../../../shared/profiles.ts';
+import { PROFILES } from '../../../shared/profiles.ts';
+import { allProfileMetas, profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 
 /** fixture id → true when its address range overlaps another fixture on the same universe */
 function findConflicts(p: Project): Set<string> {
   const conflicts = new Set<string>();
   for (const a of p.fixtures) {
-    const pa = PROFILES[a.profileId];
+    const pa = profileMeta(p, a.profileId);
     if (!pa) continue;
     if (a.address < 1 || a.address + pa.channels - 1 > 512) {
       conflicts.add(a.id);
@@ -16,7 +17,7 @@ function findConflicts(p: Project): Set<string> {
     }
     for (const b of p.fixtures) {
       if (a.id === b.id || a.universeId !== b.universeId) continue;
-      const pb = PROFILES[b.profileId];
+      const pb = profileMeta(p, b.profileId);
       if (!pb) continue;
       if (a.address < b.address + pb.channels && b.address < a.address + pa.channels) {
         conflicts.add(a.id);
@@ -29,7 +30,7 @@ function findConflicts(p: Project): Set<string> {
 function nextFreeAddress(p: Project, universeId: string, channels: number): number {
   const used: [number, number][] = p.fixtures
     .filter((f) => f.universeId === universeId)
-    .map((f) => [f.address, f.address + (PROFILES[f.profileId]?.channels ?? 1) - 1]);
+    .map((f) => [f.address, f.address + (profileMeta(p, f.profileId)?.channels ?? 1) - 1]);
   for (let a = 1; a + channels - 1 <= 512; a++) {
     if (used.every(([lo, hi]) => a + channels - 1 < lo || a > hi)) return a;
   }
@@ -39,6 +40,7 @@ function nextFreeAddress(p: Project, universeId: string, channels: number): numb
 export function PatchView() {
   const project = useStore((s) => s.project)!;
   const mutate = useStore((s) => s.mutate);
+  const importMsg = useStore((s) => s.importMsg);
   const conflicts = findConflicts(project);
 
   return (
@@ -54,7 +56,7 @@ export function PatchView() {
           </thead>
           <tbody>
             {project.fixtures.map((f) => {
-              const prof = PROFILES[f.profileId];
+              const prof = profileMeta(project, f.profileId);
               return (
                 <tr key={f.id}>
                   <td>
@@ -77,8 +79,10 @@ export function PatchView() {
                         if (x) x.profileId = e.target.value;
                       })}
                     >
-                      {PROFILE_LIST.map((pr) => (
-                        <option key={pr.id} value={pr.id}>{pr.manufacturer} {pr.model} · {pr.mode}</option>
+                      {allProfileMetas(project).map((pr) => (
+                        <option key={pr.id} value={pr.id}>
+                          {pr.imported ? '⇩ ' : ''}{pr.label}
+                        </option>
                       ))}
                     </select>
                   </td>
@@ -162,7 +166,31 @@ export function PatchView() {
           >
             + add fixture
           </button>
+          <label className="btn small" style={{ cursor: 'pointer' }}>
+            ⇩ import .gdtf
+            <input
+              type="file"
+              accept=".gdtf"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const b64 = String(reader.result).split(',')[1] ?? '';
+                  useStore.getState().send({ type: 'importGdtf', name: file.name, data: b64 });
+                };
+                reader.readAsDataURL(file);
+                e.target.value = '';
+              }}
+            />
+          </label>
           <span className="label">drag fixtures in the 2D previz to place them</span>
+          {importMsg && (
+            <span className="label" style={{ color: importMsg.ok ? 'var(--good)' : 'var(--hot)' }}>
+              {importMsg.text}
+            </span>
+          )}
         </div>
       </div>
 
@@ -181,7 +209,7 @@ export function PatchView() {
             />
             <div className="grow" style={{ lineHeight: 1.9 }}>
               {project.fixtures.flatMap((f) => {
-                const prof = PROFILES[f.profileId];
+                const prof = profileMeta(project, f.profileId);
                 if (!prof) return [];
                 return prof.heads.map((hd, hi) => {
                   const on = g.heads.some((h) => h.fixtureId === f.id && h.head === hi);

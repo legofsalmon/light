@@ -32,6 +32,9 @@ pub struct FixtureLite {
 #[derive(Deserialize, Clone, Debug)]
 pub struct ProjectLite {
     pub fixtures: Vec<FixtureLite>,
+    /// imported (GDTF-compiled) profiles — needed for head layout + beam angle
+    #[serde(default)]
+    pub profiles: std::collections::HashMap<String, light_core::cprofile::CompiledProfile>,
 }
 
 #[derive(Deserialize, Clone, Debug)]

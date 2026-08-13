@@ -116,6 +116,91 @@ fn merge_to_dmx() {
 }
 
 #[test]
+fn gdtf_import_end_to_end() {
+    use light_core::types::{Fixture, Group, HeadRef, Look, LookPart, PartParams, Vec3};
+
+    fn b64(data: &[u8]) -> String {
+        const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for chunk in data.chunks(3) {
+            let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+            let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+            out.push(A[(n >> 18) as usize & 63] as char);
+            out.push(A[(n >> 12) as usize & 63] as char);
+            out.push(if chunk.len() > 1 { A[(n >> 6) as usize & 63] as char } else { '=' });
+            out.push(if chunk.len() > 2 { A[n as usize & 63] as char } else { '=' });
+        }
+        out
+    }
+
+    let t0 = 1000.0;
+    let mut st = EngineState::new(default_project(), t0);
+    let out = st.handle_command(
+        Command::ImportGdtf {
+            name: "synthetic.gdtf".into(),
+            data: b64(include_bytes!("data/synthetic.gdtf")),
+        },
+        t0,
+    );
+    let (ok, msg, ids) = out.import_result.expect("import result");
+    assert!(ok, "import failed: {msg}");
+    assert_eq!(ids, vec!["gdtf-acme-testspot-100-standard".to_string()]);
+    assert!(st.project.profiles.contains_key(&ids[0]));
+
+    // patch it at 200 and fire a look at it
+    st.project.fixtures.push(Fixture {
+        id: "spot1".into(),
+        name: "Test Spot".into(),
+        profile_id: ids[0].clone(),
+        universe_id: "u1".into(),
+        address: 200,
+        pos: Vec3 { x: 0.0, y: 3.0, z: 0.0 },
+        rot_y: 0.0,
+    });
+    st.project.groups.push(Group {
+        id: "g-spot".into(),
+        name: "Spot".into(),
+        heads: vec![HeadRef { fixture_id: "spot1".into(), head: 0 }],
+    });
+    st.project.looks.insert(
+        "look-spot".into(),
+        Look {
+            id: "look-spot".into(),
+            name: "Spot test".into(),
+            parts: vec![LookPart {
+                id: "p1".into(),
+                group_id: "g-spot".into(),
+                params: PartParams {
+                    dimmer: Some(1.0),
+                    color: Some(light_core::types::ColorHS { h: 0.0, s: 1.0 }),
+                    pan: Some(0.5),
+                    tilt: Some(1.0),
+                    ..Default::default()
+                },
+                effects: vec![],
+            }],
+            flash: None,
+            fade: None,
+        },
+    );
+    st.project.layers[0].cells[0] = Some("look-spot".into());
+
+    let mut r = Renderer::new();
+    r.tick(&mut st, t0);
+    st.trigger("layer-wash", 0, t0);
+    let res = r.tick(&mut st, t0 + 1000.0); // > 0.8 s fade
+    let u1 = &res.buffers["u1"];
+    let base = 199;
+    assert_eq!([u1[base], u1[base + 1]], [128, 0], "pan 16-bit");
+    assert_eq!([u1[base + 2], u1[base + 3]], [255, 255], "tilt 16-bit");
+    assert_eq!(u1[base + 4], 255, "dimmer");
+    assert_eq!(u1[base + 5], 8, "shutter open default");
+    assert_eq!([u1[base + 6], u1[base + 7], u1[base + 8]], [255, 0, 0], "rgb");
+    assert_eq!(u1[base + 9], 128, "unmapped zoom default");
+    assert_eq!(u1[base + 10], 23, "wheel quantised to red");
+}
+
+#[test]
 fn clock_math() {
     let mut c = BeatClock::new(0.0);
     c.set_bpm(120.0, 0.0);

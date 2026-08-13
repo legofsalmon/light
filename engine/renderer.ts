@@ -2,6 +2,7 @@ import type { HeadRef, HeadSnap, LayerSnap, MotorMode } from '../shared/types.ts
 import { clamp, lerp } from '../shared/types.ts';
 import type { HeadKind, ResolvedParams } from '../shared/profiles.ts';
 import { PROFILES, defaultResolved } from '../shared/profiles.ts';
+import { renderImported } from './wasmProfiles.ts';
 import { applyEffects } from '../shared/effects.ts';
 import { DERBY_MACROS, derbyMacroForValue, derbyQuantize, hsvToRgb, rgbToHsv } from '../shared/color.ts';
 import type { EngineState } from './state.ts';
@@ -45,9 +46,9 @@ export class Renderer {
     const heads = new Map<string, ResolvedParams>();
     const headOrder: { key: string; fixtureId: string; head: number; kind: HeadKind }[] = [];
     for (const f of p.fixtures) {
-      const prof = PROFILES[f.profileId];
-      if (!prof) continue;
-      prof.heads.forEach((hd, i) => {
+      const profHeads = PROFILES[f.profileId]?.heads ?? p.profiles?.[f.profileId]?.heads;
+      if (!profHeads) continue;
+      profHeads.forEach((hd, i) => {
         const key = `${f.id}:${i}`;
         heads.set(key, defaultResolved());
         headOrder.push({ key, fixtureId: f.id, head: i, kind: hd.kind });
@@ -171,14 +172,21 @@ export class Renderer {
     const buffers = new Map<string, Uint8Array>();
     for (const u of p.universes) buffers.set(u.id, new Uint8Array(512));
     for (const f of p.fixtures) {
-      const prof = PROFILES[f.profileId];
-      if (!prof) continue;
       const buf = buffers.get(f.universeId);
       if (!buf) continue;
       const base = f.address - 1;
-      if (base < 0 || base + prof.channels > 512) continue;
-      const hp = prof.heads.map((_, i) => heads.get(`${f.id}:${i}`)!);
-      prof.render(hp, buf, base);
+      const prof = PROFILES[f.profileId];
+      if (prof) {
+        if (base < 0 || base + prof.channels > 512) continue;
+        const hp = prof.heads.map((_, i) => heads.get(`${f.id}:${i}`)!);
+        prof.render(hp, buf, base);
+        continue;
+      }
+      const cp = p.profiles?.[f.profileId];
+      if (!cp) continue;
+      if (base < 0 || base + cp.footprint > 512) continue;
+      const hp = cp.heads.map((_, i) => heads.get(`${f.id}:${i}`)!);
+      renderImported(f.profileId, cp, hp, buf, base);
     }
 
     // --- previz snapshot ---

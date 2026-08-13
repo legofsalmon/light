@@ -89,4 +89,6 @@ The top-bar haze slider writes here directly (merged highest-wins with any look 
 
 Per 40 Hz tick the engine resolves every head's parameters (layer merge → effects → masters), then each profile renders parameters to its channels: masters scale dimmer/white before rendering; profiles without a dimmer channel fold intensity into their colour channels; banded channels (derby macros, motor modes) snap rather than fade. The maths is identical in both engines and locked by the parity test.
 
-Custom fixtures beyond the generics currently mean adding a profile in code — [GDTF import](../ROADMAP.md) replaces that with drop-in fixture files from gdtf-share.com as the v0.4 milestone.
+## Importing fixtures (GDTF)
+
+For anything beyond the built-ins, click **⇩ import .gdtf** in the Fixtures tab and pick a fixture file (e.g. from [gdtf-share.com](https://gdtf-share.com)). Every DMX mode in the file becomes a selectable profile (marked ⇩ in the dropdown), stored inside the project so it travels with your show. Supported in v1: dimmer, RGB(W) colour, 16-bit pan/tilt, shutter/strobe, and colour wheels (with automatic nearest-colour quantisation, like the derby); unmapped channels hold the fixture's own defaults. Both engines interpret imported profiles through one shared implementation, and the parity suite covers it.

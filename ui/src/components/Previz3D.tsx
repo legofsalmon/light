@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { HeadSnap, Project } from '../../../shared/types.ts';
-import { PROFILES } from '../../../shared/profiles.ts';
+import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 
 type HeadHandle = {
@@ -46,7 +46,7 @@ function buildRig(project: Project): { group: THREE.Group; handles: HeadHandle[]
   const handles: HeadHandle[] = [];
 
   for (const f of project.fixtures) {
-    const prof = PROFILES[f.profileId];
+    const prof = profileMeta(project, f.profileId);
     if (!prof) continue;
     const fg = new THREE.Group();
     fg.position.set(f.pos.x, f.pos.y, f.pos.z);

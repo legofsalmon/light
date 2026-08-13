@@ -2,7 +2,27 @@ use bevy::pbr::{FogVolume, VolumetricLight};
 use bevy::prelude::*;
 use light_core::profiles::{profile_of, HeadKind};
 
+use crate::protocol::ProjectLite;
 use crate::state::Live;
+
+/// Profile metadata from either source: built-in code or imported GDTF data.
+struct ProfMeta {
+    heads: Vec<(HeadKind, f64)>,
+    beam_deg: f64,
+}
+
+fn prof_meta(project: &ProjectLite, id: &str) -> Option<ProfMeta> {
+    if let Some(p) = profile_of(id) {
+        return Some(ProfMeta {
+            heads: p.heads.iter().map(|h| (h.kind, h.offset)).collect(),
+            beam_deg: p.beam_deg,
+        });
+    }
+    project.profiles.get(id).map(|c| ProfMeta {
+        heads: c.heads.iter().map(|h| (h.kind, h.offset)).collect(),
+        beam_deg: c.beam_deg,
+    })
+}
 
 #[derive(Component)]
 pub struct FixtureRoot;
@@ -116,7 +136,7 @@ pub fn rebuild_fixtures(
     });
 
     for f in &project.fixtures {
-        let Some(prof) = profile_of(&f.profile_id) else { continue };
+        let Some(prof) = prof_meta(&project, &f.profile_id) else { continue };
         let root = commands
             .spawn((
                 FixtureRoot,
@@ -127,7 +147,7 @@ pub fn rebuild_fixtures(
             .id();
 
         // body
-        let body = match prof.heads.first().map(|h| h.kind) {
+        let body = match prof.heads.first().map(|h| h.0) {
             Some(HeadKind::Derby) => Cuboid::new(0.26, 0.2, 0.2),
             Some(HeadKind::Hazer) => Cuboid::new(0.34, 0.26, 0.26),
             _ if prof.heads.len() > 1 => Cuboid::new(1.06, 0.09, 0.09),
@@ -141,10 +161,10 @@ pub fn rebuild_fixtures(
             ));
         });
 
-        for (hi, hd) in prof.heads.iter().enumerate() {
-            let tag = HeadTag { fixture: f.id.clone(), head: hi, kind: hd.kind };
+        for (hi, &(kind, offset)) in prof.heads.iter().enumerate() {
+            let tag = HeadTag { fixture: f.id.clone(), head: hi, kind };
             let rigged = f.pos.y > 1.2;
-            let beam_dir = match hd.kind {
+            let beam_dir = match kind {
                 HeadKind::Derby => Vec3::new(0.0, -0.85, 0.52),
                 _ if rigged => Vec3::new(0.0, -0.93, 0.37),
                 _ => Vec3::new(0.0, -0.26, 0.97),
@@ -154,7 +174,7 @@ pub fn rebuild_fixtures(
             commands.entity(root).with_children(|p| {
                 let mut head = p.spawn((
                     tag.clone(),
-                    Transform::from_xyz(hd.offset as f32, 0.0, 0.0),
+                    Transform::from_xyz(offset as f32, 0.0, 0.0),
                     Visibility::default(),
                 ));
 
@@ -173,7 +193,7 @@ pub fn rebuild_fixtures(
                         Transform::default(),
                     ));
 
-                    match hd.kind {
+                    match kind {
                         HeadKind::Derby => {
                             // ring blinder
                             h.spawn((

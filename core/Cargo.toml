@@ -4,16 +4,28 @@ version = "0.1.0"
 edition = "2021"
 description = "LIGHT engine core — DMX look engine with Art-Net/sACN out, OSC/MIDI in, WS control"
 
+[features]
+# "engine" pulls in everything OS-bound (sockets, MIDI, filesystem). Disable
+# default features for wasm builds: profiles/GDTF/colour stay available.
+default = ["engine"]
+engine = ["dep:tungstenite", "dep:midir", "dep:dirs", "dep:getrandom"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tungstenite = "0.24"
-midir = "0.10"
-dirs = "5"
-getrandom = "0.2"
+tungstenite = { version = "0.24", optional = true }
+midir = { version = "0.10", optional = true }
+dirs = { version = "5", optional = true }
+getrandom = { version = "0.2", optional = true }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 roxmltree = "0.20"
 
 [[bin]]
 name = "light-engine"
 path = "src/bin/light-engine.rs"
+required-features = ["engine"]
+
+[[bin]]
+name = "light-bench"
+path = "src/bin/light-bench.rs"
+required-features = ["engine"]

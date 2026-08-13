@@ -241,6 +241,9 @@ pub struct Project {
     pub midi: Vec<MidiMapping>,
     pub sync: SyncCfg,
     pub settings: Settings,
+    /// imported (GDTF-compiled) fixture profiles — travel with the project
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub profiles: HashMap<String, crate::cprofile::CompiledProfile>,
 }
 
 // ---------- live wire types (engine → ui) ----------
@@ -322,5 +325,6 @@ pub enum Command {
     UpdateProject { project: Box<Project> },
     Midi { status: u8, d1: u8, d2: u8 },
     Learn { action: Option<MidiAction> },
+    ImportGdtf { name: String, data: String },
     Save,
 }

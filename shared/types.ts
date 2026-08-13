@@ -136,6 +136,21 @@ export type Settings = {
   hazeFan: number;
 };
 
+/** Imported (GDTF-compiled) fixture profile — pure data, interpreted by the
+ *  Rust core natively and by the Node engine via the shared WASM build.
+ *  The UI only reads metadata (heads/footprint/channel names). */
+export type CompiledProfile = {
+  id: string;
+  manufacturer: string;
+  model: string;
+  mode: string;
+  footprint: number;
+  heads: { kind: 'rgb' | 'derby' | 'hazer' | 'dimmer' | 'mover'; offset: number; label: string }[];
+  channels: { offsets: number[]; head: number; name: string; default: number; cases: unknown[] }[];
+  beamDeg: number;
+  virtualDimmer: boolean;
+};
+
 export type Project = {
   version: 1;
   name: string;
@@ -149,6 +164,8 @@ export type Project = {
   midi: MidiMapping[];
   sync: SyncCfg;
   settings: Settings;
+  /** imported fixture profiles, keyed by profile id — travel with the project */
+  profiles?: Record<string, CompiledProfile>;
 };
 
 // ---------- live wire types ----------
@@ -219,6 +236,8 @@ export type Command =
   | { type: 'midi'; status: number; d1: number; d2: number }
   /** arm (or cancel with null) engine-side MIDI learn — next note/cc maps to the action */
   | { type: 'learn'; action: MidiAction | null }
+  /** import a .gdtf file (base64) — engine parses and adds its modes to project.profiles */
+  | { type: 'importGdtf'; name: string; data: string }
   | { type: 'save' };
 
 // ---------- events (engine → ui) ----------
@@ -230,7 +249,8 @@ export type ServerEvent =
   | { type: 'saved'; path: string }
   /** native MIDI inputs owned by the engine (Rust core); empty for the Node dev engine */
   | { type: 'midiInputs'; names: string[] }
-  | { type: 'learned'; mapping: MidiMapping };
+  | { type: 'learned'; mapping: MidiMapping }
+  | { type: 'importResult'; ok: boolean; message: string; profileIds: string[] };
 
 export const WS_PORT = 9900;
 

@@ -2,7 +2,8 @@ import React from 'react';
 import type { Effect, EffectTarget, Look, LookPart, Project, Wave } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
-import { PROFILES, type HeadKind } from '../../../shared/profiles.ts';
+import { type HeadKind } from '../../../shared/profiles.ts';
+import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 import { Fader } from './Fader.tsx';
 
@@ -33,7 +34,7 @@ function groupKinds(project: Project, groupId: string): Set<HeadKind> {
   if (!group) return kinds;
   for (const ref of group.heads) {
     const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
-    const head = fixture ? PROFILES[fixture.profileId]?.heads[ref.head] : null;
+    const head = fixture ? profileMeta(project, fixture.profileId)?.heads[ref.head] : null;
     if (head) kinds.add(head.kind);
   }
   return kinds;

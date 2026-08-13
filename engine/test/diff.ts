@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import WebSocket from 'ws';
 import { defaultProject } from '../defaultProject.ts';
-import type { Command, Snapshot } from '../../shared/types.ts';
+import type { Command, Project, Snapshot } from '../../shared/types.ts';
 
 const ROOT = process.cwd();
 const TMP = path.join(ROOT, '.parity-tmp');
@@ -27,6 +27,7 @@ function check(name: string, cond: boolean, detail = ''): void {
 class Client {
   ws!: WebSocket;
   snap: Snapshot | null = null;
+  project: Project | null = null;
 
   async connect(port: number): Promise<void> {
     for (let i = 0; i < 50; i++) {
@@ -42,6 +43,7 @@ class Client {
         this.ws.on('message', (d) => {
           const ev = JSON.parse(String(d));
           if (ev.type === 'snap') this.snap = ev;
+          if (ev.type === 'project') this.project = ev.project;
         });
         return;
       } catch {
@@ -57,6 +59,14 @@ class Client {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function currentProject(c: Client): Promise<Project> {
+  for (let i = 0; i < 30; i++) {
+    if (c.project) return c.project;
+    await sleep(100);
+  }
+  throw new Error('no project received');
+}
 
 function compareDmx(name: string, a: Snapshot | null, b: Snapshot | null): void {
   const da = a?.dmx['u1'];
@@ -159,6 +169,45 @@ async function main(): Promise<void> {
   const colsN = node.snap?.layers.map((l) => `${l.id}:${l.col}`).join(' ');
   const colsR = rust.snap?.layers.map((l) => `${l.id}:${l.col}`).join(' ');
   check('live column state parity', colsN === colsR, `node=[${colsN}] rust=[${colsR}]`);
+
+  // --- GDTF import parity: Node renders via WASM, Rust natively — same file,
+  // --- same bytes required.
+  const gdtf = fs.readFileSync(path.join(ROOT, 'core', 'tests', 'data', 'synthetic.gdtf'));
+  both({ type: 'importGdtf', name: 'synthetic.gdtf', data: gdtf.toString('base64') });
+  await sleep(500);
+
+  const projN = structuredClone(await currentProject(node));
+  const profileId = 'gdtf-acme-testspot-100-standard';
+  check('import landed in project (node)', !!projN.looks && !!projN.profiles?.[profileId]);
+
+  // patch the imported fixture + a look targeting it, identically on both
+  const patchIn = (p: Project) => {
+    p.fixtures.push({
+      id: 'spot1', name: 'Test Spot', profileId, universeId: 'u1', address: 200,
+      pos: { x: 0, y: 3, z: 0 }, rotY: 0,
+    });
+    p.groups.push({ id: 'g-spot', name: 'Spot', heads: [{ fixtureId: 'spot1', head: 0 }] });
+    p.looks['look-spot'] = {
+      id: 'look-spot', name: 'Spot test',
+      parts: [{ id: 'p-spot', groupId: 'g-spot',
+        params: { dimmer: 1, color: { h: 0, s: 1 }, pan: 0.5, tilt: 1 }, effects: [] }],
+    };
+    p.layers[0].cells[0] = 'look-spot';
+    return p;
+  };
+  node.send({ type: 'updateProject', project: patchIn(structuredClone(projN)) });
+  const projR = structuredClone(await currentProject(rust));
+  rust.send({ type: 'updateProject', project: patchIn(projR) });
+  await sleep(300);
+  both({ type: 'trigger', layerId: 'layer-wash', col: 0 });
+  await sleep(1400);
+  compareDmx('imported GDTF fixture (wasm vs native)', node.snap, rust.snap);
+  const spot = node.snap?.dmx['u1']?.slice(199, 210);
+  check(
+    'imported fixture bytes correct',
+    JSON.stringify(spot) === JSON.stringify([128, 0, 255, 255, 255, 8, 255, 0, 0, 128, 23]),
+    `got ${JSON.stringify(spot)}`
+  );
 
   kill();
   fs.rmSync(TMP, { recursive: true, force: true });

@@ -1,10 +1,43 @@
 use std::collections::HashMap;
 
 use crate::color::{derby_macro_for_value, derby_quantize, hsv_to_rgb, rgb_to_hsv, DERBY_MACROS};
+use crate::cprofile::{render_compiled, CompiledProfile};
 use crate::effects::apply_effects;
-use crate::profiles::{profile_of, HeadKind, ResolvedParams};
+use crate::profiles::{profile_of, HeadKind, Profile, ResolvedParams};
 use crate::state::EngineState;
-use crate::types::{clamp01, lerp, HeadSnap, LayerBlend, LayerSnap, MotorMode};
+use crate::types::{clamp01, lerp, HeadSnap, LayerBlend, LayerSnap, MotorMode, Project};
+
+/// A fixture profile from either source: built-in code or imported data.
+enum Prof<'a> {
+    Legacy(&'static Profile),
+    Compiled(&'a CompiledProfile),
+}
+
+impl<'a> Prof<'a> {
+    fn resolve(project: &'a Project, id: &str) -> Option<Prof<'a>> {
+        profile_of(id)
+            .map(Prof::Legacy)
+            .or_else(|| project.profiles.get(id).map(Prof::Compiled))
+    }
+    fn head_kinds(&self) -> Vec<HeadKind> {
+        match self {
+            Prof::Legacy(p) => p.heads.iter().map(|h| h.kind).collect(),
+            Prof::Compiled(p) => p.heads.iter().map(|h| h.kind).collect(),
+        }
+    }
+    fn channels(&self) -> usize {
+        match self {
+            Prof::Legacy(p) => p.channels,
+            Prof::Compiled(p) => p.footprint,
+        }
+    }
+    fn render(&self, heads: &[&ResolvedParams], buf: &mut [u8], base: usize) {
+        match self {
+            Prof::Legacy(p) => (p.render)(heads, buf, base),
+            Prof::Compiled(p) => render_compiled(p, heads, buf, base),
+        }
+    }
+}
 
 const N_FIELDS: usize = 9;
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -91,11 +124,11 @@ impl Renderer {
         let mut heads: HashMap<(String, usize), ResolvedParams> = HashMap::new();
         let mut head_order: Vec<HeadInfo> = Vec::new();
         for f in &st.project.fixtures {
-            let Some(prof) = profile_of(&f.profile_id) else { continue };
-            for (i, hd) in prof.heads.iter().enumerate() {
+            let Some(prof) = Prof::resolve(&st.project, &f.profile_id) else { continue };
+            for (i, kind) in prof.head_kinds().into_iter().enumerate() {
                 let key = (f.id.clone(), i);
                 heads.insert(key.clone(), ResolvedParams::default());
-                head_order.push(HeadInfo { key, kind: hd.kind });
+                head_order.push(HeadInfo { key, kind });
             }
         }
 
@@ -250,18 +283,19 @@ impl Renderer {
             buffers.insert(u.id.clone(), [0u8; 512]);
         }
         for f in &st.project.fixtures {
-            let Some(prof) = profile_of(&f.profile_id) else { continue };
+            let Some(prof) = Prof::resolve(&st.project, &f.profile_id) else { continue };
             let Some(buf) = buffers.get_mut(&f.universe_id) else { continue };
-            if f.address < 1 || f.address - 1 + prof.channels > 512 {
+            let n_heads = prof.head_kinds().len();
+            if f.address < 1 || f.address - 1 + prof.channels() > 512 {
                 continue;
             }
-            let hp: Vec<&ResolvedParams> = (0..prof.heads.len())
+            let hp: Vec<&ResolvedParams> = (0..n_heads)
                 .filter_map(|i| heads.get(&(f.id.clone(), i)))
                 .collect();
-            if hp.len() != prof.heads.len() {
+            if hp.len() != n_heads {
                 continue; // duplicate fixture ids or corrupt patch — skip, never panic
             }
-            (prof.render)(&hp, buf, f.address - 1);
+            prof.render(&hp, buf, f.address - 1);
         }
 
         // --- previz snapshot ---
