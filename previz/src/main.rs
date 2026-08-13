@@ -14,7 +14,15 @@ use std::sync::Mutex;
 fn main() {
     let rx = protocol::spawn_ws_client();
 
-    App::new()
+    let mut app = App::new();
+    // LIGHT_PREVIZ_DIAG=1 logs frame-time diagnostics once per second.
+    if std::env::var("LIGHT_PREVIZ_DIAG").is_ok() {
+        app.add_plugins((
+            bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
+            bevy::diagnostic::LogDiagnosticsPlugin::default(),
+        ));
+    }
+    app
         .insert_resource(ClearColor(Color::srgb(0.016, 0.016, 0.022)))
         .insert_resource(AmbientLight {
             color: Color::srgb(0.65, 0.7, 0.9),
@@ -45,3 +53,4 @@ fn main() {
         )
         .run();
 }
+
