@@ -29,6 +29,12 @@ export class Renderer {
   private effBeat = 0;
   private lastT: number | null = null;
   private st: EngineState;
+  /** Cue-list anchors, keyed "layerId lookId" (space-joined; neither id can
+   *  contain spaces): the trigger this anchor belongs to (fadeStart) and the
+   *  effBeat it started at. Keyed per layer+look so a cue-to-cue crossfade
+   *  keeps the outgoing cue's phase, and anchoring at trigger time keeps the
+   *  two engines in the same step. */
+  private cueAnchors = new Map<string, { fadeStart: number; at: number }>();
 
   constructor(st: EngineState) {
     this.st = st;
@@ -36,7 +42,66 @@ export class Renderer {
 
   /** Land the effect phase on a downbeat (tap / resync). */
   alignPhase(): void {
-    this.effBeat = Math.round(this.effBeat);
+    const rounded = Math.round(this.effBeat);
+    // shift cue anchors by the same delta so running cue lists keep their
+    // step position - and the two engines (whose absolute effBeats differ)
+    // stay in the same step through a tap
+    const delta = rounded - this.effBeat;
+    for (const a of this.cueAnchors.values()) a.at += delta;
+    this.effBeat = rounded;
+  }
+
+  /** Follow a cue-list look to its active step (one level; a step that
+   *  points at another cue list renders dark). Non-cue looks pass through.
+   *  Steps are normalised here, not in sanitize, so both engines apply the
+   *  exact same rules to whatever reaches them. */
+  private resolveCue(lookId: string, layerId: string, fadeStart: number) {
+    const p = this.st.project;
+    // Object.hasOwn: a step id like "constructor" must resolve to nothing,
+    // not to Object.prototype - an inherited value here crashed the tick
+    const look = Object.hasOwn(p.looks, lookId) ? p.looks[lookId] : undefined;
+    if (!look) return undefined;
+    const steps = look.steps;
+    if (!steps || steps.length === 0) return look;
+    const beatsOf = (b: number) => (Number.isFinite(b) && b > 0 ? Math.min(b, 512) : 1);
+    const total = steps.reduce((sum, st) => sum + beatsOf(st.beats), 0);
+    // one anchor per (layer, look): a new trigger (fadeStart) restarts it,
+    // and the outgoing look of a crossfade (fadeStart -1) keeps its own
+    const key = `${layerId} ${lookId}`;
+    let anchor = this.cueAnchors.get(key);
+    if (fadeStart >= 0 && (!anchor || anchor.fadeStart !== fadeStart)) {
+      anchor = { fadeStart, at: this.effBeat };
+      this.cueAnchors.set(key, anchor);
+    }
+    const at = anchor ? anchor.at : this.effBeat;
+    let pos = (this.effBeat - at) % total;
+    if (!Number.isFinite(pos)) pos = 0;
+    if (pos < 0) pos += total;
+    for (const st of steps) {
+      const b = beatsOf(st.beats);
+      if (pos < b) {
+        const target = Object.hasOwn(p.looks, st.lookId) ? p.looks[st.lookId] : undefined;
+        if (!target || (target.steps && target.steps.length > 0)) return undefined;
+        return target;
+      }
+      pos -= b;
+    }
+    return undefined;
+  }
+
+  /** Drop anchors whose (layer, look) is no longer live or fading - keeps
+   *  the map from growing forever as looks and layers come and go. */
+  private pruneCueAnchors(): void {
+    if (this.cueAnchors.size === 0) return;
+    const alive = new Set<string>();
+    for (const layer of this.st.project.layers) {
+      const live = this.st.layerLive(layer.id);
+      if (live.lookId) alive.add(`${layer.id} ${live.lookId}`);
+      if (live.prevId) alive.add(`${layer.id} ${live.prevId}`);
+    }
+    for (const key of this.cueAnchors.keys()) {
+      if (!alive.has(key)) this.cueAnchors.delete(key);
+    }
   }
 
   tick(t: number): TickResult {
@@ -79,7 +144,7 @@ export class Renderer {
       ];
       for (const src of sources) {
         if (!src.lookId || src.w <= 0.001) continue;
-        const look = p.looks[src.lookId];
+        const look = this.resolveCue(src.lookId, layer.id, src.incoming ? live.fadeStart : -1);
         if (!look) continue;
         for (const part of look.parts) {
           const refs = groupHeads.get(part.groupId) ?? [];
@@ -153,6 +218,8 @@ export class Renderer {
         if (a.macro !== undefined) out.macro = a.macro;
       }
     }
+
+    this.pruneCueAnchors();
 
     // --- manual haze is merged HTP so looks can only add ---
     for (const ho of headOrder) {

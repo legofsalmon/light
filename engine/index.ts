@@ -192,6 +192,12 @@ function handleCommand(cmd: Command): void {
       state.project.settings.hazeFan = clamp(cmd.v);
       state.onChange?.();
       break;
+    case 'setLink':
+      // Ableton Link runs in the native (Rust) engine only — the reference
+      // engine records the preference so the project stays in sync
+      state.project.sync.linkEnabled = cmd.on;
+      state.updateProject(state.project);
+      break;
     case 'updateProject':
       state.updateProject(cmd.project);
       break;

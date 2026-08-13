@@ -149,6 +149,43 @@ pub struct LookPart {
     pub effects: Vec<Effect>,
 }
 
+/// One entry of a cue list: play `look_id` for `beats` beats, then advance.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CueStep {
+    pub look_id: String,
+    #[serde(default = "default_beats")]
+    pub beats: f64,
+}
+
+fn default_beats() -> f64 {
+    1.0
+}
+
+/// Mirror of the TS sanitize for `Look.steps`: repair, never reject. A
+/// hand-edited project file with `"beats": "2"` or a null entry must load
+/// here exactly as it does in the Node engine — a hard serde error would
+/// silently boot the core with the default project instead.
+fn de_steps<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<Vec<CueStep>>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    let Some(serde_json::Value::Array(items)) = v else { return Ok(None) };
+    let steps: Vec<CueStep> = items
+        .into_iter()
+        .filter_map(|item| {
+            let obj = item.as_object()?;
+            let look_id = obj.get("lookId")?.as_str()?.to_string();
+            let beats = match obj.get("beats").and_then(|b| b.as_f64()) {
+                Some(b) if b.is_finite() && b > 0.0 => b.min(512.0),
+                _ => 1.0,
+            };
+            Some(CueStep { look_id, beats })
+        })
+        .collect();
+    Ok(if steps.is_empty() { None } else { Some(steps) })
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Look {
     pub id: String,
@@ -158,6 +195,8 @@ pub struct Look {
     pub flash: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fade: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "de_steps")]
+    pub steps: Option<Vec<CueStep>>,
 }
 
 impl Look {
@@ -234,6 +273,9 @@ pub struct SyncCfg {
     pub osc_port: u16,
     pub follow_columns: bool,
     pub bpm_from_osc: bool,
+    /// follow an Ableton Link session (native engine only)
+    #[serde(default)]
+    pub link_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -305,6 +347,12 @@ pub struct EngineStats {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct LinkSnap {
+    pub on: bool,
+    pub peers: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     #[serde(rename = "type")]
@@ -316,6 +364,8 @@ pub struct Snapshot {
     pub master: f64,
     pub blackout: bool,
     pub haze: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub link: Option<LinkSnap>,
     pub haze_fan: f64,
     pub heads: Vec<HeadSnap>,
     pub layers: Vec<LayerSnap>,
@@ -334,6 +384,7 @@ pub enum Command {
     ClearLayer { layer_id: String },
     Column { col: usize },
     SetBpm { bpm: f64 },
+    SetLink { on: bool },
     Tap,
     Resync,
     SetSpeed { v: f64 },

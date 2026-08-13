@@ -61,8 +61,23 @@ fn nearest(r: u8, g: u8, b: u8) -> (u8, u8) {
 }
 
 /// First swatch colour of a look — mirror of `lookSwatch(look)[0]` in
-/// `ui/src/lookColors.ts` (first part that yields a colour wins).
-fn swatch_first(look: &Look) -> (u8, u8, u8) {
+/// `ui/src/lookColors.ts` (first part that yields a colour wins). Cue lists
+/// borrow the swatch of their first resolvable step.
+fn swatch_first(look: &Look, looks: &std::collections::HashMap<String, Look>) -> (u8, u8, u8) {
+    if let Some(steps) = look.steps.as_ref().filter(|s| !s.is_empty()) {
+        for st in steps {
+            if let Some(target) = looks.get(&st.look_id) {
+                if target.steps.as_ref().is_none_or(|s| s.is_empty()) {
+                    return swatch_first_plain(target);
+                }
+            }
+        }
+        return (0x3a, 0x3a, 0x40);
+    }
+    swatch_first_plain(look)
+}
+
+fn swatch_first_plain(look: &Look) -> (u8, u8, u8) {
     for part in &look.parts {
         if part.effects.iter().any(|e| e.target == EffectTarget::Hue) {
             return (0xff, 0x3b, 0x30); // RAINBOW[0]
@@ -108,7 +123,7 @@ fn compute_leds(state: &EngineState) -> HashMap<u8, u8> {
         for col in 0..p.columns.len().min(8) {
             let Some(Some(look_id)) = layer.cells.get(col) else { continue };
             let Some(look) = p.looks.get(look_id) else { continue };
-            let (r, g, b) = swatch_first(look);
+            let (r, g, b) = swatch_first(look, &p.looks);
             let (bright, dim) = nearest(r, g, b);
             let active = live.is_some_and(|lv| {
                 lv.look_id.as_deref() == Some(look_id.as_str()) && lv.col == Some(col)

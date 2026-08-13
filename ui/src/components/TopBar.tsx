@@ -77,6 +77,17 @@ export function TopBar() {
         <button className="btn small ghost" onClick={() => send({ type: 'resync' })} title="snap phase to downbeat">
           sync
         </button>
+        <button
+          className={`btn small ${project.sync.linkEnabled ? 'on' : ''}`}
+          title={
+            snap?.link
+              ? 'Ableton Link — follow/lead the session tempo'
+              : 'Ableton Link runs in the native engine (packaged app / rust core)'
+          }
+          onClick={() => send({ type: 'setLink', on: !project.sync.linkEnabled })}
+        >
+          link{project.sync.linkEnabled && snap?.link ? ` ${snap.link.peers}` : ''}
+        </button>
         <Fader
           label="speed"
           width={92}

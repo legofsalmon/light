@@ -89,6 +89,8 @@ pub fn run(cfg: EngineConfig) {
     // APC40 LED feedback shares the with_midi gate — the parity harness runs
     // with LIGHT_NO_MIDI and must never touch a controller
     let mut apc = cfg.with_midi.then(crate::apc::ApcOut::new);
+    let mut link = crate::link::LinkSync::new(state.clock.bpm);
+    link.set_enabled(state.project.sync.link_enabled);
     ensure_osc(&mut osc, &state, &tx);
 
     let mut midi_names: Vec<String> = Vec::new();
@@ -151,12 +153,21 @@ pub fn run(cfg: EngineConfig) {
             }
             match rx.recv_timeout(next - now) {
                 Ok(msg) => {
+                    let bpm_before = state.clock.bpm;
                     let align = handle_msg(
                         msg, &mut state, &bc, &mut osc, &tx, &dir, &mut dirty_at, &mut midi_names,
                         &mut osc_log, now_ms(),
                     );
                     if align {
                         renderer.align_phase();
+                    }
+                    // a locally-set tempo (tap / setBpm / OSC) leads the session
+                    if state.clock.bpm != bpm_before {
+                        link.push_tempo(state.clock.bpm);
+                    }
+                    // the enable flag can change via SetLink or a project edit
+                    if link.enabled() != state.project.sync.link_enabled {
+                        link.set_enabled(state.project.sync.link_enabled);
                     }
                 }
                 Err(RecvTimeoutError::Timeout) => break,
@@ -170,6 +181,10 @@ pub fn run(cfg: EngineConfig) {
         }
 
         let t = now_ms();
+        // follow the Link session tempo while enabled
+        if let Some(bpm) = link.poll_tempo(state.clock.bpm) {
+            state.clock.set_bpm(bpm, t);
+        }
         let res = renderer.tick(&mut state, t);
         for u in &state.project.universes {
             let Some(buf) = res.buffers.get(&u.id) else { continue };
@@ -201,7 +216,7 @@ pub fn run(cfg: EngineConfig) {
         // Snapshots to the UI at 20 fps.
         snap_flip = !snap_flip;
         if snap_flip && bc.count() > 0 {
-            let snap = build_snapshot(&state, &res, t, &stats);
+            let snap = build_snapshot(&state, &res, t, &stats, &link);
             if let Ok(s) = serde_json::to_string(&snap) {
                 bc.broadcast(&s);
             }
@@ -406,7 +421,13 @@ fn handle_osc_sync(m: &OscMessage, state: &mut EngineState, t: f64) {
     }
 }
 
-fn build_snapshot(state: &EngineState, res: &TickResult, t: f64, stats: &EngineStats) -> Snapshot {
+fn build_snapshot(
+    state: &EngineState,
+    res: &TickResult,
+    t: f64,
+    stats: &EngineStats,
+    link: &crate::link::LinkSync,
+) -> Snapshot {
     let mut dmx = std::collections::HashMap::new();
     for (id, buf) in &res.buffers {
         dmx.insert(id.clone(), buf.to_vec());
@@ -418,6 +439,7 @@ fn build_snapshot(state: &EngineState, res: &TickResult, t: f64, stats: &EngineS
         bpm: state.clock.bpm,
         speed: state.speed,
         master: state.master,
+        link: Some(crate::types::LinkSnap { on: link.enabled(), peers: link.peers() }),
         blackout: state.blackout,
         haze: state.project.settings.haze,
         haze_fan: state.project.settings.haze_fan,

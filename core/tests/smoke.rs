@@ -167,6 +167,7 @@ fn gdtf_import_end_to_end() {
         Look {
             id: "look-spot".into(),
             name: "Spot test".into(),
+            steps: None,
             parts: vec![LookPart {
                 id: "p1".into(),
                 group_id: "g-spot".into(),

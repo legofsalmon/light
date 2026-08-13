@@ -63,7 +63,7 @@ function computeLeds(project: Project, snap: Snapshot | null): Map<number, [numb
       if (!lookId) continue;
       const look = project.looks[lookId];
       if (!look) continue;
-      const pal = nearest(lookSwatch(look)[0] ?? '#666666');
+      const pal = nearest(lookSwatch(look, project.looks)[0] ?? '#666666');
       const active = live?.lookId === lookId && live?.col === col;
       leds.set(base + col, [0, active ? pal.bright : pal.dim]);
     }

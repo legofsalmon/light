@@ -8,7 +8,7 @@ description = "LIGHT engine core — DMX look engine with Art-Net/sACN out, OSC/
 # "engine" pulls in everything OS-bound (sockets, MIDI, filesystem). Disable
 # default features for wasm builds: profiles/GDTF/colour stay available.
 default = ["engine"]
-engine = ["dep:tungstenite", "dep:midir", "dep:dirs", "dep:getrandom"]
+engine = ["dep:tungstenite", "dep:midir", "dep:dirs", "dep:getrandom", "dep:rusty_link"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -19,6 +19,7 @@ dirs = { version = "5", optional = true }
 getrandom = { version = "0.2", optional = true }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 roxmltree = "0.20"
+rusty_link = { version = "0.4.9", optional = true }
 
 [[bin]]
 name = "light-engine"

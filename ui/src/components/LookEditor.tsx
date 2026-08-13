@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Effect, EffectTarget, Look, LookPart, Project, Wave } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
@@ -314,6 +314,35 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
   );
 }
 
+/** Beats editor that commits on blur/Enter — per-keystroke clamping made
+ *  fractional values untypeable ("0.5" clamped at "0") and the field
+ *  unclearable. */
+function BeatsInput({ value, onCommit }: { value: number; onCommit: (v: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const v = Number(draft);
+    const clean = Number.isFinite(v) && v > 0 ? Math.min(v, 512) : 1;
+    setDraft(String(clean));
+    if (clean !== value) onCommit(clean);
+  };
+  return (
+    <input
+      className="num"
+      type="number"
+      min={0.25}
+      step={0.25}
+      style={{ width: 60 }}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+    />
+  );
+}
+
 export function LookEditor() {
   const project = useStore((s) => s.project)!;
   const sel = useStore((s) => s.sel);
@@ -403,27 +432,154 @@ export function LookEditor() {
         </button>
         <button
           className="btn small ghost"
-          onClick={() => mutate((p) => {
-            delete p.looks[lookId];
-            for (const ly of p.layers) ly.cells = ly.cells.map((c) => (c === lookId ? null : c));
-          })}
+          onClick={() => {
+            const refs = Object.values(project.looks).filter(
+              (l) => l.steps?.some((st) => st.lookId === lookId),
+            );
+            if (
+              refs.length > 0 &&
+              !window.confirm(
+                `"${look.name}" is a step in ${refs.length} cue list(s) (${refs
+                  .map((l) => l.name)
+                  .join(', ')}) - those steps will go dark. Delete anyway?`,
+              )
+            ) {
+              return;
+            }
+            mutate((p) => {
+              delete p.looks[lookId];
+              for (const ly of p.layers) ly.cells = ly.cells.map((c) => (c === lookId ? null : c));
+            });
+          }}
         >
           delete look
         </button>
       </div>
 
-      {look.parts.map((part) => (
-        <PartEditor key={part.id} lookId={lookId} part={part} />
-      ))}
+      {look.steps?.length ? (
+        <div>
+          <div className="sectionhead" style={{ marginTop: 10 }}>
+            Cue steps — hard cuts on the beat, loops, starts at step 1 when fired
+          </div>
+          {look.steps.map((st, i) => (
+            <div className="row" key={i} style={{ marginBottom: 4 }}>
+              <span className="chip">{i + 1}</span>
+              <select
+                className="sel"
+                value={st.lookId}
+                onChange={(e) => editLook((lk) => { if (lk.steps?.[i]) lk.steps[i].lookId = e.target.value; })}
+              >
+                {(!project.looks[st.lookId] || project.looks[st.lookId]?.steps?.length) ? (
+                  <option value={st.lookId}>
+                    {project.looks[st.lookId] ? '(cue list - renders dark)' : '(missing look)'}
+                  </option>
+                ) : null}
+                {Object.values(project.looks)
+                  .filter((l) => !l.steps?.length)
+                  .map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+              </select>
+              <BeatsInput
+                value={st.beats}
+                onCommit={(v) => editLook((lk) => { if (lk.steps?.[i]) lk.steps[i].beats = v; })}
+              />
+              <span className="label">beats</span>
+              <button
+                className="btn small ghost"
+                disabled={i === 0}
+                onClick={() => editLook((lk) => {
+                  if (!lk.steps || i === 0) return;
+                  [lk.steps[i - 1], lk.steps[i]] = [lk.steps[i], lk.steps[i - 1]];
+                })}
+              >
+                ↑
+              </button>
+              <button
+                className="btn small ghost"
+                disabled={i === (look.steps?.length ?? 0) - 1}
+                onClick={() => editLook((lk) => {
+                  if (!lk.steps || i >= lk.steps.length - 1) return;
+                  [lk.steps[i], lk.steps[i + 1]] = [lk.steps[i + 1], lk.steps[i]];
+                })}
+              >
+                ↓
+              </button>
+              <button
+                className="btn small ghost"
+                onClick={() => editLook((lk) => {
+                  lk.steps?.splice(i, 1);
+                  if (lk.steps?.length === 0) delete lk.steps;
+                })}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <div className="row">
+            <button
+              className="btn small ghost"
+              disabled={!Object.values(project.looks).some((l) => !l.steps?.length && l.id !== lookId)}
+              title="add a step (needs at least one plain look)"
+              onClick={() => editLook((lk) => {
+                const first = Object.values(project.looks).find((l) => !l.steps?.length && l.id !== lookId);
+                if (first) lk.steps?.push({ lookId: first.id, beats: 1 });
+              })}
+            >
+              + step
+            </button>
+            <button
+              className="btn small ghost"
+              title="remove all steps — the look becomes a plain look again"
+              onClick={() => editLook((lk) => { delete lk.steps; })}
+            >
+              → plain look
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {look.parts.map((part) => (
+            <PartEditor key={part.id} lookId={lookId} part={part} />
+          ))}
 
-      <div className="row">
-        <button
-          className="btn small ghost"
-          onClick={() => editLook((lk) => lk.parts.push({ id: uid('part'), groupId: project.groups[0]?.id ?? '', params: { dimmer: 1 }, effects: [] }))}
-        >
-          + part (fixture group)
-        </button>
-      </div>
+          <div className="row">
+            <button
+              className="btn small ghost"
+              onClick={() => editLook((lk) => lk.parts.push({ id: uid('part'), groupId: project.groups[0]?.id ?? '', params: { dimmer: 1 }, effects: [] }))}
+            >
+              + part (fixture group)
+            </button>
+            {(() => {
+              const referencedBy = Object.values(project.looks).filter(
+                (l) => l.steps?.some((st) => st.lookId === lookId),
+              ).length;
+              const eligible = Object.values(project.looks).some(
+                (l) => !l.steps?.length && l.id !== lookId,
+              );
+              return (
+                <button
+                  className="btn small ghost"
+                  disabled={referencedBy > 0 || !eligible}
+                  title={
+                    referencedBy > 0
+                      ? `used as a step by ${referencedBy} cue list(s) - cue lists cannot nest`
+                      : eligible
+                        ? 'turn this look into a cue list that steps through other looks on the beat'
+                        : 'needs at least one other plain look to step through'
+                  }
+                  onClick={() => editLook((lk) => {
+                    const first = Object.values(project.looks).find((l) => !l.steps?.length && l.id !== lookId);
+                    if (first) lk.steps = [{ lookId: first.id, beats: 1 }];
+                  })}
+                >
+                  ⛓ cue list
+                </button>
+              );
+            })()}
+          </div>
+        </>
+      )}
     </div>
   );
 }

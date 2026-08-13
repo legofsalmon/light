@@ -80,6 +80,9 @@ export type LookPart = {
   effects: Effect[];
 };
 
+/** One entry of a cue list: play `lookId` for `beats` beats, then advance. */
+export type CueStep = { lookId: string; beats: number };
+
 export type Look = {
   id: string;
   name: string;
@@ -88,6 +91,9 @@ export type Look = {
   flash?: boolean;
   /** crossfade seconds, overrides the layer default */
   fade?: number;
+  /** when present the look is a cue list: steps play in order, hard cuts on
+   *  the beat, anchored at trigger time; `parts` is unused while set */
+  steps?: CueStep[];
 };
 
 export type LayerBlend = 'normal' | 'multiply' | 'htp';
@@ -136,6 +142,8 @@ export type MidiMapping = {
 
 export type SyncCfg = {
   oscEnabled: boolean;
+  /** follow an Ableton Link session (native engine only) */
+  linkEnabled?: boolean;
   oscPort: number;
   /** Resolume column connect → trigger the same column here */
   followColumns: boolean;
@@ -221,6 +229,8 @@ export type Snapshot = {
   master: number;
   blackout: boolean;
   haze: number;
+  /** Ableton Link session state — native (Rust) engine only */
+  link?: { on: boolean; peers: number };
   hazeFan: number;
   heads: HeadSnap[];
   layers: LayerSnap[];
@@ -237,6 +247,7 @@ export type Command =
   | { type: 'trigger'; layerId: string; col: number }
   | { type: 'release'; layerId: string; col: number }
   | { type: 'clearLayer'; layerId: string }
+  | { type: 'setLink'; on: boolean }
   | { type: 'column'; col: number }
   | { type: 'setBpm'; bpm: number }
   | { type: 'tap' }
@@ -312,6 +323,7 @@ export function sanitizeProject(p: Project): Project | null {
   const sync = (p.sync ?? {}) as Partial<SyncCfg>;
   p.sync = {
     oscEnabled: sync.oscEnabled ?? true,
+    linkEnabled: sync.linkEnabled ?? false,
     oscPort: Number.isFinite(sync.oscPort) ? (sync.oscPort as number) : 7700,
     followColumns: sync.followColumns ?? true,
     bpmFromOsc: sync.bpmFromOsc ?? true,
@@ -330,10 +342,27 @@ export function sanitizeProject(p: Project): Project | null {
       if (!part.params || typeof part.params !== 'object') part.params = {};
       if (!Array.isArray(part.effects)) part.effects = [];
     }
+    if (lk.steps !== undefined) {
+      if (!Array.isArray(lk.steps)) delete lk.steps;
+      else {
+        lk.steps = lk.steps
+          .filter((st): st is CueStep => !!st && typeof st === 'object' && typeof st.lookId === 'string')
+          // prototype keys ("constructor", "__proto__", ...) must never reach
+          // the renderer as look references - they resolve to inherited values
+          .filter((st) => Object.hasOwn(p.looks, st.lookId) || !(st.lookId in p.looks))
+          .map((st) => ({
+            lookId: st.lookId,
+            beats: Number.isFinite(st.beats) && st.beats > 0 ? Math.min(st.beats, 512) : 1,
+          }));
+        if (lk.steps.length === 0) delete lk.steps;
+      }
+    }
   }
   for (const layer of p.layers) {
     if (!Array.isArray(layer.cells)) layer.cells = p.columns.map(() => null);
-    layer.cells = layer.cells.map((c) => (typeof c === 'string' && p.looks[c] ? c : null));
+    layer.cells = layer.cells.map((c) =>
+      typeof c === 'string' && Object.hasOwn(p.looks, c) && p.looks[c] ? c : null,
+    );
     if (!Number.isFinite(layer.master)) layer.master = 1;
     if (!Number.isFinite(layer.fade)) layer.fade = 0.5;
   }

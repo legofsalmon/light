@@ -209,6 +209,93 @@ async function main(): Promise<void> {
     `got ${JSON.stringify(spot)}`
   );
 
+  // --- cue lists: trigger-anchored steps must advance identically ---
+  {
+    const p = structuredClone(await currentProject(node));
+    const wash = p.layers.find((l) => l.id === 'layer-wash');
+    const stepIds = (wash?.cells ?? []).filter((c): c is string => !!c).slice(0, 3);
+    if (wash && stepIds.length === 3) {
+      p.looks['look-cue-test'] = {
+        id: 'look-cue-test',
+        name: 'Cue Test',
+        parts: [],
+        steps: [
+          { lookId: stepIds[0], beats: 2 },
+          { lookId: stepIds[1], beats: 1 },
+          { lookId: stepIds[2], beats: 1 },
+        ],
+      };
+      wash.cells[7] = 'look-cue-test';
+      both({ type: 'updateProject', project: p });
+      await sleep(300);
+      both({ type: 'setBpm', bpm: 120 }); // 500 ms/beat; also aligns phase
+      await sleep(200);
+      both({ type: 'trigger', layerId: 'layer-wash', col: 7 });
+      // steps of 2/1/1 beats → boundaries at 1000/1500/2000 ms after trigger;
+      // checkpoints sit mid-step so snapshot lag and trigger skew can't bite
+      await sleep(700);
+      compareDmx('cue list: step 1 parity', node.snap, rust.snap);
+      await sleep(550);
+      compareDmx('cue list: step 2 parity', node.snap, rust.snap);
+      await sleep(500);
+      compareDmx('cue list: step 3 parity', node.snap, rust.snap);
+      await sleep(500);
+      compareDmx('cue list: loop back to step 1 parity', node.snap, rust.snap);
+      // tap while the cue runs: alignPhase must shift anchors so both
+      // engines stay in the same step (regression: permanent desync)
+      both({ type: 'tap' });
+      await sleep(450);
+      compareDmx('cue list: step parity after tap/align', node.snap, rust.snap);
+
+      // cue-to-cue crossfade: firing a second chaser must not corrupt the
+      // first one's anchor (regression: outgoing cue snapped to step 1)
+      p.looks['look-cue-test-b'] = {
+        id: 'look-cue-test-b',
+        name: 'Cue Test B',
+        parts: [],
+        steps: [
+          { lookId: stepIds[2], beats: 1 },
+          { lookId: stepIds[0], beats: 1 },
+        ],
+      };
+      const wash2 = p.layers.find((l) => l.id === 'layer-wash');
+      if (wash2) wash2.cells[6] = 'look-cue-test-b';
+      both({ type: 'updateProject', project: p });
+      await sleep(300);
+      both({ type: 'trigger', layerId: 'layer-wash', col: 6 });
+      await sleep(1250); // past the 0.8 s fade, mid-step of B
+      compareDmx('cue list: cue-to-cue crossfade parity', node.snap, rust.snap);
+
+      // poisoned step id: "constructor" resolves via Object.prototype in JS —
+      // both engines must render it dark and KEEP TICKING (regression: the
+      // Node tick loop crashed and froze DMX output)
+      p.looks['look-cue-test'] = {
+        id: 'look-cue-test',
+        name: 'Cue Poisoned',
+        parts: [],
+        steps: [{ lookId: 'constructor', beats: 1 }],
+      };
+      both({ type: 'updateProject', project: p });
+      await sleep(200);
+      both({ type: 'trigger', layerId: 'layer-wash', col: 7 });
+      await sleep(1300);
+      compareDmx('cue list: prototype-key step renders dark in both', node.snap, rust.snap);
+      const nodeAlive = (node.snap?.now ?? 0);
+      await sleep(400);
+      check(
+        'node engine still ticking after poisoned cue',
+        (node.snap?.now ?? 0) > nodeAlive,
+        'snapshot clock stopped'
+      );
+
+      both({ type: 'clearLayer', layerId: 'layer-wash' });
+      await sleep(1200); // > 0.8 s fade — mid-fade bytes are skew-sensitive
+      compareDmx('cue list: released parity', node.snap, rust.snap);
+    } else {
+      check('cue list scenario prerequisites', false, 'wash layer content missing');
+    }
+  }
+
   // --- MVR import parity: both engines apply the same scene identically.
   const mvr = fs.readFileSync(path.join(ROOT, 'core', 'tests', 'data', 'synthetic.mvr'));
   node.project = null;

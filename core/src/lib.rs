@@ -18,6 +18,8 @@ pub mod clock;
 #[cfg(feature = "engine")]
 pub mod engine;
 #[cfg(feature = "engine")]
+pub mod link;
+#[cfg(feature = "engine")]
 pub mod midi;
 #[cfg(feature = "engine")]
 pub mod osc;

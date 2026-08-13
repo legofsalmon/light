@@ -534,6 +534,12 @@ impl EngineState {
                 }
             }
             Command::SetBlackout { v } => self.blackout = v,
+            Command::SetLink { on } => {
+                // the engine loop watches this flag and drives the Link session
+                self.project.sync.link_enabled = on;
+                out.project_changed = true;
+                out.save_requested = true;
+            }
             Command::SetHaze { v } => {
                 self.project.settings.haze = clamp01(v);
                 out.project_changed = true;

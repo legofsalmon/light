@@ -47,12 +47,12 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
       {look && (
         <>
           <div className="swatch">
-            {lookSwatch(look).map((c, i) => (
+            {lookSwatch(look, project.looks).map((c, i) => (
               <i key={i} style={{ background: c }} />
             ))}
           </div>
           {look.flash && <div className="flashmark">FLASH</div>}
-          <div className="cellname">{look.name}</div>
+          <div className="cellname">{look.steps?.length ? '⛓ ' : ''}{look.name}</div>
           {fading && <div className="fadebar" style={{ width: `${(live?.t ?? 0) * 100}%` }} />}
         </>
       )}

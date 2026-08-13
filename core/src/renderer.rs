@@ -99,19 +99,88 @@ pub struct TickResult {
     pub beat: f64,
 }
 
+struct CueAnchor {
+    fade_start: f64,
+    at: f64,
+}
+
 pub struct Renderer {
     eff_beat: f64,
     last_t: Option<f64>,
+    /// Cue-list anchors, keyed (layer id, look id): the trigger this anchor
+    /// belongs to (fade_start) and the eff_beat it started at. Keyed per
+    /// layer+look so a cue-to-cue crossfade keeps the outgoing cue's phase,
+    /// and anchoring at trigger time keeps both engines in the same step.
+    cue_anchors: HashMap<(String, String), CueAnchor>,
+}
+
+/// Follow a cue-list look to its active step (one level; a step that points
+/// at another cue list renders dark). Non-cue looks pass through. Steps are
+/// normalised here, not in sanitize, so both engines apply the exact same
+/// rules to whatever reaches them. Mirror of `resolveCue` in
+/// `engine/renderer.ts`.
+fn resolve_cue<'a>(
+    project: &'a crate::types::Project,
+    anchors: &mut HashMap<(String, String), CueAnchor>,
+    eff_beat: f64,
+    look_id: &str,
+    layer_id: &str,
+    fade_start: f64, // -1 for the outgoing look of a crossfade
+) -> Option<&'a crate::types::Look> {
+    let look = project.looks.get(look_id)?;
+    let Some(steps) = look.steps.as_ref().filter(|s| !s.is_empty()) else {
+        return Some(look);
+    };
+    let beats_of = |b: f64| if b.is_finite() && b > 0.0 { b.min(512.0) } else { 1.0 };
+    let total: f64 = steps.iter().map(|s| beats_of(s.beats)).sum();
+    // one anchor per (layer, look): a new trigger (fade_start) restarts it,
+    // and the outgoing look of a crossfade (fade_start -1) keeps its own
+    let key = (layer_id.to_string(), look_id.to_string());
+    if fade_start >= 0.0
+        && anchors
+            .get(&key)
+            .is_none_or(|a| a.fade_start != fade_start)
+    {
+        anchors.insert(key.clone(), CueAnchor { fade_start, at: eff_beat });
+    }
+    let at = anchors.get(&key).map_or(eff_beat, |a| a.at);
+    let mut pos = (eff_beat - at) % total;
+    if !pos.is_finite() {
+        pos = 0.0;
+    }
+    if pos < 0.0 {
+        pos += total;
+    }
+    for st in steps {
+        let b = beats_of(st.beats);
+        if pos < b {
+            let target = project.looks.get(&st.look_id)?;
+            if target.steps.as_ref().is_some_and(|t| !t.is_empty()) {
+                return None;
+            }
+            return Some(target);
+        }
+        pos -= b;
+    }
+    None
 }
 
 impl Renderer {
     pub fn new() -> Self {
-        Renderer { eff_beat: 0.0, last_t: None }
+        Renderer { eff_beat: 0.0, last_t: None, cue_anchors: HashMap::new() }
     }
 
     /// Land the effect phase on a downbeat (tap / resync).
     pub fn align_phase(&mut self) {
-        self.eff_beat = self.eff_beat.round();
+        let rounded = self.eff_beat.round();
+        // shift cue anchors by the same delta so running cue lists keep
+        // their step position - and the two engines (whose absolute
+        // eff_beats differ) stay in the same step through a tap
+        let delta = rounded - self.eff_beat;
+        for a in self.cue_anchors.values_mut() {
+            a.at += delta;
+        }
+        self.eff_beat = rounded;
     }
 
     pub fn tick(&mut self, st: &mut EngineState, t: f64) -> TickResult {
@@ -166,6 +235,7 @@ impl Renderer {
             }
 
             // Weighted combination of outgoing and incoming look, per head.
+            let fade_start = live.fade_start;
             let sources = [
                 (live.prev_id.clone(), 1.0 - tau, false),
                 (live.look_id.clone(), tau, true),
@@ -176,7 +246,14 @@ impl Renderer {
                 if w <= 0.001 {
                     continue;
                 }
-                let Some(look) = st.project.looks.get(&look_id) else { continue };
+                let Some(look) = resolve_cue(
+                    &st.project,
+                    &mut self.cue_anchors,
+                    self.eff_beat,
+                    &look_id,
+                    layer_id,
+                    if incoming { fade_start } else { -1.0 },
+                ) else { continue };
                 for part in &look.parts {
                     let Some(group) = st.project.groups.iter().find(|g| g.id == part.group_id) else { continue };
                     let n = group.heads.len();
@@ -260,6 +337,24 @@ impl Renderer {
                     out.macro_ = a.macro_;
                 }
             }
+        }
+
+        // drop anchors whose (layer, look) is no longer live or fading -
+        // keeps the map from growing forever as looks and layers come and go
+        if !self.cue_anchors.is_empty() {
+            let mut alive: std::collections::HashSet<(String, String)> =
+                std::collections::HashSet::new();
+            for layer in &st.project.layers {
+                if let Some(lv) = st.live.get(&layer.id) {
+                    if let Some(id) = &lv.look_id {
+                        alive.insert((layer.id.clone(), id.clone()));
+                    }
+                    if let Some(id) = &lv.prev_id {
+                        alive.insert((layer.id.clone(), id.clone()));
+                    }
+                }
+            }
+            self.cue_anchors.retain(|k, _| alive.contains(k));
         }
 
         // --- manual haze merges HTP so looks can only add ---

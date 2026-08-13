@@ -3,8 +3,16 @@ import { derbyMacroForValue, hsvToRgb, rgbHex } from '../../shared/color.ts';
 
 const RAINBOW = ['#ff3b30', '#ffcc00', '#34c759', '#32ade6', '#5856d6', '#ff2d88'];
 
-/** Representative colour strip for a look's grid-cell thumbnail. */
-export function lookSwatch(look: Look): string[] {
+/** Representative colour strip for a look's grid-cell thumbnail. Cue lists
+ *  borrow the swatch of their first resolvable step (pass `looks` for that). */
+export function lookSwatch(look: Look, looks?: Record<string, Look>): string[] {
+  if (look.steps?.length && looks) {
+    for (const st of look.steps) {
+      const target = Object.hasOwn(looks, st.lookId) ? looks[st.lookId] : undefined;
+      if (target && !target.steps?.length) return lookSwatch(target);
+    }
+    return ['#3a3a40'];
+  }
   const out: string[] = [];
   for (const part of look.parts) {
     if (part.effects.some((e) => e.target === 'hue')) {

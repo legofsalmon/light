@@ -424,13 +424,96 @@ export function PatchView() {
             auto-pack addresses
           </button>
           {fxSel.length > 0 && (
-            <button
-              className="btn small"
-              onClick={createGroupFromSelection}
-              title="Create a group from the selected fixtures"
-            >
-              ⊕ group from {fxSel.length} selected
-            </button>
+            <>
+              <button
+                className="btn small"
+                onClick={createGroupFromSelection}
+                title="Create a group from the selected fixtures"
+              >
+                ⊕ group from {fxSel.length} selected
+              </button>
+              <select
+                className="sel"
+                value=""
+                title="move the selected fixtures to a universe"
+                onChange={(e) => {
+                  const uid = e.target.value;
+                  if (!uid) return;
+                  mutate((p) => {
+                    for (const f of p.fixtures) if (fxSel.includes(f.id)) f.universeId = uid;
+                  });
+                }}
+              >
+                <option value="">→ universe…</option>
+                {project.universes.map((u) => (
+                  <option key={u.id} value={u.id}>{u.label}</option>
+                ))}
+              </select>
+              <button
+                className="btn small ghost"
+                title="re-address the selected fixtures sequentially, keeping their current order"
+                onClick={() => {
+                  const startStr = window.prompt('Re-address selected sequentially from address:', '1');
+                  if (startStr === null) return;
+                  const start = Math.max(1, Math.min(512, Number(startStr) || 1));
+                  mutate((p) => {
+                    let addr = start;
+                    for (const f of sortedFixtures) {
+                      if (!fxSel.includes(f.id)) continue;
+                      const x = p.fixtures.find((y) => y.id === f.id);
+                      const ch = profileMeta(p, f.profileId)?.channels ?? 1;
+                      if (!x || addr + ch - 1 > 512) continue;
+                      x.address = addr;
+                      addr += ch;
+                    }
+                  });
+                }}
+              >
+                ⇢ re-address
+              </button>
+              <button
+                className="btn small ghost"
+                title="duplicate the selected fixtures (next free addresses, offset 0.3 m)"
+                onClick={() => {
+                  const clones: string[] = [];
+                  mutate((p) => {
+                    for (const f of sortedFixtures) {
+                      if (!fxSel.includes(f.id)) continue;
+                      const src = p.fixtures.find((y) => y.id === f.id);
+                      if (!src) continue;
+                      const ch = profileMeta(p, src.profileId)?.channels ?? 1;
+                      const copy = {
+                        ...structuredClone(src),
+                        id: uid('fx'),
+                        name: `${src.name} copy`,
+                        address: nextFreeAddress(p, src.universeId, ch),
+                        pos: { ...src.pos, x: src.pos.x + 0.3 },
+                      };
+                      p.fixtures.push(copy);
+                      clones.push(copy.id);
+                    }
+                  });
+                  if (clones.length) useStore.getState().setFxSel(clones);
+                }}
+              >
+                ⧉ duplicate
+              </button>
+              <button
+                className="btn small ghost"
+                style={{ color: 'var(--hot)' }}
+                title="delete the selected fixtures"
+                onClick={() => {
+                  if (!window.confirm(`Delete ${fxSel.length} selected fixture(s)? Groups lose their heads.`)) return;
+                  mutate((p) => {
+                    p.fixtures = p.fixtures.filter((f) => !fxSel.includes(f.id));
+                    for (const g of p.groups) g.heads = g.heads.filter((h) => !fxSel.includes(h.fixtureId));
+                  });
+                  useStore.getState().setFxSel([]);
+                }}
+              >
+                ✕ delete
+              </button>
+            </>
           )}
           {conflicts.size > 0 && (
             <span className="label" style={{ color: 'var(--hot)' }}>
