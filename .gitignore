@@ -1,0 +1,13 @@
+# dependencies & build output
+node_modules/
+target/
+ui/dist/
+
+# runtime state
+projects/
+.parity-tmp/
+*.log
+
+# local tooling
+.claude/settings.local.json
+.DS_Store

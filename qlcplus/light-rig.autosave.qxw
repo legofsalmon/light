@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Workspace>
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="VC">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>5.2.2</Version>
+  <Author>Colm Hewson</Author>
+ </Creator>
+ <Engine>
+  <InputOutputMap>
+   <BeatGenerator BeatType="Disabled" BPM="120"/>
+   <NetworkServer Type="Native" AutoStart="False" Name="QLC+_C0A8C84D" Password=""/>
+   <Universe Name="Effects (Art-Net U1)" ID="0">
+    <Input Plugin="OSC" Name="127.0.0.1" UID="" Line="0"/>
+    <Output Plugin="ArtNet" Name="127.0.0.1" UID="" Line="0">
+     <PluginParameters UniverseChannels="102" outputIP="2.255.255.255" outputUni="1"/>
+    </Output>
+   </Universe>
+  </InputOutputMap>
+  <Fixture>
+   <Manufacturer>Varytec</Manufacturer>
+   <Model>LED Derby ST</Model>
+   <Mode>4 Channel</Mode>
+   <ID>0</ID>
+   <Name>Derby 1</Name>
+   <Universe>0</Universe>
+   <Address>0</Address>
+   <Channels>4</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Varytec</Manufacturer>
+   <Model>LED Derby ST</Model>
+   <Mode>4 Channel</Mode>
+   <ID>1</ID>
+   <Name>Derby 2</Name>
+   <Universe>0</Universe>
+   <Address>10</Address>
+   <Channels>4</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Kam</Manufacturer>
+   <Model>Power Partybar WFS</Model>
+   <Mode>20 Channel</Mode>
+   <ID>2</ID>
+   <Name>Partybar 1</Name>
+   <Universe>0</Universe>
+   <Address>20</Address>
+   <Channels>20</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Kam</Manufacturer>
+   <Model>Power Partybar WFS</Model>
+   <Mode>20 Channel</Mode>
+   <ID>3</ID>
+   <Name>Partybar 2</Name>
+   <Universe>0</Universe>
+   <Address>50</Address>
+   <Channels>20</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Hazer 2CH</Model>
+   <Mode>2 Channel</Mode>
+   <ID>4</ID>
+   <Name>Hazer</Name>
+   <Universe>0</Universe>
+   <Address>100</Address>
+   <Channels>2</Channels>
+  </Fixture>
+  <Function ID="0" Type="Scene" Name="Warm wash" Path="Looks">
+   <Speed FadeIn="300" FadeOut="300" Duration="0"/>
+   <FixtureVal ID="0">0,103,1,0,2,0,3,0</FixtureVal>
+   <FixtureVal ID="1">0,103,1,0,2,0,3,0</FixtureVal>
+   <FixtureVal ID="2">0,255,1,120,2,15,3,230,4,0,5,255,6,120,7,15,8,230,9,0,10,255,11,120,12,15,13,230,14,0,15,255,16,120,17,15,18,230,19,0</FixtureVal>
+   <FixtureVal ID="3">0,255,1,120,2,15,3,230,4,0,5,255,6,120,7,15,8,230,9,0,10,255,11,120,12,15,13,230,14,0,15,255,16,120,17,15,18,230,19,0</FixtureVal>
+  </Function>
+  <Function ID="1" Type="Scene" Name="Cold split" Path="Looks">
+   <Speed FadeIn="300" FadeOut="300" Duration="0"/>
+   <FixtureVal ID="0">0,118,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="1">0,118,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="2">0,0,1,60,2,255,3,230,4,0,5,180,6,220,7,255,8,230,9,0,10,0,11,60,12,255,13,230,14,0,15,180,16,220,17,255,18,230,19,0</FixtureVal>
+   <FixtureVal ID="3">0,0,1,60,2,255,3,230,4,0,5,180,6,220,7,255,8,230,9,0,10,0,11,60,12,255,13,230,14,0,15,180,16,220,17,255,18,230,19,0</FixtureVal>
+  </Function>
+  <Function ID="2" Type="Scene" Name="Chase step 1" Path="Looks/Chase">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">0,208,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="1">0,208,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="2">0,255,1,255,2,255,3,255,4,0,5,0,6,0,7,0,8,0,9,0,10,0,11,0,12,0,13,0,14,0,15,0,16,0,17,0,18,0,19,0</FixtureVal>
+   <FixtureVal ID="3">0,255,1,255,2,255,3,255,4,0,5,0,6,0,7,0,8,0,9,0,10,0,11,0,12,0,13,0,14,0,15,0,16,0,17,0,18,0,19,0</FixtureVal>
+  </Function>
+  <Function ID="3" Type="Scene" Name="Chase step 2" Path="Looks/Chase">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">0,208,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="1">0,208,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="2">0,0,1,0,2,0,3,0,4,0,5,255,6,255,7,255,8,255,9,0,10,0,11,0,12,0,13,0,14,0,15,0,16,0,17,0,18,0,19,0</FixtureVal>
+   <FixtureVal ID="3">0,0,1,0,2,0,3,0,4,0,5,255,6,255,7,255,8,255,9,0,10,0,11,0,12,0,13,0,14,0,15,0,16,0,17,0,18,0,19,0</FixtureVal>
+  </Function>
+  <Function ID="4" Type="Scene" Name="Chase step 3" Path="Looks/Chase">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">0,208,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="1">0,208,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="2">0,0,1,0,2,0,3,0,4,0,5,0,6,0,7,0,8,0,9,0,10,255,11,255,12,255,13,255,14,0,15,0,16,0,17,0,18,0,19,0</FixtureVal>
+   <FixtureVal ID="3">0,0,1,0,2,0,3,0,4,0,5,0,6,0,7,0,8,0,9,0,10,255,11,255,12,255,13,255,14,0,15,0,16,0,17,0,18,0,19,0</FixtureVal>
+  </Function>
+  <Function ID="5" Type="Scene" Name="Chase step 4" Path="Looks/Chase">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">0,208,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="1">0,208,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="2">0,0,1,0,2,0,3,0,4,0,5,0,6,0,7,0,8,0,9,0,10,0,11,0,12,0,13,0,14,0,15,255,16,255,17,255,18,255,19,0</FixtureVal>
+   <FixtureVal ID="3">0,0,1,0,2,0,3,0,4,0,5,0,6,0,7,0,8,0,9,0,10,0,11,0,12,0,13,0,14,0,15,255,16,255,17,255,18,255,19,0</FixtureVal>
+  </Function>
+  <Function ID="6" Type="Chaser" Name="Bar chase + derby spin" Path="Looks">
+   <Speed FadeIn="0" FadeOut="0" Duration="300"/>
+   <Direction>Forward</Direction>
+   <RunOrder>Loop</RunOrder>
+   <SpeedModes FadeIn="Default" FadeOut="Default" Duration="Common"/>
+   <Step Number="0" FadeIn="0" Hold="0" FadeOut="0">2</Step>
+   <Step Number="1" FadeIn="0" Hold="0" FadeOut="0">3</Step>
+   <Step Number="2" FadeIn="0" Hold="0" FadeOut="0">4</Step>
+   <Step Number="3" FadeIn="0" Hold="0" FadeOut="0">5</Step>
+  </Function>
+  <Function ID="7" Type="Scene" Name="Strobe hit" Path="Looks">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">0,0,1,0,2,0,3,170</FixtureVal>
+   <FixtureVal ID="1">0,0,1,0,2,0,3,170</FixtureVal>
+   <FixtureVal ID="2">0,255,1,255,2,255,3,255,4,220,5,255,6,255,7,255,8,255,9,220,10,255,11,255,12,255,13,255,14,220,15,255,16,255,17,255,18,255,19,220</FixtureVal>
+   <FixtureVal ID="3">0,255,1,255,2,255,3,255,4,220,5,255,6,255,7,255,8,255,9,220,10,255,11,255,12,255,13,255,14,220,15,255,16,255,17,255,18,255,19,220</FixtureVal>
+  </Function>
+  <Function ID="8" Type="Scene" Name="Blinder" Path="Looks">
+   <Speed FadeIn="0" FadeOut="200" Duration="0"/>
+   <FixtureVal ID="0">0,58,1,0,2,0,3,255</FixtureVal>
+   <FixtureVal ID="1">0,58,1,0,2,0,3,255</FixtureVal>
+   <FixtureVal ID="2">0,255,1,255,2,255,3,255,4,0,5,255,6,255,7,255,8,255,9,0,10,255,11,255,12,255,13,255,14,0,15,255,16,255,17,255,18,255,19,0</FixtureVal>
+   <FixtureVal ID="3">0,255,1,255,2,255,3,255,4,0,5,255,6,255,7,255,8,255,9,0,10,255,11,255,12,255,13,255,14,0,15,255,16,255,17,255,18,255,19,0</FixtureVal>
+  </Function>
+  <Function ID="9" Type="Scene" Name="Deep red room" Path="Looks">
+   <Speed FadeIn="500" FadeOut="500" Duration="0"/>
+   <FixtureVal ID="0">0,13,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="1">0,13,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="2">0,255,1,0,2,0,3,140,4,0,5,255,6,0,7,0,8,140,9,0,10,255,11,0,12,0,13,140,14,0,15,255,16,0,17,0,18,140,19,0</FixtureVal>
+   <FixtureVal ID="3">0,255,1,0,2,0,3,140,4,0,5,255,6,0,7,0,8,140,9,0,10,255,11,0,12,0,13,140,14,0,15,255,16,0,17,0,18,140,19,0</FixtureVal>
+  </Function>
+  <Function ID="10" Type="Scene" Name="RGBW party" Path="Looks">
+   <Speed FadeIn="300" FadeOut="300" Duration="0"/>
+   <FixtureVal ID="0">0,208,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="1">0,208,1,0,2,200,3,0</FixtureVal>
+   <FixtureVal ID="2">0,255,1,0,2,0,3,255,4,0,5,0,6,255,7,0,8,255,9,0,10,0,11,0,12,255,13,255,14,0,15,255,16,255,17,255,18,255,19,0</FixtureVal>
+   <FixtureVal ID="3">0,255,1,255,2,255,3,255,4,0,5,0,6,0,7,255,8,255,9,0,10,0,11,255,12,0,13,255,14,0,15,255,16,0,17,0,18,255,19,0</FixtureVal>
+  </Function>
+  <Function ID="11" Type="Scene" Name="Blackout (lights)" Path="Looks">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">0,0,1,0,2,0,3,0</FixtureVal>
+   <FixtureVal ID="1">0,0,1,0,2,0,3,0</FixtureVal>
+   <FixtureVal ID="2">0,0,1,0,2,0,3,0,4,0,5,0,6,0,7,0,8,0,9,0,10,0,11,0,12,0,13,0,14,0,15,0,16,0,17,0,18,0,19,0</FixtureVal>
+   <FixtureVal ID="3">0,0,1,0,2,0,3,0,4,0,5,0,6,0,7,0,8,0,9,0,10,0,11,0,12,0,13,0,14,0,15,0,16,0,17,0,18,0,19,0</FixtureVal>
+  </Function>
+  <Monitor DisplayMode="0" ShowLabels="0">
+   <Font>Arial,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1</Font>
+   <ChannelStyle>0</ChannelStyle>
+   <ValueStyle>0</ValueStyle>
+   <Grid Width="5" Height="3" Depth="3" Units="0" POV="2"/>
+   <StageItem>0</StageItem>
+   <FxItem ID="0" XPos="12.1254" YPos="997.57" ZPos="0"/>
+   <FxItem ID="1" XPos="4700.05" YPos="1000" ZPos="29.1144"/>
+   <FxItem ID="2" XPos="645.908" YPos="230.314" ZPos="0"/>
+   <FxItem ID="3" XPos="3258.85" YPos="266.716" ZPos="38.6545"/>
+   <FxItem ID="4" XPos="2369.33" YPos="299.433" ZPos="-12.7558"/>
+  </Monitor>
+ </Engine>
+ <VirtualConsole>
+  <Frame Caption="Page 1" ID="0">
+   <Appearance>
+    <Font>Roboto Condensed,16,-1,5,400,0,0,0,0,0,0,0,0,0,0,1</Font>
+   </Appearance>
+   <WindowState Visible="True" X="0" Y="0" Width="1000" Height="560"/>
+   <AllowResize>False</AllowResize>
+   <ShowHeader>False</ShowHeader>
+   <ShowEnableButton>True</ShowEnableButton>
+   <Collapsed>False</Collapsed>
+   <Disabled>False</Disabled>
+   <Label Caption="Bind each look to Resolume: enable OSC Output in Resolume (target 127.0.0.1:7700), then right-click a button (design mode) &gt; Properties &gt; External Input &gt; Auto Detect &gt; launch the clip/column in Resolume &gt; OK." ID="113">
+    <WindowState Visible="True" X="10" Y="210" Width="650" Height="100"/>
+   </Label>
+   <SoloFrame Caption="LOOKS — one active at a time (keys 1-8)" ID="100">
+    <WindowState Visible="True" X="10" Y="10" Width="650" Height="190"/>
+    <AllowResize>True</AllowResize>
+    <ShowHeader>True</ShowHeader>
+    <ShowEnableButton>True</ShowEnableButton>
+    <Collapsed>False</Collapsed>
+    <Disabled>False</Disabled>
+    <Button Caption="Warm wash" ID="101">
+     <WindowState Visible="True" X="10" Y="35" Width="150" Height="66"/>
+     <Function ID="0"/>
+     <Action>Toggle</Action>
+     <Key>1</Key>
+    </Button>
+    <Button Caption="Cold split" ID="102">
+     <WindowState Visible="True" X="168" Y="35" Width="150" Height="66"/>
+     <Function ID="1"/>
+     <Action>Toggle</Action>
+     <Key>2</Key>
+    </Button>
+    <Button Caption="Bar chase + spin" ID="103">
+     <WindowState Visible="True" X="326" Y="35" Width="150" Height="66"/>
+     <Function ID="6"/>
+     <Action>Toggle</Action>
+     <Key>3</Key>
+    </Button>
+    <Button Caption="Strobe hit" ID="104">
+     <WindowState Visible="True" X="484" Y="35" Width="150" Height="66"/>
+     <Function ID="7"/>
+     <Action>Toggle</Action>
+     <Key>4</Key>
+    </Button>
+    <Button Caption="Blinder" ID="105">
+     <WindowState Visible="True" X="10" Y="110" Width="150" Height="66"/>
+     <Function ID="8"/>
+     <Action>Toggle</Action>
+     <Key>5</Key>
+    </Button>
+    <Button Caption="Deep red room" ID="106">
+     <WindowState Visible="True" X="168" Y="110" Width="150" Height="66"/>
+     <Function ID="9"/>
+     <Action>Toggle</Action>
+     <Key>6</Key>
+    </Button>
+    <Button Caption="RGBW party" ID="107">
+     <WindowState Visible="True" X="326" Y="110" Width="150" Height="66"/>
+     <Function ID="10"/>
+     <Action>Toggle</Action>
+     <Key>7</Key>
+    </Button>
+    <Button Caption="BLACKOUT" ID="108">
+     <WindowState Visible="True" X="484" Y="110" Width="150" Height="66"/>
+     <Function ID="11"/>
+     <Action>Toggle</Action>
+     <Key>8</Key>
+    </Button>
+   </SoloFrame>
+   <Frame Caption="ATMOS" ID="110">
+    <WindowState Visible="True" X="670" Y="10" Width="200" Height="300"/>
+    <AllowResize>True</AllowResize>
+    <ShowHeader>True</ShowHeader>
+    <ShowEnableButton>False</ShowEnableButton>
+    <Collapsed>False</Collapsed>
+    <Disabled>False</Disabled>
+    <Slider Caption="Haze" ID="111" WidgetStyle="Slider" InvertedAppearance="false">
+     <WindowState Visible="True" X="15" Y="35" Width="80" Height="250"/>
+     <SliderMode ValueDisplayStyle="Exact" Monitor="true">Level</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0">
+      <Channel Fixture="4">0</Channel>
+     </Level>
+    </Slider>
+    <Slider Caption="Fan" ID="112" WidgetStyle="Slider" InvertedAppearance="false">
+     <WindowState Visible="True" X="105" Y="35" Width="80" Height="250"/>
+     <SliderMode ValueDisplayStyle="Exact" Monitor="true">Level</SliderMode>
+     <Level LowLimit="0" HighLimit="255" Value="0">
+      <Channel Fixture="4">1</Channel>
+     </Level>
+    </Slider>
+   </Frame>
+  </Frame>
+ </VirtualConsole>
+</Workspace>

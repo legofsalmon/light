@@ -1,0 +1,766 @@
+{
+ "version": 1,
+ "name": "Aug 2026 Rig",
+ "universes": [
+  {
+   "id": "u1",
+   "label": "Art-Net node (U1)",
+   "artnetUniverse": 1,
+   "sacnUniverse": 1,
+   "artnet": true,
+   "sacn": false,
+   "unicast": null
+  }
+ ],
+ "fixtures": [
+  {
+   "id": "derby1",
+   "name": "Derby 1",
+   "profileId": "varytec-derby-st-4ch",
+   "universeId": "u1",
+   "address": 1,
+   "pos": {
+    "x": -4.1,
+    "y": 3,
+    "z": -1.65
+   },
+   "rotY": 0
+  },
+  {
+   "id": "derby2",
+   "name": "Derby 2",
+   "profileId": "varytec-derby-st-4ch",
+   "universeId": "u1",
+   "address": 11,
+   "pos": {
+    "x": 3.85,
+    "y": 3,
+    "z": -1.65
+   },
+   "rotY": 0
+  },
+  {
+   "id": "bar1",
+   "name": "Partybar 1",
+   "profileId": "kam-partybar-wfs-20ch",
+   "universeId": "u1",
+   "address": 21,
+   "pos": {
+    "x": -1.5,
+    "y": 3,
+    "z": -1.75
+   },
+   "rotY": 0
+  },
+  {
+   "id": "bar2",
+   "name": "Partybar 2",
+   "profileId": "kam-partybar-wfs-20ch",
+   "universeId": "u1",
+   "address": 51,
+   "pos": {
+    "x": 1.5,
+    "y": 3,
+    "z": -1.8
+   },
+   "rotY": 0
+  },
+  {
+   "id": "hazer",
+   "name": "Hazer",
+   "profileId": "generic-hazer-2ch",
+   "universeId": "u1",
+   "address": 101,
+   "pos": {
+    "x": 3.2,
+    "y": 0,
+    "z": 0.6
+   },
+   "rotY": 0
+  }
+ ],
+ "groups": [
+  {
+   "id": "g-all",
+   "name": "All",
+   "heads": [
+    {
+     "fixtureId": "derby1",
+     "head": 0
+    },
+    {
+     "fixtureId": "derby2",
+     "head": 0
+    },
+    {
+     "fixtureId": "bar1",
+     "head": 0
+    },
+    {
+     "fixtureId": "bar1",
+     "head": 1
+    },
+    {
+     "fixtureId": "bar1",
+     "head": 2
+    },
+    {
+     "fixtureId": "bar1",
+     "head": 3
+    },
+    {
+     "fixtureId": "bar2",
+     "head": 0
+    },
+    {
+     "fixtureId": "bar2",
+     "head": 1
+    },
+    {
+     "fixtureId": "bar2",
+     "head": 2
+    },
+    {
+     "fixtureId": "bar2",
+     "head": 3
+    }
+   ]
+  },
+  {
+   "id": "g-derbies",
+   "name": "Derbies",
+   "heads": [
+    {
+     "fixtureId": "derby1",
+     "head": 0
+    },
+    {
+     "fixtureId": "derby2",
+     "head": 0
+    }
+   ]
+  },
+  {
+   "id": "g-pars",
+   "name": "Bar Pars L→R",
+   "heads": [
+    {
+     "fixtureId": "bar1",
+     "head": 0
+    },
+    {
+     "fixtureId": "bar1",
+     "head": 1
+    },
+    {
+     "fixtureId": "bar1",
+     "head": 2
+    },
+    {
+     "fixtureId": "bar1",
+     "head": 3
+    },
+    {
+     "fixtureId": "bar2",
+     "head": 0
+    },
+    {
+     "fixtureId": "bar2",
+     "head": 1
+    },
+    {
+     "fixtureId": "bar2",
+     "head": 2
+    },
+    {
+     "fixtureId": "bar2",
+     "head": 3
+    }
+   ]
+  },
+  {
+   "id": "g-bar1",
+   "name": "Bar 1",
+   "heads": [
+    {
+     "fixtureId": "bar1",
+     "head": 0
+    },
+    {
+     "fixtureId": "bar1",
+     "head": 1
+    },
+    {
+     "fixtureId": "bar1",
+     "head": 2
+    },
+    {
+     "fixtureId": "bar1",
+     "head": 3
+    }
+   ]
+  },
+  {
+   "id": "g-bar2",
+   "name": "Bar 2",
+   "heads": [
+    {
+     "fixtureId": "bar2",
+     "head": 0
+    },
+    {
+     "fixtureId": "bar2",
+     "head": 1
+    },
+    {
+     "fixtureId": "bar2",
+     "head": 2
+    },
+    {
+     "fixtureId": "bar2",
+     "head": 3
+    }
+   ]
+  },
+  {
+   "id": "g-hazer",
+   "name": "Hazer",
+   "heads": [
+    {
+     "fixtureId": "hazer",
+     "head": 0
+    }
+   ]
+  }
+ ],
+ "looks": {
+  "wash-amber": {
+   "id": "wash-amber",
+   "name": "Amber Wash",
+   "parts": [
+    {
+     "id": "part1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 32,
+       "s": 0.95
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "wash-red": {
+   "id": "wash-red",
+   "name": "Red Wash",
+   "parts": [
+    {
+     "id": "part2",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "wash-blue": {
+   "id": "wash-blue",
+   "name": "Deep Blue",
+   "parts": [
+    {
+     "id": "part3",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 228,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "wash-magenta": {
+   "id": "wash-magenta",
+   "name": "Magenta",
+   "parts": [
+    {
+     "id": "part4",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 312,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "wash-teal": {
+   "id": "wash-teal",
+   "name": "Teal",
+   "parts": [
+    {
+     "id": "part5",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 175,
+       "s": 0.9
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "wash-white": {
+   "id": "wash-white",
+   "name": "White",
+   "parts": [
+    {
+     "id": "part6",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "wash-rainbow": {
+   "id": "wash-rainbow",
+   "name": "Rainbow Drift",
+   "parts": [
+    {
+     "id": "part8",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "fx7",
+       "rate": 16,
+       "size": 1,
+       "spread": 0.5,
+       "width": 0.5,
+       "phase": 0,
+       "target": "hue",
+       "wave": "sawUp"
+      }
+     ]
+    }
+   ]
+  },
+  "wash-duotone": {
+   "id": "wash-duotone",
+   "name": "Red/Blue Split",
+   "parts": [
+    {
+     "id": "part9",
+     "groupId": "g-bar1",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "part10",
+     "groupId": "g-bar2",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 228,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "derby-red-spin": {
+   "id": "derby-red-spin",
+   "name": "Derby Red Spin",
+   "parts": [
+    {
+     "id": "part11",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.35
+     },
+     "effects": []
+    }
+   ]
+  },
+  "derby-rb-spin": {
+   "id": "derby-rb-spin",
+   "name": "Derby R+B Spin",
+   "parts": [
+    {
+     "id": "part12",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "macro": 88,
+      "motorMode": "rotate",
+      "motorValue": 0.5
+     },
+     "effects": []
+    }
+   ]
+  },
+  "derby-gb-slow": {
+   "id": "derby-gb-slow",
+   "name": "Derby G+B Slow",
+   "parts": [
+    {
+     "id": "part13",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "macro": 118,
+      "motorMode": "rotate",
+      "motorValue": 0.15
+     },
+     "effects": []
+    }
+   ]
+  },
+  "derby-white-aim": {
+   "id": "derby-white-aim",
+   "name": "Derby White Static",
+   "parts": [
+    {
+     "id": "part14",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0
+      },
+      "motorMode": "aim",
+      "motorValue": 0.5
+     },
+     "effects": []
+    }
+   ]
+  },
+  "derby-rgbw-fast": {
+   "id": "derby-rgbw-fast",
+   "name": "Derby RGBW Fast",
+   "parts": [
+    {
+     "id": "part15",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "macro": 208,
+      "motorMode": "rotate",
+      "motorValue": 0.85
+     },
+     "effects": []
+    }
+   ]
+  },
+  "fx-chase": {
+   "id": "fx-chase",
+   "name": "Par Chase",
+   "parts": [
+    {
+     "id": "part17",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "id": "fx16",
+       "rate": 2,
+       "size": 1,
+       "spread": 0,
+       "width": 0.25,
+       "phase": 0,
+       "target": "dimmer",
+       "wave": "chase"
+      }
+     ]
+    }
+   ]
+  },
+  "fx-swell": {
+   "id": "fx-swell",
+   "name": "Slow Swell",
+   "parts": [
+    {
+     "id": "part19",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "id": "fx18",
+       "rate": 8,
+       "size": 0.8,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "target": "dimmer",
+       "wave": "sine"
+      }
+     ]
+    }
+   ]
+  },
+  "fx-pulse": {
+   "id": "fx-pulse",
+   "name": "Beat Pulse",
+   "parts": [
+    {
+     "id": "part21",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "id": "fx20",
+       "rate": 1,
+       "size": 0.9,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "target": "dimmer",
+       "wave": "sawDown"
+      }
+     ]
+    }
+   ]
+  },
+  "fx-flicker": {
+   "id": "fx-flicker",
+   "name": "Random Flicker",
+   "parts": [
+    {
+     "id": "part23",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "id": "fx22",
+       "rate": 0.5,
+       "size": 1,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "target": "dimmer",
+       "wave": "random"
+      }
+     ]
+    }
+   ]
+  },
+  "fx-oddeven": {
+   "id": "fx-oddeven",
+   "name": "Odd / Even",
+   "parts": [
+    {
+     "id": "part25",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "id": "fx24",
+       "rate": 2,
+       "size": 1,
+       "spread": 0.5,
+       "width": 0.5,
+       "phase": 0,
+       "target": "dimmer",
+       "wave": "square"
+      }
+     ]
+    }
+   ]
+  },
+  "strobe-all": {
+   "id": "strobe-all",
+   "name": "Full Strobe",
+   "parts": [
+    {
+     "id": "part26",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0
+      },
+      "strobe": 0.75
+     },
+     "effects": []
+    },
+    {
+     "id": "part27",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0
+      },
+      "strobe": 0.75
+     },
+     "effects": []
+    }
+   ],
+   "flash": true,
+   "fade": 0
+  },
+  "strobe-blinder": {
+   "id": "strobe-blinder",
+   "name": "Ring Blinder",
+   "parts": [
+    {
+     "id": "part28",
+     "groupId": "g-derbies",
+     "params": {
+      "white": 1
+     },
+     "effects": []
+    }
+   ],
+   "flash": true,
+   "fade": 0
+  },
+  "strobe-ringfx": {
+   "id": "strobe-ringfx",
+   "name": "Ring Patterns",
+   "parts": [
+    {
+     "id": "part29",
+     "groupId": "g-derbies",
+     "params": {
+      "ringFx": 0.55
+     },
+     "effects": []
+    }
+   ]
+  }
+ },
+ "layers": [
+  {
+   "id": "layer-wash",
+   "name": "WASH",
+   "blend": "normal",
+   "master": 1,
+   "fade": 0.8,
+   "cells": [
+    "wash-amber",
+    "wash-red",
+    "wash-blue",
+    "wash-magenta",
+    "wash-teal",
+    "wash-duotone",
+    "wash-rainbow",
+    "wash-white"
+   ]
+  },
+  {
+   "id": "layer-derby",
+   "name": "DERBY",
+   "blend": "normal",
+   "master": 1,
+   "fade": 0.5,
+   "cells": [
+    null,
+    "derby-red-spin",
+    "derby-rb-spin",
+    "derby-gb-slow",
+    null,
+    "derby-rgbw-fast",
+    "derby-white-aim",
+    null
+   ]
+  },
+  {
+   "id": "layer-fx",
+   "name": "FX",
+   "blend": "multiply",
+   "master": 1,
+   "fade": 0.3,
+   "cells": [
+    null,
+    "fx-pulse",
+    "fx-chase",
+    "fx-swell",
+    "fx-oddeven",
+    "fx-flicker",
+    null,
+    null
+   ]
+  },
+  {
+   "id": "layer-strobe",
+   "name": "STROBE",
+   "blend": "htp",
+   "master": 1,
+   "fade": 0.05,
+   "cells": [
+    "strobe-all",
+    "strobe-blinder",
+    "strobe-ringfx",
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  }
+ ],
+ "columns": [
+  "Intro",
+  "Build",
+  "Peak",
+  "Groove",
+  "Break",
+  "Drop",
+  "Outro",
+  "Chill"
+ ],
+ "midi": [],
+ "sync": {
+  "oscEnabled": true,
+  "oscPort": 7700,
+  "followColumns": true,
+  "bpmFromOsc": true
+ },
+ "settings": {
+  "haze": 0,
+  "hazeFan": 0.35
+ }
+}

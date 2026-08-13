@@ -1,0 +1,16 @@
+[package]
+name = "light-app"
+version = "0.1.0"
+edition = "2021"
+description = "LIGHT — look engine for Resolume"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+light-core = { path = "../core" }
+
+[[bin]]
+name = "light-app"
+path = "src/main.rs"
