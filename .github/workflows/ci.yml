@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: engine + core + parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # previz (Bevy) is never built in CI — key the cache to core only
+          workspaces: ". -> target"
+
+      # midir needs ALSA headers on Linux
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - run: npm ci
+
+      - name: Typecheck (engine + UI)
+        run: npm run typecheck
+
+      - name: Engine smoke tests (Node reference)
+        run: npm test
+
+      - name: Rust core tests
+        run: cargo test -p light-core
+
+      - name: Build Rust engine (debug, for parity)
+        run: cargo build -p light-core
+
+      - name: Differential parity (Node vs Rust, byte-identical DMX)
+        run: npm run test:parity
