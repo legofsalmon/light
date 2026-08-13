@@ -185,8 +185,12 @@ fn eval_case(case: &FuncCase, p: &ResolvedParams, virtual_dimmer: bool) -> u16 {
     match &case.func {
         Func::Fixed { value } => *value,
         Func::Linear { source } => {
+            // f64 math end-to-end: untrusted profiles may have from > to, and
+            // u16 arithmetic here must never underflow/overflow the tick loop
             let v = clamp01(source_value(p, *source, virtual_dimmer));
-            case.dmx_from + (v * (case.dmx_to - case.dmx_from) as f64).round() as u16
+            let from = case.dmx_from as f64;
+            let to = case.dmx_to as f64;
+            (from + v * (to - from)).round().clamp(0.0, 65535.0) as u16
         }
         Func::Wheel { sets, allow_explicit } => {
             if *allow_explicit {

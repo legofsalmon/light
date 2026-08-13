@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Project } from '../shared/types.ts';
+import { sanitizeProject } from '../shared/types.ts';
 
 const DIR = process.env.LIGHT_PROJECT_DIR ?? path.join(process.cwd(), 'projects');
 const FILE = path.join(DIR, 'default.project.json');
@@ -10,18 +11,47 @@ export function projectPath(): string {
   return FILE;
 }
 
-export function loadProject(): Project | null {
+function tryLoad(file: string): Project | null {
   try {
-    const raw = fs.readFileSync(FILE, 'utf8');
-    const p = JSON.parse(raw) as Project;
-    if (p.version !== 1 || !Array.isArray(p.layers)) throw new Error('unrecognised project format');
-    return p;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      console.error('[persist] failed to load project:', (err as Error).message);
-    }
+    const p = JSON.parse(fs.readFileSync(file, 'utf8')) as Project;
+    return sanitizeProject(p);
+  } catch {
     return null;
   }
+}
+
+/**
+ * Load the project — falling back through the rotating backups if the main
+ * file is corrupt. A corrupt main file is preserved aside (never silently
+ * replaced, never rotated over the good backups).
+ */
+export function loadProject(): Project | null {
+  if (!fs.existsSync(FILE)) return null;
+  const main = tryLoad(FILE);
+  if (main) return main;
+
+  console.error('[persist] project file is corrupt — trying backups');
+  for (let i = 1; i <= BACKUPS; i++) {
+    const p = tryLoad(`${FILE}.bak${i}`);
+    if (p) {
+      console.error(`[persist] recovered from ${path.basename(FILE)}.bak${i}`);
+      try {
+        fs.renameSync(FILE, `${FILE}.corrupt-${Date.now()}`);
+        saveProjectNow(p); // restore a good main file immediately
+      } catch {
+        // best effort — the recovered project is still returned
+      }
+      return p;
+    }
+  }
+  try {
+    const aside = `${FILE}.corrupt-${Date.now()}`;
+    fs.renameSync(FILE, aside);
+    console.error(`[persist] no readable backup — corrupt file preserved at ${aside}`);
+  } catch {
+    // nothing more we can do
+  }
+  return null;
 }
 
 function rotateBackups(): void {
@@ -46,15 +76,34 @@ export function saveProjectNow(p: Project): string {
   return FILE;
 }
 
+/** Fully async save — never blocks the render thread. */
+async function saveProjectAsync(p: Project): Promise<void> {
+  await fs.promises.mkdir(DIR, { recursive: true });
+  rotateBackups(); // rename/copy of small files; sub-ms
+  const tmp = `${FILE}.tmp`;
+  await fs.promises.writeFile(tmp, JSON.stringify(p, null, 1));
+  await fs.promises.rename(tmp, FILE);
+}
+
 let timer: NodeJS.Timeout | null = null;
+let dirtySince: number | null = null;
+
+/** Debounced autosave with a bounded maximum latency: quiet for 1.2 s OR
+ *  dirty for 10 s, whichever comes first — continuous editing can no longer
+ *  postpone persistence indefinitely. */
 export function saveProjectDebounced(get: () => Project, delayMs = 1200): void {
+  const now = Date.now();
+  dirtySince ??= now;
+  const overdue = now - dirtySince >= 10_000;
   if (timer) clearTimeout(timer);
-  timer = setTimeout(() => {
-    timer = null;
-    try {
-      saveProjectNow(get());
-    } catch (err) {
-      console.error('[persist] autosave failed:', (err as Error).message);
-    }
-  }, delayMs);
+  timer = setTimeout(
+    () => {
+      timer = null;
+      dirtySince = null;
+      saveProjectAsync(get()).catch((err) => {
+        console.error('[persist] autosave failed:', (err as Error).message);
+      });
+    },
+    overdue ? 0 : delayMs
+  );
 }

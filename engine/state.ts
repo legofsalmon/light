@@ -1,5 +1,5 @@
 import type { MidiAction, MidiMapping, Project } from '../shared/types.ts';
-import { clamp, uid } from '../shared/types.ts';
+import { clamp, sanitizeProject, uid } from '../shared/types.ts';
 import { BeatClock } from './clock.ts';
 
 export type LayerLive = {
@@ -51,6 +51,9 @@ export class EngineState {
     const look = this.project.looks[lookId];
     if (!look) return;
     const live = this.layerLive(layerId);
+    // Retriggering the already-active look is a no-op — a double column press
+    // mid-fade must not snap the crossfade by discarding the outgoing look.
+    if (live.lookId === lookId && !look.flash) return;
     live.prevId = live.lookId;
     live.lookId = lookId;
     live.col = col;
@@ -110,7 +113,8 @@ export class EngineState {
     for (const layer of this.project.layers) {
       const lookId = layer.cells[col];
       const look = lookId ? this.project.looks[lookId] : null;
-      if (look && !look.flash) this.trigger(layer.id, col, t);
+      if (look?.flash) continue; // momentary looks are untouched by cues
+      if (look) this.trigger(layer.id, col, t);
       else this.clearLayer(layer.id, t);
     }
   }
@@ -138,10 +142,17 @@ export class EngineState {
       return;
     }
 
+    const CONTINUOUS = new Set(['layerMaster', 'grand', 'speed', 'haze']);
     for (const m of this.project.midi) {
       if (m.channel !== channel || m.number !== d1) continue;
-      if (m.type === 'note' && (isNoteOn || isNoteOff)) this.runAction(m.action, isNoteOn, d2 / 127);
-      else if (m.type === 'cc' && isCC) this.runAction(m.action, d2 > 63, d2 / 127);
+      if (m.type === 'note' && (isNoteOn || isNoteOff)) {
+        // A pad mapped to a fader-style target must not slam it to zero on
+        // release — notes drive continuous targets by velocity, press only.
+        if (CONTINUOUS.has(m.action.kind) && !isNoteOn) continue;
+        this.runAction(m.action, isNoteOn, d2 / 127);
+      } else if (m.type === 'cc' && isCC) {
+        this.runAction(m.action, d2 > 63, d2 / 127);
+      }
     }
   }
 
@@ -186,7 +197,12 @@ export class EngineState {
 
   /** Replace the project (UI edit) and drop any live references that no longer exist. */
   updateProject(p: Project): void {
-    this.project = p;
+    const clean = sanitizeProject(p);
+    if (!clean) {
+      console.error('[state] rejected malformed project update');
+      return;
+    }
+    this.project = clean;
     this.reconcile();
     this.notify();
   }

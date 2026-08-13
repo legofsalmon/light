@@ -18,7 +18,7 @@ Looks target **groups**, and group members are *heads*, not fixtures — a 4-par
 
 - **Art-Net universe** — the 15-bit port-address exactly as your node expects it (0-based on the wire; this rig's node listens on universe 1).
 - **sACN universe** — 1-based, if sACN is enabled.
-- **Destination** — empty = Art-Net broadcast (255.255.255.255) / sACN multicast; or enter your node's IP for unicast.
+- **Destination** — empty = Art-Net broadcast (255.255.255.255) / sACN multicast; or enter your node's IP for unicast (IP literal only). **If the Mac is on Wi-Fi and the rig on Ethernet, set the node's unicast IP** — broadcast follows the default route (usually Wi-Fi) and the rig would hear nothing; unicast always routes out the correct interface.
 
 Output runs continuously at 40 Hz per enabled universe. The DMX monitor at the bottom shows live channel values; engine health (refresh rate, tick jitter) sits above it.
 

@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
+    if !v.is_finite() {
+        return lo; // NaN must never propagate into the engine
+    }
     if v < lo { lo } else if v > hi { hi } else { v }
 }
 pub fn clamp01(v: f64) -> f64 {

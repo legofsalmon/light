@@ -28,7 +28,8 @@ export class Server {
       const url = (req.url ?? '/').split('?')[0];
       const rel = url === '/' ? 'index.html' : url.slice(1);
       const file = path.join(distDir, path.normalize(rel));
-      if (!file.startsWith(distDir)) {
+      // path.sep suffix: "dist" must not also authorise "dist-evil"
+      if (file !== distDir && !file.startsWith(distDir + path.sep)) {
         res.writeHead(403).end();
         return;
       }
@@ -82,7 +83,9 @@ export class Server {
   broadcast(ev: ServerEvent): void {
     const s = JSON.stringify(ev);
     for (const c of this.wss.clients) {
-      if (c.readyState === WebSocket.OPEN) c.send(s);
+      // A stalled client must not buffer unbounded snapshot backlog in the
+      // engine — skip it until it drains (snapshots are disposable).
+      if (c.readyState === WebSocket.OPEN && c.bufferedAmount < 1_000_000) c.send(s);
     }
   }
 

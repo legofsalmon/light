@@ -19,6 +19,9 @@ export function App() {
         st.send({ type: 'save' });
         return;
       }
+      // Held keys must not machine-gun cues/tap/blackout, and browser
+      // shortcuts (⌘1 etc.) must not double as ours.
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key >= '1' && e.key <= '9') {
         const col = Number(e.key) - 1;
         if (st.project && col < st.project.columns.length) st.send({ type: 'column', col });

@@ -7,8 +7,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tungstenite::protocol::Role;
-use tungstenite::{Message, WebSocket};
+use tungstenite::Message;
 
 use crate::engine::EngineMsg;
 use crate::types::Command;
@@ -17,10 +16,12 @@ pub type ClientId = u64;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
-/// Fan-out of engine events to every connected WS client.
+/// Fan-out of engine events to every connected WS client. Queues are
+/// bounded: a client that falls a full queue behind (~25 s of snapshots) is
+/// dead and gets evicted rather than buffering unbounded backlog.
 #[derive(Clone)]
 pub struct Broadcaster {
-    clients: Arc<Mutex<HashMap<ClientId, std::sync::mpsc::Sender<String>>>>,
+    clients: Arc<Mutex<HashMap<ClientId, std::sync::mpsc::SyncSender<String>>>>,
 }
 
 impl Broadcaster {
@@ -29,17 +30,24 @@ impl Broadcaster {
     }
     pub fn broadcast(&self, msg: &str) {
         let mut m = self.clients.lock().unwrap();
-        m.retain(|_, tx| tx.send(msg.to_string()).is_ok());
+        m.retain(|id, tx| match tx.try_send(msg.to_string()) {
+            Ok(()) => true,
+            Err(std::sync::mpsc::TrySendError::Full(_)) => {
+                eprintln!("[server] evicting stalled client {id}");
+                false
+            }
+            Err(std::sync::mpsc::TrySendError::Disconnected(_)) => false,
+        });
     }
     pub fn send_to(&self, id: ClientId, msg: String) {
         if let Some(tx) = self.clients.lock().unwrap().get(&id) {
-            let _ = tx.send(msg);
+            let _ = tx.try_send(msg);
         }
     }
     pub fn count(&self) -> usize {
         self.clients.lock().unwrap().len()
     }
-    fn add(&self, id: ClientId, tx: std::sync::mpsc::Sender<String>) {
+    fn add(&self, id: ClientId, tx: std::sync::mpsc::SyncSender<String>) {
         self.clients.lock().unwrap().insert(id, tx);
     }
     fn remove(&self, id: ClientId) {
@@ -100,45 +108,51 @@ fn handle_conn(
 }
 
 fn handle_ws(stream: TcpStream, tx: Sender<EngineMsg>, bc: Broadcaster) -> std::io::Result<()> {
-    let reader_stream = stream.try_clone()?;
-    reader_stream.set_read_timeout(None).ok();
-    let mut ws_read = match tungstenite::accept(reader_stream) {
+    // Handshake under the generous accept timeout set in handle_conn…
+    let mut ws = match tungstenite::accept(stream) {
         Ok(ws) => ws,
         Err(_) => return Ok(()),
     };
-    let writer_stream = stream;
-    writer_stream.set_read_timeout(None).ok();
-    let mut ws_write: WebSocket<TcpStream> =
-        WebSocket::from_raw_socket(writer_stream, Role::Server, None);
+    // …then a single thread owns the socket: short read timeout to poll,
+    // write timeout to detect dead peers. One writer means ping replies and
+    // broadcasts can never interleave into corrupted frames.
+    ws.get_ref().set_read_timeout(Some(Duration::from_millis(20))).ok();
+    ws.get_ref().set_write_timeout(Some(Duration::from_secs(2))).ok();
 
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-    let (out_tx, out_rx) = std::sync::mpsc::channel::<String>();
+    let (out_tx, out_rx) = std::sync::mpsc::sync_channel::<String>(512);
     bc.add(id, out_tx);
     let _ = tx.send(EngineMsg::ClientConnected(id));
 
-    // Writer: its channel sender lives in the broadcaster map; when the client
-    // is removed the sender drops and this thread ends.
-    std::thread::spawn(move || {
-        while let Ok(s) = out_rx.recv() {
-            if ws_write.send(Message::Text(s)).is_err() {
-                break;
+    'conn: loop {
+        // drain outbound
+        loop {
+            match out_rx.try_recv() {
+                Ok(s) => {
+                    if ws.send(Message::Text(s)).is_err() {
+                        break 'conn;
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => break 'conn,
             }
         }
-        let _ = ws_write.close(None);
-    });
-
-    // Reader: commands to the engine.
-    loop {
-        match ws_read.read() {
+        // poll inbound
+        match ws.read() {
             Ok(Message::Text(t)) => {
                 if let Ok(cmd) = serde_json::from_str::<Command>(&t) {
                     let _ = tx.send(EngineMsg::Cmd(cmd));
                 }
             }
-            Ok(Message::Close(_)) | Err(_) => break,
+            Ok(Message::Close(_)) => break,
             Ok(_) => {}
+            Err(tungstenite::Error::Io(ref e))
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut => {}
+            Err(_) => break,
         }
     }
+    let _ = ws.close(None);
     bc.remove(id);
     let _ = tx.send(EngineMsg::ClientDisconnected);
     Ok(())

@@ -66,11 +66,11 @@ impl SacnOut {
         p[125] = 0; // start code
         p[126..].copy_from_slice(data);
 
-        let dest = match unicast {
-            Some(ip) => ip.to_string(),
-            None => format!("239.255.{}.{}", (universe >> 8) & 0xff, universe & 0xff),
+        let dest: std::net::Ipv4Addr = match unicast.and_then(|s| s.parse().ok()) {
+            Some(ip) => ip,
+            None => std::net::Ipv4Addr::new(239, 255, ((universe >> 8) & 0xff) as u8, (universe & 0xff) as u8),
         };
-        if sock.send_to(&p, (dest.as_str(), SACN_PORT)).is_ok() {
+        if sock.send_to(&p, (dest, SACN_PORT)).is_ok() {
             self.packets += 1;
         }
     }

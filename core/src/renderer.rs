@@ -109,12 +109,20 @@ impl Renderer {
         Renderer { eff_beat: 0.0, last_t: None }
     }
 
+    /// Land the effect phase on a downbeat (tap / resync).
+    pub fn align_phase(&mut self) {
+        self.eff_beat = self.eff_beat.round();
+    }
+
     pub fn tick(&mut self, st: &mut EngineState, t: f64) -> TickResult {
         let beat = st.clock.beat_at(t);
         let dt = self.last_t.map_or(0.0, |lt| t - lt);
         self.last_t = Some(t);
         // Integrated so speed-master changes never jump effect phase.
         self.eff_beat += (dt / 60000.0) * st.clock.bpm * st.speed;
+        if !self.eff_beat.is_finite() {
+            self.eff_beat = 0.0; // never let NaN become absorbing
+        }
 
         // --- resolved params per head ---
         struct HeadInfo {

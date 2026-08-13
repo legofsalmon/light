@@ -115,6 +115,7 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             let offsets: Vec<usize> = offset_attr
                 .split(',')
                 .filter_map(|o| o.trim().parse::<usize>().ok())
+                .filter(|&o| o >= 1) // Offset="0" exists in the wild; `0 - 1` must not underflow
                 .map(|o| o - 1)
                 .collect();
             if offsets.is_empty() || offsets.len() > 2 {
@@ -330,7 +331,10 @@ fn wheel_sets_from_functions(
         .iter()
         .enumerate()
         .map(|(i, (from, name))| {
-            let to = bands.get(i + 1).map(|b| b.0 - 1).unwrap_or(max_dmx as u32);
+            let to = bands
+                .get(i + 1)
+                .map(|b| b.0.saturating_sub(1))
+                .unwrap_or(max_dmx as u32);
             // match the slot colour by index in the wheel; fall back to white
             let rgb = wheel.slots.get(i).map(|s| s.1).unwrap_or([255, 255, 255]);
             let label = if name.is_empty() {

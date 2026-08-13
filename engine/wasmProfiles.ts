@@ -83,5 +83,9 @@ export function renderImported(
     flat[o + 13] = p.haze;
     flat[o + 14] = p.fan;
   });
-  buf.set(w.render(h.handle, flat), base);
+  const bytes = w.render(h.handle, flat);
+  // Never trust the length: an inconsistent profile must not RangeError the
+  // render loop.
+  const n = Math.min(bytes.length, cp.footprint, buf.length - base);
+  buf.set(bytes.subarray(0, n), base);
 }

@@ -128,6 +128,12 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
 
 // ---------- clock ----------
 {
+  const nan = new BeatClock();
+  nan.setBpm(NaN);
+  check('NaN bpm rejected', nan.bpm === 120, `got ${nan.bpm}`);
+  nan.setBpm(150);
+  check('clock works after NaN rejection', Math.abs(nan.bpm - 150) < 1e-9);
+
   const c = new BeatClock();
   c.setBpm(120, 0);
   const b = c.beatAt(1000);

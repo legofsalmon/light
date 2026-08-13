@@ -17,6 +17,16 @@ not speed).
 | Previz frame | ≤ 8.3 ms | ProMotion 120 Hz; ≥ 60 fps mandatory |
 | GDTF import | interactive (< 100 ms/file) | import-time only, never on the tick path |
 
+## 2026-08-13 — post-review hardening
+
+43 confirmed review findings fixed (NaN guards, loop exception guard, project
+sanitisation, WS server rewrite with bounded queues, IP-literal-only output,
+overflow guards throughout). Tick-path cost after all guards:
+
+| Bench | Result | Notes |
+|---|---|---|
+| Engine tick (default rig, 3 active looks + fx) | **8.23 µs** | within noise of pre-hardening (7.85–9.79 µs range); guards are free at rig scale |
+
 ## 2026-08-13 — v0.5: MVR import
 
 | Bench | Result | Notes |

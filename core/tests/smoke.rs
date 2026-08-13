@@ -201,6 +201,18 @@ fn gdtf_import_end_to_end() {
 }
 
 #[test]
+fn nan_bpm_rejected() {
+    let mut c = BeatClock::new(0.0);
+    c.set_bpm(f64::NAN, 1000.0);
+    assert_eq!(c.bpm, 120.0, "NaN must not poison the clock");
+    c.set_bpm(f64::INFINITY, 1000.0);
+    assert_eq!(c.bpm, 120.0);
+    c.set_bpm(150.0, 1000.0);
+    assert!((c.bpm - 150.0).abs() < 1e-9, "clock still works after rejection");
+    assert!(c.beat_at(2000.0).is_finite());
+}
+
+#[test]
 fn clock_math() {
     let mut c = BeatClock::new(0.0);
     c.set_bpm(120.0, 0.0);

@@ -32,9 +32,9 @@ Two interchangeable engines speak the **same protocol on :9900**:
 |---|---|---|
 | Role | reference + dev iteration | the shipped engine |
 | MIDI | via browser WebMIDI | native CoreMIDI (works with window closed) |
-| Verified | 28 smoke checks | same suite ported + **byte-identical parity test** |
+| Verified | full smoke suite | same suite ported + **byte-identical parity test** |
 
-`npm run test:parity` boots both and requires channel-for-channel identical DMX.
+`npm run test:parity` boots both and requires channel-for-channel identical DMX (build the Rust core first: `cargo build -p light-core`).
 
 ## Run it
 
@@ -44,7 +44,8 @@ npm run dev            # Node engine + UI dev server → http://localhost:5173
 npm run dev:rust       # same, but running the Rust core
 npm run app:dev        # Tauri desktop window (Rust core inside)
 npm run app:build      # → target/release/bundle/macos/LIGHT.app
-npm start              # headless gig mode: engine serves built UI on :9900
+npm start              # headless gig mode: Node engine serves the built UI on :9900
+npm run start:rust     # same, on the Rust core (LAN devices can open http://<mac-ip>:9900)
 ```
 
 Tests: `npm test` (Node engine), `cargo test -p light-core` (Rust core),

@@ -34,6 +34,8 @@ pub struct Outcome {
     /// (ok, message, imported profile ids)
     pub import_result: Option<(bool, String, Vec<String>)>,
     pub launch_previz: bool,
+    /// tap/resync: land the effect phase on a downbeat
+    pub align_phase: bool,
 }
 
 /// Minimal base64 decode (standard alphabet, padding optional) — the import
@@ -101,6 +103,11 @@ impl EngineState {
         let fade = look.fade.unwrap_or(layer.fade).max(0.0);
         let flash = look.is_flash();
         let live = self.layer_live(layer_id);
+        // Retriggering the already-active look is a no-op — a double column
+        // press mid-fade must not snap the crossfade.
+        if live.look_id.as_deref() == Some(look_id.as_str()) && !flash {
+            return;
+        }
         live.prev_id = live.look_id.take();
         live.look_id = Some(look_id);
         live.col = Some(col);
@@ -179,8 +186,9 @@ impl EngineState {
                 .and_then(|c| c.as_ref())
                 .and_then(|lid| self.project.looks.get(lid));
             match look {
-                Some(l) if !l.is_flash() => self.trigger(&id, col, t),
-                _ => self.clear_layer(&id, t),
+                Some(l) if l.is_flash() => {} // momentary looks are untouched by cues
+                Some(_) => self.trigger(&id, col, t),
+                None => self.clear_layer(&id, t),
             }
         }
     }
@@ -213,7 +221,7 @@ impl EngineState {
             self.learn_target = Some(target);
         }
 
-        let actions: Vec<MidiAction> = self
+        let actions: Vec<(MidiAction, MidiType)> = self
             .project
             .midi
             .iter()
@@ -225,9 +233,19 @@ impl EngineState {
                         MidiType::Cc => is_cc,
                     }
             })
-            .map(|m| m.action.clone())
+            .map(|m| (m.action.clone(), m.kind))
             .collect();
-        for action in actions {
+        for (action, kind) in actions {
+            // A pad mapped to a fader-style target must not slam it to zero
+            // on release — notes drive continuous targets by velocity, press
+            // only.
+            let continuous = matches!(
+                action,
+                MidiAction::LayerMaster { .. } | MidiAction::Grand | MidiAction::Speed | MidiAction::Haze
+            );
+            if kind == MidiType::Note && continuous && !is_note_on {
+                continue;
+            }
             let pressed = if is_cc { d2 > 63 } else { is_note_on };
             if self.run_action(&action, pressed, d2 as f64 / 127.0, t) {
                 out.project_changed = true;
@@ -414,8 +432,14 @@ impl EngineState {
             Command::ClearLayer { layer_id } => self.clear_layer(&layer_id, t),
             Command::Column { col } => self.trigger_column(col, t),
             Command::SetBpm { bpm } => self.clock.set_bpm(bpm, t),
-            Command::Tap => self.clock.tap(t),
-            Command::Resync => self.clock.resync(t),
+            Command::Tap => {
+                self.clock.tap(t);
+                out.align_phase = true;
+            }
+            Command::Resync => {
+                self.clock.resync(t);
+                out.align_phase = true;
+            }
             Command::SetSpeed { v } => self.speed = clamp(v, 0.1, 8.0),
             Command::SetMaster { v } => self.master = clamp01(v),
             Command::SetLayerMaster { layer_id, v } => {

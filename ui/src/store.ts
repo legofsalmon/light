@@ -45,9 +45,22 @@ type Store = {
 let ws: WebSocket | null = null;
 const pending: string[] = [];
 
+// Only edits are worth replaying after a reconnect — queued live commands
+// (triggers, tap, masters) would fire as a stale burst.
+const QUEUEABLE = new Set(['updateProject', 'save', 'learn', 'importGdtf', 'importMvr']);
+
 function wsSend(msg: string): void {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(msg);
-  else if (pending.length < 200) pending.push(msg);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(msg);
+    return;
+  }
+  try {
+    const type = (JSON.parse(msg) as { type: string }).type;
+    if (!QUEUEABLE.has(type)) return;
+  } catch {
+    return;
+  }
+  if (pending.length < 50) pending.push(msg);
 }
 
 export const useStore = create<Store>()((set, get) => ({

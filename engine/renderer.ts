@@ -34,6 +34,11 @@ export class Renderer {
     this.st = st;
   }
 
+  /** Land the effect phase on a downbeat (tap / resync). */
+  alignPhase(): void {
+    this.effBeat = Math.round(this.effBeat);
+  }
+
   tick(t: number): TickResult {
     const st = this.st;
     const p = st.project;
@@ -41,6 +46,7 @@ export class Renderer {
     const dt = this.lastT === null ? 0 : t - this.lastT;
     this.lastT = t;
     this.effBeat += (dt / 60000) * st.clock.bpm * st.speed;
+    if (!Number.isFinite(this.effBeat)) this.effBeat = 0; // never let NaN become absorbing
 
     // --- resolved params per head, starting from profile defaults ---
     const heads = new Map<string, ResolvedParams>();

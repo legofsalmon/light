@@ -11,8 +11,9 @@ export class BeatClock {
     return this.anchorBeat + ((t - this.anchorT) / 60000) * this.bpm;
   }
 
-  /** Change tempo without a phase jump. */
+  /** Change tempo without a phase jump. Non-finite input is rejected outright. */
   setBpm(bpm: number, t = performance.now()): void {
+    if (!Number.isFinite(bpm)) return;
     this.anchorBeat = this.beatAt(t);
     this.anchorT = t;
     this.bpm = clamp(bpm, 20, 500);

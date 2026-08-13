@@ -90,6 +90,21 @@ pub fn run(cfg: EngineConfig) {
 
     let mut midi_names: Vec<String> = Vec::new();
     let mut dirty_at: Option<Instant> = None;
+    let mut osc_log: (f64, u32) = (0.0, 0); // monitor rate-limit window
+
+    // Keep the machine awake through a set — display sleep or App Nap
+    // stopping DMX mid-show is the classic venue failure.
+    #[cfg(target_os = "macos")]
+    {
+        let pid = std::process::id().to_string();
+        match std::process::Command::new("caffeinate")
+            .args(["-dims", "-w", &pid])
+            .spawn()
+        {
+            Ok(_) => println!("[light] caffeinate active — sleep/App Nap suppressed"),
+            Err(e) => eprintln!("[light] caffeinate unavailable: {e}"),
+        }
+    }
 
     println!();
     println!("  ██   LIGHT engine (rust core)");
@@ -132,9 +147,15 @@ pub fn run(cfg: EngineConfig) {
                 break;
             }
             match rx.recv_timeout(next - now) {
-                Ok(msg) => handle_msg(
-                    msg, &mut state, &bc, &mut osc, &tx, &dir, &mut dirty_at, &mut midi_names, now_ms(),
-                ),
+                Ok(msg) => {
+                    let align = handle_msg(
+                        msg, &mut state, &bc, &mut osc, &tx, &dir, &mut dirty_at, &mut midi_names,
+                        &mut osc_log, now_ms(),
+                    );
+                    if align {
+                        renderer.align_phase();
+                    }
+                }
                 Err(RecvTimeoutError::Timeout) => break,
                 Err(RecvTimeoutError::Disconnected) => return,
             }
@@ -179,12 +200,17 @@ pub fn run(cfg: EngineConfig) {
             }
         }
 
-        // Debounced autosave after project changes.
+        // Debounced autosave after project changes — on a worker thread so
+        // filesystem latency never touches the tick.
         if let Some(at) = dirty_at {
             if at.elapsed() >= Duration::from_millis(1200) {
-                if let Err(e) = persist::save_project(&dir, &state.project) {
-                    eprintln!("[persist] autosave failed: {e}");
-                }
+                let p = state.project.clone();
+                let d = dir.clone();
+                std::thread::spawn(move || {
+                    if let Err(e) = persist::save_project(&d, &p) {
+                        eprintln!("[persist] autosave failed: {e}");
+                    }
+                });
                 dirty_at = None;
             }
         }
@@ -273,19 +299,33 @@ fn handle_msg(
     dir: &PathBuf,
     dirty_at: &mut Option<Instant>,
     midi_names: &mut Vec<String>,
+    osc_log: &mut (f64, u32),
     t: f64,
-) {
+) -> bool {
     match msg {
         EngineMsg::Cmd(cmd) => {
             let out = state.handle_command(cmd, t);
+            let align = out.align_phase;
             apply_outcome(out, state, bc, osc, tx, dir, dirty_at);
+            return align;
         }
         EngineMsg::Osc(m) => {
-            bc.broadcast(
-                &json!({ "type": "osc", "entry": { "t": unix_ms(), "addr": m.addr, "args": m.args } })
-                    .to_string(),
-            );
+            // The monitor is best-effort — never let an OSC flood amplify
+            // into the WS broadcast path (cap ~25 events/s).
+            let now = unix_ms();
+            if now - osc_log.0 > 1000.0 {
+                *osc_log = (now, 0);
+            }
+            if osc_log.1 < 25 {
+                osc_log.1 += 1;
+                bc.broadcast(
+                    &json!({ "type": "osc", "entry": { "t": now, "addr": m.addr, "args": m.args } })
+                        .to_string(),
+                );
+            }
+            let align = m.addr == "/composition/tempocontroller/resync";
             handle_osc_sync(&m, state, t);
+            return align;
         }
         EngineMsg::Midi(status, d1, d2) => {
             let out = state.apply_midi(status, d1, d2, t);
@@ -300,13 +340,12 @@ fn handle_msg(
             bc.send_to(id, json!({ "type": "midiInputs", "names": midi_names }).to_string());
         }
         EngineMsg::ClientDisconnected => {
-            // No client left to release a held flash look — never leave a
-            // blinder latched on stage.
-            if bc.count() == 0 {
-                state.release_all_held(t);
-            }
+            // The protocol doesn't attribute holds to clients, so release on
+            // ANY disconnect: a spurious release beats a latched blinder.
+            state.release_all_held(t);
         }
     }
+    false
 }
 
 fn handle_osc_sync(m: &OscMessage, state: &mut EngineState, t: f64) {
@@ -335,20 +374,28 @@ fn handle_osc_sync(m: &OscMessage, state: &mut EngineState, t: f64) {
             }
         }
     }
+    // Untrusted network input: finite-checked, range-checked, identical to
+    // the Node engine.
     if m.addr == "/light/bpm" {
         if let Some(v) = num0 {
-            state.clock.set_bpm(v, t);
+            if v.is_finite() && (20.0..=999.0).contains(&v) {
+                state.clock.set_bpm(v, t);
+            }
         }
     }
     if m.addr == "/light/column" {
         if let Some(v) = num0 {
-            if v >= 1.0 {
-                state.trigger_column(v as usize - 1, t);
+            if v.is_finite() && v >= 1.0 {
+                state.trigger_column(v.floor() as usize - 1, t);
             }
         }
     }
     if m.addr == "/light/blackout" {
-        state.blackout = num0.unwrap_or(0.0) >= 1.0;
+        if let Some(v) = num0 {
+            if v.is_finite() {
+                state.blackout = v >= 1.0;
+            }
+        }
     }
 }
 

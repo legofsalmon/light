@@ -25,6 +25,7 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
       className={`cell ${look ? '' : 'empty'} ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${armed ? 'learn-armed' : ''}`}
       onPointerDown={(e) => {
         setSel({ layerId: layer.id, col });
+        if (e.button !== 0) return; // right/middle-click must never latch a flash look
         if (learnMode) {
           useStore.getState().armLearn({ kind: 'cell', layerId: layer.id, col });
           return;

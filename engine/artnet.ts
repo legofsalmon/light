@@ -1,4 +1,5 @@
 import dgram from 'node:dgram';
+import net from 'node:net';
 
 const ARTNET_PORT = 6454;
 
@@ -46,7 +47,11 @@ export class ArtnetOut {
     pkt.writeUInt16BE(512, 16);
     pkt.set(data.subarray(0, 512), 18);
 
-    this.sock.send(pkt, ARTNET_PORT, unicast ?? '255.255.255.255', (err) => {
+    // Only IP literals — a hostname here would trigger DNS resolution on the
+    // 40 Hz output path. Anything else falls back to broadcast so the rig
+    // keeps receiving while the user is mid-typing an address.
+    const dest = unicast && net.isIP(unicast) ? unicast : '255.255.255.255';
+    this.sock.send(pkt, ARTNET_PORT, dest, (err) => {
       if (!err) this.packets++;
     });
   }

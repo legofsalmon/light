@@ -18,8 +18,11 @@ impl BeatClock {
         self.anchor_beat + ((t - self.anchor_t) / 60000.0) * self.bpm
     }
 
-    /// Change tempo without a phase jump.
+    /// Change tempo without a phase jump. Non-finite input is rejected outright.
     pub fn set_bpm(&mut self, bpm: f64, t: f64) {
+        if !bpm.is_finite() {
+            return;
+        }
         self.anchor_beat = self.beat_at(t);
         self.anchor_t = t;
         self.bpm = clamp(bpm, 20.0, 500.0);

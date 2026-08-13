@@ -77,7 +77,13 @@ function spawnPreviz(): [boolean, string] {
   for (const c of candidates) {
     if (fs.existsSync(c)) {
       try {
-        spawn(c, [], { detached: true, stdio: 'ignore' }).unref();
+        const child = spawn(c, [], { detached: true, stdio: 'ignore' });
+        // spawn errors (EACCES, ENOENT-at-exec) arrive async — an unhandled
+        // 'error' event would take down the whole engine.
+        child.on('error', (e) => {
+          server.broadcast({ type: 'toast', ok: false, message: `previz failed to start: ${e.message}` });
+        });
+        child.unref();
         return [true, 'previz launched'];
       } catch (err) {
         return [false, `previz failed to start: ${(err as Error).message}`];
@@ -123,10 +129,11 @@ server.onConnect = (ws) => {
   server.send(ws, { type: 'midiInputs', names: [] }); // Node dev engine has no native MIDI
 };
 
-// If the client holding a flash look crashes, nothing will ever release it —
-// drop all held flash looks once no client is connected.
+// If the client holding a flash look crashes, nothing will ever release it.
+// The protocol doesn't attribute holds to clients, so release on ANY
+// disconnect: a spurious release beats a blinder latched on stage.
 server.onDisconnect = () => {
-  if (server.clientCount === 0) state.releaseAllHeld();
+  state.releaseAllHeld();
 };
 
 state.onLearned = (mapping) => {
@@ -154,9 +161,11 @@ function handleCommand(cmd: Command): void {
       break;
     case 'tap':
       state.clock.tap();
+      renderer.alignPhase();
       break;
     case 'resync':
       state.clock.resync();
+      renderer.alignPhase();
       break;
     case 'setSpeed':
       state.speed = clamp(cmd.v, 0.1, 8);
@@ -238,8 +247,20 @@ function handleCommand(cmd: Command): void {
   }
 }
 
+let oscLogWindow = 0;
+let oscLogCount = 0;
+
 function handleOsc(msg: OscMessage): void {
-  server.broadcast({ type: 'osc', entry: { t: Date.now(), addr: msg.addr, args: msg.args } });
+  // The monitor is best-effort — never let an OSC flood amplify into the
+  // WS broadcast path (cap ~25 events/s, drop the rest).
+  const now = Date.now();
+  if (now - oscLogWindow > 1000) {
+    oscLogWindow = now;
+    oscLogCount = 0;
+  }
+  if (oscLogCount++ < 25) {
+    server.broadcast({ type: 'osc', entry: { t: now, addr: msg.addr, args: msg.args } });
+  }
   const sync = state.project.sync;
 
   if (sync.bpmFromOsc && msg.addr === '/composition/tempocontroller/tempo') {
@@ -260,10 +281,19 @@ function handleOsc(msg: OscMessage): void {
       state.triggerColumn(parseInt(m[1], 10) - 1);
     }
   }
-  // Direct control addresses for anything that can send OSC.
-  if (msg.addr === '/light/bpm' && typeof msg.args[0] === 'number') state.clock.setBpm(msg.args[0]);
-  if (msg.addr === '/light/column' && typeof msg.args[0] === 'number') state.triggerColumn(msg.args[0] - 1);
-  if (msg.addr === '/light/blackout') state.blackout = Number(msg.args[0]) >= 1;
+  // Direct control addresses for anything that can send OSC. All args are
+  // untrusted network input: finite-checked, range-checked, and identical in
+  // behaviour to the Rust core.
+  const a0 = msg.args[0];
+  if (msg.addr === '/light/bpm' && typeof a0 === 'number' && Number.isFinite(a0) && a0 >= 20 && a0 <= 999) {
+    state.clock.setBpm(a0);
+  }
+  if (msg.addr === '/light/column' && typeof a0 === 'number' && Number.isFinite(a0) && a0 >= 1) {
+    state.triggerColumn(Math.floor(a0) - 1);
+  }
+  if (msg.addr === '/light/blackout' && typeof a0 === 'number' && Number.isFinite(a0)) {
+    state.blackout = a0 >= 1;
+  }
 }
 
 // --- 40 Hz output loop with drift correction ---
@@ -273,7 +303,27 @@ let jitterMax = 0;
 let windowStart = performance.now();
 let stats = { fps: 40, jitter: 0, artnet: 0, sacn: 0 };
 
+let lastLoopError = 0;
+
 function loop(): void {
+  try {
+    loopBody();
+  } catch (err) {
+    // A render error must never stop the show: nodes hold their last frame,
+    // we log (throttled) and keep ticking.
+    const now = Date.now();
+    if (now - lastLoopError > 1000) {
+      lastLoopError = now;
+      console.error('[light] tick error (output holding):', err);
+    }
+  } finally {
+    target += TICK_MS;
+    if (target < performance.now() - 250) target = performance.now() + TICK_MS;
+    setTimeout(loop, Math.max(0, target - performance.now()));
+  }
+}
+
+function loopBody(): void {
   const now = performance.now();
   jitterMax = Math.max(jitterMax, Math.abs(now - target));
 
@@ -320,10 +370,14 @@ function loop(): void {
     server.broadcast(snap);
   }
 
-  target += TICK_MS;
-  if (target < now - 250) target = now + TICK_MS; // recover after sleep/suspend
-  setTimeout(loop, Math.max(0, target - performance.now()));
 }
+
+process.on('uncaughtException', (err) => {
+  console.error('[light] uncaught exception (engine continues):', err);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('[light] unhandled rejection (engine continues):', err);
+});
 
 loop();
 

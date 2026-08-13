@@ -268,11 +268,66 @@ export type MvrBundle = {
 export const WS_PORT = 9900;
 
 export function clamp(v: number, lo = 0, hi = 1): number {
+  if (!Number.isFinite(v)) return lo; // NaN must never propagate into the engine
   return v < lo ? lo : v > hi ? hi : v;
 }
 
 export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+/**
+ * Structural validation + repair for untrusted project data (updateProject
+ * commands, files from disk). Repairs what it can, drops what it can't, and
+ * returns null only when the data is unusable — the render loop must never
+ * meet a shape it can't survive.
+ */
+export function sanitizeProject(p: Project): Project | null {
+  if (!p || typeof p !== 'object' || p.version !== 1) return null;
+  if (
+    !Array.isArray(p.universes) || !Array.isArray(p.fixtures) || !Array.isArray(p.groups) ||
+    !Array.isArray(p.layers) || !Array.isArray(p.columns)
+  ) {
+    return null;
+  }
+  p.midi = Array.isArray(p.midi) ? p.midi : [];
+  p.looks = p.looks && typeof p.looks === 'object' ? p.looks : {};
+  const sync = (p.sync ?? {}) as Partial<SyncCfg>;
+  p.sync = {
+    oscEnabled: sync.oscEnabled ?? true,
+    oscPort: Number.isFinite(sync.oscPort) ? (sync.oscPort as number) : 7700,
+    followColumns: sync.followColumns ?? true,
+    bpmFromOsc: sync.bpmFromOsc ?? true,
+  };
+  const settings = (p.settings ?? {}) as Partial<Settings>;
+  p.settings = {
+    haze: Number.isFinite(settings.haze) ? (settings.haze as number) : 0,
+    hazeFan: Number.isFinite(settings.hazeFan) ? (settings.hazeFan as number) : 0.35,
+  };
+  for (const [id, lk] of Object.entries(p.looks)) {
+    if (!lk || typeof lk !== 'object' || !Array.isArray(lk.parts)) {
+      delete p.looks[id];
+      continue;
+    }
+    for (const part of lk.parts) {
+      if (!part.params || typeof part.params !== 'object') part.params = {};
+      if (!Array.isArray(part.effects)) part.effects = [];
+    }
+  }
+  for (const layer of p.layers) {
+    if (!Array.isArray(layer.cells)) layer.cells = p.columns.map(() => null);
+    layer.cells = layer.cells.map((c) => (typeof c === 'string' && p.looks[c] ? c : null));
+    if (!Number.isFinite(layer.master)) layer.master = 1;
+    if (!Number.isFinite(layer.fade)) layer.fade = 0.5;
+  }
+  for (const g of p.groups) {
+    if (!Array.isArray(g.heads)) g.heads = [];
+  }
+  for (const f of p.fixtures) {
+    if (!Number.isFinite(f.address)) f.address = 1;
+    if (!f.pos || typeof f.pos !== 'object') f.pos = { x: 0, y: 2, z: 0 };
+  }
+  return p;
 }
 
 let idCounter = 0;

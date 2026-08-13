@@ -38,6 +38,7 @@ export function Fader({ value, onChange, label, fmt, min = 0, max = 1, def, widt
   );
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
     if (learn && learnMode) {
       useStore.getState().armLearn(learn);
       return;

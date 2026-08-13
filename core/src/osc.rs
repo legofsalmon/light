@@ -10,6 +10,9 @@ pub struct OscMessage {
 }
 
 fn read_padded_string(buf: &[u8], offset: usize) -> Option<(String, usize)> {
+    if offset >= buf.len() {
+        return None;
+    }
     let mut end = offset;
     while end < buf.len() && buf[end] != 0 {
         end += 1;
@@ -87,6 +90,9 @@ pub fn parse_osc(buf: &[u8]) -> Vec<OscMessage> {
             }
             'b' => {
                 let Some(len) = be_i32(buf, o) else { break };
+                if len < 0 {
+                    break; // negative blob length would overflow usize
+                }
                 o += 4 + ((len as usize + 3) / 4) * 4;
             }
             'T' => args.push(serde_json::json!(1)),
@@ -101,12 +107,13 @@ pub fn parse_osc(buf: &[u8]) -> Vec<OscMessage> {
 /// UDP OSC listener thread with hot rebind when the port/enabled state changes.
 pub struct OscIn {
     stop: Option<Arc<AtomicBool>>,
+    alive: Option<Arc<AtomicBool>>,
     current: Option<u16>,
 }
 
 impl OscIn {
     pub fn new() -> Self {
-        OscIn { stop: None, current: None }
+        OscIn { stop: None, alive: None, current: None }
     }
 
     pub fn listen<F: Fn(OscMessage) + Send + 'static>(&mut self, port: u16, enabled: bool, on_msg: F) {
@@ -114,22 +121,31 @@ impl OscIn {
             self.stop();
             return;
         }
-        if self.current == Some(port) {
+        // A dead listener (bind failure, thread exit) must not be mistaken
+        // for a live one — re-attempt whenever it isn't provably running.
+        let running = self.alive.as_ref().map(|a| a.load(Ordering::Relaxed)).unwrap_or(false);
+        if self.current == Some(port) && running {
             return;
         }
         self.stop();
+        // Bind synchronously so failure is visible immediately and the next
+        // project change retries.
+        let sock = match UdpSocket::bind(("0.0.0.0", port)) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[osc] listen error on :{port}: {e} (will retry on next change)");
+                self.current = None;
+                return;
+            }
+        };
         let stop = Arc::new(AtomicBool::new(false));
         let stop2 = stop.clone();
+        let alive = Arc::new(AtomicBool::new(true));
+        let alive2 = alive.clone();
         self.stop = Some(stop);
+        self.alive = Some(alive);
         self.current = Some(port);
         std::thread::spawn(move || {
-            let sock = match UdpSocket::bind(("0.0.0.0", port)) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("[osc] listen error on :{port}: {e}");
-                    return;
-                }
-            };
             sock.set_read_timeout(Some(Duration::from_millis(400))).ok();
             let mut buf = [0u8; 4096];
             while !stop2.load(Ordering::Relaxed) {
@@ -145,6 +161,7 @@ impl OscIn {
                     Err(_) => break,
                 }
             }
+            alive2.store(false, Ordering::Relaxed);
         });
     }
 
@@ -152,6 +169,7 @@ impl OscIn {
         if let Some(s) = self.stop.take() {
             s.store(true, Ordering::Relaxed);
         }
+        self.alive = None;
         self.current = None;
     }
 }

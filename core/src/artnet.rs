@@ -42,7 +42,12 @@ impl ArtnetOut {
         pkt[16..18].copy_from_slice(&512u16.to_be_bytes());
         pkt[18..].copy_from_slice(data);
 
-        let dest = unicast.unwrap_or("255.255.255.255");
+        // IP literals only — hostnames would resolve via DNS on the 40 Hz
+        // output path. Invalid strings fall back to broadcast so the rig
+        // keeps receiving while an address is being typed.
+        let dest: std::net::Ipv4Addr = unicast
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(std::net::Ipv4Addr::BROADCAST);
         if sock.send_to(&pkt, (dest, ARTNET_PORT)).is_ok() {
             self.packets += 1;
         }
