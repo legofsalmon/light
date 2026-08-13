@@ -231,6 +231,10 @@ export type Snapshot = {
   haze: number;
   /** Ableton Link session state — native (Rust) engine only */
   link?: { on: boolean; peers: number };
+  /** Art-Net nodes discovered via ArtPoll (present when polling is active) */
+  artnetNodes?: { ip: string; name: string; ageMs: number }[];
+  /** 'failed' = reply port 6454 is held by another app — discovery unavailable */
+  artnetPoll?: 'on' | 'failed';
   hazeFan: number;
   heads: HeadSnap[];
   layers: LayerSnap[];
@@ -248,6 +252,10 @@ export type Command =
   | { type: 'release'; layerId: string; col: number }
   | { type: 'clearLayer'; layerId: string }
   | { type: 'setLink'; on: boolean }
+  | { type: 'projects' }
+  | { type: 'newProject'; name: string }
+  | { type: 'openProject'; slug: string }
+  | { type: 'saveProjectAs'; name: string }
   | { type: 'column'; col: number }
   | { type: 'setBpm'; bpm: number }
   | { type: 'tap' }
@@ -283,7 +291,8 @@ export type ServerEvent =
   | { type: 'midiInputs'; names: string[] }
   | { type: 'learned'; mapping: MidiMapping }
   | { type: 'importResult'; ok: boolean; message: string; profileIds: string[] }
-  | { type: 'toast'; ok: boolean; message: string };
+  | { type: 'toast'; ok: boolean; message: string }
+  | { type: 'projects'; current: string; list: { slug: string; name: string }[] };
 
 /** Neutral MVR import bundle produced by the shared parser. */
 export type MvrBundle = {

@@ -396,6 +396,14 @@ impl EngineState {
         }
     }
 
+    /// Swap in a different project wholesale (open/new): live look state,
+    /// fades, and held flashes all reset — a fresh show, not an edit.
+    pub fn replace_project(&mut self, p: Project) {
+        self.project = p;
+        self.ensure_decks();
+        self.live.clear();
+    }
+
     pub fn update_project(&mut self, p: Project) {
         self.project = p;
         self.ensure_decks();
@@ -534,6 +542,12 @@ impl EngineState {
                 }
             }
             Command::SetBlackout { v } => self.blackout = v,
+            Command::Projects
+            | Command::NewProject { .. }
+            | Command::OpenProject { .. }
+            | Command::SaveProjectAs { .. } => {
+                // handled by the engine loop (filesystem access lives there)
+            }
             Command::SetLink { on } => {
                 // the engine loop watches this flag and drives the Link session
                 self.project.sync.link_enabled = on;

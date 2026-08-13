@@ -19,6 +19,12 @@ export function App() {
         st.send({ type: 'save' });
         return;
       }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) st.redo();
+        else st.undo();
+        return;
+      }
       // Held keys must not machine-gun cues/tap/blackout, and browser
       // shortcuts (⌘1 etc.) must not double as ours.
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;

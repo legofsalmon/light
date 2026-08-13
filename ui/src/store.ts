@@ -31,10 +31,17 @@ type Store = {
   importMsg: { ok: boolean; text: string } | null;
   /** transient engine notice shown in the top bar */
   toast: { ok: boolean; text: string; at: number } | null;
+  /** known project files on the engine's disk (for the project menu) */
+  projects: { current: string; list: { slug: string; name: string }[] } | null;
+  /** undo depth available (for button/menu state) */
+  undoDepth: number;
+  redoDepth: number;
 
   send: (cmd: Command) => void;
   /** Clone-mutate-commit a project edit; optimistic locally, authoritative echo follows. */
   mutate: (fn: (p: Project) => void) => void;
+  undo: () => void;
+  redo: () => void;
   setSel: (s: Sel) => void;
   setTab: (t: Tab) => void;
   setPrevizMode: (m: '3d' | '2d') => void;
@@ -69,6 +76,43 @@ function wsSend(msg: string): void {
   if (pending.length < 50) pending.push(msg);
 }
 
+// --- undo history: snapshots taken ONLY at the mutate() choke point — this
+// window's own edits. Engine-originated changes (imports, APC deck switches,
+// fader/CC commands) are deliberately NOT captured: inferring them from echo
+// diffs proved unsafe (review: cross-project overwrites, fader floods).
+// Every snapshot is tagged with the project slug it belongs to; a slug
+// mismatch clears history instead of ever sending another project's state.
+const UNDO_CAP = 30;
+type HistoryEntry = { slug: string | null; project: Project };
+const undoStack: HistoryEntry[] = [];
+const redoStack: HistoryEntry[] = [];
+let lastPushAt = 0;
+/** current project slug per the engine's `projects` events; null until known */
+let currentSlug: string | null = null;
+
+function clearHistory(): void {
+  undoStack.length = 0;
+  redoStack.length = 0;
+  lastPushAt = 0;
+}
+
+function pushUndo(p: Project): void {
+  const now = Date.now();
+  // pushes within 800 ms coalesce into the earlier snapshot — a continuous
+  // drag lands as one step (rapid distinct edits may merge too; the cap on
+  // surprise is the 800 ms window)
+  if (now - lastPushAt < 800) return;
+  lastPushAt = now;
+  undoStack.push({ slug: currentSlug, project: structuredClone(p) });
+  if (undoStack.length > UNDO_CAP) undoStack.shift();
+  redoStack.length = 0;
+}
+
+/** entry usable only if it provably belongs to the current project */
+function entryUsable(e: HistoryEntry | undefined): e is HistoryEntry {
+  return !!e && e.slug !== null && e.slug === currentSlug;
+}
+
 export const useStore = create<Store>()((set, get) => ({
   connected: false,
   project: null,
@@ -88,16 +132,54 @@ export const useStore = create<Store>()((set, get) => ({
   lastMidi: null,
   importMsg: null,
   toast: null,
+  projects: null,
+  undoDepth: 0,
+  redoDepth: 0,
 
   send: (cmd) => wsSend(JSON.stringify(cmd)),
 
   mutate: (fn) => {
     const cur = get().project;
     if (!cur) return;
+    pushUndo(cur);
     const next = structuredClone(cur);
     fn(next);
-    set({ project: next });
+    set({ project: next, undoDepth: undoStack.length, redoDepth: redoStack.length });
     get().send({ type: 'updateProject', project: next });
+  },
+
+  undo: () => {
+    const cur = get().project;
+    const prev = undoStack.at(-1);
+    if (!cur) return;
+    if (!entryUsable(prev)) {
+      // unknown or foreign snapshot — never send another project's state
+      clearHistory();
+      set({ undoDepth: 0, redoDepth: 0 });
+      return;
+    }
+    undoStack.pop();
+    redoStack.push({ slug: currentSlug, project: structuredClone(cur) });
+    lastPushAt = 0; // the next edit must not coalesce across a history apply
+    set({ project: prev.project, undoDepth: undoStack.length, redoDepth: redoStack.length });
+    get().send({ type: 'updateProject', project: prev.project });
+  },
+
+  redo: () => {
+    const cur = get().project;
+    const next = redoStack.at(-1);
+    if (!cur) return;
+    if (!entryUsable(next)) {
+      clearHistory();
+      set({ undoDepth: 0, redoDepth: 0 });
+      return;
+    }
+    redoStack.pop();
+    undoStack.push({ slug: currentSlug, project: structuredClone(cur) });
+    if (undoStack.length > UNDO_CAP) undoStack.shift();
+    lastPushAt = 0;
+    set({ project: next.project, undoDepth: undoStack.length, redoDepth: redoStack.length });
+    get().send({ type: 'updateProject', project: next.project });
   },
 
   setSel: (sel) => set({ sel }),
@@ -143,6 +225,9 @@ function connect(): void {
   ws.onopen = () => {
     useStore.setState({ connected: true });
     for (const m of pending.splice(0)) ws?.send(m);
+    // learn the current project slug right away — undo refuses to act on
+    // snapshots it cannot attribute to the loaded project
+    ws?.send(JSON.stringify({ type: 'projects' }));
   };
   ws.onmessage = (e) => {
     let ev: ServerEvent;
@@ -157,11 +242,12 @@ function connect(): void {
       const ids = new Set(ev.project.fixtures.map((f) => f.id));
       const cur = useStore.getState().fxSel;
       const pruned = cur.filter((id) => ids.has(id));
-      useStore.setState(
-        pruned.length === cur.length
-          ? { project: ev.project }
-          : { project: ev.project, fxSel: pruned },
-      );
+      useStore.setState({
+        project: ev.project,
+        ...(pruned.length === cur.length ? {} : { fxSel: pruned }),
+        undoDepth: undoStack.length,
+        redoDepth: redoStack.length,
+      });
     }
     else if (ev.type === 'snap') useStore.setState({ snap: ev as Snapshot });
     else if (ev.type === 'osc') {
@@ -174,6 +260,19 @@ function connect(): void {
       useStore.setState({ learnMode: false, learnTarget: null, lastMidi: 'mapped ✓' });
     } else if (ev.type === 'importResult') {
       useStore.setState({ importMsg: { ok: ev.ok, text: ev.message } });
+    } else if (ev.type === 'projects') {
+      if (currentSlug !== ev.current) {
+        // different project identity — this window's history no longer applies
+        clearHistory();
+        currentSlug = ev.current;
+        useStore.setState({
+          projects: { current: ev.current, list: ev.list },
+          undoDepth: 0,
+          redoDepth: 0,
+        });
+      } else {
+        useStore.setState({ projects: { current: ev.current, list: ev.list } });
+      }
     } else if (ev.type === 'toast') {
       useStore.setState({ toast: { ok: ev.ok, text: ev.message, at: Date.now() } });
       setTimeout(() => {

@@ -106,11 +106,11 @@ async function main(): Promise<void> {
 
   procs.push(
     spawn(process.execPath, ['engine/index.ts'], {
-      env: { ...process.env, LIGHT_PORT: '9902', LIGHT_PROJECT_DIR: dirs.node },
+      env: { ...process.env, LIGHT_PORT: '9902', LIGHT_PROJECT_DIR: dirs.node, LIGHT_NO_ARTPOLL: '1' },
       stdio: 'ignore',
     }),
     spawn(RUST_BIN, [], {
-      env: { ...process.env, LIGHT_PORT: '9901', LIGHT_PROJECT_DIR: dirs.rust, LIGHT_NO_MIDI: '1' },
+      env: { ...process.env, LIGHT_PORT: '9901', LIGHT_PROJECT_DIR: dirs.rust, LIGHT_NO_MIDI: '1', LIGHT_NO_ARTPOLL: '1' },
       stdio: 'ignore',
     })
   );
@@ -317,6 +317,24 @@ async function main(): Promise<void> {
   const shapeN = shape(await currentProject(node));
   const shapeR = shape(await currentProject(rust));
   check('mvr import shape parity', shapeN === shapeR, `node=${shapeN}\nrust=${shapeR}`);
+
+  // the import added artnet-enabled universes — disable ALL outputs in both
+  // engines immediately (universe 0 is the factory default on most nodes;
+  // a test run must never black out a real rig)
+  for (const c of [node, rust]) {
+    const p = structuredClone(await currentProject(c));
+    for (const u of p.universes) {
+      u.artnet = false;
+      u.sacn = false;
+    }
+    c.send({ type: 'updateProject', project: p });
+  }
+  await sleep(300);
+  check(
+    'no output universes remain enabled after import',
+    (await currentProject(node)).universes.every((u) => !u.artnet && !u.sacn),
+    'artnet leaked on'
+  );
 
   kill();
   fs.rmSync(TMP, { recursive: true, force: true });

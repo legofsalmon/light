@@ -354,6 +354,14 @@ pub struct LinkSnap {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ArtnetNodeSnap {
+    pub ip: String,
+    pub name: String,
+    pub age_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     #[serde(rename = "type")]
     pub typ: &'static str, // always "snap"
@@ -366,6 +374,10 @@ pub struct Snapshot {
     pub haze: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<LinkSnap>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artnet_nodes: Option<Vec<ArtnetNodeSnap>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artnet_poll: Option<&'static str>,
     pub haze_fan: f64,
     pub heads: Vec<HeadSnap>,
     pub layers: Vec<LayerSnap>,
@@ -385,6 +397,10 @@ pub enum Command {
     Column { col: usize },
     SetBpm { bpm: f64 },
     SetLink { on: bool },
+    Projects,
+    NewProject { name: String },
+    OpenProject { slug: String },
+    SaveProjectAs { name: String },
     Tap,
     Resync,
     SetSpeed { v: f64 },

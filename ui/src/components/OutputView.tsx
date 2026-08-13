@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { uid } from '../../../shared/types.ts';
+import { NumInput, UnicastInput } from './inputs.tsx';
 import { useStore } from '../store.ts';
 
 function DmxMeters({ universeId }: { universeId: string }) {
@@ -38,6 +39,39 @@ function DmxMeters({ universeId }: { universeId: string }) {
   );
 }
 
+function PollStatusLine({ artnetOn }: { artnetOn: boolean }) {
+  const nodes = useStore((s) => s.snap?.artnetNodes);
+  const poll = useStore((s) => s.snap?.artnetPoll);
+  if (nodes?.length) return null;
+  return (
+    <span className="label">
+      {poll === 'failed'
+        ? 'discovery unavailable — UDP 6454 is held by another app (QLC+? a second engine?)'
+        : artnetOn
+          ? 'polling… no nodes have answered yet — check network / node power'
+          : 'Art-Net output is off on every universe'}
+    </span>
+  );
+}
+
+function NodeList() {
+  const nodes = useStore((s) => s.snap?.artnetNodes);
+  if (!nodes?.length) return null;
+  return (
+    <div className="row" style={{ gap: 14, flexWrap: 'wrap' }}>
+      {nodes.map((n) => {
+        const fresh = n.ageMs < 8000;
+        return (
+          <span key={n.ip} className="label" style={{ color: fresh ? 'var(--good)' : 'var(--warn)' }}>
+            ● {n.name} <span style={{ fontFamily: 'var(--mono)' }}>{n.ip}</span>
+            {fresh ? '' : ` (silent ${Math.round(n.ageMs / 1000)}s)`}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export function OutputView() {
   const project = useStore((s) => s.project)!;
   const stats = useStore((s) => s.snap?.stats);
@@ -52,7 +86,7 @@ export function OutputView() {
           <thead>
             <tr>
               <th>Label</th><th>Art-Net</th><th>ArtNet uni</th><th>sACN</th><th>sACN uni</th>
-              <th>Destination</th><th></th>
+              <th>Destination</th><th>Fixtures</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -62,6 +96,7 @@ export function OutputView() {
                   const x = p.universes.find((y) => y.id === u.id);
                   if (x) fn(x);
                 });
+              const used = project.fixtures.filter((f) => f.universeId === u.id).length;
               return (
                 <tr key={u.id}>
                   <td>
@@ -73,7 +108,12 @@ export function OutputView() {
                     </button>
                   </td>
                   <td>
-                    <input className="num" type="number" min={0} max={32767} value={u.artnetUniverse} onChange={(e) => editU((x) => (x.artnetUniverse = Math.max(0, Number(e.target.value) || 0)))} />
+                    <NumInput
+                      value={u.artnetUniverse}
+                      min={0}
+                      max={32767}
+                      onCommit={(v) => editU((x) => (x.artnetUniverse = v))}
+                    />
                   </td>
                   <td>
                     <button className={`btn small ${u.sacn ? 'on' : ''}`} onClick={() => editU((x) => (x.sacn = !x.sacn))}>
@@ -81,21 +121,31 @@ export function OutputView() {
                     </button>
                   </td>
                   <td>
-                    <input className="num" type="number" min={1} max={63999} value={u.sacnUniverse} onChange={(e) => editU((x) => (x.sacnUniverse = Math.max(1, Number(e.target.value) || 1)))} />
-                  </td>
-                  <td>
-                    <input
-                      className="text"
-                      style={{ width: 150, fontFamily: 'var(--mono)' }}
-                      placeholder="broadcast"
-                      value={u.unicast ?? ''}
-                      title="empty = broadcast 255.255.255.255 (Art-Net) / multicast (sACN); or enter your node's IP"
-                      onChange={(e) => editU((x) => (x.unicast = e.target.value.trim() === '' ? null : e.target.value.trim()))}
+                    <NumInput
+                      value={u.sacnUniverse}
+                      min={1}
+                      max={63999}
+                      onCommit={(v) => editU((x) => (x.sacnUniverse = v))}
                     />
                   </td>
                   <td>
+                    <UnicastInput
+                      value={u.unicast}
+                      onCommit={(v) => editU((x) => (x.unicast = v))}
+                    />
+                  </td>
+                  <td className="mono">{used}</td>
+                  <td>
                     <button
                       className="btn small ghost"
+                      disabled={used > 0 || project.universes.length <= 1}
+                      title={
+                        used > 0
+                          ? `${used} fixture(s) still patched here — move them first`
+                          : project.universes.length <= 1
+                            ? 'the last universe cannot be deleted'
+                            : 'delete universe'
+                      }
                       onClick={() => mutate((p) => {
                         p.universes = p.universes.filter((x) => x.id !== u.id);
                       })}
@@ -126,6 +176,12 @@ export function OutputView() {
         >
           + add universe
         </button>
+      </div>
+
+      <div>
+        <div className="sectionhead">Art-Net nodes</div>
+        <PollStatusLine artnetOn={project.universes.some((u) => u.artnet)} />
+        <NodeList />
       </div>
 
       <div>

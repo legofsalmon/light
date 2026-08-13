@@ -8,7 +8,7 @@ import { SacnOut } from './sacn.ts';
 import { OscIn, type OscMessage } from './osc.ts';
 import { Server } from './server.ts';
 import { defaultProject } from './defaultProject.ts';
-import { loadProject, projectPath, saveProjectDebounced, saveProjectNow } from './persist.ts';
+import * as persist from './persist.ts';
 import { parseGdtfBase64, parseMvrBase64 } from './wasmProfiles.ts';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -97,12 +97,12 @@ const TICK_MS = 25; // 40 Hz DMX refresh
 const PORT = Number(process.env.LIGHT_PORT ?? WS_PORT);
 
 // --- boot ---
-let project = loadProject();
+let project = persist.loadProject();
 if (!project) {
   project = sanitizeProject(defaultProject())!;
   try {
-    saveProjectNow(project);
-    console.log(`[light] created default project at ${projectPath()}`);
+    persist.saveProjectNow(project);
+    console.log(`[light] created default project at ${persist.projectPath()}`);
   } catch (err) {
     console.error('[light] could not write default project:', (err as Error).message);
   }
@@ -111,6 +111,14 @@ if (!project) {
 const state = new EngineState(project);
 const renderer = new Renderer(state);
 const artnet = new ArtnetOut();
+
+function broadcastProjects(): void {
+  server.broadcast({
+    type: 'projects',
+    current: persist.currentSlug(),
+    list: persist.listProjects(),
+  });
+}
 const sacn = new SacnOut();
 
 const server = new Server(PORT, path.join(process.cwd(), 'ui', 'dist'), handleCommand);
@@ -120,7 +128,7 @@ osc.listen(state.project.sync.oscPort, state.project.sync.oscEnabled);
 
 state.onChange = () => {
   server.broadcast({ type: 'project', project: state.project });
-  saveProjectDebounced(() => state.project);
+  persist.saveProjectDebounced(() => state.project);
   osc.listen(state.project.sync.oscPort, state.project.sync.oscEnabled);
 };
 
@@ -201,6 +209,58 @@ function handleCommand(cmd: Command): void {
     case 'updateProject':
       state.updateProject(cmd.project);
       break;
+    case 'projects':
+      broadcastProjects();
+      break;
+    case 'newProject': {
+      const name = cmd.name.trim() || 'Untitled';
+      const slug = persist.uniqueSlug(name);
+      const fresh = sanitizeProject(defaultProject())!;
+      fresh.name = name;
+      // flush the outgoing project under its OWN slug first — an edit inside
+      // the autosave debounce window must not vanish with the switch
+      persist.cancelPendingSave();
+      persist.saveProjectNow(state.project);
+      persist.saveSlugNow(slug, fresh);
+      persist.setCurrentSlug(slug);
+      state.replaceProject(fresh);
+      server.broadcast({ type: 'toast', ok: true, message: `created "${name}"` });
+      broadcastProjects();
+      break;
+    }
+    case 'openProject': {
+      if (cmd.slug === persist.currentSlug()) {
+        // already open — flush live edits rather than reverting to the
+        // possibly-stale disk copy
+        persist.cancelPendingSave();
+        persist.saveProjectNow(state.project);
+        server.broadcast({ type: 'toast', ok: true, message: 'already open' });
+        break;
+      }
+      const p = persist.loadSlug(cmd.slug);
+      if (!p) {
+        server.broadcast({ type: 'toast', ok: false, message: `cannot open "${cmd.slug}"` });
+        break;
+      }
+      persist.cancelPendingSave();
+      persist.saveProjectNow(state.project); // flush pending edits, old slug
+      persist.setCurrentSlug(cmd.slug);
+      state.replaceProject(p);
+      server.broadcast({ type: 'toast', ok: true, message: `opened "${p.name}"` });
+      broadcastProjects();
+      break;
+    }
+    case 'saveProjectAs': {
+      const name = cmd.name.trim() || 'Untitled';
+      const slug = persist.slugify(name);
+      state.project.name = name;
+      persist.saveSlugNow(slug, state.project);
+      persist.setCurrentSlug(slug);
+      state.onChange?.(); // name changed — echo + autosave under the new slug
+      server.broadcast({ type: 'toast', ok: true, message: `saved as "${name}"` });
+      broadcastProjects();
+      break;
+    }
     case 'midi':
       state.applyMidi(cmd.status, cmd.d1, cmd.d2);
       break;
@@ -249,7 +309,7 @@ function handleCommand(cmd: Command): void {
       break;
     }
     case 'save': {
-      const p = saveProjectNow(state.project);
+      const p = persist.saveProjectNow(state.project);
       server.broadcast({ type: 'saved', path: p });
       break;
     }
@@ -337,6 +397,10 @@ function loopBody(): void {
   jitterMax = Math.max(jitterMax, Math.abs(now - target));
 
   const res = renderer.tick(now);
+  artnet.pollTick(
+    state.project.universes.some((u) => u.artnet),
+    state.project.universes.filter((u) => u.artnet).map((u) => u.unicast),
+  );
   for (const u of state.project.universes) {
     const buf = res.buffers.get(u.id);
     if (!buf) continue;
@@ -374,6 +438,17 @@ function loopBody(): void {
       heads: res.heads,
       layers: res.layers,
       dmx,
+      ...(() => {
+        // include discovery state whenever polling is (or was) relevant, and
+        // call nodesSnapshot exactly once per snapshot
+        const status = artnet.pollStatus();
+        if (status === 'off' && !state.project.universes.some((u) => u.artnet)) return {};
+        const nodes = artnet.nodesSnapshot();
+        return {
+          artnetNodes: nodes,
+          ...(status === 'failed' ? { artnetPoll: 'failed' as const } : { artnetPoll: 'on' as const }),
+        };
+      })(),
       stats,
     };
     server.broadcast(snap);
@@ -401,7 +476,7 @@ console.log('');
 process.on('SIGINT', () => {
   console.log('\n[light] saving project & shutting down…');
   try {
-    saveProjectNow(state.project);
+    persist.saveProjectNow(state.project);
   } catch {
     // nothing more we can do on the way out
   }

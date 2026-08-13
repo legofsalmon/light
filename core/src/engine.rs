@@ -95,6 +95,7 @@ pub fn run(cfg: EngineConfig) {
 
     let mut midi_names: Vec<String> = Vec::new();
     let mut dirty_at: Option<Instant> = None;
+    let mut dirty_first: Option<Instant> = None;
     let mut osc_log: (f64, u32) = (0.0, 0); // monitor rate-limit window
 
     // Keep the machine awake through a set — display sleep or App Nap
@@ -169,6 +170,11 @@ pub fn run(cfg: EngineConfig) {
                     if link.enabled() != state.project.sync.link_enabled {
                         link.set_enabled(state.project.sync.link_enabled);
                     }
+                    if dirty_at.is_none() {
+                        dirty_first = None; // a switch handler flushed + cleared
+                    } else if dirty_first.is_none() {
+                        dirty_first = Some(Instant::now());
+                    }
                 }
                 Err(RecvTimeoutError::Timeout) => break,
                 Err(RecvTimeoutError::Disconnected) => return,
@@ -186,6 +192,17 @@ pub fn run(cfg: EngineConfig) {
             state.clock.set_bpm(bpm, t);
         }
         let res = renderer.tick(&mut state, t);
+        {
+            let enabled = state.project.universes.iter().any(|u| u.artnet);
+            let unicasts: Vec<Option<String>> = state
+                .project
+                .universes
+                .iter()
+                .filter(|u| u.artnet)
+                .map(|u| u.unicast.clone())
+                .collect();
+            artnet.poll_tick(enabled, &unicasts);
+        }
         for u in &state.project.universes {
             let Some(buf) = res.buffers.get(&u.id) else { continue };
             if u.artnet {
@@ -216,24 +233,31 @@ pub fn run(cfg: EngineConfig) {
         // Snapshots to the UI at 20 fps.
         snap_flip = !snap_flip;
         if snap_flip && bc.count() > 0 {
-            let snap = build_snapshot(&state, &res, t, &stats, &link);
+            let snap = build_snapshot(&state, &res, t, &stats, &link, &artnet);
             if let Ok(s) = serde_json::to_string(&snap) {
                 bc.broadcast(&s);
             }
         }
 
         // Debounced autosave after project changes — on a worker thread so
-        // filesystem latency never touches the tick.
+        // filesystem latency never touches the tick. Quiet for 1.2 s OR
+        // dirty for 10 s, whichever first (continuous editing must not
+        // postpone persistence indefinitely — mirrors the Node reference).
         if let Some(at) = dirty_at {
-            if at.elapsed() >= Duration::from_millis(1200) {
+            let overdue = dirty_first.is_some_and(|f| f.elapsed() >= Duration::from_secs(10));
+            if at.elapsed() >= Duration::from_millis(1200) || overdue {
                 let p = state.project.clone();
                 let d = dir.clone();
+                // capture the slug HERE, on the tick thread — the worker must
+                // never re-read .current mid-save and race a project switch
+                let slug = persist::current_slug(&dir);
                 std::thread::spawn(move || {
-                    if let Err(e) = persist::save_project(&d, &p) {
+                    if let Err(e) = persist::save_project_slug(&d, &slug, &p) {
                         eprintln!("[persist] autosave failed: {e}");
                     }
                 });
                 dirty_at = None;
+                dirty_first = None;
             }
         }
 
@@ -272,6 +296,21 @@ fn spawn_previz() -> (bool, String) {
 
 fn project_event(state: &EngineState) -> String {
     json!({ "type": "project", "project": state.project }).to_string()
+}
+
+fn broadcast_projects(bc: &Broadcaster, dir: &PathBuf) {
+    let list: Vec<serde_json::Value> = persist::list_projects(dir)
+        .into_iter()
+        .map(|(slug, name)| json!({ "slug": slug, "name": name }))
+        .collect();
+    bc.broadcast(
+        &json!({
+            "type": "projects",
+            "current": persist::current_slug(dir),
+            "list": list,
+        })
+        .to_string(),
+    );
 }
 
 fn apply_outcome(
@@ -326,6 +365,76 @@ fn handle_msg(
 ) -> bool {
     match msg {
         EngineMsg::Cmd(cmd) => {
+            // project FILE commands live here — the state machine has no
+            // filesystem access, mirroring the Node reference's split
+            match &cmd {
+                Command::Projects => {
+                    broadcast_projects(bc, dir);
+                    return false;
+                }
+                Command::NewProject { name } => {
+                    let name = if name.trim().is_empty() { "Untitled" } else { name.trim() };
+                    let slug = persist::unique_slug(dir, name);
+                    let mut fresh = crate::defaults::default_project();
+                    fresh.name = name.to_string();
+                    // flush the outgoing project under its OWN slug first —
+                    // an edit inside the autosave debounce window must not
+                    // vanish with the switch
+                    let _ = persist::save_project(dir, &state.project);
+                    *dirty_at = None;
+                    if let Err(e) = persist::save_slug_now(dir, &slug, &fresh) {
+                        bc.broadcast(&json!({"type":"toast","ok":false,"message":format!("cannot create: {e}")}).to_string());
+                        return false;
+                    }
+                    persist::set_current_slug(dir, &slug);
+                    state.replace_project(fresh);
+                    bc.broadcast(&project_event(state));
+                    bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("created \"{name}\"")}).to_string());
+                    broadcast_projects(bc, dir);
+                    ensure_osc(osc, state, tx);
+                    return false;
+                }
+                Command::OpenProject { slug } if *slug == persist::current_slug(dir) => {
+                    // already open — flush live edits rather than reverting
+                    // to the possibly-stale disk copy
+                    let cur = persist::current_slug(dir);
+                    let _ = persist::save_project_slug(dir, &cur, &state.project);
+                    *dirty_at = None;
+                    bc.broadcast(&json!({"type":"toast","ok":true,"message":"already open"}).to_string());
+                    return false;
+                }
+                Command::OpenProject { slug } => {
+                    let Some(p) = persist::load_slug(dir, slug) else {
+                        bc.broadcast(&json!({"type":"toast","ok":false,"message":format!("cannot open \"{slug}\"")}).to_string());
+                        return false;
+                    };
+                    let _ = persist::save_project(dir, &state.project); // flush pending edits, old slug
+                    *dirty_at = None;
+                    persist::set_current_slug(dir, slug);
+                    let pname = p.name.clone();
+                    state.replace_project(p);
+                    bc.broadcast(&project_event(state));
+                    bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("opened \"{pname}\"")}).to_string());
+                    broadcast_projects(bc, dir);
+                    ensure_osc(osc, state, tx);
+                    return false;
+                }
+                Command::SaveProjectAs { name } => {
+                    let name = if name.trim().is_empty() { "Untitled" } else { name.trim() };
+                    let slug = persist::slugify(name);
+                    state.project.name = name.to_string();
+                    if let Err(e) = persist::save_slug_now(dir, &slug, &state.project) {
+                        bc.broadcast(&json!({"type":"toast","ok":false,"message":format!("cannot save: {e}")}).to_string());
+                        return false;
+                    }
+                    persist::set_current_slug(dir, &slug);
+                    bc.broadcast(&project_event(state));
+                    bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("saved as \"{name}\"")}).to_string());
+                    broadcast_projects(bc, dir);
+                    return false;
+                }
+                _ => {}
+            }
             let out = state.handle_command(cmd, t);
             let align = out.align_phase;
             apply_outcome(out, state, bc, osc, tx, dir, dirty_at);
@@ -427,6 +536,7 @@ fn build_snapshot(
     t: f64,
     stats: &EngineStats,
     link: &crate::link::LinkSync,
+    artnet: &crate::artnet::ArtnetOut,
 ) -> Snapshot {
     let mut dmx = std::collections::HashMap::new();
     for (id, buf) in &res.buffers {
@@ -440,6 +550,23 @@ fn build_snapshot(
         speed: state.speed,
         master: state.master,
         link: Some(crate::types::LinkSnap { on: link.enabled(), peers: link.peers() }),
+        artnet_nodes: if artnet.poll_status() != "off"
+            || state.project.universes.iter().any(|u| u.artnet)
+        {
+            Some(artnet.nodes_snapshot())
+        } else {
+            None
+        },
+        artnet_poll: match artnet.poll_status() {
+            "off" => {
+                if state.project.universes.iter().any(|u| u.artnet) {
+                    Some("on") // enabled this tick; listener opens next poll
+                } else {
+                    None
+                }
+            }
+            s => Some(if s == "failed" { "failed" } else { "on" }),
+        },
         blackout: state.blackout,
         haze: state.project.settings.haze,
         haze_fan: state.project.settings.haze_fan,

@@ -233,6 +233,16 @@ export class EngineState {
   }
 
   /** Replace the project (UI edit) and drop any live references that no longer exist. */
+  /** Swap in a different project wholesale (open/new): live look state,
+   *  fades, and held flashes all reset — a fresh show, not an edit. */
+  replaceProject(p: Project): void {
+    const clean = sanitizeProject(p);
+    if (!clean) return;
+    this.project = clean;
+    this.live.clear();
+    this.onChange?.();
+  }
+
   updateProject(p: Project): void {
     const clean = sanitizeProject(p);
     if (!clean) {
