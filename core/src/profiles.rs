@@ -1,7 +1,8 @@
 use crate::color::{derby_quantize, rgb_to_hsv};
 use crate::types::{clamp01, MotorMode};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum HeadKind {
     Rgb,
     Derby,
