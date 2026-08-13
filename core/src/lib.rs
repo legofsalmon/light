@@ -2,6 +2,7 @@ pub mod artnet;
 pub mod clock;
 pub mod color;
 pub mod cprofile;
+pub mod gdtf;
 pub mod defaults;
 pub mod effects;
 pub mod engine;

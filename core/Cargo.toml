@@ -11,6 +11,8 @@ tungstenite = "0.24"
 midir = "0.10"
 dirs = "5"
 getrandom = "0.2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+roxmltree = "0.20"
 
 [[bin]]
 name = "light-engine"
