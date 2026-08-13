@@ -238,6 +238,10 @@ export type Command =
   | { type: 'learn'; action: MidiAction | null }
   /** import a .gdtf file (base64) — engine parses and adds its modes to project.profiles */
   | { type: 'importGdtf'; name: string; data: string }
+  /** import a .mvr scene (base64) — patch, positions, groups; replace clears the current patch */
+  | { type: 'importMvr'; name: string; data: string; replace: boolean }
+  /** spawn the native previz window next to the engine */
+  | { type: 'launchPreviz' }
   | { type: 'save' };
 
 // ---------- events (engine → ui) ----------
@@ -250,7 +254,16 @@ export type ServerEvent =
   /** native MIDI inputs owned by the engine (Rust core); empty for the Node dev engine */
   | { type: 'midiInputs'; names: string[] }
   | { type: 'learned'; mapping: MidiMapping }
-  | { type: 'importResult'; ok: boolean; message: string; profileIds: string[] };
+  | { type: 'importResult'; ok: boolean; message: string; profileIds: string[] }
+  | { type: 'toast'; ok: boolean; message: string };
+
+/** Neutral MVR import bundle produced by the shared parser. */
+export type MvrBundle = {
+  profiles: Record<string, CompiledProfile>;
+  fixtures: { name: string; profileId: string; universe: number; address: number; pos: [number, number, number]; rotY: number }[];
+  groups: { name: string; fixtures: number[] }[];
+  warnings: string[];
+};
 
 export const WS_PORT = 9900;
 

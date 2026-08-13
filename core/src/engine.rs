@@ -196,6 +196,32 @@ pub fn run(cfg: EngineConfig) {
     }
 }
 
+/// Launch the native previz window as a detached process. Candidate paths:
+/// env override, next to the current executable, repo target dirs.
+fn spawn_previz() -> (bool, String) {
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(p) = std::env::var("LIGHT_PREVIZ_BIN") {
+        candidates.push(p.into());
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("light-previz"));
+        }
+    }
+    candidates.push("target/release/light-previz".into());
+    candidates.push("target/debug/light-previz".into());
+
+    for c in &candidates {
+        if c.is_file() {
+            return match std::process::Command::new(c).spawn() {
+                Ok(_) => (true, "previz launched".into()),
+                Err(e) => (false, format!("previz failed to start: {e}")),
+            };
+        }
+    }
+    (false, "previz binary not found — build it with: cargo build --release -p light-previz".into())
+}
+
 fn project_event(state: &EngineState) -> String {
     json!({ "type": "project", "project": state.project }).to_string()
 }
@@ -222,6 +248,10 @@ fn apply_outcome(
             &json!({ "type": "importResult", "ok": ok, "message": message, "profileIds": profile_ids })
                 .to_string(),
         );
+    }
+    if out.launch_previz {
+        let (ok, message) = spawn_previz();
+        bc.broadcast(&json!({ "type": "toast", "ok": ok, "message": message }).to_string());
     }
     if out.save_requested {
         match persist::save_project(dir, &state.project) {

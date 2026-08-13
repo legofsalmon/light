@@ -21,6 +21,7 @@ export function TopBar() {
   const learnMode = useStore((s) => s.learnMode);
   const send = useStore((s) => s.send);
   const savedFlash = useStore((s) => s.savedFlash);
+  const toast = useStore((s) => s.toast);
 
   const bpm = snap?.bpm ?? 120;
   const beat = snap?.beat ?? 0;
@@ -124,6 +125,18 @@ export function TopBar() {
       >
         midi learn
       </button>
+      <button
+        className="btn ghost"
+        title="open the native previz window"
+        onClick={() => send({ type: 'launchPreviz' })}
+      >
+        previz
+      </button>
+      {toast && (
+        <span className="label" style={{ color: toast.ok ? 'var(--good)' : 'var(--hot)' }}>
+          {toast.text}
+        </span>
+      )}
 
       <div className="statusdots">
         <StatusDot ok={engineOk} label={`engine ${snap?.stats.fps ?? 0}fps`} />

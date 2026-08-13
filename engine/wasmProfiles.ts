@@ -10,6 +10,7 @@ const require = createRequire(import.meta.url);
 
 type WasmModule = {
   parse_gdtf(bytes: Uint8Array): string;
+  parse_mvr(bytes: Uint8Array): string;
   register_profile(json: string): number;
   unregister_profile(handle: number): void;
   render(handle: number, params: Float64Array): Uint8Array;
@@ -36,6 +37,12 @@ export function parseGdtfBase64(b64: string): CompiledProfile[] {
   const w = ensureWasm();
   if (!w) throw new Error('profile interpreter (wasm) not built');
   return JSON.parse(w.parse_gdtf(Buffer.from(b64, 'base64'))) as CompiledProfile[];
+}
+
+export function parseMvrBase64(b64: string): import('../shared/types.ts').MvrBundle {
+  const w = ensureWasm();
+  if (!w) throw new Error('profile interpreter (wasm) not built');
+  return JSON.parse(w.parse_mvr(Buffer.from(b64, 'base64')));
 }
 
 const MM: Record<string, number> = { off: 0, aim: 1, rotate: 2 };

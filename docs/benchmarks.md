@@ -17,6 +17,16 @@ not speed).
 | Previz frame | ≤ 8.3 ms | ProMotion 120 Hz; ≥ 60 fps mandatory |
 | GDTF import | interactive (< 100 ms/file) | import-time only, never on the tick path |
 
+## 2026-08-13 — v0.5: MVR import
+
+| Bench | Result | Notes |
+|---|---|---|
+| MVR parse, native (2-fixture scene, embedded GDTF) | 41.7 µs | import-time only |
+| MVR parse via WASM (Node) | 64.1 µs | |
+| Engine tick after v0.5 changes | 9.79 µs | was 7.85 µs — profile-resolution now checks imported profiles too; still 0.04 % of budget |
+
+Verdict: no meaningful movement; the tick path remains ~2 500× under budget.
+
 ## 2026-08-13 — v0.4 C1/C2: compiled-profile interpreter + GDTF parser
 
 `light-bench`, release profile:

@@ -326,5 +326,7 @@ pub enum Command {
     Midi { status: u8, d1: u8, d2: u8 },
     Learn { action: Option<MidiAction> },
     ImportGdtf { name: String, data: String },
+    ImportMvr { name: String, data: String, replace: bool },
+    LaunchPreviz,
     Save,
 }

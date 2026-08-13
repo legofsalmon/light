@@ -83,6 +83,12 @@ fn main() {
         let _ = parse_gdtf(&gdtf).unwrap();
     });
 
+    // MVR parse (synthetic 2-fixture scene with embedded GDTF)
+    let mvr = include_bytes!("../../tests/data/synthetic.mvr");
+    bench("mvr parse (synthetic 2-fixture scene)", 2_000, || {
+        let _ = light_core::mvr::parse_mvr(mvr).unwrap();
+    });
+
     println!("\ntick budget @40 Hz = 25 ms; snapshot cadence 20 fps");
 }
 

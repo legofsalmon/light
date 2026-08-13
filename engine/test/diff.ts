@@ -209,6 +209,28 @@ async function main(): Promise<void> {
     `got ${JSON.stringify(spot)}`
   );
 
+  // --- MVR import parity: both engines apply the same scene identically.
+  const mvr = fs.readFileSync(path.join(ROOT, 'core', 'tests', 'data', 'synthetic.mvr'));
+  node.project = null;
+  rust.project = null;
+  both({ type: 'importMvr', name: 'synthetic.mvr', replace: false, data: mvr.toString('base64') });
+  await sleep(600);
+  const shape = (p: Project) =>
+    JSON.stringify({
+      fixtures: p.fixtures
+        .map((f) => {
+          const u = p.universes.find((x) => x.id === f.universeId);
+          return [f.name, u?.artnetUniverse, f.address, f.pos];
+        })
+        .sort(),
+      groups: p.groups.map((g) => [g.name, g.heads.length]).sort(),
+      universes: p.universes.map((u) => u.artnetUniverse).sort(),
+      profiles: Object.keys(p.profiles ?? {}).sort(),
+    });
+  const shapeN = shape(await currentProject(node));
+  const shapeR = shape(await currentProject(rust));
+  check('mvr import shape parity', shapeN === shapeR, `node=${shapeN}\nrust=${shapeR}`);
+
   kill();
   fs.rmSync(TMP, { recursive: true, force: true });
   console.log(failures === 0 ? '\nParity: Rust core matches the Node reference.' : `\n${failures} parity FAILURE(S).`);

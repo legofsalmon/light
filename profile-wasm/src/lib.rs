@@ -29,6 +29,14 @@ pub fn parse_gdtf(bytes: &[u8]) -> Result<String, JsError> {
     serde_json::to_string(&profiles).map_err(|e| JsError::new(&e.to_string()))
 }
 
+/// Parse a .mvr archive; returns the import bundle as JSON
+/// ({profiles, fixtures, groups, warnings}).
+#[wasm_bindgen]
+pub fn parse_mvr(bytes: &[u8]) -> Result<String, JsError> {
+    let bundle = light_core::mvr::parse_mvr(bytes).map_err(|e| JsError::new(&e))?;
+    serde_json::to_string(&bundle).map_err(|e| JsError::new(&e.to_string()))
+}
+
 /// Register a compiled profile (JSON) for rendering; returns a handle.
 #[wasm_bindgen]
 pub fn register_profile(json: &str) -> Result<u32, JsError> {

@@ -167,18 +167,26 @@ export function PatchView() {
             + add fixture
           </button>
           <label className="btn small" style={{ cursor: 'pointer' }}>
-            ⇩ import .gdtf
+            ⇩ import .gdtf / .mvr
             <input
               type="file"
-              accept=".gdtf"
+              accept=".gdtf,.mvr"
               style={{ display: 'none' }}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
+                const isMvr = file.name.toLowerCase().endsWith('.mvr');
                 const reader = new FileReader();
                 reader.onload = () => {
                   const b64 = String(reader.result).split(',')[1] ?? '';
-                  useStore.getState().send({ type: 'importGdtf', name: file.name, data: b64 });
+                  if (isMvr) {
+                    const merge = window.confirm(
+                      `Import "${file.name}" and KEEP the current patch (merge)?\nCancel imports it as a full replacement.`
+                    );
+                    useStore.getState().send({ type: 'importMvr', name: file.name, data: b64, replace: !merge });
+                  } else {
+                    useStore.getState().send({ type: 'importGdtf', name: file.name, data: b64 });
+                  }
                 };
                 reader.readAsDataURL(file);
                 e.target.value = '';

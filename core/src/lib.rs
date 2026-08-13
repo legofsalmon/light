@@ -4,6 +4,7 @@ pub mod cprofile;
 pub mod defaults;
 pub mod effects;
 pub mod gdtf;
+pub mod mvr;
 pub mod profiles;
 pub mod types;
 

@@ -9,7 +9,83 @@ import { OscIn, type OscMessage } from './osc.ts';
 import { Server } from './server.ts';
 import { defaultProject } from './defaultProject.ts';
 import { loadProject, projectPath, saveProjectDebounced, saveProjectNow } from './persist.ts';
-import { parseGdtfBase64 } from './wasmProfiles.ts';
+import { parseGdtfBase64, parseMvrBase64 } from './wasmProfiles.ts';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import type { MvrBundle, Project } from '../shared/types.ts';
+import { uid } from '../shared/types.ts';
+
+/** Mirror of the Rust engine's apply_mvr — keep them in step. */
+function applyMvrBundle(p: Project, bundle: MvrBundle, replace: boolean): string {
+  if (replace) {
+    p.fixtures = [];
+    p.groups = [];
+    for (const layer of p.layers) layer.cells = layer.cells.map(() => null);
+    p.looks = {};
+  }
+  p.profiles ??= {};
+  for (const [id, prof] of Object.entries(bundle.profiles)) p.profiles[id] = prof;
+
+  const fixtureIds: string[] = [];
+  for (const f of bundle.fixtures) {
+    let u = p.universes.find((x) => x.artnetUniverse === f.universe);
+    if (!u) {
+      u = {
+        id: uid('u'),
+        label: `MVR U${f.universe}`,
+        artnetUniverse: f.universe,
+        sacnUniverse: Math.max(1, f.universe),
+        artnet: true,
+        sacn: false,
+        unicast: null,
+      };
+      p.universes.push(u);
+    }
+    const fid = uid('fx');
+    fixtureIds.push(fid);
+    p.fixtures.push({
+      id: fid,
+      name: f.name,
+      profileId: f.profileId,
+      universeId: u.id,
+      address: f.address,
+      pos: { x: f.pos[0], y: f.pos[1], z: f.pos[2] },
+      rotY: f.rotY,
+    });
+  }
+  for (const g of bundle.groups) {
+    const heads = g.fixtures.flatMap((fi) => {
+      const fid = fixtureIds[fi];
+      const f = bundle.fixtures[fi];
+      if (!fid || !f) return [];
+      const n = p.profiles?.[f.profileId]?.heads.length ?? 1;
+      return Array.from({ length: n }, (_, h) => ({ fixtureId: fid, head: h }));
+    });
+    if (heads.length) p.groups.push({ id: uid('g'), name: g.name, heads });
+  }
+  let msg = `imported ${bundle.fixtures.length} fixture(s), ${bundle.groups.length} group(s)`;
+  if (bundle.warnings.length) msg += ` · ${bundle.warnings.length} warning(s): ${bundle.warnings.join('; ')}`;
+  return msg;
+}
+
+function spawnPreviz(): [boolean, string] {
+  const candidates = [
+    process.env.LIGHT_PREVIZ_BIN,
+    'target/release/light-previz',
+    'target/debug/light-previz',
+  ].filter((c): c is string => !!c);
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      try {
+        spawn(c, [], { detached: true, stdio: 'ignore' }).unref();
+        return [true, 'previz launched'];
+      } catch (err) {
+        return [false, `previz failed to start: ${(err as Error).message}`];
+      }
+    }
+  }
+  return [false, 'previz binary not found — build it with: cargo build --release -p light-previz'];
+}
 
 const TICK_MS = 25; // 40 Hz DMX refresh
 const PORT = Number(process.env.LIGHT_PORT ?? WS_PORT);
@@ -136,6 +212,22 @@ function handleCommand(cmd: Command): void {
           profileIds: [],
         });
       }
+      break;
+    }
+    case 'importMvr': {
+      try {
+        const bundle = parseMvrBase64(cmd.data);
+        const summary = applyMvrBundle(state.project, bundle, cmd.replace);
+        state.updateProject(state.project);
+        server.broadcast({ type: 'importResult', ok: true, message: `${cmd.name}: ${summary}`, profileIds: [] });
+      } catch (err) {
+        server.broadcast({ type: 'importResult', ok: false, message: `${cmd.name}: ${(err as Error).message}`, profileIds: [] });
+      }
+      break;
+    }
+    case 'launchPreviz': {
+      const [ok, message] = spawnPreviz();
+      server.broadcast({ type: 'toast', ok, message });
       break;
     }
     case 'save': {

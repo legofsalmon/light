@@ -33,6 +33,7 @@ pub struct Outcome {
     pub save_requested: bool,
     /// (ok, message, imported profile ids)
     pub import_result: Option<(bool, String, Vec<String>)>,
+    pub launch_previz: bool,
 }
 
 /// Minimal base64 decode (standard alphabet, padding optional) — the import
@@ -316,6 +317,93 @@ impl EngineState {
         }
     }
 
+    /// Apply an MVR import bundle: ensure universes exist, add profiles,
+    /// fixtures, and a group per MVR layer. Returns a summary string.
+    fn apply_mvr(&mut self, bundle: crate::mvr::MvrBundle, replace: bool, t: f64) -> String {
+        if replace {
+            self.project.fixtures.clear();
+            self.project.groups.clear();
+            for layer in &mut self.project.layers {
+                for c in &mut layer.cells {
+                    *c = None;
+                }
+            }
+            self.project.looks.clear();
+            self.reconcile();
+            let _ = t;
+        }
+        for (id, p) in bundle.profiles {
+            self.project.profiles.insert(id, p);
+        }
+        let mut fixture_ids: Vec<String> = Vec::new();
+        for f in &bundle.fixtures {
+            let universe_id = match self
+                .project
+                .universes
+                .iter()
+                .find(|u| u.artnet_universe == f.universe)
+            {
+                Some(u) => u.id.clone(),
+                None => {
+                    let id = uid("u");
+                    self.project.universes.push(crate::types::UniverseCfg {
+                        id: id.clone(),
+                        label: format!("MVR U{}", f.universe),
+                        artnet_universe: f.universe,
+                        sacn_universe: f.universe.max(1),
+                        artnet: true,
+                        sacn: false,
+                        unicast: None,
+                    });
+                    id
+                }
+            };
+            let fid = uid("fx");
+            fixture_ids.push(fid.clone());
+            self.project.fixtures.push(crate::types::Fixture {
+                id: fid,
+                name: f.name.clone(),
+                profile_id: f.profile_id.clone(),
+                universe_id,
+                address: f.address,
+                pos: crate::types::Vec3 { x: f.pos[0], y: f.pos[1], z: f.pos[2] },
+                rot_y: f.rot_y,
+            });
+        }
+        for g in &bundle.groups {
+            let mut heads: Vec<crate::types::HeadRef> = Vec::new();
+            for &fi in &g.fixtures {
+                let Some(fid) = fixture_ids.get(fi) else { continue };
+                let Some(f) = bundle.fixtures.get(fi) else { continue };
+                let n = self
+                    .project
+                    .profiles
+                    .get(&f.profile_id)
+                    .map(|p| p.heads.len())
+                    .unwrap_or(1);
+                for h in 0..n {
+                    heads.push(crate::types::HeadRef { fixture_id: fid.clone(), head: h });
+                }
+            }
+            if !heads.is_empty() {
+                self.project.groups.push(crate::types::Group {
+                    id: uid("g"),
+                    name: g.name.clone(),
+                    heads,
+                });
+            }
+        }
+        let mut msg = format!(
+            "imported {} fixture(s), {} group(s)",
+            bundle.fixtures.len(),
+            bundle.groups.len()
+        );
+        if !bundle.warnings.is_empty() {
+            msg.push_str(&format!(" · {} warning(s): {}", bundle.warnings.len(), bundle.warnings.join("; ")));
+        }
+        msg
+    }
+
     /// Handle one protocol command. Mirrors the Node engine's handleCommand.
     pub fn handle_command(&mut self, cmd: Command, t: f64) -> Outcome {
         let mut out = Outcome::default();
@@ -375,6 +463,18 @@ impl EngineState {
                     }
                 }
             }
+            Command::ImportMvr { name, data, replace } => {
+                let result = base64_decode(&data).and_then(|bytes| crate::mvr::parse_mvr(&bytes));
+                match result {
+                    Ok(bundle) => {
+                        let n = self.apply_mvr(bundle, replace, t);
+                        out.project_changed = true;
+                        out.import_result = Some((true, format!("{name}: {n}"), vec![]));
+                    }
+                    Err(e) => out.import_result = Some((false, format!("{name}: {e}"), vec![])),
+                }
+            }
+            Command::LaunchPreviz => out.launch_previz = true,
             Command::Save => out.save_requested = true,
         }
         out

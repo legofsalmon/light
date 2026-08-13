@@ -2,6 +2,7 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const parse_gdtf: (a: number, b: number) => [number, number, number, number];
+export const parse_mvr: (a: number, b: number) => [number, number, number, number];
 export const register_profile: (a: number, b: number) => [number, number, number];
 export const render: (a: number, b: number, c: number) => [number, number, number, number];
 export const unregister_profile: (a: number) => void;

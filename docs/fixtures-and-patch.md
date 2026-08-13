@@ -89,6 +89,18 @@ The top-bar haze slider writes here directly (merged highest-wins with any look 
 
 Per 40 Hz tick the engine resolves every head's parameters (layer merge → effects → masters), then each profile renders parameters to its channels: masters scale dimmer/white before rendering; profiles without a dimmer channel fold intensity into their colour channels; banded channels (derby macros, motor modes) snap rather than fade. The maths is identical in both engines and locked by the parity test.
 
+## Importing a whole design (MVR)
+
+The same import button accepts **.mvr** scene files (exported from
+Vectorworks, Depence, grandMA, and most planning tools): fixtures arrive with
+their patch addresses, plan positions, and fixture types (the GDTFs embedded
+in the file), plus one group per MVR layer. You choose merge (keep the
+current patch) or full replace on import. Universes named in the file that
+don't exist yet are created automatically. Conventions: positions convert
+from MVR millimetres/Z-up to LIGHT metres/Y-up; addresses accept both the
+absolute and `universe.channel` forms — exporters vary, so check the patch
+table after a first import.
+
 ## Importing fixtures (GDTF)
 
 For anything beyond the built-ins, click **⇩ import .gdtf** in the Fixtures tab and pick a fixture file (e.g. from [gdtf-share.com](https://gdtf-share.com)). Every DMX mode in the file becomes a selectable profile (marked ⇩ in the dropdown), stored inside the project so it travels with your show. Supported in v1: dimmer, RGB(W) colour, 16-bit pan/tilt, shutter/strobe, and colour wheels (with automatic nearest-colour quantisation, like the derby); unmapped channels hold the fixture's own defaults. Both engines interpret imported profiles through one shared implementation, and the parity suite covers it.

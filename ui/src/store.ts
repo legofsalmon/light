@@ -23,8 +23,10 @@ type Store = {
   /** true when the engine owns native MIDI (Rust core) — the browser must not double-forward */
   engineMidi: boolean;
   lastMidi: string | null;
-  /** last GDTF import outcome, shown in the Fixtures tab */
+  /** last GDTF/MVR import outcome, shown in the Fixtures tab */
   importMsg: { ok: boolean; text: string } | null;
+  /** transient engine notice shown in the top bar */
+  toast: { ok: boolean; text: string; at: number } | null;
 
   send: (cmd: Command) => void;
   /** Clone-mutate-commit a project edit; optimistic locally, authoritative echo follows. */
@@ -64,6 +66,7 @@ export const useStore = create<Store>()((set, get) => ({
   engineMidi: false,
   lastMidi: null,
   importMsg: null,
+  toast: null,
 
   send: (cmd) => wsSend(JSON.stringify(cmd)),
 
@@ -137,6 +140,12 @@ function connect(): void {
       useStore.setState({ learnMode: false, learnTarget: null, lastMidi: 'mapped ✓' });
     } else if (ev.type === 'importResult') {
       useStore.setState({ importMsg: { ok: ev.ok, text: ev.message } });
+    } else if (ev.type === 'toast') {
+      useStore.setState({ toast: { ok: ev.ok, text: ev.message, at: Date.now() } });
+      setTimeout(() => {
+        const t = useStore.getState().toast;
+        if (t && Date.now() - t.at >= 4900) useStore.setState({ toast: null });
+      }, 5000);
     }
   };
   ws.onclose = () => {

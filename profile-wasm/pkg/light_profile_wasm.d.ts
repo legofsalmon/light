@@ -8,6 +8,12 @@
 export function parse_gdtf(bytes: Uint8Array): string;
 
 /**
+ * Parse a .mvr archive; returns the import bundle as JSON
+ * ({profiles, fixtures, groups, warnings}).
+ */
+export function parse_mvr(bytes: Uint8Array): string;
+
+/**
  * Register a compiled profile (JSON) for rendering; returns a handle.
  */
 export function register_profile(json: string): number;
