@@ -17,6 +17,24 @@ not speed).
 | Previz frame | ≤ 8.3 ms | ProMotion 120 Hz; ≥ 60 fps mandatory |
 | GDTF import | interactive (< 100 ms/file) | import-time only, never on the tick path |
 
+## 2026-08-13 — previz beam-cone shafts + photometric fix
+
+The native previz shipped with two rendering defects found during visual
+acceptance: fixture spotlight lumens were ~14× below Bevy's photometric
+exposure scale (invisible pools), and Bevy 0.16.1's volumetric light-shaft
+term renders nothing on this Metal/macOS combination (ambient in-fog
+scattering works; per-light shafts never draw — reproduced with the engine's
+canonical example setup). Fixed with 8 M lm bars / 2.5 M lm derby cones plus
+additive vertex-alpha cone meshes for shafts, energy-scaled by live haze.
+
+| Metric | Result |
+|---|---|
+| Frame rate | ~121 fps avg (vsync-locked, 120 Hz cap) — unchanged vs pre-cone soak |
+| Frame time | 8.32 ms avg / 8.04 ms spot |
+| Added scene cost | 20 beam cones (28-segment, additive, unlit) — no measurable delta |
+
+Verdict: beam cones are free at this rig size; budget unchanged.
+
 ## 2026-08-13 — post-review hardening
 
 43 confirmed review findings fixed (NaN guards, loop exception guard, project

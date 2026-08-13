@@ -46,6 +46,56 @@ pub struct BeamLight {
 #[derive(Component)]
 pub struct SourceGlow;
 
+/// Additive translucent beam cone — the visible shaft. Volumetric light-shaft
+/// sampling is broken on this Bevy/Metal combination (ambient fog scattering
+/// renders, per-light shafts never do), so shafts are honest cone geometry,
+/// energy-modulated by live haze. The FogVolume still supplies the ambient
+/// haze bed, and VolumetricLight stays on the spots in case a future Bevy
+/// makes real shafts work — they would simply add on top.
+#[derive(Component)]
+pub struct BeamCone;
+
+/// Unit beam cone: apex at the origin, opening along -Z to radius 1 at z=-1,
+/// with vertex alpha fading apex→base so the shaft dissolves with distance.
+fn unit_cone_mesh() -> Mesh {
+    use bevy::render::mesh::{Indices, PrimitiveTopology};
+    use bevy::render::render_asset::RenderAssetUsages;
+
+    const SEGS: usize = 28;
+    let mut positions: Vec<[f32; 3]> = vec![[0.0, 0.0, 0.0]];
+    let mut colors: Vec<[f32; 4]> = vec![[1.0, 1.0, 1.0, 0.85]];
+    let mut normals: Vec<[f32; 3]> = vec![[0.0, 0.0, 1.0]];
+    for i in 0..=SEGS {
+        let a = i as f32 / SEGS as f32 * std::f32::consts::TAU;
+        positions.push([a.cos(), a.sin(), -1.0]);
+        colors.push([1.0, 1.0, 1.0, 0.0]);
+        normals.push([0.0, 0.0, 1.0]);
+    }
+    let mut indices: Vec<u32> = Vec::with_capacity(SEGS * 3);
+    for i in 0..SEGS as u32 {
+        indices.extend_from_slice(&[0, i + 1, i + 2]);
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colors)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_indices(Indices::U32(indices))
+}
+
+fn cone_material() -> StandardMaterial {
+    StandardMaterial {
+        base_color: Color::NONE,
+        unlit: true,
+        alpha_mode: AlphaMode::Add,
+        cull_mode: None,
+        double_sided: true,
+        ..default()
+    }
+}
+
 #[derive(Component)]
 pub struct RingMesh;
 
@@ -101,10 +151,15 @@ pub fn setup_stage(
         ));
     }
 
-    // participating medium — density driven live by the engine's haze value
+    // participating medium — density driven live by the engine's haze value.
+    // Stage haze scatters close to isotropically: the default forward-biased
+    // asymmetry (0.5) makes side-on beams nearly invisible from FOH.
     commands.spawn((
         FogVolume {
             density_factor: 0.08,
+            scattering: 0.65,
+            scattering_asymmetry: 0.15,
+            light_intensity: 2.0,
             ..default()
         },
         Transform::from_xyz(0.0, 3.0, 1.0).with_scale(Vec3::new(16.0, 7.0, 13.0)),
@@ -123,6 +178,7 @@ pub fn rebuild_fixtures(
         return;
     }
     live.built_rev = live.project_rev;
+    eprintln!("[previz] scene rebuild #{} ", live.project_rev);
     for e in &existing {
         commands.entity(e).despawn();
     }
@@ -134,6 +190,7 @@ pub fn rebuild_fixtures(
         metallic: 0.4,
         ..default()
     });
+    let cone_mesh = meshes.add(unit_cone_mesh());
 
     for f in &project.fixtures {
         let Some(prof) = prof_meta(&project, &f.profile_id) else { continue };
@@ -141,13 +198,10 @@ pub fn rebuild_fixtures(
         // an emissive source, not a shadow-casting volumetric spotlight — 64
         // shadowed lights would crush the GPU for zero visual gain.
         let pixel_strip = prof.heads.len() > 4 && prof.heads.iter().all(|h| h.0 == HeadKind::Rgb);
+        let root_tf = Transform::from_xyz(f.pos.x, f.pos.y, f.pos.z)
+            .with_rotation(Quat::from_rotation_y(f.rot_y));
         let root = commands
-            .spawn((
-                FixtureRoot,
-                Transform::from_xyz(f.pos.x, f.pos.y, f.pos.z)
-                    .with_rotation(Quat::from_rotation_y(f.rot_y)),
-                Visibility::default(),
-            ))
+            .spawn((FixtureRoot, root_tf, Visibility::default()))
             .id();
 
         // body
@@ -174,6 +228,9 @@ pub fn rebuild_fixtures(
                 _ => Vec3::new(0.0, -0.26, 0.97),
             };
             let outer = (prof.beam_deg.max(2.0) as f32).to_radians() / 2.0;
+            // shaft length: throw to the floor along the beam, clamped sane
+            let throw = (f.pos.y.max(0.3) / beam_dir.y.abs().max(0.2)).clamp(1.0, 9.0);
+            let cone_scale = Vec3::new(throw * outer.tan().max(0.02), throw * outer.tan().max(0.02), throw);
 
             commands.entity(root).with_children(|p| {
                 let mut head = p.spawn((
@@ -231,7 +288,7 @@ pub fn rebuild_fixtures(
                                         ) * Quat::from_rotation_x(0.42);
                                         fan.spawn((
                                             tag.clone(),
-                                            BeamLight { idx: k, lumens: 180_000.0 },
+                                            BeamLight { idx: k, lumens: 2_500_000.0 },
                                             SpotLight {
                                                 color: Color::BLACK,
                                                 intensity: 0.0,
@@ -244,7 +301,17 @@ pub fn rebuild_fixtures(
                                             },
                                             VolumetricLight,
                                             Transform::from_rotation(rot),
-                                        ));
+                                        ))
+                                        .with_children(|c| {
+                                            c.spawn((
+                                                tag.clone(),
+                                                BeamLight { idx: k, lumens: 0.0 },
+                                                BeamCone,
+                                                Mesh3d(cone_mesh.clone()),
+                                                MeshMaterial3d(materials.add(cone_material())),
+                                                Transform::from_scale(cone_scale * Vec3::new(0.7, 0.7, 0.85)),
+                                            ));
+                                        });
                                     }
                                 });
                             });
@@ -254,7 +321,10 @@ pub fn rebuild_fixtures(
                         _ => {
                             h.spawn((
                                 tag.clone(),
-                                BeamLight { idx: 0, lumens: 420_000.0 },
+                                // Bevy photometric scale: ~1e6 lm is a domestic
+                                // point light; stage beams need multi-megalumen
+                                // output to read at concert throw distances.
+                                BeamLight { idx: 0, lumens: 8_000_000.0 },
                                 SpotLight {
                                     color: Color::BLACK,
                                     intensity: 0.0,
@@ -267,7 +337,17 @@ pub fn rebuild_fixtures(
                                 },
                                 VolumetricLight,
                                 Transform::default().looking_to(beam_dir, Vec3::Y),
-                            ));
+                            ))
+                            .with_children(|c| {
+                                c.spawn((
+                                    tag.clone(),
+                                    BeamLight { idx: 0, lumens: 0.0 },
+                                    BeamCone,
+                                    Mesh3d(cone_mesh.clone()),
+                                    MeshMaterial3d(materials.add(cone_material())),
+                                    Transform::from_scale(cone_scale),
+                                ));
+                            });
                         }
                     }
                 });

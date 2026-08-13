@@ -25,6 +25,17 @@ export function Previz2D() {
     x: number;
     v: number;
     rot: number;
+    /** other selected fixtures move with the grabbed one, keeping offsets */
+    others: { id: string; dx: number; dv: number }[];
+  } | null>(null);
+  // marquee box in world coords for the active view; null when not dragging
+  const marqueeRef = useRef<{
+    x0: number;
+    v0: number;
+    x1: number;
+    v1: number;
+    additive: boolean;
+    moved: boolean;
   } | null>(null);
 
   useEffect(() => {
@@ -46,6 +57,12 @@ export function Previz2D() {
     ro.observe(host);
 
     const mapping = (view: ViewKind) => {
+      // measure on demand — RO-cached w/h can be stale/zero in a freshly
+      // (re)mounted effect closure (StrictMode double-mount), and a wrong
+      // scale here silently breaks hit-testing with NaN/Infinity coords
+      const hr = host.getBoundingClientRect();
+      const w = Math.max(1, hr.width);
+      const h = Math.max(1, hr.height);
       const depth = view === 'plan' ? PLAN_D : FRONT_H;
       const scale = Math.min(w / WORLD_W, h / depth);
       const mx = (w - WORLD_W * scale) / 2;
@@ -69,7 +86,13 @@ export function Previz2D() {
 
     const draw = () => {
       raf = requestAnimationFrame(draw);
-      const { project, snap, previz2dView: view } = useStore.getState();
+      const { project, snap, previz2dView: view, fxSel } = useStore.getState();
+      // refresh cached size every frame — see mapping() for why
+      const hr = host.getBoundingClientRect();
+      w = Math.max(1, hr.width);
+      h = Math.max(1, hr.height);
+      if (canvas.width !== Math.round(w * dpr)) canvas.width = Math.round(w * dpr);
+      if (canvas.height !== Math.round(h * dpr)) canvas.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = '#101013';
       ctx.fillRect(0, 0, w, h);
@@ -198,26 +221,72 @@ export function Previz2D() {
           }
         }
 
+        // selection ring (marquee-hover counts as selected-in-progress)
+        const mq = marqueeRef.current;
+        const inMarquee =
+          mq && mq.moved &&
+          f.pos.x >= Math.min(mq.x0, mq.x1) && f.pos.x <= Math.max(mq.x0, mq.x1) &&
+          vertOf(f.pos, view) >= Math.min(mq.v0, mq.v1) &&
+          vertOf(f.pos, view) <= Math.max(mq.v0, mq.v1);
+        if (fxSel.includes(f.id) || inMarquee) {
+          ctx.beginPath();
+          const selHalf = (prof.heads.length > 1 ? 0.72 : 0.3) * m.scale;
+          ctx.setLineDash([4, 3]);
+          ctx.strokeStyle = 'rgba(110,180,255,0.9)';
+          ctx.lineWidth = 1.5;
+          ctx.rect(fx - selHalf, fy - 0.3 * m.scale, selHalf * 2, 0.6 * m.scale);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
         ctx.fillStyle = 'rgba(255,255,255,0.28)';
         ctx.textAlign = 'center';
         ctx.font = '9px -apple-system, sans-serif';
         const label = view === 'front' ? `${f.name} · ${f.pos.y.toFixed(1)}m` : f.name;
         ctx.fillText(label, fx, fy + 0.42 * m.scale + 8);
       }
+
+      // marquee rectangle
+      const mq = marqueeRef.current;
+      if (mq && mq.moved) {
+        const x0 = m.toX(Math.min(mq.x0, mq.x1));
+        const x1 = m.toX(Math.max(mq.x0, mq.x1));
+        const yA = m.toY(mq.v0);
+        const yB = m.toY(mq.v1);
+        const y0 = Math.min(yA, yB);
+        const y1 = Math.max(yA, yB);
+        ctx.fillStyle = 'rgba(110,180,255,0.08)';
+        ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = 'rgba(110,180,255,0.7)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+        ctx.setLineDash([]);
+      }
     };
     raf = requestAnimationFrame(draw);
 
-    const applyDrag = (id: string, x: number, v: number) => {
+    const applyDrag = (
+      id: string,
+      x: number,
+      v: number,
+      others: { id: string; dx: number; dv: number }[],
+    ) => {
       const view = useStore.getState().previz2dView;
       useStore.getState().mutate((p) => {
-        const f = p.fixtures.find((fx) => fx.id === id);
-        if (!f) return;
-        f.pos.x = Math.round(x * 20) / 20;
-        if (view === 'plan') {
-          f.pos.z = Math.round(v * 20) / 20;
-        } else {
-          f.pos.y = Math.round(Math.min(6, Math.max(0, v)) * 20) / 20;
-        }
+        const place = (fid: string, px: number, pv: number) => {
+          const f = p.fixtures.find((fx) => fx.id === fid);
+          if (!f) return;
+          f.pos.x = Math.round(px * 20) / 20;
+          if (view === 'plan') {
+            f.pos.z = Math.round(pv * 20) / 20;
+          } else {
+            f.pos.y = Math.round(Math.min(6, Math.max(0, pv)) * 20) / 20;
+          }
+        };
+        place(id, x, v);
+        // a selected fixture drags the rest of the selection with it
+        for (const o of others) place(o.id, x + o.dx, v + o.dv);
       });
     };
 
@@ -230,24 +299,67 @@ export function Previz2D() {
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
-      const { project, previz2dView: view } = useStore.getState();
+      const { project, previz2dView: view, fxSel, setFxSel } = useStore.getState();
       if (!project) return;
       const rect = canvas.getBoundingClientRect();
       const m = mapping(view);
       const pos = m.fromPx(e.clientX - rect.left, e.clientY - rect.top);
+      const additive = e.shiftKey || e.metaKey || e.ctrlKey;
       let best: { id: string; d: number } | null = null;
       for (const f of project.fixtures) {
         const d = Math.hypot(f.pos.x - pos.x, vertOf(f.pos, view) - pos.v);
         if (d < 0.6 && (!best || d < best.d)) best = { id: f.id, d };
       }
+      if (best && additive) {
+        // ⇧/⌘-click toggles membership — selection only, no drag
+        setFxSel(
+          fxSel.includes(best.id) ? fxSel.filter((id) => id !== best.id) : [...fxSel, best.id],
+        );
+        return;
+      }
       if (best) {
         // ⌥-drag rotates (plan view only — yaw isn't meaningful in elevation)
         const kind = e.altKey && view === 'plan' ? 'rotate' : 'move';
-        dragRef.current = { id: best.id, kind, lastSend: 0, x: pos.x, v: pos.v, rot: 0 };
-        canvas.setPointerCapture(e.pointerId);
+        // clicking an unselected fixture makes it the sole selection;
+        // dragging a selected one moves the whole selection together
+        const sel = fxSel.includes(best.id) ? fxSel : [best.id];
+        if (sel !== fxSel) setFxSel(sel);
+        const grabbed = project.fixtures.find((f) => f.id === best.id)!;
+        const others =
+          kind === 'move'
+            ? sel
+                .filter((id) => id !== best.id)
+                .flatMap((id) => {
+                  const f = project.fixtures.find((fx) => fx.id === id);
+                  return f
+                    ? [{
+                        id,
+                        dx: f.pos.x - grabbed.pos.x,
+                        dv: vertOf(f.pos, view) - vertOf(grabbed.pos, view),
+                      }]
+                    : [];
+                })
+            : [];
+        dragRef.current = { id: best.id, kind, lastSend: 0, x: pos.x, v: pos.v, rot: 0, others };
+        try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointers */ }
+        return;
       }
+      // empty space: marquee select
+      marqueeRef.current = { x0: pos.x, v0: pos.v, x1: pos.x, v1: pos.v, additive, moved: false };
+      try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointers */ }
     };
     const onPointerMove = (e: PointerEvent) => {
+      const mq = marqueeRef.current;
+      if (mq && e.buttons & 1) {
+        const view = useStore.getState().previz2dView;
+        const rect = canvas.getBoundingClientRect();
+        const m = mapping(view);
+        const pos = m.fromPx(e.clientX - rect.left, e.clientY - rect.top);
+        mq.x1 = pos.x;
+        mq.v1 = pos.v;
+        if (Math.hypot(mq.x1 - mq.x0, mq.v1 - mq.v0) > 0.12) mq.moved = true;
+        return;
+      }
       const drag = dragRef.current;
       if (!drag || !(e.buttons & 1)) return;
       const view = useStore.getState().previz2dView;
@@ -269,16 +381,41 @@ export function Previz2D() {
       if (now - drag.lastSend < 90) return;
       drag.lastSend = now;
       if (drag.kind === 'rotate') applyRotate(drag.id, drag.rot);
-      else applyDrag(drag.id, drag.x, drag.v);
+      else applyDrag(drag.id, drag.x, drag.v, drag.others);
     };
     const onPointerUp = () => {
+      const mq = marqueeRef.current;
+      if (mq) {
+        marqueeRef.current = null;
+        const { project, previz2dView: view, fxSel, setFxSel } = useStore.getState();
+        if (!project) return;
+        if (!mq.moved) {
+          // plain click on empty space clears the selection
+          if (!mq.additive) setFxSel([]);
+          return;
+        }
+        const inBox = project.fixtures
+          .filter(
+            (f) =>
+              f.pos.x >= Math.min(mq.x0, mq.x1) && f.pos.x <= Math.max(mq.x0, mq.x1) &&
+              vertOf(f.pos, view) >= Math.min(mq.v0, mq.v1) &&
+              vertOf(f.pos, view) <= Math.max(mq.v0, mq.v1),
+          )
+          .map((f) => f.id);
+        setFxSel(mq.additive ? [...new Set([...fxSel, ...inBox])] : inBox);
+        return;
+      }
       const drag = dragRef.current;
       dragRef.current = null;
       // flush the final value — the move throttle must not drop it
       if (!drag) return;
       if (drag.kind === 'rotate') applyRotate(drag.id, drag.rot);
-      else applyDrag(drag.id, drag.x, drag.v);
+      else applyDrag(drag.id, drag.x, drag.v, drag.others);
     };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') useStore.getState().setFxSel([]);
+    };
+    window.addEventListener('keydown', onKeyDown);
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('pointerup', onPointerUp);
@@ -286,6 +423,7 @@ export function Previz2D() {
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      window.removeEventListener('keydown', onKeyDown);
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', onPointerUp);

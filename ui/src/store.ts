@@ -18,6 +18,8 @@ type Store = {
   previzMode: '3d' | '2d';
   /** 2D sub-view: top-down plan or front elevation (drag sets height) */
   previz2dView: 'plan' | 'front';
+  /** fixtures selected in the 2D previz (shift-click / marquee) for group building */
+  fxSel: string[];
   hazeViz: number;
   learnMode: boolean;
   learnTarget: MidiAction | null;
@@ -37,6 +39,7 @@ type Store = {
   setTab: (t: Tab) => void;
   setPrevizMode: (m: '3d' | '2d') => void;
   setPreviz2dView: (v: 'plan' | 'front') => void;
+  setFxSel: (ids: string[]) => void;
   setHazeViz: (v: number) => void;
   toggleLearnMode: () => void;
   /** In learn mode, a click on a mappable control arms it as the learn target. */
@@ -76,6 +79,7 @@ export const useStore = create<Store>()((set, get) => ({
   tab: 'look',
   previzMode: '3d',
   previz2dView: 'plan',
+  fxSel: [],
   hazeViz: 0.7,
   learnMode: false,
   learnTarget: null,
@@ -100,6 +104,7 @@ export const useStore = create<Store>()((set, get) => ({
   setTab: (tab) => set({ tab }),
   setPrevizMode: (previzMode) => set({ previzMode }),
   setPreviz2dView: (previz2dView) => set({ previz2dView }),
+  setFxSel: (fxSel) => set({ fxSel }),
   setHazeViz: (hazeViz) => set({ hazeViz }),
   toggleLearnMode: () =>
     set((s) => {
@@ -181,4 +186,9 @@ export function lookOf(project: Project | null, layerId: string, col: number) {
   const layer = project.layers.find((l) => l.id === layerId);
   const lookId = layer?.cells[col];
   return lookId ? project.looks[lookId] ?? null : null;
+}
+
+// dev-only handle for debugging/automation (vite strips this in production builds)
+if (import.meta.env.DEV) {
+  (window as unknown as { __lightStore?: typeof useStore }).__lightStore = useStore;
 }

@@ -113,15 +113,19 @@ pub fn spawn_ws_client() -> Receiver<WsEvent> {
                                 };
                                 match v.get("type").and_then(|s| s.as_str()) {
                                     Some("project") => {
-                                        if let Ok(p) =
-                                            serde_json::from_value::<ProjectLite>(v["project"].clone())
-                                        {
-                                            let _ = tx.send(WsEvent::Project(p));
+                                        match serde_json::from_value::<ProjectLite>(v["project"].clone()) {
+                                            Ok(p) => {
+                                                let _ = tx.send(WsEvent::Project(p));
+                                            }
+                                            Err(e) => eprintln!("[previz] project parse FAILED: {e}"),
                                         }
                                     }
                                     Some("snap") => {
-                                        if let Ok(s) = serde_json::from_value::<SnapLite>(v) {
-                                            let _ = tx.send(WsEvent::Snap(s));
+                                        match serde_json::from_value::<SnapLite>(v) {
+                                            Ok(s) => {
+                                                let _ = tx.send(WsEvent::Snap(s));
+                                            }
+                                            Err(e) => eprintln!("[previz] snap parse FAILED: {e}"),
                                         }
                                     }
                                     _ => {}
