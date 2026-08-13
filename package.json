@@ -12,6 +12,7 @@
     "start:rust": "npm run build && cargo run --release -p light-core --bin light-engine",
     "app:dev": "tauri dev",
     "app:build": "tauri build",
+    "previz": "cargo run --release -p light-previz",
     "test": "node engine/test/smoke.ts",
     "test:parity": "node engine/test/diff.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p ui/tsconfig.json --noEmit"
