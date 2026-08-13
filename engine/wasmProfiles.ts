@@ -17,16 +17,20 @@ type WasmModule = {
 };
 
 let wasm: WasmModule | null = null;
-let wasmError = false;
+let nextRetry = 0;
 
 function ensureWasm(): WasmModule | null {
-  if (wasm || wasmError) return wasm;
+  if (wasm) return wasm;
+  // Never latch a failure permanently — the pkg may be mid-rebuild
+  // (wasm-pack rewrites the directory); retry every few seconds.
+  const now = Date.now();
+  if (now < nextRetry) return null;
+  nextRetry = now + 5000;
   try {
     wasm = require('../profile-wasm/pkg/light_profile_wasm.js') as WasmModule;
   } catch (err) {
-    wasmError = true;
     console.error(
-      '[wasm] profile interpreter unavailable — build it with: cd profile-wasm && wasm-pack build --target nodejs --out-dir pkg\n',
+      '[wasm] profile interpreter unavailable (will retry) — build with: cd profile-wasm && wasm-pack build --target nodejs --out-dir pkg\n',
       (err as Error).message
     );
   }

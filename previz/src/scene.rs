@@ -137,6 +137,10 @@ pub fn rebuild_fixtures(
 
     for f in &project.fixtures {
         let Some(prof) = prof_meta(&project, &f.profile_id) else { continue };
+        // Pixel strips (imported multi-pixel fixtures): each pixel renders as
+        // an emissive source, not a shadow-casting volumetric spotlight — 64
+        // shadowed lights would crush the GPU for zero visual gain.
+        let pixel_strip = prof.heads.len() > 4 && prof.heads.iter().all(|h| h.0 == HeadKind::Rgb);
         let root = commands
             .spawn((
                 FixtureRoot,
@@ -246,6 +250,7 @@ pub fn rebuild_fixtures(
                             });
                         }
                         HeadKind::Hazer => {}
+                        _ if pixel_strip => {} // emissive glow only
                         _ => {
                             h.spawn((
                                 tag.clone(),

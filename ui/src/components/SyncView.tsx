@@ -1,6 +1,42 @@
 import React from 'react';
-import type { MidiAction, Project } from '../../../shared/types.ts';
+import type { MidiAction, MidiMapping, Project } from '../../../shared/types.ts';
+import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
+
+/**
+ * Akai APC mini mk2 factory layout (channel 0):
+ * pads 0–63 (bottom-left = 0, rows ascend), scene column 112–119,
+ * track faders CC 48–55, master fader CC 56.
+ *
+ * Mapping: top four pad rows mirror the on-screen grid (top row = top layer),
+ * bottom pad row fires columns, scene buttons clear layers + tap + blackout,
+ * faders 1–4 = layer masters (bottom layer first), 5 = haze, 6 = speed,
+ * master fader = grand master.
+ */
+function apcMiniMk2Mappings(p: Project): MidiMapping[] {
+  const maps: MidiMapping[] = [];
+  const add = (type: 'note' | 'cc', number: number, action: MidiAction) =>
+    maps.push({ id: uid('midi'), type, channel: 0, number, action });
+
+  const visual = [...p.layers].reverse(); // top row of the UI grid first
+  visual.slice(0, 4).forEach((layer, row) => {
+    const base = 56 - row * 8;
+    for (let col = 0; col < Math.min(8, p.columns.length); col++) {
+      add('note', base + col, { kind: 'cell', layerId: layer.id, col });
+    }
+    add('note', 112 + row, { kind: 'layerClear', layerId: layer.id });
+  });
+  for (let col = 0; col < Math.min(8, p.columns.length); col++) {
+    add('note', col, { kind: 'column', col });
+  }
+  add('note', 118, { kind: 'tap' });
+  add('note', 119, { kind: 'blackout' });
+  p.layers.slice(0, 4).forEach((layer, i) => add('cc', 48 + i, { kind: 'layerMaster', layerId: layer.id }));
+  add('cc', 52, { kind: 'haze' });
+  add('cc', 53, { kind: 'speed' });
+  add('cc', 56, { kind: 'grand' });
+  return maps;
+}
 
 function describeAction(p: Project, a: MidiAction): string {
   switch (a.kind) {
@@ -94,6 +130,20 @@ export function SyncView() {
           {learnMode
             ? 'LEARN ARMED — click a cell, column, or fader, then press/move the control on your device.'
             : 'Click MIDI LEARN in the top bar, click any cell / column / fader, then touch your controller.'}
+        </div>
+        <div className="row">
+          <button
+            className="btn small"
+            onClick={() => {
+              if (!window.confirm('Load the APC mini mk2 preset? This replaces all current MIDI mappings.')) return;
+              mutate((p) => {
+                p.midi = apcMiniMk2Mappings(p);
+              });
+            }}
+          >
+            load APC mini mk2 preset
+          </button>
+          <span className="label">pads = grid · bottom row = cues · scene col = clears/tap/blackout · faders = masters</span>
         </div>
         <table className="tbl">
           <thead>
