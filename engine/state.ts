@@ -17,6 +17,14 @@ const freshLive = (): LayerLive => ({ lookId: null, prevId: null, col: null, fad
 export class EngineState {
   project: Project;
   live = new Map<string, LayerLive>();
+  /** Silenced fixtures — a stuck or dead unit is taken out of the show
+   *  without touching the patch (which would re-fan every chase). Transient:
+   *  a mute is for tonight, not a property of the show. */
+  muted = new Set<string>();
+  /** Fixture driven to full white so it can be found on the truss. */
+  identify: string | null = null;
+  /** universeId -> channel(0-511) -> value. Raw override applied last. */
+  overrides = new Map<string, Map<number, number>>();
   clock = new BeatClock();
   master = 1;
   speed = 1;

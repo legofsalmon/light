@@ -379,6 +379,47 @@ impl Renderer {
                 o.ring_fx = 0.0;
             }
         }
+        // --- muted fixtures go dark, whatever the looks say ---
+        if !st.muted.is_empty() {
+            for ho in &head_order {
+                if !st.muted.contains(&ho.key.0) {
+                    continue;
+                }
+                if let Some(o) = heads.get_mut(&ho.key) {
+                    o.dimmer = 0.0;
+                    o.white = 0.0;
+                    o.strobe = 0.0;
+                    o.ring_fx = 0.0;
+                    o.haze = 0.0;
+                    o.motor_mode = MotorMode::Off;
+                    o.motor_value = 0.0;
+                    o.macro_ = None;
+                }
+            }
+        }
+
+        // --- identify: full white, overriding everything including blackout ---
+        if let Some(target) = st.identify.clone() {
+            for ho in &head_order {
+                if ho.key.0 != target {
+                    continue;
+                }
+                let kind = ho.kind;
+                if let Some(o) = heads.get_mut(&ho.key) {
+                    o.dimmer = 1.0;
+                    o.white = 1.0;
+                    o.r = 1.0;
+                    o.g = 1.0;
+                    o.b = 1.0;
+                    o.strobe = 0.0;
+                    o.macro_ = None; // derbies: let the quantiser pick white
+                    if kind == HeadKind::Hazer {
+                        o.haze = 0.0; // never identify by hazing the room
+                    }
+                }
+            }
+        }
+
 
         // --- render to DMX buffers ---
         let mut buffers: HashMap<String, [u8; 512]> = HashMap::new();
@@ -400,6 +441,43 @@ impl Renderer {
             }
             prof.render(&hp, buf, f.address - 1);
         }
+        // --- muted fixtures: zero their whole channel span. Zeroing the
+        //     resolved params is not enough — a profile can emit raw colour
+        //     with a separate dimmer, and a fixture that is misbehaving is
+        //     exactly the one you cannot trust to honour its dimmer. ---
+        if !st.muted.is_empty() {
+            for f in &st.project.fixtures {
+                if !st.muted.contains(&f.id) {
+                    continue;
+                }
+                let width = match Prof::resolve(&st.project, &f.profile_id) {
+                    Some(p) => p.channels(),
+                    None => continue,
+                };
+                if let Some(buf) = buffers.get_mut(&f.universe_id) {
+                    let base = f.address.saturating_sub(1);
+                    for i in 0..width {
+                        if base + i < 512 {
+                            buf[base + i] = 0;
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- raw channel overrides: last word, after every fixture render ---
+        if !st.overrides.is_empty() {
+            for (uid, chans) in &st.overrides {
+                if let Some(buf) = buffers.get_mut(uid) {
+                    for (ch, v) in chans {
+                        if *ch < 512 {
+                            buf[*ch] = *v;
+                        }
+                    }
+                }
+            }
+        }
+
 
         // --- previz snapshot ---
         let mut head_snaps: Vec<HeadSnap> = Vec::with_capacity(head_order.len());

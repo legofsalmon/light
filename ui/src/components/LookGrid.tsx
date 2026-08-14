@@ -150,6 +150,38 @@ function DeckBar() {
           }}
         >
           {d.name}
+          {decks.length > 1 && d.id === project.activeDeckId && (
+            <>
+              <span
+                className="deckmove"
+                title="move this song earlier"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  mutate((p) => {
+                    const arr = p.decks ?? [];
+                    const i = arr.findIndex((x) => x.id === d.id);
+                    if (i > 0) [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+                  });
+                }}
+              >
+                ‹
+              </span>
+              <span
+                className="deckmove"
+                title="move this song later"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  mutate((p) => {
+                    const arr = p.decks ?? [];
+                    const i = arr.findIndex((x) => x.id === d.id);
+                    if (i >= 0 && i < arr.length - 1) [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
+                  });
+                }}
+              >
+                ›
+              </span>
+            </>
+          )}
           {decks.length > 1 && d.id !== project.activeDeckId && (
             <span
               className="deckx"
@@ -174,6 +206,15 @@ function DeckBar() {
           )}
         </div>
       ))}
+      {decks.length > 1 && (() => {
+        const i = decks.findIndex((x) => x.id === project.activeDeckId);
+        const next = decks[((i < 0 ? 0 : i) + 1) % decks.length];
+        return (
+          <span className="decknext" title="what ] / the APC bank ▶ will select next">
+            next: {next.name}
+          </span>
+        );
+      })()}
       <button
         className="btn small ghost"
         title="new empty deck"

@@ -296,6 +296,68 @@ async function main(): Promise<void> {
     }
   }
 
+  // --- gig tools: mute / identify / all-stop must be byte-identical ---
+  {
+    both({ type: 'column', col: 0 });
+    await sleep(1200);
+    compareDmx('gig tools: baseline cue parity', node.snap, rust.snap);
+
+    both({ type: 'setFixtureMute', fixtureId: 'bar1', on: true });
+    await sleep(600);
+    compareDmx('mute: silenced fixture parity', node.snap, rust.snap);
+    // a muted fixture's whole span must be zero — not merely "dimmer 0", which
+    // trusts a fixture that is by definition misbehaving
+    const bar1Span = (node.snap?.dmx['u1'] ?? []).slice(20, 40);
+    check('mute: bar1 whole channel span is zero', bar1Span.every((v) => v === 0),
+      `still emitting: ${bar1Span.map((v, i) => (v ? `${i + 21}:${v}` : '')).filter(Boolean).join(' ')}`);
+
+    both({ type: 'identify', fixtureId: 'derby1' });
+    await sleep(600);
+    compareDmx('identify: full-white override parity', node.snap, rust.snap);
+
+    // identify must beat blackout — that is the point at load-in
+    both({ type: 'setBlackout', v: true });
+    await sleep(600);
+    compareDmx('identify: survives blackout parity', node.snap, rust.snap);
+    const derbyLit = (node.snap?.dmx['u1'] ?? [])[0] > 0;
+    check('identify: derby1 still lit under blackout', derbyLit, 'identify lost to blackout');
+
+    both({ type: 'identify', fixtureId: null });
+    both({ type: 'setFixtureMute', fixtureId: 'bar1', on: false });
+    both({ type: 'setBlackout', v: false });
+    await sleep(600);
+    compareDmx('gig tools: cleared parity', node.snap, rust.snap);
+
+    // raw channel override is the last word in the buffer
+    both({ type: 'setChannel', universeId: 'u1', channel: 5, value: 200 });
+    await sleep(600);
+    compareDmx('channel override parity', node.snap, rust.snap);
+    check(
+      'channel override reaches the wire',
+      (node.snap?.dmx['u1'] ?? [])[4] === 200,
+      `ch5 = ${(node.snap?.dmx['u1'] ?? [])[4]}`
+    );
+
+    // all-stop: dark, quiet, and no overrides left behind
+    both({ type: 'allStop' });
+    await sleep(900);
+    compareDmx('all-stop parity', node.snap, rust.snap);
+    // all-stop is about the room going dark and QUIET: every dimmer at zero,
+    // the hazer and its fan stopped, derby motors stopped. (Colour channels
+    // may still hold their last value behind a zero dimmer — harmless.)
+    const dmx = node.snap?.dmx['u1'] ?? [];
+    check('all-stop: hazer output and fan are off', dmx[100] === 0 && dmx[101] === 0,
+      `hazer=${dmx[100]} fan=${dmx[101]}`);
+    check('all-stop: derbies fully zeroed (motors stopped)',
+      dmx.slice(0, 20).every((v) => v === 0),
+      `derby bytes: ${dmx.slice(0, 20).join(',')}`);
+    check('all-stop: no head is lit', (node.snap?.heads ?? []).every((h) => h.i === 0),
+      'a head still has intensity');
+
+    both({ type: 'setBlackout', v: false });
+    await sleep(400);
+  }
+
   // --- MVR import parity: both engines apply the same scene identically.
   const mvr = fs.readFileSync(path.join(ROOT, 'core', 'tests', 'data', 'synthetic.mvr'));
   node.project = null;

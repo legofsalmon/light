@@ -241,6 +241,38 @@ export class Renderer {
       }
     }
 
+    // --- muted fixtures go dark, whatever the looks say ---
+    if (st.muted.size > 0) {
+      for (const ho of headOrder) {
+        if (!st.muted.has(ho.fixtureId)) continue;
+        const o = heads.get(ho.key)!;
+        o.dimmer = 0;
+        o.white = 0;
+        o.strobe = 0;
+        o.ringFx = 0;
+        o.haze = 0;
+        o.motorMode = 'off';
+        o.motorValue = 0;
+        o.macro = null;
+      }
+    }
+
+    // --- identify: full white, overriding everything including blackout ---
+    if (st.identify) {
+      for (const ho of headOrder) {
+        if (ho.fixtureId !== st.identify) continue;
+        const o = heads.get(ho.key)!;
+        o.dimmer = 1;
+        o.white = 1;
+        o.r = 1;
+        o.g = 1;
+        o.b = 1;
+        o.strobe = 0;
+        o.macro = null; // derbies: let the quantiser pick white
+        if (ho.kind === 'hazer') o.haze = 0; // never identify by hazing the room
+      }
+    }
+
     // --- render to DMX buffers ---
     const buffers = new Map<string, Uint8Array>();
     for (const u of p.universes) buffers.set(u.id, new Uint8Array(512));
@@ -260,6 +292,35 @@ export class Renderer {
       if (base < 0 || base + cp.footprint > 512) continue;
       const hp = cp.heads.map((_, i) => heads.get(`${f.id}:${i}`)!);
       renderImported(f.profileId, cp, hp, buf, base);
+    }
+
+    // --- muted fixtures: zero their whole channel span. Zeroing the
+    //     resolved params is not enough — a profile can emit raw colour with
+    //     a separate dimmer, and a fixture that is misbehaving is exactly the
+    //     one you cannot trust to honour its own dimmer channel. ---
+    if (st.muted.size > 0) {
+      for (const f of p.fixtures) {
+        if (!st.muted.has(f.id)) continue;
+        const buf = buffers.get(f.universeId);
+        if (!buf) continue;
+        const prof = PROFILES[f.profileId];
+        const width = prof ? prof.channels : p.profiles?.[f.profileId]?.footprint ?? 0;
+        const base = f.address - 1;
+        for (let i = 0; i < width; i++) {
+          if (base + i >= 0 && base + i < 512) buf[base + i] = 0;
+        }
+      }
+    }
+
+    // --- raw channel overrides: last word, after every fixture render ---
+    if (st.overrides.size > 0) {
+      for (const [uid, chans] of st.overrides) {
+        const buf = buffers.get(uid);
+        if (!buf) continue;
+        for (const [ch, v] of chans) {
+          if (ch >= 0 && ch < 512) buf[ch] = v;
+        }
+      }
     }
 
     // --- previz snapshot ---

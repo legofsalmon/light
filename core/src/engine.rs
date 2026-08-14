@@ -89,6 +89,10 @@ pub fn run(mut cfg: EngineConfig) {
         crate::midi::start(tx.clone());
     }
 
+    // The hazer must never start pumping on its own: opening the app in an
+    // empty room the afternoon after a gig used to restore last night's level.
+    let mut project = project;
+    project.settings.haze = 0.0;
     let mut state = EngineState::new(project, now_ms());
     let mut renderer = Renderer::new();
     let mut artnet = ArtnetOut::new();
@@ -619,6 +623,13 @@ fn build_snapshot(
         } else {
             None
         },
+        muted: {
+            let mut m: Vec<String> = state.muted.iter().cloned().collect();
+            m.sort(); // stable wire order
+            m
+        },
+        identify: state.identify.clone(),
+        overrides: state.overrides.values().map(|m| m.len()).sum(),
         artnet_poll: match artnet.poll_status() {
             "off" => {
                 if state.project.universes.iter().any(|u| u.artnet) {

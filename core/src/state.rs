@@ -74,6 +74,14 @@ pub struct EngineState {
     pub master: f64,
     pub speed: f64,
     pub blackout: bool,
+    /// Silenced fixtures — a stuck or dead unit is taken out of the show
+    /// without touching the patch (which would re-fan every chase).
+    /// Transient: a mute is for tonight, not a property of the show.
+    pub muted: std::collections::HashSet<String>,
+    /// Fixture driven to full white so it can be found on the truss.
+    pub identify: Option<String>,
+    /// universe id -> channel(0-511) -> value. Raw override, applied last.
+    pub overrides: HashMap<String, HashMap<usize, u8>>,
     pub learn_target: Option<MidiAction>,
 }
 
@@ -86,6 +94,9 @@ impl EngineState {
             master: 1.0,
             speed: 1.0,
             blackout: false,
+            muted: std::collections::HashSet::new(),
+            identify: None,
+            overrides: HashMap::new(),
             learn_target: None,
         };
         st.ensure_decks();
@@ -557,6 +568,49 @@ impl EngineState {
             | Command::SaveProjectAs { .. } => {
                 // handled by the engine loop (filesystem access lives there)
             }
+            Command::SetFixtureMute { fixture_id, on } => {
+                if on {
+                    self.muted.insert(fixture_id);
+                } else {
+                    self.muted.remove(&fixture_id);
+                }
+            }
+            Command::Identify { fixture_id } => self.identify = fixture_id,
+            Command::AllStop => {
+                // panic: everything dark and quiet, right now
+                self.blackout = true;
+                let layer_ids: Vec<String> =
+                    self.project.layers.iter().map(|l| l.id.clone()).collect();
+                for id in layer_ids {
+                    self.clear_layer(&id, t);
+                }
+                self.release_all_held(t);
+                self.identify = None;
+                self.overrides.clear();
+                self.project.settings.haze = 0.0;
+                self.project.settings.haze_fan = 0.0; // the fan is the audible one
+                out.project_changed = true;
+            }
+            Command::SetChannel { universe_id, channel, value } => {
+                // protocol is 1-512
+                if channel >= 1 && channel <= 512 {
+                    let ch = channel - 1;
+                    match value {
+                        None => {
+                            if let Some(map) = self.overrides.get_mut(&universe_id) {
+                                map.remove(&ch);
+                                if map.is_empty() {
+                                    self.overrides.remove(&universe_id);
+                                }
+                            }
+                        }
+                        Some(v) => {
+                            self.overrides.entry(universe_id).or_default().insert(ch, v);
+                        }
+                    }
+                }
+            }
+            Command::ClearChannelOverrides => self.overrides.clear(),
             Command::SetLink { on } => {
                 // the engine loop watches this flag and drives the Link session
                 self.project.sync.link_enabled = on;

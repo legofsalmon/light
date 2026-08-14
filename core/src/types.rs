@@ -194,6 +194,10 @@ pub struct CueStep {
     pub beats: f64,
 }
 
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
 fn default_beats() -> f64 {
     1.0
 }
@@ -416,6 +420,12 @@ pub struct Snapshot {
     pub artnet_nodes: Option<Vec<ArtnetNodeSnap>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artnet_poll: Option<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub muted: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identify: Option<String>,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub overrides: usize,
     pub haze_fan: f64,
     pub heads: Vec<HeadSnap>,
     pub layers: Vec<LayerSnap>,
@@ -435,6 +445,14 @@ pub enum Command {
     Column { col: usize },
     SetBpm { bpm: f64 },
     SetLink { on: bool },
+    #[serde(rename_all = "camelCase")]
+    SetFixtureMute { fixture_id: String, on: bool },
+    #[serde(rename_all = "camelCase")]
+    Identify { fixture_id: Option<String> },
+    AllStop,
+    #[serde(rename_all = "camelCase")]
+    SetChannel { universe_id: String, channel: usize, value: Option<u8> },
+    ClearChannelOverrides,
     Projects,
     NewProject { name: String },
     OpenProject { slug: String },

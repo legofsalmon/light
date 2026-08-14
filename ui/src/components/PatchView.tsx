@@ -83,6 +83,9 @@ export function PatchView() {
   const mutate = useStore((s) => s.mutate);
   const importMsg = useStore((s) => s.importMsg);
   const fxSel = useStore((s) => s.fxSel);
+  const send = useStore((s) => s.send);
+  const muted = useStore((s) => s.snap?.muted) ?? [];
+  const identify = useStore((s) => s.snap?.identify) ?? null;
   const conflicts = findConflicts(project);
   const uniOrder = new Map(project.universes.map((u, i) => [u.id, i]));
   const sortedFixtures = [...project.fixtures].sort(
@@ -268,7 +271,7 @@ export function PatchView() {
           <thead>
             <tr>
               <th>Fixture</th><th>Profile</th><th>Universe</th><th>Address</th><th>Ch</th>
-              <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th>Tilt°</th><th>Roll°</th><th></th>
+              <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th>Tilt°</th><th>Roll°</th><th>Live</th><th></th>
             </tr>
           </thead>
           <tbody ref={tbodyRef}>
@@ -375,6 +378,26 @@ export function PatchView() {
                       onSet={(v) => setRot(f.id, 'rotZ', v)}
                       onDelta={(d) => nudgeRot(f.id, 'rotZ', d)}
                     />
+                  </td>
+                  <td>
+                    <div className="row" style={{ gap: 4 }}>
+                      <button
+                        className={`btn small ${muted.includes(f.id) ? 'danger on' : 'ghost'}`}
+                        title={muted.includes(f.id)
+                          ? 'muted — this fixture is receiving all zeros. Click to bring it back.'
+                          : 'mute: silence this fixture without touching the patch (stuck or dead unit)'}
+                        onClick={() => send({ type: 'setFixtureMute', fixtureId: f.id, on: !muted.includes(f.id) })}
+                      >
+                        {muted.includes(f.id) ? 'muted' : 'mute'}
+                      </button>
+                      <button
+                        className={`btn small ${identify === f.id ? 'on' : 'ghost'}`}
+                        title="identify: drive this fixture to full white so you can find it on the truss"
+                        onClick={() => send({ type: 'identify', fixtureId: identify === f.id ? null : f.id })}
+                      >
+                        ◎
+                      </button>
+                    </div>
                   </td>
                   <td>
                     <button
@@ -623,9 +646,11 @@ export function PatchView() {
                 return prof.heads.map((hd, hi) => {
                   const on = g.heads.some((h) => h.fixtureId === f.id && h.head === hi);
                   const label = prof.heads.length > 1 ? `${f.name}·${hd.label}` : f.name;
+                  const pos = g.heads.findIndex((h) => h.fixtureId === f.id && h.head === hi);
                   return (
                     <span
                       key={`${f.id}:${hi}`}
+                      title={on ? `chase position ${pos + 1}` : 'click to add to this group'}
                       className={`headchip ${on ? 'on' : ''}`}
                       onClick={() => mutate((p) => {
                         const x = p.groups.find((y) => y.id === g.id);
@@ -635,12 +660,23 @@ export function PatchView() {
                         else x.heads.push({ fixtureId: f.id, head: hi });
                       })}
                     >
-                      {label}
+                      {on ? `${pos + 1}· ` : ''}{label}
                     </span>
                   );
                 });
               })}
             </div>
+            <button
+              className="btn small ghost"
+              title="reverse the chase order — one click when a bar is hung the other way round"
+              disabled={g.heads.length < 2}
+              onClick={() => mutate((p) => {
+                const x = p.groups.find((y) => y.id === g.id);
+                if (x) x.heads.reverse();
+              })}
+            >
+              ⇄
+            </button>
             <button
               className="btn small ghost"
               title="delete group"

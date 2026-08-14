@@ -112,6 +112,9 @@ if (!project) {
   }
 }
 
+// The hazer must never start pumping on its own: opening the app in an empty
+// room the afternoon after a gig used to restore last night's haze level.
+if (project.settings) project.settings.haze = 0;
 const state = new EngineState(project);
 const renderer = new Renderer(state);
 const artnet = new ArtnetOut();
@@ -233,6 +236,45 @@ function handleCommand(cmd: Command): void {
     case 'setHazeFan':
       state.project.settings.hazeFan = clamp(cmd.v);
       state.onChange?.();
+      break;
+    case 'setFixtureMute': {
+      if (cmd.on) state.muted.add(cmd.fixtureId);
+      else state.muted.delete(cmd.fixtureId);
+      break;
+    }
+    case 'identify':
+      state.identify = cmd.fixtureId;
+      break;
+    case 'allStop': {
+      // panic: everything dark and quiet, right now
+      state.blackout = true;
+      for (const l of state.project.layers) state.clearLayer(l.id);
+      state.releaseAllHeld();
+      state.identify = null;
+      state.overrides.clear();
+      state.project.settings.haze = 0;
+      state.project.settings.hazeFan = 0; // the fan is the audible one
+      state.onChange?.();
+      break;
+    }
+    case 'setChannel': {
+      const ch = Math.round(cmd.channel) - 1; // protocol is 1-512
+      if (ch < 0 || ch > 511) break;
+      let map = state.overrides.get(cmd.universeId);
+      if (cmd.value === null) {
+        map?.delete(ch);
+        if (map && map.size === 0) state.overrides.delete(cmd.universeId);
+      } else {
+        if (!map) {
+          map = new Map<number, number>();
+          state.overrides.set(cmd.universeId, map);
+        }
+        map.set(ch, Math.max(0, Math.min(255, Math.round(cmd.value))));
+      }
+      break;
+    }
+    case 'clearChannelOverrides':
+      state.overrides.clear();
       break;
     case 'setLink':
       // Ableton Link runs in the native (Rust) engine only — the reference
@@ -473,6 +515,13 @@ function loopBody(): void {
       heads: res.heads,
       layers: res.layers,
       dmx,
+      ...(state.muted.size > 0 ? { muted: [...state.muted] } : {}),
+      ...(state.identify ? { identify: state.identify } : {}),
+      ...((() => {
+        let n = 0;
+        for (const m of state.overrides.values()) n += m.size;
+        return n > 0 ? { overrides: n } : {};
+      })()),
       ...(() => {
         // include discovery state whenever polling is (or was) relevant, and
         // call nodesSnapshot exactly once per snapshot

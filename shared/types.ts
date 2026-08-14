@@ -251,6 +251,12 @@ export type Snapshot = {
   artnetNodes?: { ip: string; name: string; ageMs: number }[];
   /** 'failed' = reply port 6454 is held by another app — discovery unavailable */
   artnetPoll?: 'on' | 'failed';
+  /** fixtures currently silenced */
+  muted?: string[];
+  /** fixture being identified (driven to full white), if any */
+  identify?: string | null;
+  /** number of raw channel overrides in force */
+  overrides?: number;
   hazeFan: number;
   heads: HeadSnap[];
   layers: LayerSnap[];
@@ -268,6 +274,16 @@ export type Command =
   | { type: 'release'; layerId: string; col: number }
   | { type: 'clearLayer'; layerId: string }
   | { type: 'setLink'; on: boolean }
+  /** silence one fixture without touching the patch (stuck/dead unit) */
+  | { type: 'setFixtureMute'; fixtureId: string; on: boolean }
+  /** drive one fixture to full white to find it on the truss */
+  | { type: 'identify'; fixtureId: string | null }
+  /** panic: blackout, clear every layer, release holds, haze + motors off */
+  | { type: 'allStop' }
+  /** raw channel override, applied last into the DMX buffer (channel is 1-512;
+   *  value null clears). Not persisted — a check tool, not show data. */
+  | { type: 'setChannel'; universeId: string; channel: number; value: number | null }
+  | { type: 'clearChannelOverrides' }
   | { type: 'projects' }
   | { type: 'newProject'; name: string }
   | { type: 'openProject'; slug: string }

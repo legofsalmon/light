@@ -226,6 +226,34 @@ export function TopBar() {
         def={1}
         learn={{ kind: 'grand' }}
       />
+      {(snap?.muted?.length ?? 0) > 0 && (
+        <span className="mutedchip" title="fixtures silenced — they are receiving all zeros">
+          {snap!.muted!.length} muted
+        </span>
+      )}
+      {(snap?.overrides ?? 0) > 0 && (
+        <span
+          className="mutedchip"
+          title="raw channel overrides are held from the Output tab — the show is not driving those channels"
+        >
+          {snap!.overrides} override{snap!.overrides === 1 ? '' : 's'}
+        </span>
+      )}
+      <button
+        className="btn allstop"
+        title="ALL STOP — blackout, clear every layer, release holds, haze and motors off"
+        onClick={() => {
+          void askConfirm('All stop?', {
+            body: 'Blackout on, every layer cleared, holds released, haze and fan off. Use this when something must stop NOW.',
+            confirmLabel: 'ALL STOP',
+            danger: true,
+          }).then((ok) => {
+            if (ok) send({ type: 'allStop' });
+          });
+        }}
+      >
+        all stop
+      </button>
       <button
         className={`btn blackout ${snap?.blackout ? 'hot' : ''}`}
         onClick={() => {
