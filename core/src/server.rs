@@ -63,15 +63,14 @@ pub fn start(
     bc: Broadcaster,
 ) -> std::io::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port))?;
-    // A second engine binding [::]:port would answer localhost requests too,
-    // giving two engines driving one rig. Claim v6 as well and treat failure
-    // as "another engine is already running" — but only when it is a real
-    // conflict, not a host without IPv6.
-    let v6_guard = match TcpListener::bind(("::", port)) {
-        Ok(l) => Some(l),
-        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => return Err(e),
-        Err(_) => None, // no IPv6 stack on this host — fine
-    };
+    // A second engine binding [::]:port could answer localhost requests too
+    // (macOS defaults IPV6_V6ONLY on, so the v6 wildcard is a separate
+    // socket), giving two engines driving one rig. Claim it as well — but
+    // best-effort only: on Linux `::` is dual-stack by default and therefore
+    // *always* collides with the 0.0.0.0 socket we just took. A second engine
+    // is still locked out either way, because it hits AddrInUse on the v4
+    // wildcard above before it ever gets here.
+    let v6_guard = TcpListener::bind(("::", port)).ok();
     std::thread::spawn(move || {
         let _v6_guard = v6_guard; // held for the process lifetime
         for stream in listener.incoming() {
