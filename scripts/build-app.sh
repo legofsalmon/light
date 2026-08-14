@@ -27,7 +27,12 @@ for a in "${ARCHES[@]}"; do
 done
 
 echo "==> tauri build ($TARGET)"
-npx tauri build --target "$TARGET"
+# Deliberately hide the notarisation credentials from Tauri: it would notarise
+# the bundle it just produced, and we then graft the previz binary in and
+# re-sign, which invalidates that ticket. Notarising happens below, after the
+# bundle stops changing. Signing credentials stay visible so the nested
+# binaries Tauri signs carry the right identity.
+env -u APPLE_ID -u APPLE_PASSWORD -u APPLE_TEAM_ID npx tauri build --target "$TARGET"
 
 echo "==> grafting the previz binary into the bundle"
 if [ "${#ARCHES[@]}" -gt 1 ]; then
@@ -51,6 +56,21 @@ else
   codesign --force --deep --entitlements "$ENTS" -s - "$BUNDLE"
 fi
 
+# --- notarise, now that nothing else will touch the bundle ---
+if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
+  echo "==> notarising the app (a few minutes)"
+  NOTARY_ZIP="$(dirname "$BUNDLE")/notarise.zip"
+  ditto -c -k --keepParent "$BUNDLE" "$NOTARY_ZIP"
+  xcrun notarytool submit "$NOTARY_ZIP" \
+    --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+  rm -f "$NOTARY_ZIP"
+  # stapling attaches the ticket so a first launch works offline too
+  xcrun stapler staple "$BUNDLE"
+  xcrun stapler validate "$BUNDLE"
+else
+  echo "==> not notarising (APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID unset)"
+fi
+
 echo "==> dmg"
 # Tauri's bundle_dmg.sh drives Finder over AppleScript to lay the window out,
 # which fails headless (CI) and on a machine without Finder automation rights.
@@ -64,6 +84,16 @@ cp -R "$BUNDLE" "$DMG_DIR/"
 ln -s /Applications "$DMG_DIR/Applications"
 hdiutil create -volname LIGHT -srcfolder "$DMG_DIR" -ov -format UDZO -quiet "$DMG_OUT"
 rm -rf "$DMG_DIR"
+if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
+  # the .dmg is what people download, so it needs its own ticket — a stapled
+  # app inside an unstapled disk image still trips Gatekeeper on the image
+  echo "==> notarising the dmg"
+  codesign --force --timestamp -s "${APPLE_SIGNING_IDENTITY}" "$DMG_OUT"
+  xcrun notarytool submit "$DMG_OUT" \
+    --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+  xcrun stapler staple "$DMG_OUT"
+  xcrun stapler validate "$DMG_OUT"
+fi
 echo "dmg: $DMG_OUT"
 
 echo "==> result"
