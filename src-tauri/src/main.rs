@@ -13,7 +13,9 @@ fn main() {
                     .and_then(|p| p.parse().ok())
                     .unwrap_or(9900),
                 ui_dist: None,
-                with_midi: true,
+                // honor the same kill-switch as the standalone binary — test
+                // harnesses must be able to keep the app off the controller
+                with_midi: std::env::var("LIGHT_NO_MIDI").is_err(),
             });
         });
         if result.is_err() {
