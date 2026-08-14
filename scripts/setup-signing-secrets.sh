@@ -59,16 +59,25 @@ elif [ "$P12" != "--export" ]; then
     exit 1
   fi
   IFS= read -r -s -p "Password for $P12: " P12_PASS; echo
-  # Check it here rather than discovering it 40 minutes into a CI build, which
-  # is exactly how the first attempt failed: every test passed, both slices
-  # compiled, then the keychain import rejected the password.
-  if ! openssl pkcs12 -in "$P12" -noout -passin pass:"$P12_PASS" 2>/dev/null; then
+  # Verify with `security import` into a throwaway keychain — the exact call CI
+  # makes, so a pass here means a pass there.
+  #
+  # NOT openssl: Keychain Access encrypts .p12 files with RC2-40-CBC, which
+  # OpenSSL 3 dropped from its default provider. openssl therefore fails on a
+  # perfectly good file AFTER the password has already verified, reporting
+  # "unsupported ... RC2-40-CBC" — which reads like a bad password and is not.
+  VFY_KC="$(mktemp -d)/verify.keychain-db"
+  security create-keychain -p verify "$VFY_KC" >/dev/null 2>&1
+  security unlock-keychain -p verify "$VFY_KC" >/dev/null 2>&1
+  if ! security import "$P12" -k "$VFY_KC" -P "$P12_PASS" -T /usr/bin/codesign >/dev/null 2>&1; then
+    security delete-keychain "$VFY_KC" >/dev/null 2>&1 || true
     echo >&2
     echo "That password does not open $P12." >&2
-    echo "Check it by hand with:  openssl pkcs12 -in \"$P12\" -noout" >&2
+    echo "Mind any leading or trailing space — paste it rather than retyping." >&2
     echo "Or re-export the certificate from Keychain Access with a fresh one." >&2
     exit 1
   fi
+  security delete-keychain "$VFY_KC" >/dev/null 2>&1 || true
   echo "password verified against the certificate"
 else
   echo "Exporting: $IDENT"
