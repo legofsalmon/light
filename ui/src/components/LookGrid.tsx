@@ -15,7 +15,9 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
   const setSel = useStore((s) => s.setSel);
 
   const lookId = layer.cells[col] ?? null;
-  const look = lookId ? project.looks[lookId] : null;
+  // hasOwn, not a bare index: a cell holding "constructor" or "toString"
+  // resolves to a function off the prototype and renders as a phantom look
+  const look = lookId && Object.hasOwn(project.looks, lookId) ? project.looks[lookId] : null;
   const active = !!lookId && live?.lookId === lookId && live?.col === col;
   const fading = active && (live?.t ?? 1) < 1;
   const selected = sel?.layerId === layer.id && sel?.col === col;
@@ -61,8 +63,15 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
   );
 }
 
-function LayerHead({ layer }: { layer: Layer }) {
+function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined }) {
   const send = useStore((s) => s.send);
+  const project = useStore((s) => s.project)!;
+  // The grid scrolls and looks fire from MIDI/OSC too, so the active cell can
+  // be off-screen. The layer head never scrolls — it is the one place that can
+  // always answer "what is this layer doing right now".
+  const liveId = live?.lookId ?? null;
+  const liveLook = liveId && Object.hasOwn(project.looks, liveId) ? project.looks[liveId] : null;
+  const crossfading = !!liveLook && (live?.t ?? 1) < 1;
   return (
     <div className="layerhead">
       <div className="row">
@@ -79,6 +88,27 @@ function LayerHead({ layer }: { layer: Layer }) {
         >
           ✕
         </button>
+      </div>
+      <div
+        className={`nowplaying ${liveLook ? 'on' : ''} ${crossfading ? 'fading' : ''}`}
+        title={
+          liveLook
+            ? `playing: ${liveLook.name}${live?.col != null ? ` (column ${live.col + 1})` : ''}`
+            : 'nothing playing on this layer'
+        }
+      >
+        {liveLook ? (
+          <>
+            <span className="swatch mini">
+              {lookSwatch(liveLook, project.looks).map((c, i) => (
+                <i key={i} style={{ background: c }} />
+              ))}
+            </span>
+            <span className="grow ellip">{liveLook.name}</span>
+          </>
+        ) : (
+          '—'
+        )}
       </div>
       <Fader
         value={layer.master}
@@ -293,7 +323,7 @@ export function LookGrid() {
         const live = liveLayers?.find((l) => l.id === layer.id);
         return (
           <React.Fragment key={layer.id}>
-            <LayerHead layer={layer} />
+            <LayerHead layer={layer} live={live} />
             {cols.map((_, col) => (
               <Cell key={col} layer={layer} col={col} live={live} />
             ))}

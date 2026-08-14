@@ -509,6 +509,7 @@ impl EngineState {
             self.project.profiles.insert(id, p);
         }
         let mut fixture_ids: Vec<String> = Vec::new();
+        let mut new_universes = 0usize;
         for f in &bundle.fixtures {
             let universe_id = match self
                 .project
@@ -518,13 +519,18 @@ impl EngineState {
             {
                 Some(u) => u.id.clone(),
                 None => {
+                    new_universes += 1;
                     let id = uid("u");
                     self.project.universes.push(crate::types::UniverseCfg {
                         id: id.clone(),
                         label: format!("MVR U{}", f.universe),
                         artnet_universe: f.universe,
                         sacn_universe: f.universe.max(1),
-                        artnet: true,
+                        // Output OFF until the operator says otherwise: an
+                        // imported scene's universe can collide with a live one
+                        // (universe 0 is the factory default on most nodes) and
+                        // importing must never start driving a rig.
+                        artnet: false,
                         sacn: false,
                         unicast: None,
                     });
@@ -573,6 +579,13 @@ impl EngineState {
             bundle.fixtures.len(),
             bundle.groups.len()
         );
+        if new_universes > 0 {
+            // the operator has to switch these on deliberately — say so, or the
+            // rig looks dead after a clean import
+            msg.push_str(&format!(
+                " · {new_universes} new universe(s) created with output OFF — enable them in Output"
+            ));
+        }
         if !bundle.warnings.is_empty() {
             msg.push_str(&format!(" · {} warning(s): {}", bundle.warnings.len(), bundle.warnings.join("; ")));
         }

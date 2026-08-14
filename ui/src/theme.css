@@ -686,3 +686,28 @@ table.tbl th { color: var(--text-dim); }
   border-radius: 3px;
   padding: 3px 7px;
 }
+
+/* ---------- layer head: what is playing right now ---------- */
+.layerhead .nowplaying {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0 4px;
+  min-height: 15px;
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.layerhead .nowplaying.on { color: var(--text); }
+.layerhead .nowplaying.fading { opacity: 0.72; }
+.layerhead .nowplaying .ellip { overflow: hidden; text-overflow: ellipsis; }
+.swatch.mini {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 8px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.swatch.mini i { flex: 1 1 0; }

@@ -469,7 +469,9 @@ export function PatchView() {
                     { value: 'merge', label: 'Merge into patch', primary: true },
                     { value: 'replace', label: 'Replace everything', danger: true },
                   ], {
-                    body: 'Merge adds the scene’s fixtures to the current patch. Replace clears the patch, groups, and looks first — that cannot be undone.',
+                    body:
+                      'Merge adds the scene’s fixtures to the current patch. Replace clears the patch, groups, and looks first — that cannot be undone.\n\n' +
+                      'Either way the scene’s addressing wins for the fixtures it brings in, and any universe the scene needs is created with its output switched OFF. Turn those on in Output once you have checked the addresses.',
                   }).then((choice) => {
                     if (!choice) return;
                     useStore.getState().send({

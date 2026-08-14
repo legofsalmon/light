@@ -30,15 +30,18 @@ function applyMvrBundle(p: Project, bundle: MvrBundle, replace: boolean): string
   for (const [id, prof] of Object.entries(bundle.profiles)) p.profiles[id] = prof;
 
   const fixtureIds: string[] = [];
+  let newUniverses = 0;
   for (const f of bundle.fixtures) {
     let u = p.universes.find((x) => x.artnetUniverse === f.universe);
     if (!u) {
+      newUniverses++;
       u = {
         id: uid('u'),
         label: `MVR U${f.universe}`,
         artnetUniverse: f.universe,
         sacnUniverse: Math.max(1, f.universe),
-        artnet: true,
+        // Output OFF until the operator says otherwise — see the Rust core.
+        artnet: false,
         sacn: false,
         unicast: null,
       };
@@ -67,6 +70,11 @@ function applyMvrBundle(p: Project, bundle: MvrBundle, replace: boolean): string
     if (heads.length) p.groups.push({ id: uid('g'), name: g.name, heads });
   }
   let msg = `imported ${bundle.fixtures.length} fixture(s), ${bundle.groups.length} group(s)`;
+  if (newUniverses > 0) {
+    // the operator has to switch these on deliberately — say so, or the rig
+    // looks dead after a clean import
+    msg += ` · ${newUniverses} new universe(s) created with output OFF — enable them in Output`;
+  }
   if (bundle.warnings.length) msg += ` · ${bundle.warnings.length} warning(s): ${bundle.warnings.join('; ')}`;
   return msg;
 }
