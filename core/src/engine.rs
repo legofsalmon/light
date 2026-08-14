@@ -132,14 +132,20 @@ pub fn run(mut cfg: EngineConfig) {
     println!("  ██   ui        http://localhost:{}", cfg.port);
     println!(
         "  ██   art-net   {} @ 40 Hz",
-        state
-            .project
-            .universes
-            .iter()
-            .filter(|u| u.artnet)
-            .map(|u| format!("U{}", u.artnet_universe))
-            .collect::<Vec<_>>()
-            .join(", ")
+        {
+            // A blank here reads as "something, probably". The Node banner has
+            // always said "off", and the packaged app is the one people read
+            // when the rig is dark and they are working out why.
+            let on = state
+                .project
+                .universes
+                .iter()
+                .filter(|u| u.artnet)
+                .map(|u| format!("U{}", u.artnet_universe))
+                .collect::<Vec<_>>()
+                .join(", ");
+            if on.is_empty() { "off".to_string() } else { on }
+        }
     );
     println!(
         "  ██   osc in    {}",
