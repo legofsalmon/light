@@ -10,14 +10,21 @@ pub struct LayerLive {
     pub col: Option<usize>,
     pub fade_start: f64,
     pub fade_dur: f64, // seconds
-    pub held: bool,
+    /// Which client is holding this momentary look, if any. None while nothing
+    /// is held; a hold started by MIDI/OSC is owned by `LOCAL_CLIENT` so that a
+    /// browser disconnecting never drops it.
+    pub held_by: Option<u64>,
 }
 
 impl Default for LayerLive {
     fn default() -> Self {
-        LayerLive { look_id: None, prev_id: None, col: None, fade_start: 0.0, fade_dur: 0.0, held: false }
+        LayerLive { look_id: None, prev_id: None, col: None, fade_start: 0.0, fade_dur: 0.0, held_by: None }
     }
 }
+
+/// Owner for holds started by MIDI, OSC or any non-socket source. No WS client
+/// ever gets this id, so such a hold survives every browser disconnect.
+pub const LOCAL_CLIENT: u64 = u64::MAX;
 
 static UID_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
@@ -217,7 +224,7 @@ impl EngineState {
     /// from is swapped out, so the note-off can never find them again and the
     /// blinder stays lit for the rest of the show.
     fn release_holds_for_deck_change(&mut self, t: f64) {
-        self.release_all_held(t);
+        self.release_all_held(t, None);
     }
 
     pub fn deck_step(&mut self, dir: i32) -> bool {
@@ -240,7 +247,7 @@ impl EngineState {
         self.live.entry(layer_id.to_string()).or_default()
     }
 
-    pub fn trigger(&mut self, layer_id: &str, col: usize, t: f64) {
+    pub fn trigger(&mut self, layer_id: &str, col: usize, t: f64, owner: u64) {
         let Some(layer) = self.project.layers.iter().find(|l| l.id == layer_id) else { return };
         let Some(Some(look_id)) = layer.cells.get(col).cloned() else { return };
         let Some(look) = self.project.looks.get(&look_id) else { return };
@@ -257,7 +264,7 @@ impl EngineState {
         live.col = Some(col);
         live.fade_start = t;
         live.fade_dur = fade;
-        live.held = flash;
+        live.held_by = if flash { Some(owner) } else { None };
     }
 
     pub fn release(&mut self, layer_id: &str, col: usize, t: f64) {
@@ -277,7 +284,7 @@ impl EngineState {
         live.col = None;
         live.fade_start = t;
         live.fade_dur = fade;
-        live.held = false;
+        live.held_by = None;
     }
 
     pub fn clear_layer(&mut self, layer_id: &str, t: f64) {
@@ -292,15 +299,18 @@ impl EngineState {
         live.col = None;
         live.fade_start = t;
         live.fade_dur = fade;
-        live.held = false;
+        live.held_by = None;
     }
 
     /// Gig safety: if the client holding a momentary flash look vanishes, its
-    /// release will never arrive — drop all held flash looks.
-    pub fn release_all_held(&mut self, t: f64) {
+    /// release will never arrive — drop the holds it owned. `owner: None` drops
+    /// every hold regardless of who started it (all-stop, project reload).
+    pub fn release_all_held(&mut self, t: f64, owner: Option<u64>) {
         for live in self.live.values_mut() {
-            if !live.held {
-                continue;
+            match (live.held_by, owner) {
+                (None, _) => continue,                       // nothing held here
+                (Some(h), Some(o)) if h != o => continue,    // someone else's hold
+                _ => {}
             }
             let Some(look_id) = live.look_id.take() else { continue };
             let fade = self
@@ -314,7 +324,7 @@ impl EngineState {
             live.col = None;
             live.fade_start = t;
             live.fade_dur = fade;
-            live.held = false;
+            live.held_by = None;
         }
     }
 
@@ -331,7 +341,7 @@ impl EngineState {
                 .and_then(|lid| self.project.looks.get(lid));
             match look {
                 Some(l) if l.is_flash() => {} // momentary looks are untouched by cues
-                Some(_) => self.trigger(&id, col, t),
+                Some(_) => self.trigger(&id, col, t, LOCAL_CLIENT),
                 None => self.clear_layer(&id, t),
             }
         }
@@ -403,7 +413,7 @@ impl EngineState {
         match a {
             MidiAction::Cell { layer_id, col } => {
                 if pressed {
-                    self.trigger(layer_id, *col, t);
+                    self.trigger(layer_id, *col, t, LOCAL_CLIENT);
                 } else {
                     self.release(layer_id, *col, t);
                 }
@@ -593,11 +603,14 @@ impl EngineState {
     }
 
     /// Handle one protocol command. Mirrors the Node engine's handleCommand.
-    pub fn handle_command(&mut self, cmd: Command, t: f64) -> Outcome {
+    pub fn handle_command(&mut self, cmd: Command, t: f64, owner: Option<u64>) -> Outcome {
+        // MIDI, OSC and internal callers have no socket: their holds belong to
+        // LOCAL_CLIENT so no browser disconnect can release them.
+        let owner = owner.unwrap_or(LOCAL_CLIENT);
         let mut out = Outcome::default();
         match cmd {
             Command::Hello => {}
-            Command::Trigger { layer_id, col } => self.trigger(&layer_id, col, t),
+            Command::Trigger { layer_id, col } => self.trigger(&layer_id, col, t, owner),
             Command::Release { layer_id, col } => self.release(&layer_id, col, t),
             Command::ClearLayer { layer_id } => self.clear_layer(&layer_id, t),
             Command::Column { col } => self.trigger_column(col, t),
@@ -641,7 +654,7 @@ impl EngineState {
                 for id in layer_ids {
                     self.clear_layer(&id, t);
                 }
-                self.release_all_held(t);
+                self.release_all_held(t, None);
                 self.identify = None;
                 self.overrides.clear();
                 self.project.settings.haze = 0.0;

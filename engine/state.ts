@@ -8,10 +8,16 @@ export type LayerLive = {
   col: number | null;
   fadeStart: number;
   fadeDur: number; // seconds
-  held: boolean;
+  /** Which client is holding this momentary look, if any. A hold started by
+   *  MIDI/OSC is owned by LOCAL_CLIENT so no browser disconnect drops it. */
+  heldBy: number | null;
 };
 
-const freshLive = (): LayerLive => ({ lookId: null, prevId: null, col: null, fadeStart: 0, fadeDur: 0, held: false });
+/** Owner for holds started by MIDI, OSC or any non-socket source. No WS client
+ *  ever gets this id, so such a hold survives every browser disconnect. */
+export const LOCAL_CLIENT = Number.MAX_SAFE_INTEGER;
+
+const freshLive = (): LayerLive => ({ lookId: null, prevId: null, col: null, fadeStart: 0, fadeDur: 0, heldBy: null });
 
 /** Authoritative engine state: the project plus everything live. */
 export class EngineState {
@@ -51,7 +57,7 @@ export class EngineState {
     return l;
   }
 
-  trigger(layerId: string, col: number, t = performance.now()): void {
+  trigger(layerId: string, col: number, t = performance.now(), owner: number = LOCAL_CLIENT): void {
     const layer = this.project.layers.find((l) => l.id === layerId);
     if (!layer) return;
     const lookId = layer.cells[col] ?? null;
@@ -67,7 +73,7 @@ export class EngineState {
     live.col = col;
     live.fadeStart = t;
     live.fadeDur = Math.max(0, look.fade ?? layer.fade);
-    live.held = !!look.flash;
+    live.heldBy = look.flash ? owner : null;
   }
 
   release(layerId: string, col: number, t = performance.now()): void {
@@ -83,7 +89,7 @@ export class EngineState {
     live.col = null;
     live.fadeStart = t;
     live.fadeDur = Math.max(0.02, look.fade ?? 0.05);
-    live.held = false;
+    live.heldBy = null;
   }
 
   clearLayer(layerId: string, t = performance.now()): void {
@@ -96,7 +102,7 @@ export class EngineState {
     live.col = null;
     live.fadeStart = t;
     live.fadeDur = layer.fade;
-    live.held = false;
+    live.heldBy = null;
   }
 
   /** Switch the active grid page: store the current cells into the outgoing
@@ -135,17 +141,21 @@ export class EngineState {
   }
 
   /** Gig safety: if the client holding a momentary flash look vanishes, its
-   *  release will never arrive — drop all held flash looks. */
-  releaseAllHeld(t = performance.now()): void {
+   *  release will never arrive — drop the holds it owned. `owner` null drops
+   *  every hold whoever started it (all-stop, project reload). */
+  releaseAllHeld(t = performance.now(), owner: number | null = null): void {
     for (const [layerId, live] of this.live) {
-      if (!live.held || !live.lookId) continue;
-      const look = this.project.looks[live.lookId];
+      if (live.heldBy === null || !live.lookId) continue;
+      if (owner !== null && live.heldBy !== owner) continue; // someone else's
+      const look = Object.hasOwn(this.project.looks, live.lookId)
+        ? this.project.looks[live.lookId]
+        : undefined;
       live.prevId = live.lookId;
       live.lookId = null;
       live.col = null;
       live.fadeStart = t;
       live.fadeDur = Math.max(0.02, look?.fade ?? 0.05);
-      live.held = false;
+      live.heldBy = null;
       void layerId;
     }
   }

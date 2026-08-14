@@ -304,7 +304,7 @@ mod tests {
         let Some(col) = cells.iter().position(|c| c.is_some()) else {
             return; // default project always has content, but stay robust
         };
-        state.trigger(&top_layer, col, 0.0);
+        state.trigger(&top_layer, col, 0.0, crate::state::LOCAL_CLIENT);
         let leds = compute_leds(&state);
         let note = (32 + col) as u8;
         let vel = leds.get(&note).copied().unwrap_or(0);

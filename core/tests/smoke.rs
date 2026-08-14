@@ -45,7 +45,7 @@ fn merge_to_dmx() {
     r.tick(&mut st, t0);
 
     // Red wash (col 1 of WASH), after the 0.8 s fade.
-    st.trigger("layer-wash", 1, t0);
+    st.trigger("layer-wash", 1, t0, light_core::state::LOCAL_CLIENT);
     let res = r.tick(&mut st, t0 + 900.0);
     let u1 = &res.buffers["u1"];
     assert_eq!(u1[20], 255, "bar par1 red");
@@ -56,7 +56,7 @@ fn merge_to_dmx() {
     assert_eq!(u1[0], 0, "derby untouched");
 
     // Derby Red Spin: macro Red=13, motor rotate 0.35 → 172.
-    st.trigger("layer-derby", 1, t0 + 1000.0);
+    st.trigger("layer-derby", 1, t0 + 1000.0, light_core::state::LOCAL_CLIENT);
     let b2 = r.tick(&mut st, t0 + 2000.0).buffers["u1"];
     assert_eq!(b2[0], 13, "derby macro red");
     assert_eq!(b2[2], 128 + (0.35f64 * 127.0).round() as u8, "derby motor");
@@ -77,13 +77,13 @@ fn merge_to_dmx() {
     st.master = 1.0;
 
     // FX multiply modulates dimmer, leaves colour (sample off the whole beat).
-    st.trigger("layer-fx", 1, t0 + 3000.0);
+    st.trigger("layer-fx", 1, t0 + 3000.0, light_core::state::LOCAL_CLIENT);
     let b5 = r.tick(&mut st, t0 + 4100.0).buffers["u1"];
     assert_eq!(b5[20], 255, "fx leaves colour");
     assert!(b5[23] > 0 && b5[23] < 255, "fx modulates dimmer, got {}", b5[23]);
 
     // Flash blinder: latch while held, release drops it.
-    st.trigger("layer-strobe", 1, t0 + 5000.0);
+    st.trigger("layer-strobe", 1, t0 + 5000.0, light_core::state::LOCAL_CLIENT);
     let b6 = r.tick(&mut st, t0 + 5050.0).buffers["u1"];
     assert_eq!(b6[3], 220, "blinder ring on");
     st.release("layer-strobe", 1, t0 + 5100.0);
@@ -101,10 +101,10 @@ fn merge_to_dmx() {
     assert_eq!(st.layer_live("layer-derby").look_id, None, "column clears empty layer");
 
     // Held flash must drop when the last client disconnects.
-    st.trigger("layer-strobe", 1, t0 + 8000.0);
+    st.trigger("layer-strobe", 1, t0 + 8000.0, light_core::state::LOCAL_CLIENT);
     let b9 = r.tick(&mut st, t0 + 8050.0).buffers["u1"];
     assert_eq!(b9[3], 220, "held blinder on before disconnect");
-    st.release_all_held(t0 + 8100.0);
+    st.release_all_held(t0 + 8100.0, None);
     let b10 = r.tick(&mut st, t0 + 8400.0).buffers["u1"];
     assert_eq!(b10[3], 0, "release_all_held drops blinder");
 
@@ -141,6 +141,7 @@ fn gdtf_import_end_to_end() {
             data: b64(include_bytes!("data/synthetic.gdtf")),
         },
         t0,
+        None,
     );
     let (ok, msg, ids) = out.import_result.expect("import result");
     assert!(ok, "import failed: {msg}");
@@ -190,7 +191,7 @@ fn gdtf_import_end_to_end() {
 
     let mut r = Renderer::new();
     r.tick(&mut st, t0);
-    st.trigger("layer-wash", 0, t0);
+    st.trigger("layer-wash", 0, t0, light_core::state::LOCAL_CLIENT);
     let res = r.tick(&mut st, t0 + 1000.0); // > 0.8 s fade
     let u1 = &res.buffers["u1"];
     let base = 199;
@@ -283,7 +284,7 @@ fn artnet_loopback() {
     let mut st = EngineState::new(default_project(), 0.0);
     let mut r = Renderer::new();
     r.tick(&mut st, 0.0);
-    st.trigger("layer-wash", 1, 0.0);
+    st.trigger("layer-wash", 1, 0.0, light_core::state::LOCAL_CLIENT);
     let res = r.tick(&mut st, 2000.0);
 
     let mut tx = ArtnetOut::new();

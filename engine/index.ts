@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { Command, Snapshot } from '../shared/types.ts';
 import { WS_PORT, clamp, sanitizeProject } from '../shared/types.ts';
-import { EngineState } from './state.ts';
+import { EngineState, LOCAL_CLIENT } from './state.ts';
 import { Renderer } from './renderer.ts';
 import { ArtnetOut } from './artnet.ts';
 import { SacnOut } from './sacn.ts';
@@ -183,22 +183,23 @@ server.onConnect = (ws) => {
 // If the client holding a flash look crashes, nothing will ever release it.
 // The protocol doesn't attribute holds to clients, so release on ANY
 // disconnect: a spurious release beats a blinder latched on stage.
-server.onDisconnect = () => {
-  // only when the LAST client goes — a tablet dropping off the WiFi must not
-  // release a blinder the console is holding
-  if (server.clientCount === 0) state.releaseAllHeld();
+server.onDisconnect = (clientId) => {
+  // Release exactly what this client held. Waiting for the last client to go
+  // was the wrong half of the trade: a tablet dropping off the WiFi mid-flash
+  // left its blinder latched on stage while the console stayed connected.
+  state.releaseAllHeld(undefined, clientId);
 };
 
 state.onLearned = (mapping) => {
   server.broadcast({ type: 'learned', mapping });
 };
 
-function handleCommand(cmd: Command): void {
+function handleCommand(cmd: Command, _ws?: unknown, clientId: number = LOCAL_CLIENT): void {
   switch (cmd.type) {
     case 'hello':
       break; // project already sent on connect
     case 'trigger':
-      state.trigger(cmd.layerId, cmd.col);
+      state.trigger(cmd.layerId, cmd.col, undefined, clientId);
       break;
     case 'release':
       state.release(cmd.layerId, cmd.col);

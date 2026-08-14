@@ -68,9 +68,9 @@ fn main() {
     let mut st = EngineState::new(default_project(), 0.0);
     let mut r = Renderer::new();
     r.tick(&mut st, 0.0);
-    st.trigger("layer-wash", 6, 0.0); // rainbow drift: hue effect across 8 heads
-    st.trigger("layer-fx", 2, 0.0); // par chase
-    st.trigger("layer-derby", 1, 0.0);
+    st.trigger("layer-wash", 6, 0.0, light_core::state::LOCAL_CLIENT); // rainbow drift: hue effect across 8 heads
+    st.trigger("layer-fx", 2, 0.0, light_core::state::LOCAL_CLIENT); // par chase
+    st.trigger("layer-derby", 1, 0.0, light_core::state::LOCAL_CLIENT);
     let mut t = 1000.0;
     bench("engine tick (default rig, 3 active looks + fx)", 100_000, || {
         t += 25.0;

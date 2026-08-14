@@ -150,7 +150,7 @@ fn handle_ws(stream: TcpStream, tx: Sender<EngineMsg>, bc: Broadcaster) -> std::
         match ws.read() {
             Ok(Message::Text(t)) => {
                 if let Ok(cmd) = serde_json::from_str::<Command>(&t) {
-                    let _ = tx.send(EngineMsg::Cmd(cmd));
+                    let _ = tx.send(EngineMsg::Cmd(cmd, Some(id)));
                 }
             }
             Ok(Message::Close(_)) => break,
@@ -163,7 +163,7 @@ fn handle_ws(stream: TcpStream, tx: Sender<EngineMsg>, bc: Broadcaster) -> std::
     }
     let _ = ws.close(None);
     bc.remove(id);
-    let _ = tx.send(EngineMsg::ClientDisconnected);
+    let _ = tx.send(EngineMsg::ClientDisconnected(id));
     Ok(())
 }
 

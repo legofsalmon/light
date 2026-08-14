@@ -21,9 +21,10 @@ export class Server {
   private httpServer: http.Server;
   private wss: WebSocketServer;
   onConnect: ((ws: WebSocket) => void) | null = null;
-  onDisconnect: (() => void) | null = null;
+  onDisconnect: ((clientId: number) => void) | null = null;
+  private nextClientId = 1;
 
-  constructor(port: number, distDir: string, onCommand: (cmd: Command, ws: WebSocket) => void) {
+  constructor(port: number, distDir: string, onCommand: (cmd: Command, ws: WebSocket, clientId: number) => void) {
     this.httpServer = http.createServer((req, res) => {
       const url = (req.url ?? '/').split('?')[0];
       const rel = url === '/' ? 'index.html' : url.slice(1);
@@ -52,8 +53,10 @@ export class Server {
 
     this.wss = new WebSocketServer({ server: this.httpServer });
     this.wss.on('connection', (ws) => {
+      // holds are attributed to this id so a disconnect releases only its own
+      const clientId = this.nextClientId++;
       this.onConnect?.(ws);
-      ws.on('close', () => this.onDisconnect?.());
+      ws.on('close', () => this.onDisconnect?.(clientId));
       ws.on('message', (data) => {
         let cmd: Command;
         try {
@@ -62,7 +65,7 @@ export class Server {
           return;
         }
         try {
-          onCommand(cmd, ws);
+          onCommand(cmd, ws, clientId);
         } catch (err) {
           console.error('[server] command failed:', (err as Error).message);
         }

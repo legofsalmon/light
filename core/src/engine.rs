@@ -19,12 +19,12 @@ const TICK_MS: u64 = 25; // 40 Hz DMX refresh
 pub enum EngineMsg {
     /// quit requested — flush the project to disk, then let run() return
     Shutdown,
-    Cmd(Command),
+    Cmd(Command, Option<ClientId>),
     Osc(OscMessage),
     Midi(u8, u8, u8),
     MidiPorts(Vec<String>),
     ClientConnected(ClientId),
-    ClientDisconnected,
+    ClientDisconnected(ClientId),
 }
 
 pub struct EngineConfig {
@@ -418,7 +418,7 @@ fn handle_msg(
     match msg {
         // handled by the drain loop before it reaches here
         EngineMsg::Shutdown => {}
-        EngineMsg::Cmd(cmd) => {
+        EngineMsg::Cmd(cmd, owner) => {
             // project FILE commands live here — the state machine has no
             // filesystem access, mirroring the Node reference's split
             match &cmd {
@@ -489,7 +489,7 @@ fn handle_msg(
                 }
                 _ => {}
             }
-            let out = state.handle_command(cmd, t);
+            let out = state.handle_command(cmd, t, owner);
             let align = out.align_phase;
             apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_dirty);
             return align;
@@ -524,14 +524,12 @@ fn handle_msg(
             bc.send_to(id, project_event(state));
             bc.send_to(id, json!({ "type": "midiInputs", "names": midi_names }).to_string());
         }
-        EngineMsg::ClientDisconnected => {
-            // Only when the LAST client goes: a tablet dropping off the WiFi
-            // must not release a blinder the console is holding. (Holds are
-            // still not attributed per client — that is the complete fix — but
-            // a latched blinder with nobody connected is the dangerous case.)
-            if bc.count() == 0 {
-                state.release_all_held(t);
-            }
+        EngineMsg::ClientDisconnected(gone) => {
+            // Release exactly what this client was holding. Waiting for the
+            // last client to go was the wrong half of the trade: a tablet
+            // dropping off the WiFi mid-flash left its blinder latched on
+            // stage for as long as the console stayed connected.
+            state.release_all_held(t, Some(gone));
             // Closing the window drops its socket — flush now rather than
             // gambling that the process lives long enough for the autosave
             // debounce (or that the host delivers a quit event at all).
