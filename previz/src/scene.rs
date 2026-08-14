@@ -350,6 +350,17 @@ pub fn rebuild_fixtures(
     });
     let cone_mesh = meshes.add(unit_cone_mesh());
 
+    // Every shadow-casting spotlight costs its own depth pass, so cost grows
+    // with rig size, not with what you can see: 10 bars + 4 derbies is 64 of
+    // them and the previz falls to ~13 fps. Shadows are what sells the beams
+    // landing on people, so keep them — but only for a fixed budget of main
+    // heads. Derby sub-beams never get one: six narrow spinning beams per
+    // fixture is where the cost explodes and where a shadow map buys nothing.
+    let mut shadow_budget: usize = std::env::var("LIGHT_PREVIZ_SHADOWS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+
     for f in &project.fixtures {
         let Some(prof) = prof_meta(&project, &f.profile_id) else { continue };
         // Pixel strips (imported multi-pixel fixtures): each pixel renders as
@@ -462,7 +473,7 @@ pub fn rebuild_fixtures(
                                                 radius: 0.02,
                                                 inner_angle: outer * 0.6,
                                                 outer_angle: outer,
-                                                shadows_enabled: true,
+                                                shadows_enabled: false,
                                                 ..default()
                                             },
                                             VolumetricLight,
@@ -498,7 +509,11 @@ pub fn rebuild_fixtures(
                                     radius: 0.04,
                                     inner_angle: outer * 0.7,
                                     outer_angle: outer,
-                                    shadows_enabled: true,
+                                    shadows_enabled: {
+                                        let on = shadow_budget > 0;
+                                        shadow_budget = shadow_budget.saturating_sub(1);
+                                        on
+                                    },
                                     ..default()
                                 },
                                 VolumetricLight,

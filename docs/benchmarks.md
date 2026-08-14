@@ -17,6 +17,36 @@ not speed).
 | Previz frame | ≤ 8.3 ms | ProMotion 120 Hz; ≥ 60 fps mandatory |
 | GDTF import | interactive (< 100 ms/file) | import-time only, never on the tick path |
 
+## 2026-08-14 — previz shadow budget (large-rig cliff)
+
+Every shadow-casting spotlight costs its own depth pass, and the previz was
+giving one to **every head** — plus six per derby, one for each sub-beam of the
+spinning fan. Cost therefore scaled with rig size rather than with what is on
+screen, and a realistic touring patch fell off a cliff.
+
+Stress rig: 10 × Power Partybar WFS (4 heads each) + 4 × LED Derby ST, all lit
+= 44 heads and **64 shadow-casting spotlights**.
+
+| Rig | Before | After | |
+|---|---|---|---|
+| Stress (44 heads, 64 shadow lights) | **70.7 ms** (14 fps) | **15.9 ms** (63 fps) | 4.4× |
+| Default rig (11 heads) | — | **8.6 ms** (116 fps) | at budget |
+
+The fix is a hard cap rather than a heuristic: derby sub-beams never cast
+shadows (six narrow spinning beams per fixture is where the cost explodes and
+where a shadow map buys nothing visually), and main heads draw from a budget of
+10, overridable with `LIGHT_PREVIZ_SHADOWS`. Shadows are what sell beams
+landing on people, so the budget keeps them where they read and drops them
+where they do not.
+
+The stress rig still misses the 8.3 ms ProMotion budget at 15.9 ms, but clears
+the 60 fps floor with room; the default rig sits at budget. Further headroom
+would need half-resolution volumetrics rather than more shadow tuning.
+
+**Measurement note:** macOS throttles an occluded window to ~1 fps, which shows
+up as 1000 ms samples in the diagnostics. Those are excluded; the figures above
+are means over unthrottled samples (27 before, 17 after, 32 default).
+
 ## 2026-08-13 — previz beam-cone shafts + photometric fix
 
 The native previz shipped with two rendering defects found during visual
