@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { Command, Snapshot } from '../shared/types.ts';
+import type { Command, CompiledProfile, Snapshot } from '../shared/types.ts';
 import { WS_PORT, clamp, sanitizeProject } from '../shared/types.ts';
 import { EngineState, LOCAL_CLIENT } from './state.ts';
 import { Renderer } from './renderer.ts';
@@ -19,6 +19,39 @@ import { uid } from '../shared/types.ts';
 let bootWarning: string | null = null;
 
 /** Mirror of the Rust engine's apply_mvr — keep them in step. */
+
+/** A cheap, float-free fingerprint of what a profile does on the wire.
+ *  Footprint alone is not enough: an MVR-exported stub (every channel named
+ *  "Dimmer1..N") and the real manufacturer GDTF can share a footprint and mean
+ *  entirely different things — exactly the case an operator re-imports to fix.
+ *  Mirrors layout_sig in core/src/state.rs. */
+function layoutSig(p: CompiledProfile): string {
+  return `${p.footprint}|${p.heads.length}|${p.channels.map((c: CompiledProfile['channels'][number]) => c.name).join(',')}`;
+}
+
+/** Replacing a profile that fixtures are patched to rewrites what every one of
+ *  their addresses means. Overwriting is correct — it is the point of
+ *  re-importing a corrected file — but it must never be silent.
+ *  Mirrors describe_profile_replacement in core/src/state.rs. */
+function describeProfileReplacement(p: Project, incoming: CompiledProfile): string | null {
+  const existing = Object.hasOwn(p.profiles ?? {}, incoming.id) ? p.profiles![incoming.id] : undefined;
+  if (!existing) return null;
+  if (layoutSig(existing) === layoutSig(incoming)) return null;
+  const users = p.fixtures.filter((f) => f.profileId === incoming.id).map((f) => f.name);
+  if (users.length === 0) return null; // nothing patched to it — a library update
+  const shown = users.slice(0, 3);
+  const more = users.length - shown.length;
+  const grew =
+    incoming.footprint > existing.footprint
+      ? ' · footprint GREW — check the patch for address overlaps'
+      : '';
+  return (
+    `${incoming.manufacturer} ${incoming.model} · ${incoming.mode} replaced in place ` +
+    `(${existing.footprint}ch → ${incoming.footprint}ch): ${users.length} patched fixture(s) ` +
+    `now use the new layout — ${shown.join(', ')}${more > 0 ? ` +${more} more` : ''}${grew}`
+  );
+}
+
 function applyMvrBundle(p: Project, bundle: MvrBundle, replace: boolean): string {
   if (replace) {
     p.fixtures = [];
@@ -27,7 +60,12 @@ function applyMvrBundle(p: Project, bundle: MvrBundle, replace: boolean): string
     p.looks = {};
   }
   p.profiles ??= {};
-  for (const [id, prof] of Object.entries(bundle.profiles)) p.profiles[id] = prof;
+  const replaced: string[] = [];
+  for (const [id, prof] of Object.entries(bundle.profiles)) {
+    const note = describeProfileReplacement(p, prof);
+    if (note) replaced.push(note);
+    p.profiles[id] = prof;
+  }
 
   const fixtureIds: string[] = [];
   let newUniverses = 0;
@@ -70,6 +108,7 @@ function applyMvrBundle(p: Project, bundle: MvrBundle, replace: boolean): string
     if (heads.length) p.groups.push({ id: uid('g'), name: g.name, heads });
   }
   let msg = `imported ${bundle.fixtures.length} fixture(s), ${bundle.groups.length} group(s)`;
+  for (const note of replaced) msg += ` · ${note}`;
   if (newUniverses > 0) {
     // the operator has to switch these on deliberately — say so, or the rig
     // looks dead after a clean import
@@ -356,12 +395,19 @@ function handleCommand(cmd: Command, _ws?: unknown, clientId: number = LOCAL_CLI
       try {
         const profiles = parseGdtfBase64(cmd.data);
         state.project.profiles ??= {};
-        for (const p of profiles) state.project.profiles[p.id] = p;
+        const replacedGdtf: string[] = [];
+        for (const p of profiles) {
+          const note = describeProfileReplacement(state.project, p);
+          if (note) replacedGdtf.push(note);
+          state.project.profiles[p.id] = p;
+        }
         state.onChange?.();
         server.broadcast({
           type: 'importResult',
           ok: true,
-          message: `${cmd.name}: imported ${profiles.length} mode(s)`,
+          message:
+            `${cmd.name}: imported ${profiles.length} mode(s)` +
+            replacedGdtf.map((n) => ` · ${n}`).join(''),
           profileIds: profiles.map((p) => p.id),
         });
       } catch (err) {

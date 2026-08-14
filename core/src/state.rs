@@ -76,6 +76,58 @@ mod uid_tests {
     }
 }
 
+/// A cheap, float-free fingerprint of what a profile does on the wire.
+/// Footprint alone is not enough: an MVR-exported stub profile (every channel
+/// named "Dimmer1..N") and the real manufacturer GDTF can share a footprint
+/// and mean entirely different things, which is exactly the case an operator
+/// re-imports to fix. Ordered channel names catch it. No floats, so the two
+/// engines cannot disagree the way a structural f64 compare would.
+fn layout_sig(p: &crate::cprofile::CompiledProfile) -> String {
+    let names: Vec<&str> = p.channels.iter().map(|c| c.name.as_str()).collect();
+    format!("{}|{}|{}", p.footprint, p.heads.len(), names.join(","))
+}
+
+/// Replacing a profile that fixtures are patched to rewrites what every one of
+/// their addresses means. Overwriting is correct — it is the whole point of
+/// re-importing a corrected file — but it must never be silent.
+fn describe_profile_replacement(
+    project: &Project,
+    incoming: &crate::cprofile::CompiledProfile,
+) -> Option<String> {
+    let existing = project.profiles.get(&incoming.id)?;
+    if layout_sig(existing) == layout_sig(incoming) {
+        return None;
+    }
+    let users: Vec<&str> = project
+        .fixtures
+        .iter()
+        .filter(|f| f.profile_id == incoming.id)
+        .map(|f| f.name.as_str())
+        .collect();
+    if users.is_empty() {
+        return None; // nothing patched to it — a plain library update
+    }
+    let shown: Vec<&str> = users.iter().take(3).copied().collect();
+    let more = users.len() - shown.len();
+    let grew = if incoming.footprint > existing.footprint {
+        " · footprint GREW — check the patch for address overlaps"
+    } else {
+        ""
+    };
+    Some(format!(
+        "{} {} · {} replaced in place ({}ch → {}ch): {} patched fixture(s) now use the new layout — {}{}{}",
+        incoming.manufacturer,
+        incoming.model,
+        incoming.mode,
+        existing.footprint,
+        incoming.footprint,
+        users.len(),
+        shown.join(", "),
+        if more > 0 { format!(" +{more} more") } else { String::new() },
+        grew,
+    ))
+}
+
 /// What a handled message asks the surrounding engine loop to do.
 #[derive(Default)]
 pub struct Outcome {
@@ -515,7 +567,11 @@ impl EngineState {
             self.reconcile();
             let _ = t;
         }
+        let mut replaced: Vec<String> = Vec::new();
         for (id, p) in bundle.profiles {
+            if let Some(note) = describe_profile_replacement(&self.project, &p) {
+                replaced.push(note);
+            }
             self.project.profiles.insert(id, p);
         }
         let mut fixture_ids: Vec<String> = Vec::new();
@@ -591,6 +647,9 @@ impl EngineState {
             bundle.fixtures.len(),
             bundle.groups.len()
         );
+        for note in &replaced {
+            msg.push_str(&format!(" · {note}"));
+        }
         if new_universes > 0 {
             // the operator has to switch these on deliberately — say so, or the
             // rig looks dead after a clean import
@@ -718,15 +777,19 @@ impl EngineState {
                 match result {
                     Ok(profiles) => {
                         let ids: Vec<String> = profiles.iter().map(|p| p.id.clone()).collect();
+                        let mut replaced: Vec<String> = Vec::new();
                         for p in profiles {
+                            if let Some(note) = describe_profile_replacement(&self.project, &p) {
+                                replaced.push(note);
+                            }
                             self.project.profiles.insert(p.id.clone(), p);
                         }
                         out.project_changed = true;
-                        out.import_result = Some((
-                            true,
-                            format!("{name}: imported {} mode(s)", ids.len()),
-                            ids,
-                        ));
+                        let mut msg = format!("{name}: imported {} mode(s)", ids.len());
+                        for note in &replaced {
+                            msg.push_str(&format!(" · {note}"));
+                        }
+                        out.import_result = Some((true, msg, ids));
                     }
                     Err(e) => {
                         out.import_result = Some((false, format!("{name}: {e}"), vec![]));
