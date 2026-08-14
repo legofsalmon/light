@@ -58,7 +58,19 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npm run app:build
+          # App Store Connect API key — preferred over the Apple ID pair when
+          # set. The .p8 arrives base64 in a secret and is written to a file
+          # below, because notarytool takes a path, not the key material.
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [ -n "${{ secrets.APPLE_API_KEY }}" ]; then
+            mkdir -p "$RUNNER_TEMP/notary"
+            printf '%s' "${{ secrets.APPLE_API_KEY }}" | base64 --decode > "$RUNNER_TEMP/notary/key.p8"
+            export APPLE_API_KEY_PATH="$RUNNER_TEMP/notary/key.p8"
+          fi
+          npm run app:build
+          rm -rf "$RUNNER_TEMP/notary"
 
       - name: Report how the bundle was signed
         run: |

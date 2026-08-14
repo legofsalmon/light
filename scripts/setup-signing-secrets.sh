@@ -38,6 +38,12 @@ TEAM=$(echo "$IDENT" | sed -n 's/.*(\([A-Z0-9]\{10\}\)).*/\1/p')
 
 P12="${1:-}"
 CLEANUP_P12=0
+# a .p12 sitting in the usual place is almost always the one you meant
+DEFAULT_P12="$HOME/Documents/certs/developerIDapplication/Certificates.p12"
+if [ -z "$P12" ] && [ -f "$DEFAULT_P12" ]; then
+  P12="$DEFAULT_P12"
+  echo "using $P12"
+fi
 if [ -z "$P12" ]; then
   echo "usage: $0 path/to/cert.p12     (or --export to try exporting it here)" >&2
   echo >&2
@@ -76,20 +82,44 @@ echo
 echo "identity : $IDENT"
 echo "team     : $TEAM"
 echo
-read -r -p  "Apple ID email                          : " APPLE_ID_VALUE
-read -r -s -p "App-specific password (xxxx-xxxx-xxxx-xxxx): " APP_PASS; echo
-[ -n "$APPLE_ID_VALUE" ] || { echo "Apple ID cannot be empty" >&2; exit 1; }
-[ -n "$APP_PASS" ]       || { echo "app-specific password cannot be empty" >&2; exit 1; }
+# An App Store Connect API key beats an app-specific password: it is scoped to
+# what it can do, revocable by itself, and survives an Apple ID password change.
+P8=$(ls "$HOME"/Documents/certs/appleauthkey/AuthKey_*.p8 2>/dev/null | head -1 || true)
+USE_KEY=0
+if [ -n "$P8" ]; then
+  KEY_ID=$(basename "$P8" | sed 's/AuthKey_\(.*\)\.p8/\1/')
+  echo "Found App Store Connect key $KEY_ID at $P8"
+  read -r -p "Use it for notarisation instead of an app-specific password? [Y/n] " ANS
+  [ "$ANS" = "n" ] || [ "$ANS" = "N" ] || USE_KEY=1
+fi
+
+if [ "$USE_KEY" = "1" ]; then
+  echo "Issuer ID is on the same App Store Connect page as the key:"
+  echo "  Users and Access > Integrations > Keys — shown above the key list."
+  read -r -p "Issuer ID (UUID): " ISSUER
+  [ -n "$ISSUER" ] || { echo "issuer id cannot be empty" >&2; exit 1; }
+else
+  read -r -p  "Apple ID email                          : " APPLE_ID_VALUE
+  read -r -s -p "App-specific password (xxxx-xxxx-xxxx-xxxx): " APP_PASS; echo
+  [ -n "$APPLE_ID_VALUE" ] || { echo "Apple ID cannot be empty" >&2; exit 1; }
+  [ -n "$APP_PASS" ]       || { echo "app-specific password cannot be empty" >&2; exit 1; }
+fi
 
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 echo
 echo "setting six secrets on $REPO ..."
 base64 -i "$P12"               | gh secret set APPLE_CERTIFICATE
 printf '%s' "$P12_PASS"        | gh secret set APPLE_CERTIFICATE_PASSWORD
-printf '%s' "$APPLE_ID_VALUE"  | gh secret set APPLE_ID
-printf '%s' "$APP_PASS"        | gh secret set APPLE_PASSWORD
 printf '%s' "$IDENT"           | gh secret set APPLE_SIGNING_IDENTITY
 printf '%s' "$TEAM"            | gh secret set APPLE_TEAM_ID
+if [ "$USE_KEY" = "1" ]; then
+  base64 -i "$P8"              | gh secret set APPLE_API_KEY
+  printf '%s' "$KEY_ID"        | gh secret set APPLE_API_KEY_ID
+  printf '%s' "$ISSUER"        | gh secret set APPLE_API_ISSUER
+else
+  printf '%s' "$APPLE_ID_VALUE" | gh secret set APPLE_ID
+  printf '%s' "$APP_PASS"       | gh secret set APPLE_PASSWORD
+fi
 unset P12_PASS APP_PASS
 
 if [ "$CLEANUP_P12" = "1" ]; then

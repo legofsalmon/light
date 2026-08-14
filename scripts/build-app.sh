@@ -57,18 +57,29 @@ else
 fi
 
 # --- notarise, now that nothing else will touch the bundle ---
-if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
-  echo "==> notarising the app (a few minutes)"
+# Two ways to authenticate. An App Store Connect API key is preferred: it is
+# scoped, revocable on its own, and unaffected by an Apple ID password change.
+# Apple ID + app-specific password still works and stays supported.
+NOTARY_AUTH=()
+if [ -n "${APPLE_API_KEY_PATH:-}" ] && [ -n "${APPLE_API_KEY_ID:-}" ] && [ -n "${APPLE_API_ISSUER:-}" ]; then
+  NOTARY_AUTH=(--key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER")
+  echo "==> notarising with App Store Connect API key $APPLE_API_KEY_ID"
+elif [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
+  NOTARY_AUTH=(--apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID")
+  echo "==> notarising with Apple ID $APPLE_ID"
+fi
+
+if [ ${#NOTARY_AUTH[@]} -gt 0 ]; then
+  echo "    (a few minutes)"
   NOTARY_ZIP="$(dirname "$BUNDLE")/notarise.zip"
   ditto -c -k --keepParent "$BUNDLE" "$NOTARY_ZIP"
-  xcrun notarytool submit "$NOTARY_ZIP" \
-    --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+  xcrun notarytool submit "$NOTARY_ZIP" "${NOTARY_AUTH[@]}" --wait
   rm -f "$NOTARY_ZIP"
   # stapling attaches the ticket so a first launch works offline too
   xcrun stapler staple "$BUNDLE"
   xcrun stapler validate "$BUNDLE"
 else
-  echo "==> not notarising (APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID unset)"
+  echo "==> not notarising (no API key and no Apple ID credentials set)"
 fi
 
 echo "==> dmg"
@@ -84,13 +95,12 @@ cp -R "$BUNDLE" "$DMG_DIR/"
 ln -s /Applications "$DMG_DIR/Applications"
 hdiutil create -volname LIGHT -srcfolder "$DMG_DIR" -ov -format UDZO -quiet "$DMG_OUT"
 rm -rf "$DMG_DIR"
-if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
+if [ ${#NOTARY_AUTH[@]} -gt 0 ]; then
   # the .dmg is what people download, so it needs its own ticket — a stapled
   # app inside an unstapled disk image still trips Gatekeeper on the image
   echo "==> notarising the dmg"
   codesign --force --timestamp -s "${APPLE_SIGNING_IDENTITY}" "$DMG_OUT"
-  xcrun notarytool submit "$DMG_OUT" \
-    --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+  xcrun notarytool submit "$DMG_OUT" "${NOTARY_AUTH[@]}" --wait
   xcrun stapler staple "$DMG_OUT"
   xcrun stapler validate "$DMG_OUT"
 fi
