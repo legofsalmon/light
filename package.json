@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "LIGHT — a look engine that sits between Resolume and your lighting network. Art-Net/sACN out, MIDI in, OSC sync, 2D/3D previz.",
+  "description": "LIGHT \u2014 a look engine that sits between Resolume and your lighting network. Art-Net/sACN out, MIDI in, OSC sync, 2D/3D previz.",
   "scripts": {
     "dev": "concurrently -k -n engine,ui -c blue,magenta \"node --watch engine/index.ts\" \"vite ui --port 5173\"",
     "dev:rust": "concurrently -k -n engine,ui -c red,magenta \"cargo run -p light-core --bin light-engine\" \"vite ui --port 5173\"",
@@ -11,7 +11,7 @@
     "start": "node engine/index.ts",
     "start:rust": "npm run build && cargo run --release -p light-core --bin light-engine",
     "app:dev": "tauri dev",
-    "app:build": "tauri build",
+    "app:build": "cargo build --release -p light-previz && tauri build && cp target/release/light-previz target/release/bundle/macos/LIGHT.app/Contents/MacOS/ && codesign --force --deep -s - target/release/bundle/macos/LIGHT.app",
     "previz": "cargo run --release -p light-previz",
     "test": "node engine/test/smoke.ts",
     "test:parity": "node engine/test/diff.ts",
