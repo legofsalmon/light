@@ -420,6 +420,8 @@ pub struct Snapshot {
     pub artnet_nodes: Option<Vec<ArtnetNodeSnap>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artnet_poll: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub osc_in: Option<&'static str>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub muted: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

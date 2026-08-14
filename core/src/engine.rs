@@ -143,10 +143,11 @@ pub fn run(mut cfg: EngineConfig) {
     );
     println!(
         "  ██   osc in    {}",
-        if state.project.sync.osc_enabled {
-            format!(":{}", state.project.sync.osc_port)
-        } else {
-            "off".into()
+        match osc.status() {
+            // saying ":7700" when the bind failed sends you hunting Resolume
+            Some("failed") => format!(":{} UNAVAILABLE (port held by another app)", state.project.sync.osc_port),
+            Some(_) => format!(":{}", state.project.sync.osc_port),
+            None => "off".into(),
         }
     );
     println!();
@@ -266,7 +267,7 @@ pub fn run(mut cfg: EngineConfig) {
         // Snapshots to the UI at 20 fps.
         snap_flip = !snap_flip;
         if snap_flip && bc.count() > 0 {
-            let snap = build_snapshot(&state, &res, t, &stats, &link, &artnet);
+            let snap = build_snapshot(&state, &res, t, &stats, &link, &artnet, osc.status());
             if let Ok(s) = serde_json::to_string(&snap) {
                 bc.broadcast(&s);
             }
@@ -603,6 +604,7 @@ fn build_snapshot(
     stats: &EngineStats,
     link: &crate::link::LinkSync,
     artnet: &crate::artnet::ArtnetOut,
+    osc_status: Option<&'static str>,
 ) -> Snapshot {
     let mut dmx = std::collections::HashMap::new();
     for (id, buf) in &res.buffers {
@@ -630,6 +632,7 @@ fn build_snapshot(
         },
         identify: state.identify.clone(),
         overrides: state.overrides.values().map(|m| m.len()).sum(),
+        osc_in: osc_status,
         artnet_poll: match artnet.poll_status() {
             "off" => {
                 if state.project.universes.iter().any(|u| u.artnet) {

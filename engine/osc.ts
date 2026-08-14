@@ -87,27 +87,48 @@ export class OscIn {
   private sock: dgram.Socket | null = null;
   private port: number | null = null;
   private onMessage: (msg: OscMessage) => void;
+  /** null = disabled, 'on' = bound, 'failed' = the port is held elsewhere.
+   *  A silent OSC link is indistinguishable from a quiet one without this. */
+  private bound: 'on' | 'failed' | null = null;
 
   constructor(onMessage: (msg: OscMessage) => void) {
     this.onMessage = onMessage;
   }
 
+  /** null = disabled, 'on' = bound, 'failed' = port taken by another app. */
+  status(): 'on' | 'failed' | null {
+    return this.bound;
+  }
+
   listen(port: number, enabled: boolean): void {
     if (!enabled) {
       this.stop();
+      this.bound = null;
       return;
     }
     if (this.sock && this.port === port) return;
     this.stop();
     this.port = port;
-    const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    // No reuseAddr: with it, a second engine binds the same OSC port and both
+    // sit there splitting (or missing) Resolume's traffic while each reports a
+    // healthy link. Failing loudly matches the Rust core and is what you want
+    // to see at soundcheck. UDP has no TIME_WAIT, so restarts still rebind.
+    const sock = dgram.createSocket({ type: 'udp4' });
     sock.on('message', (buf) => {
       for (const msg of parseOsc(buf)) this.onMessage(msg);
     });
     sock.on('error', (err) => {
       console.error(`[osc] listen error on :${port}:`, err.message);
       sock.close();
-      if (this.sock === sock) this.sock = null;
+      if (this.sock === sock) {
+        this.sock = null;
+        this.port = null;
+        this.bound = 'failed';
+      }
+    });
+    // bind is async — only the 'listening' event proves the port was free
+    sock.on('listening', () => {
+      if (this.sock === sock) this.bound = 'on';
     });
     sock.bind(port);
     this.sock = sock;
@@ -117,5 +138,6 @@ export class OscIn {
     this.sock?.close();
     this.sock = null;
     this.port = null;
+    this.bound = null;
   }
 }

@@ -533,6 +533,7 @@ function loopBody(): void {
           ...(status === 'failed' ? { artnetPoll: 'failed' as const } : { artnetPoll: 'on' as const }),
         };
       })(),
+      ...(osc.status() ? { oscIn: osc.status() as 'on' | 'failed' } : {}),
       stats,
     };
     server.broadcast(snap);
@@ -554,7 +555,21 @@ console.log('  ██   LIGHT engine');
 console.log(`  ██   project   ${state.project.name}`);
 console.log(`  ██   ui        http://localhost:${PORT}  (dev: http://localhost:5173)`);
 console.log(`  ██   art-net   ${state.project.universes.filter((u) => u.artnet).map((u) => `U${u.artnetUniverse}`).join(', ') || 'off'} @ 40 Hz`);
-console.log(`  ██   osc in    ${state.project.sync.oscEnabled ? `:${state.project.sync.oscPort}` : 'off'}`);
+// the bind is async, so report once it has settled rather than claiming a
+// port we may not hold — saying ":7700" after a failure sends you hunting
+// through Resolume for a problem that is on this side
+setTimeout(() => {
+  const st = osc.status();
+  console.log(
+    `  ██   osc in    ${
+      st === 'failed'
+        ? `:${state.project.sync.oscPort} UNAVAILABLE (port held by another app)`
+        : st === 'on'
+          ? `:${state.project.sync.oscPort}`
+          : 'off'
+    }`,
+  );
+}, 50);
 console.log('');
 
 process.on('SIGINT', () => {

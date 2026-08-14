@@ -251,6 +251,9 @@ export type Snapshot = {
   artnetNodes?: { ip: string; name: string; ageMs: number }[];
   /** 'failed' = reply port 6454 is held by another app — discovery unavailable */
   artnetPoll?: 'on' | 'failed';
+  /** OSC input socket: 'failed' = the port is held by another app (a second
+   *  engine? QLC+?) so nothing from Resolume will ever arrive. Absent = off. */
+  oscIn?: 'on' | 'failed';
   /** fixtures currently silenced */
   muted?: string[];
   /** fixture being identified (driven to full white), if any */

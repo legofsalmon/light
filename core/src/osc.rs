@@ -109,16 +109,30 @@ pub struct OscIn {
     stop: Option<Arc<AtomicBool>>,
     alive: Option<Arc<AtomicBool>>,
     current: Option<u16>,
+    /// Last bind outcome: None = disabled, Some(true) = bound, Some(false) =
+    /// the port is held by something else. A silent OSC link looks identical
+    /// to a quiet one from the UI unless we report this.
+    bound: Option<bool>,
 }
 
 impl OscIn {
     pub fn new() -> Self {
-        OscIn { stop: None, alive: None, current: None }
+        OscIn { stop: None, alive: None, current: None, bound: None }
+    }
+
+    /// None = disabled, Some("on") = bound, Some("failed") = port taken.
+    pub fn status(&self) -> Option<&'static str> {
+        match self.bound {
+            None => None,
+            Some(true) => Some("on"),
+            Some(false) => Some("failed"),
+        }
     }
 
     pub fn listen<F: Fn(OscMessage) + Send + 'static>(&mut self, port: u16, enabled: bool, on_msg: F) {
         if !enabled {
             self.stop();
+            self.bound = None;
             return;
         }
         // A dead listener (bind failure, thread exit) must not be mistaken
@@ -135,6 +149,7 @@ impl OscIn {
             Err(e) => {
                 eprintln!("[osc] listen error on :{port}: {e} (will retry on next change)");
                 self.current = None;
+                self.bound = Some(false);
                 return;
             }
         };
@@ -145,6 +160,7 @@ impl OscIn {
         self.stop = Some(stop);
         self.alive = Some(alive);
         self.current = Some(port);
+        self.bound = Some(true);
         std::thread::spawn(move || {
             sock.set_read_timeout(Some(Duration::from_millis(400))).ok();
             let mut buf = [0u8; 4096];

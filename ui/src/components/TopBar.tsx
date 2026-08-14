@@ -314,7 +314,20 @@ export function TopBar() {
           );
         })()}
         <StatusDot ok={midiInputs.length > 0} label="midi" />
-        <StatusDot ok={oscAlive} label="osc" />
+        {/* a quiet OSC link and an unbindable port look identical from here
+            unless the engine tells us the bind failed */}
+        <StatusDot
+          ok={oscAlive}
+          warn={snap?.oscIn === 'failed'}
+          label="osc"
+          title={
+            snap?.oscIn === 'failed'
+              ? 'OSC port is held by another app (a second engine? QLC+?) — nothing from Resolume can arrive'
+              : oscAlive
+                ? 'osc — receiving'
+                : 'osc — listening, nothing received in the last 3s'
+          }
+        />
       </div>
     </div>
   );

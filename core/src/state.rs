@@ -20,9 +20,53 @@ impl Default for LayerLive {
 }
 
 static UID_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// Fresh id. The counter alone restarts at 1 every launch, so a second MVR
+/// import after a restart used to hand out ids the project already held —
+/// two physical fixtures sharing an id merge into one head in the renderer
+/// and their group references become ambiguous. Seeding with the boot time
+/// (as the Node reference does) keeps ids unique across runs.
 pub fn uid(prefix: &str) -> String {
-    let n = UID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    format!("{prefix}-r{n:x}")
+    static BOOT_MS: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    let boot = *BOOT_MS.get_or_init(|| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    });
+    uid_with(prefix, boot, UID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+}
+
+/// Split out so the cross-restart property is testable: the boot stamp is what
+/// keeps two runs from issuing the same id, and a unit test cannot restart the
+/// process to prove it.
+fn uid_with(prefix: &str, boot: u64, n: u64) -> String {
+    format!("{prefix}-r{boot:x}{n:x}")
+}
+
+#[cfg(test)]
+mod uid_tests {
+    use super::uid_with;
+
+    #[test]
+    fn ids_differ_across_restarts() {
+        // same counter values, different launch — the case that used to collide
+        // and silently merge two MVR-imported fixtures into one head
+        let run1: Vec<String> = (1..=3).map(|n| uid_with("fx", 0x1a0000e8752, n)).collect();
+        let run2: Vec<String> = (1..=3).map(|n| uid_with("fx", 0x1a0000e9b61, n)).collect();
+        for a in &run1 {
+            assert!(!run2.contains(a), "id {a} reissued after a restart");
+        }
+    }
+
+    #[test]
+    fn ids_differ_within_a_run() {
+        let ids: Vec<String> = (1..=64).map(|n| uid_with("fx", 7, n)).collect();
+        let mut sorted = ids.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), ids.len(), "counter reused an id within one run");
+    }
 }
 
 /// What a handled message asks the surrounding engine loop to do.
