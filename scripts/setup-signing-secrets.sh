@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # Set the six Apple secrets the release workflow reads.
 #
-#   ./scripts/setup-signing-secrets.sh                 # export the cert for you
-#   ./scripts/setup-signing-secrets.sh path/to/cert.p12  # use one you exported
+#   ./scripts/setup-signing-secrets.sh path/to/cert.p12   # normal use
+#   ./scripts/setup-signing-secrets.sh --export           # try to export for me
 #
-# With no argument this exports your Developer ID certificate itself, so there
-# is no trip through Keychain Access. macOS will show one "security wants to
-# export a key" prompt — click Allow and enter your login password. The .p12 is
-# wrapped in a random one-shot password the script generates, uses, and throws
-# away, and the file is shredded at the end: it carries your private signing key
-# and exists only long enough to be encrypted into a GitHub secret.
+# Export the certificate first, in Keychain Access:
+#   My Certificates > right-click "Developer ID Application" > Export > .p12,
+#   and set any password (you paste it below, then forget it).
+#
+# --export attempts the same thing via `security export`, but macOS answers
+# that with a GUI permission dialog which frequently opens BEHIND the terminal
+# or on another Space — the script then appears to hang with nothing on screen.
+# It is offered because it works when the dialog is visible, not because it is
+# the reliable path. If it sits there, check for a hidden dialog (Mission
+# Control) or Ctrl-C and use the Keychain Access route.
 #
 # You will be asked for two things only:
 #   - your Apple ID email
@@ -34,27 +38,37 @@ TEAM=$(echo "$IDENT" | sed -n 's/.*(\([A-Z0-9]\{10\}\)).*/\1/p')
 
 P12="${1:-}"
 CLEANUP_P12=0
-if [ -n "$P12" ]; then
+if [ -z "$P12" ]; then
+  echo "usage: $0 path/to/cert.p12     (or --export to try exporting it here)" >&2
+  echo >&2
+  echo "Export it in Keychain Access: My Certificates > right-click your" >&2
+  echo "\"Developer ID Application\" certificate > Export > .p12, set a password." >&2
+  exit 1
+elif [ "$P12" != "--export" ]; then
   if [ ! -f "$P12" ]; then
     echo "No such file: $P12" >&2
     echo >&2
-    echo "Either pass a .p12 you exported yourself, or run with no argument" >&2
-    echo "and this script will export the certificate for you:" >&2
-    echo "    $0" >&2
+    echo "Export it in Keychain Access: My Certificates > right-click your" >&2
+    echo "\"Developer ID Application\" certificate > Export > .p12, set a password." >&2
     exit 1
   fi
   read -r -s -p "Password for $P12: " P12_PASS; echo
 else
   echo "Exporting: $IDENT"
-  echo "macOS will ask permission — click Allow and enter your login password."
-  P12=$(mktemp -t light-signing).p12
+  echo "macOS will show a permission dialog. It often opens BEHIND this window —"
+  echo "if nothing happens within a few seconds, check Mission Control, or press"
+  echo "Ctrl-C and export via Keychain Access instead."
+  # mktemp creates the file at the name it prints; appending .p12 to the string
+  # leaves that one behind and writes somewhere else. Build the name explicitly.
+  TMPDIR_P12=$(mktemp -d -t light-signing)
+  P12="$TMPDIR_P12/cert.p12"
   CLEANUP_P12=1
   # A random wrapper password nobody needs to remember. It appears in `ps` for
   # the moment security runs (single-user machine, and the file it protects is
   # deleted seconds later), which beats a human password reused elsewhere.
   P12_PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 40)
-  rm -f "$P12"
   security export -t identities -f pkcs12 -P "$P12_PASS" -o "$P12"
+  [ -s "$P12" ] || { echo "export produced nothing — use the Keychain Access route" >&2; exit 1; }
   echo "exported ($(wc -c <"$P12" | tr -d ' ') bytes)"
 fi
 
@@ -80,6 +94,7 @@ unset P12_PASS APP_PASS
 
 if [ "$CLEANUP_P12" = "1" ]; then
   rm -P "$P12" 2>/dev/null || rm -f "$P12"
+  rmdir "$TMPDIR_P12" 2>/dev/null || true
   echo "temporary .p12 shredded"
 fi
 
