@@ -36,12 +36,19 @@ jobs:
         # both architecture slices before `security import` rejected the
         # certificate password. That is checkable in seconds, so check it here
         # and fail before anything expensive runs.
-        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
         env:
           CERT: ${{ secrets.APPLE_CERTIFICATE }}
           CERT_PW: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
+          # `secrets` is not an allowed context in a step-level `if:` — using it
+          # there is a startup failure that produces a run with no jobs at all,
+          # which is how this workflow silently stopped running. Test the env
+          # var inside the shell instead.
+          if [ -z "$CERT" ]; then
+            echo "no signing certificate configured — skipping preflight"
+            exit 0
+          fi
           KC="$RUNNER_TEMP/preflight.keychain-db"
           P12="$RUNNER_TEMP/preflight.p12"
           printf '%s' "$CERT" | base64 --decode > "$P12"
