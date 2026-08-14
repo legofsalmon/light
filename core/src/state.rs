@@ -559,6 +559,8 @@ impl EngineState {
                 rot_y: f.rot_y,
                 rot_x: None,
                 rot_z: None,
+                pan: None,
+                tilt: None,
             });
         }
         for g in &bundle.groups {

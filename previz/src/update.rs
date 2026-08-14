@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::protocol::{WsEvent, WsReceiver};
-use crate::scene::{BeamCone, BeamLight, DerbyFan, HeadTag, RingMesh, SourceGlow};
+use crate::scene::{BeamCone, BeamLight, DerbyFan, HeadTag, MoverHead, RingMesh, SourceGlow};
 use crate::state::{Live, Smoothed};
 
 /// Pull everything the WS thread has queued into the Live resource.
@@ -81,6 +81,7 @@ pub fn apply_live(
     glows: Query<(&HeadTag, &MeshMaterial3d<StandardMaterial>), With<SourceGlow>>,
     mut rings: Query<(&HeadTag, &mut Visibility), With<RingMesh>>,
     mut fans: Query<(&HeadTag, &mut Transform), With<DerbyFan>>,
+    mut movers: Query<(&HeadTag, &MoverHead, &mut Transform), Without<DerbyFan>>,
     mut fogs: Query<&mut FogVolume>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -172,6 +173,18 @@ pub fn apply_live(
         if let Some(s) = live.smoothed.get(&key) {
             tf.rotation = Quat::from_rotation_z(s.spin);
         }
+    }
+
+    // moving heads: steer the beam by the live pan/tilt. 0.5 is centre, so a
+    // fixture with no base aim and no look driving it rests exactly where its
+    // mounting points — the same place it sat before movers could aim.
+    for (tag, mv, mut tf) in &mut movers {
+        let key = (tag.fixture.clone(), tag.head);
+        let Some(h) = heads.get(&key) else { continue };
+        let pan = (h.pan - 0.5) * mv.pan_range;
+        let tilt = (h.tilt - 0.5) * mv.tilt_range;
+        // pan about the rig's vertical, then tilt about the head's own local X
+        tf.rotation = Quat::from_rotation_y(pan) * mv.rest * Quat::from_rotation_x(tilt);
     }
 
     // haze → participating-medium density

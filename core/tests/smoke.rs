@@ -159,6 +159,8 @@ fn gdtf_import_end_to_end() {
         rot_y: 0.0,
         rot_x: None,
         rot_z: None,
+        pan: None,
+        tilt: None,
     });
     st.project.groups.push(Group {
         id: "g-spot".into(),

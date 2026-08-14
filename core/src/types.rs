@@ -52,6 +52,12 @@ pub struct Fixture {
     /// mounting roll (radians)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rot_z: Option<f64>,
+    /// Base aim for moving heads, 0..1. Focus, not an override — a look's
+    /// pan/tilt applies as a delta from centre on top of it. None = 0.5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pan: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tilt: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -30,6 +30,13 @@ export type Fixture = {
   rotX?: number;
   /** mounting roll (radians) */
   rotZ?: number;
+  /** Base aim for moving heads, 0..1 in the fixture's own pan/tilt range.
+   *  This is FOCUS, not an override: a look's pan/tilt is applied as a delta
+   *  from centre on top of it (resolved = base + (look - 0.5)), so a rig
+   *  focused fixture-by-fixture keeps its focus while looks move around it.
+   *  Absent = 0.5 = centre, which is exactly today's behaviour. */
+  pan?: number;
+  tilt?: number;
 };
 
 export type HeadRef = { fixtureId: string; head: number };

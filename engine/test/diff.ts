@@ -209,6 +209,49 @@ async function main(): Promise<void> {
     `got ${JSON.stringify(spot)}`
   );
 
+  // --- per-fixture base aim (focus): a look's pan/tilt is a DELTA on top ---
+  {
+    const withBase = (p: Project, pan: number | undefined, tilt: number | undefined) => {
+      const f = p.fixtures.find((x) => x.id === 'spot1')!;
+      f.pan = pan;
+      f.tilt = tilt;
+      return p;
+    };
+    // base 0.5 must be arithmetically identical to no base at all
+    both({ type: 'updateProject', project: withBase(structuredClone(await currentProject(node)), 0.5, 0.5) });
+    await sleep(400);
+    const same = node.snap?.dmx['u1']?.slice(199, 210);
+    check(
+      'focus: base 0.5 leaves output unchanged',
+      JSON.stringify(same) === JSON.stringify([128, 0, 255, 255, 255, 8, 255, 0, 0, 128, 23]),
+      `got ${JSON.stringify(same)}`,
+    );
+    compareDmx('focus: base 0.5 parity', node.snap, rust.snap);
+
+    // pan base 0.25 with the look at centre (0.5) -> resolved 0.25
+    // tilt base 0.25 with the look at 1.0        -> resolved 0.75 (clamped delta)
+    both({ type: 'updateProject', project: withBase(structuredClone(await currentProject(node)), 0.25, 0.25) });
+    await sleep(400);
+    compareDmx('focus: offset parity', node.snap, rust.snap);
+    const aimed = node.snap?.dmx['u1'] ?? [];
+    const near = (got: number, want: number) => Math.abs(got - want) <= 1;
+    check(
+      'focus: pan base shifts pan (0.5 -> 0.25)',
+      near(aimed[199], 63),
+      `pan coarse ${aimed[199]} (expected ~63)`,
+    );
+    check(
+      'focus: look tilt applies as a delta from centre (1.0 -> 0.75)',
+      near(aimed[201], 191),
+      `tilt coarse ${aimed[201]} (expected ~191)`,
+    );
+
+    // back to unset for the scenarios that follow
+    both({ type: 'updateProject', project: withBase(structuredClone(await currentProject(node)), undefined, undefined) });
+    await sleep(400);
+    compareDmx('focus: cleared parity', node.snap, rust.snap);
+  }
+
   // --- cue lists: trigger-anchored steps must advance identically ---
   {
     const p = structuredClone(await currentProject(node));

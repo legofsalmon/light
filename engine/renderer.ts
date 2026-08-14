@@ -273,6 +273,24 @@ export class Renderer {
       }
     }
 
+    // --- per-fixture base aim: FOCUS for moving heads ---
+    // A look's pan/tilt is a delta from centre, applied on top of the
+    // fixture's own base. Focus 24 movers individually and a look that sweeps
+    // pan sweeps around each one's focus instead of flattening them all to the
+    // same angle. Base 0.5 (the default) makes this arithmetically identical
+    // to having no base at all, so existing shows are untouched.
+    for (const f of p.fixtures) {
+      const bp = f.pan ?? 0.5;
+      const bt = f.tilt ?? 0.5;
+      if (bp === 0.5 && bt === 0.5) continue;
+      for (let i = 0; ; i++) {
+        const o = heads.get(`${f.id}:${i}`);
+        if (!o) break;
+        o.pan = clamp(bp + (o.pan - 0.5));
+        o.tilt = clamp(bt + (o.tilt - 0.5));
+      }
+    }
+
     // --- render to DMX buffers ---
     const buffers = new Map<string, Uint8Array>();
     for (const u of p.universes) buffers.set(u.id, new Uint8Array(512));

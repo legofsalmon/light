@@ -421,6 +421,25 @@ impl Renderer {
         }
 
 
+        // --- per-fixture base aim: FOCUS for moving heads ---
+        // A look's pan/tilt is a delta from centre applied on top of the
+        // fixture's own base, so a rig focused fixture-by-fixture keeps its
+        // focus while looks move around it. Base 0.5 (the default) is
+        // arithmetically identical to having no base — existing shows are
+        // untouched. Mirrors engine/renderer.ts.
+        for f in &st.project.fixtures {
+            let bp = f.pan.unwrap_or(0.5);
+            let bt = f.tilt.unwrap_or(0.5);
+            if bp == 0.5 && bt == 0.5 {
+                continue;
+            }
+            for i in 0.. {
+                let Some(o) = heads.get_mut(&(f.id.clone(), i)) else { break };
+                o.pan = clamp01(bp + (o.pan - 0.5));
+                o.tilt = clamp01(bt + (o.tilt - 0.5));
+            }
+        }
+
         // --- render to DMX buffers ---
         let mut buffers: HashMap<String, [u8; 512]> = HashMap::new();
         for u in &st.project.universes {

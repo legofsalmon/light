@@ -243,6 +243,22 @@ export function PatchView() {
     eachTarget(fid, (x) => {
       x[key] = (x[key] ?? 0) + dDeg * DEG;
     });
+  // Base aim is stored 0..1 (wire-native) but edited as a percentage: 50% is
+  // centre, which is also the default, so an untouched fixture stays absent
+  // from the project rather than pinned at an explicit 0.5.
+  const setAim = (fid: string, key: 'pan' | 'tilt', pct: number) =>
+    eachTarget(fid, (x) => {
+      const v = Math.min(1, Math.max(0, pct / 100));
+      if (Math.abs(v - 0.5) < 1e-6) delete x[key];
+      else x[key] = v;
+    });
+  const nudgeAim = (fid: string, key: 'pan' | 'tilt', dPct: number) =>
+    eachTarget(fid, (x) => {
+      x[key] = Math.min(1, Math.max(0, (x[key] ?? 0.5) + dPct / 100));
+    });
+  // the columns only exist if something in the patch can actually move
+  const anyPan = project.fixtures.some((f) => profileMeta(project, f.profileId)?.hasPan);
+  const anyTilt = project.fixtures.some((f) => profileMeta(project, f.profileId)?.hasTilt);
 
   return (
     <div className="col" style={{ gap: 14 }}>
@@ -271,7 +287,10 @@ export function PatchView() {
           <thead>
             <tr>
               <th>Fixture</th><th>Profile</th><th>Universe</th><th>Address</th><th>Ch</th>
-              <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th>Tilt°</th><th>Roll°</th><th>Live</th><th></th>
+              <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th>Tilt°</th><th>Roll°</th>
+              {anyPan && <th title="base pan aim — a look's pan moves relative to this">Pan %</th>}
+              {anyTilt && <th title="base tilt aim — a look's tilt moves relative to this">Tilt %</th>}
+              <th>Live</th><th></th>
             </tr>
           </thead>
           <tbody ref={tbodyRef}>
@@ -379,6 +398,38 @@ export function PatchView() {
                       onDelta={(d) => nudgeRot(f.id, 'rotZ', d)}
                     />
                   </td>
+                  {anyPan && (
+                    <td>
+                      {profileMeta(project, f.profileId)?.hasPan ? (
+                        <ScrubNumInput
+                          value={Math.round((f.pan ?? 0.5) * 100)}
+                          scrubStep={0.5}
+                          decimals={0}
+                          title="base pan: 50% is centre — looks move relative to this"
+                          onSet={(v) => setAim(f.id, 'pan', v)}
+                          onDelta={(d) => nudgeAim(f.id, 'pan', d)}
+                        />
+                      ) : (
+                        <span className="label dim">—</span>
+                      )}
+                    </td>
+                  )}
+                  {anyTilt && (
+                    <td>
+                      {profileMeta(project, f.profileId)?.hasTilt ? (
+                        <ScrubNumInput
+                          value={Math.round((f.tilt ?? 0.5) * 100)}
+                          scrubStep={0.5}
+                          decimals={0}
+                          title="base tilt: 50% is centre — looks move relative to this"
+                          onSet={(v) => setAim(f.id, 'tilt', v)}
+                          onDelta={(d) => nudgeAim(f.id, 'tilt', d)}
+                        />
+                      ) : (
+                        <span className="label dim">—</span>
+                      )}
+                    </td>
+                  )}
                   <td>
                     <div className="row" style={{ gap: 4 }}>
                       <button

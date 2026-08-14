@@ -107,6 +107,17 @@ pub struct BandRoot;
 #[derive(Component)]
 pub struct DerbyFan;
 
+/// A moving head's beam: aimed by the live pan/tilt rather than fixed to the
+/// mounting direction. `rest` is the mounting aim the axes deflect from.
+/// Ranges are the usual moving-head travel; GDTF carries the real physical
+/// values but the compiled profile does not surface them yet.
+#[derive(Component)]
+pub struct MoverHead {
+    pub rest: Quat,
+    pub pan_range: f32,
+    pub tilt_range: f32,
+}
+
 pub fn setup_stage(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -519,6 +530,14 @@ pub fn rebuild_fixtures(
                                 VolumetricLight,
                                 Transform::default().looking_to(beam_dir, Vec3::Y),
                             ))
+                            .insert_if(
+                                MoverHead {
+                                    rest: Transform::default().looking_to(beam_dir, Vec3::Y).rotation,
+                                    pan_range: 540f32.to_radians(),
+                                    tilt_range: 270f32.to_radians(),
+                                },
+                                || kind == HeadKind::Mover,
+                            )
                             .with_children(|c| {
                                 c.spawn((
                                     tag.clone(),

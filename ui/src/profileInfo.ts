@@ -12,6 +12,10 @@ export type ProfileMeta = {
   heads: { kind: HeadKind; offset: number; label: string }[];
   /** one name per channel of the footprint, for the DMX monitor */
   channelNames: string[];
+  /** moving heads only: whether this profile actually has a pan / tilt axis,
+   *  so the patch offers a base aim for the fixtures that can use one */
+  hasPan: boolean;
+  hasTilt: boolean;
   beamDeg: number;
   imported: boolean;
 };
@@ -30,6 +34,11 @@ function compiledChannelNames(c: NonNullable<Project['profiles']>[string]): stri
   return names;
 }
 
+/** A 16-bit axis shows up as "Pan (coarse)"/"Pan (fine)", so match the stem. */
+const hasAxis = (names: string[], axis: 'pan' | 'tilt', heads: { kind: HeadKind }[]): boolean =>
+  heads.some((h) => h.kind === 'mover') ||
+  names.some((n) => new RegExp(`^${axis}\\b`, 'i').test(n));
+
 export function profileMeta(project: Project | null, id: string): ProfileMeta | null {
   const b = PROFILES[id];
   if (b) {
@@ -39,18 +48,23 @@ export function profileMeta(project: Project | null, id: string): ProfileMeta | 
       channels: b.channels,
       heads: b.heads.map((h) => ({ kind: h.kind, offset: h.offset, label: h.label })),
       channelNames: b.channelNames,
+      hasPan: hasAxis(b.channelNames, 'pan', b.heads),
+      hasTilt: hasAxis(b.channelNames, 'tilt', b.heads),
       beamDeg: b.beamDeg,
       imported: false,
     };
   }
   const c = project?.profiles?.[id];
   if (c) {
+    const names = compiledChannelNames(c);
     return {
       id,
       label: `${c.manufacturer} ${c.model} · ${c.mode}`,
       channels: c.footprint,
       heads: c.heads,
-      channelNames: compiledChannelNames(c),
+      channelNames: names,
+      hasPan: hasAxis(names, 'pan', c.heads),
+      hasTilt: hasAxis(names, 'tilt', c.heads),
       beamDeg: c.beamDeg,
       imported: true,
     };
