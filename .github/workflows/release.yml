@@ -31,6 +31,34 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Preflight — can the signing certificate actually be imported?
+        # The last release spent 58 minutes running every test and compiling
+        # both architecture slices before `security import` rejected the
+        # certificate password. That is checkable in seconds, so check it here
+        # and fail before anything expensive runs.
+        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          CERT_PW: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KC="$RUNNER_TEMP/preflight.keychain-db"
+          P12="$RUNNER_TEMP/preflight.p12"
+          printf '%s' "$CERT" | base64 --decode > "$P12"
+          security create-keychain -p preflight "$KC"
+          security unlock-keychain -p preflight "$KC"
+          if ! security import "$P12" -k "$KC" -P "$CERT_PW" -T /usr/bin/codesign >/dev/null 2>&1; then
+            echo "::error::APPLE_CERTIFICATE_PASSWORD does not open APPLE_CERTIFICATE."
+            echo "Verify locally with: openssl pkcs12 -in your.p12 -noout"
+            echo "then re-run ./scripts/setup-signing-secrets.sh"
+            security delete-keychain "$KC" || true; rm -f "$P12"
+            exit 1
+          fi
+          echo "certificate imports cleanly:"
+          security find-identity -v -p codesigning "$KC" | sed 's/[0-9A-F]\{40\}/<hash>/'
+          security delete-keychain "$KC"
+          rm -f "$P12"
+
       - run: npm ci
 
       - name: Typecheck
