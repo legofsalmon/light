@@ -27,7 +27,8 @@ export function initMidi(): void {
             useStore.getState().handleMidi(d[0], d[1] ?? 0, d[2] ?? 0);
           };
         });
-        if (!useStore.getState().engineMidi) useStore.getState().setMidiInputs(names);
+        // always report what WebMIDI sees; the store decides which list wins
+        useStore.getState().setMidiInputs(names);
         attachApcOutput(access);
       };
       access.onstatechange = attach;

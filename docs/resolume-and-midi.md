@@ -37,7 +37,7 @@ The **OSC monitor** (Sync tab) shows the last messages received live. If nothing
 ### Current limits
 
 - Clip-level follows (`/composition/layers/N/clips/M/connect`) aren't mapped yet — columns are the sync unit. Per-clip mapping is on the roadmap.
-- Tempo follows Arena's tempo slider; Ableton Link support is planned (Arena supports Link natively).
+- Tempo follows Arena's tempo slider. Ableton Link is also supported: the LINK button in the top bar joins the session (native engine / packaged app only) and shows the peer count; a local tap or BPM drag is pushed back to the session.
 
 ## MIDI
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useStore, type Tab } from '../store.ts';
 import { LookEditor } from './LookEditor.tsx';
 import { PatchView } from './PatchView.tsx';
@@ -13,7 +13,13 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export function BottomPanel() {
+  const bodyRef = useRef<HTMLDivElement>(null);
   const tab = useStore((s) => s.tab);
+  // each tab starts at the top — otherwise the Look editor opens
+  // pre-scrolled with its own header out of view
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
+  }, [tab]);
   const setTab = useStore((s) => s.setTab);
   return (
     <>
@@ -24,7 +30,7 @@ export function BottomPanel() {
           </div>
         ))}
       </div>
-      <div className="tabbody">
+      <div className="tabbody" ref={bodyRef}>
         {tab === 'look' && <LookEditor />}
         {tab === 'patch' && <PatchView />}
         {tab === 'output' && <OutputView />}

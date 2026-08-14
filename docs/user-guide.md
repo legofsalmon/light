@@ -92,3 +92,57 @@ Everything autosaves ~1 second after any edit, with five rotating backups (`.bak
 ## Keyboard reference
 
 `1`–`8` fire columns · `T` tap tempo · `B` blackout · `⌘S` save · `Esc` deselect. Shortcuts are ignored while you're typing in a field.
+
+---
+
+## Since the first release notes — what else is in the app
+
+**Songs (decks).** The chips under the top bar are pages of the grid, one per
+song. Click to switch, double-click to rename, `⧉ duplicate` copies the current
+song's cells into a new one (the usual way to start the next song), and the
+APC40's bank ◀ ▶ arrows step through them. Looks live in one shared pool, so the
+same look can sit in many cells and songs — an empty cell offers
+**use existing look…** as well as **+ create look here**.
+
+**Cue lists (⛓).** Any look can become a chaser: open it and press `⛓ cue list`,
+then add steps (a look + a beat count each). It hard-cuts through the steps on
+the beat, loops, and follows the speed master. Cue lists cannot nest.
+
+**Undo/redo.** `⌘Z` / `⇧⌘Z`, or the ↺ ↻ buttons. Thirty steps, and a drag counts
+as one. History belongs to the loaded project: switching projects clears it
+rather than risking one show's state landing in another.
+
+**Projects.** The project name in the top bar is a menu: switch between shows,
+`+ new project…`, or `save as…`. Files live beside the app's data; the app
+remembers which one you had open.
+
+**Patch table.** Number fields (position, rotation, tilt, roll) accept typed
+values including negatives, or **drag left/right on the field to scrub**. Select
+rows first — click, ⇧-click for a range, ⌘-click to toggle, or drag a box — and
+any edit applies to the whole selection. The toolbar then offers
+`→ universe`, `⇢ re-address`, `⧉ duplicate`, `✕ delete`, and
+`⊕ group from N selected`.
+
+**Fixture aim.** `Rot°` is yaw, `Tilt°` is the mounting pitch, `Roll°` the roll.
+They compose on top of each fixture type's default aim, so a bar hung at an
+angle can be pointed where it actually points — visible in both previz views.
+
+**Art-Net node health.** The `art-net` dot goes green only when a node has
+answered an ArtPoll, with its name in the tooltip; amber means LIGHT is sending
+but nothing is answering. The Output tab lists the nodes it found.
+
+**Ableton Link.** `link` in the top bar joins a Link session (native engine
+only) and shows the peer count. Tapping tempo in LIGHT leads the session.
+
+**Stage previz.** The `+ musician…` picker in the 2D bar drops dummy performers
+on the plan — drag to place, double-click to remove. They appear in both 3D
+views (`band` toggles them in-app, `M` in the pop-out window), so you can judge
+how a look actually lands on people. `PREVIZ` in the top bar opens the native
+window with real beams, haze, and shadows.
+
+**Layout.** Drag the edges between the grid, bottom panel, and previz to resize
+them; the layout is remembered.
+
+**On the network.** The engine serves this UI over HTTP too — open
+`http://<your-mac>:9900` on a phone or tablet on the same network to drive the
+show from the floor.

@@ -351,6 +351,15 @@ export function Previz3D() {
       if (sig !== propsSig) {
         propsSig = sig;
         scene.remove(band);
+        // free the GPU buffers — rebuilding on every prop drag otherwise
+        // leaks a geometry + material set per frame of the drag
+        band.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          mesh.geometry?.dispose?.();
+          const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+          if (Array.isArray(mat)) mat.forEach((mm) => mm.dispose());
+          else mat?.dispose?.();
+        });
         band = buildProps(project?.props ?? []);
         scene.add(band);
       }

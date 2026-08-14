@@ -96,6 +96,7 @@ pub fn run(cfg: EngineConfig) {
     let mut midi_names: Vec<String> = Vec::new();
     let mut dirty_at: Option<Instant> = None;
     let mut dirty_first: Option<Instant> = None;
+    let mut project_dirty = false;
     let mut osc_log: (f64, u32) = (0.0, 0); // monitor rate-limit window
 
     // Keep the machine awake through a set — display sleep or App Nap
@@ -157,7 +158,7 @@ pub fn run(cfg: EngineConfig) {
                     let bpm_before = state.clock.bpm;
                     let align = handle_msg(
                         msg, &mut state, &bc, &mut osc, &tx, &dir, &mut dirty_at, &mut midi_names,
-                        &mut osc_log, now_ms(),
+                        &mut osc_log, now_ms(), &mut project_dirty,
                     );
                     if align {
                         renderer.align_phase();
@@ -184,6 +185,12 @@ pub fn run(cfg: EngineConfig) {
         let late = Instant::now().saturating_duration_since(next).as_secs_f64() * 1000.0;
         if late > jitter_max {
             jitter_max = late;
+        }
+
+        // one coalesced project echo per tick, however many edits arrived
+        if project_dirty {
+            project_dirty = false;
+            bc.broadcast(&project_event(&state));
         }
 
         let t = now_ms();
@@ -313,6 +320,7 @@ fn broadcast_projects(bc: &Broadcaster, dir: &PathBuf) {
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_outcome(
     out: Outcome,
     state: &mut EngineState,
@@ -321,9 +329,13 @@ fn apply_outcome(
     tx: &Sender<EngineMsg>,
     dir: &PathBuf,
     dirty_at: &mut Option<Instant>,
+    project_dirty: &mut bool,
 ) {
     if out.project_changed {
-        bc.broadcast(&project_event(state));
+        // Continuous controls (faders, MIDI CC) land here per input event and
+        // each echo is the WHOLE project — coalesce to one per tick instead of
+        // flooding every client mid fader-ride.
+        *project_dirty = true;
         *dirty_at = Some(Instant::now());
         ensure_osc(osc, state, tx);
     }
@@ -362,6 +374,7 @@ fn handle_msg(
     midi_names: &mut Vec<String>,
     osc_log: &mut (f64, u32),
     t: f64,
+    project_dirty: &mut bool,
 ) -> bool {
     match msg {
         EngineMsg::Cmd(cmd) => {
@@ -437,7 +450,7 @@ fn handle_msg(
             }
             let out = state.handle_command(cmd, t);
             let align = out.align_phase;
-            apply_outcome(out, state, bc, osc, tx, dir, dirty_at);
+            apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_dirty);
             return align;
         }
         EngineMsg::Osc(m) => {
@@ -460,7 +473,7 @@ fn handle_msg(
         }
         EngineMsg::Midi(status, d1, d2) => {
             let out = state.apply_midi(status, d1, d2, t);
-            apply_outcome(out, state, bc, osc, tx, dir, dirty_at);
+            apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_dirty);
         }
         EngineMsg::MidiPorts(names) => {
             *midi_names = names;

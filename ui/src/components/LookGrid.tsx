@@ -2,6 +2,7 @@ import React from 'react';
 import type { Layer, LayerSnap } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
+import { askConfirm, askPrompt } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
 import { lookSwatch } from '../lookColors.ts';
 
@@ -107,12 +108,14 @@ function DeckBar() {
           title="click to switch · double-click to rename"
           onClick={() => send({ type: 'switchDeck', deckId: d.id })}
           onDoubleClick={() => {
-            const name = window.prompt('Deck name', d.name);
-            if (!name) return;
-            mutate((p) => {
-              const dk = p.decks?.find((x) => x.id === d.id);
-              if (dk) dk.name = name;
-            });
+            void (async () => {
+              const name = await askPrompt('Rename deck', d.name);
+              if (!name) return;
+              mutate((p) => {
+                const dk = p.decks?.find((x) => x.id === d.id);
+                if (dk) dk.name = name;
+              });
+            })();
           }}
         >
           {d.name}
@@ -122,10 +125,17 @@ function DeckBar() {
               title="delete deck"
               onClick={(e) => {
                 e.stopPropagation();
-                if (!window.confirm(`Delete deck "${d.name}"? Its cell layout is lost (looks are kept).`)) return;
-                mutate((p) => {
-                  p.decks = (p.decks ?? []).filter((x) => x.id !== d.id);
-                });
+                void (async () => {
+                  const ok = await askConfirm(`Delete deck "${d.name}"?`, {
+                    body: 'Its cell layout is lost. The looks themselves are kept in the pool.',
+                    confirmLabel: 'Delete deck',
+                    danger: true,
+                  });
+                  if (!ok) return;
+                  mutate((p) => {
+                    p.decks = (p.decks ?? []).filter((x) => x.id !== d.id);
+                  });
+                })();
               }}
             >
               ×
@@ -135,6 +145,7 @@ function DeckBar() {
       ))}
       <button
         className="btn small ghost"
+        title="new empty deck"
         onClick={() =>
           mutate((p) => {
             p.decks ??= [];
@@ -148,6 +159,25 @@ function DeckBar() {
         }
       >
         + deck
+      </button>
+      <button
+        className="btn small ghost"
+        title="copy the current deck's cells into a new deck — the usual way to start the next song"
+        onClick={() =>
+          mutate((p) => {
+            p.decks ??= [];
+            const src = p.decks.find((d) => d.id === p.activeDeckId);
+            p.decks.push({
+              id: uid('deck'),
+              name: `${src?.name ?? 'Song'} copy`,
+              columns: [...p.columns],
+              // the live layer cells ARE the active deck — copy those
+              cells: Object.fromEntries(p.layers.map((l) => [l.id, [...l.cells]])),
+            });
+          })
+        }
+      >
+        ⧉ duplicate
       </button>
     </div>
   );

@@ -5,7 +5,7 @@ How LIGHT is put together, and the complete control-protocol reference.
 ## The split
 
 ```
-UI (React) ── previz (three.js) ── tablet on the LAN ── native previz (planned)
+UI (React) ── previz (three.js) ── tablet on the LAN ── native previz (Bevy, shipped)
         │            │                  │                      │
         └────────────┴──── WebSocket, JSON, :9900 ─────────────┘
                                 │

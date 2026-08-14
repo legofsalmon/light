@@ -2,6 +2,8 @@ import React from 'react';
 import type { MidiAction, MidiMapping, Project } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
+import { NumInput } from './inputs.tsx';
+import { askConfirm } from '../dialog.tsx';
 
 /**
  * Akai APC40 mk2 (generic mode 0):
@@ -128,11 +130,12 @@ export function SyncView() {
             {sync.oscEnabled ? 'listening' : 'off'}
           </button>
           <span className="label">port</span>
-          <input
-            className="num"
-            type="number"
+          <NumInput
             value={sync.oscPort}
-            onChange={(e) => editSync((s) => (s.oscPort = Math.max(1024, Math.min(65535, Number(e.target.value) || 7700)))) }
+            min={1024}
+            max={65535}
+            width={72}
+            onCommit={(v) => editSync((s) => (s.oscPort = v))}
           />
           <button className={`btn small ${sync.followColumns ? 'on' : ''}`} onClick={() => editSync((s) => (s.followColumns = !s.followColumns))}>
             follow columns
@@ -178,10 +181,16 @@ export function SyncView() {
           <button
             className="btn small"
             onClick={() => {
-              if (!window.confirm('Load the APC40 mk2 preset? This replaces all current MIDI mappings.')) return;
-              mutate((p) => {
-                p.midi = apc40Mk2Mappings(p);
-              });
+              void (async () => {
+                const ok = await askConfirm('Load the APC40 mk2 preset?', {
+                  body: 'This replaces all current MIDI mappings.',
+                  confirmLabel: 'Load preset',
+                });
+                if (!ok) return;
+                mutate((p) => {
+                  p.midi = apc40Mk2Mappings(p);
+                });
+              })();
             }}
           >
             load APC40 mk2 preset
@@ -189,10 +198,16 @@ export function SyncView() {
           <button
             className="btn small ghost"
             onClick={() => {
-              if (!window.confirm('Load the APC mini mk2 preset? This replaces all current MIDI mappings.')) return;
-              mutate((p) => {
-                p.midi = apcMiniMk2Mappings(p);
-              });
+              void (async () => {
+                const ok = await askConfirm('Load the APC mini mk2 preset?', {
+                  body: 'This replaces all current MIDI mappings.',
+                  confirmLabel: 'Load preset',
+                });
+                if (!ok) return;
+                mutate((p) => {
+                  p.midi = apcMiniMk2Mappings(p);
+                });
+              })();
             }}
           >
             APC mini mk2

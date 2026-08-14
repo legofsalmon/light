@@ -95,7 +95,7 @@ fn merge_to_dmx() {
     assert_eq!(st.layer_live("layer-strobe").look_id, None, "column skips flash");
     assert_eq!(
         st.layer_live("layer-wash").look_id.as_deref(),
-        Some("wash-amber"),
+        Some("wash-gold"),
         "column fires wash"
     );
     assert_eq!(st.layer_live("layer-derby").look_id, None, "column clears empty layer");
@@ -247,7 +247,7 @@ fn protocol_json_shapes() {
     let s = serde_json::to_string(&p).unwrap();
     let v: serde_json::Value = serde_json::from_str(&s).unwrap();
     assert!(v["looks"]["wash-red"]["parts"][0]["params"]["color"]["h"].is_number());
-    assert_eq!(v["layers"][0]["cells"][0], serde_json::json!("wash-amber"));
+    assert_eq!(v["layers"][0]["cells"][0], serde_json::json!("wash-gold"));
     assert!(v["sync"]["oscPort"].is_number());
     assert!(v["settings"]["hazeFan"].is_number());
     let back: light_core::types::Project = serde_json::from_str(&s).unwrap();

@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: build LIGHT.app (macOS, Apple Silicon)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: npm ci
+
+      - name: Build the app (engine + previz + bundle, ad-hoc signed)
+        run: npm run app:build
+
+      - name: Zip the bundle (ditto preserves signatures)
+        run: ditto -c -k --keepParent target/release/bundle/macos/LIGHT.app LIGHT.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LIGHT-macos
+          path: LIGHT.zip
+
+      - name: Publish release (tag builds)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LIGHT.zip
+          generate_release_notes: true
+          body: |
+            **LIGHT for macOS (Apple Silicon).**
+
+            The app is ad-hoc signed: after unzipping, right-click → Open the
+            first time (macOS Gatekeeper blocks a plain double-click on
+            downloaded unsigned apps).

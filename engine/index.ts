@@ -126,11 +126,23 @@ const server = new Server(PORT, path.join(process.cwd(), 'ui', 'dist'), handleCo
 const osc = new OscIn(handleOsc);
 osc.listen(state.project.sync.oscPort, state.project.sync.oscEnabled);
 
+/** Continuous controls (faders, MIDI CC) call onChange per input event; each
+ *  broadcast is the WHOLE project, so a fader ride used to flood every client
+ *  with hundreds of full-project frames. Coalesce to at most one per tick. */
+let projectDirty = false;
+
 state.onChange = () => {
-  server.broadcast({ type: 'project', project: state.project });
+  projectDirty = true;
   persist.saveProjectDebounced(() => state.project);
   osc.listen(state.project.sync.oscPort, state.project.sync.oscEnabled);
 };
+
+/** Flush a coalesced project echo — called once per tick. */
+function flushProject(): void {
+  if (!projectDirty) return;
+  projectDirty = false;
+  server.broadcast({ type: 'project', project: state.project });
+}
 
 server.onConnect = (ws) => {
   server.send(ws, { type: 'project', project: state.project });
@@ -396,6 +408,7 @@ function loopBody(): void {
   const now = performance.now();
   jitterMax = Math.max(jitterMax, Math.abs(now - target));
 
+  flushProject(); // one project echo per tick, however many edits arrived
   const res = renderer.tick(now);
   artnet.pollTick(
     state.project.universes.some((u) => u.artnet),

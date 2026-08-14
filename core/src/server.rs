@@ -63,7 +63,17 @@ pub fn start(
     bc: Broadcaster,
 ) -> std::io::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port))?;
+    // A second engine binding [::]:port would answer localhost requests too,
+    // giving two engines driving one rig. Claim v6 as well and treat failure
+    // as "another engine is already running" — but only when it is a real
+    // conflict, not a host without IPv6.
+    let v6_guard = match TcpListener::bind(("::", port)) {
+        Ok(l) => Some(l),
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => return Err(e),
+        Err(_) => None, // no IPv6 stack on this host — fine
+    };
     std::thread::spawn(move || {
+        let _v6_guard = v6_guard; // held for the process lifetime
         for stream in listener.incoming() {
             let Ok(stream) = stream else { continue };
             let tx = tx.clone();

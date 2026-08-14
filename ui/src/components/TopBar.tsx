@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store.ts';
+import { askConfirm, askPrompt } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
 import { clamp } from '../../../shared/types.ts';
 
@@ -59,9 +60,11 @@ function ProjectMenu({ name }: { name: string }) {
             className="btn small ghost"
             style={{ justifyContent: 'flex-start' }}
             onClick={() => {
-              const n = window.prompt('New project name:');
-              if (n) send({ type: 'newProject', name: n });
               setOpen(false);
+              void (async () => {
+                const n = await askPrompt('New project', '', { placeholder: 'project name' });
+                if (n) send({ type: 'newProject', name: n });
+              })();
             }}
           >
             + new project…
@@ -70,17 +73,22 @@ function ProjectMenu({ name }: { name: string }) {
             className="btn small ghost"
             style={{ justifyContent: 'flex-start' }}
             onClick={() => {
-              const n = window.prompt('Save current project as:', name);
-              if (n) {
+              setOpen(false);
+              void (async () => {
+                const n = await askPrompt('Save project as', name, { confirmLabel: 'Save' });
+                if (!n) return;
                 const slug = n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'untitled';
                 const clash = projects?.list.find((p) => p.slug === slug && p.slug !== projects.current);
-                if (clash && !window.confirm(`"${clash.name}" already exists — overwrite it?`)) {
-                  setOpen(false);
-                  return;
+                if (clash) {
+                  const ok = await askConfirm(`Overwrite "${clash.name}"?`, {
+                    body: 'A project with that name already exists. The old file is kept aside as a .replaced backup.',
+                    confirmLabel: 'Overwrite',
+                    danger: true,
+                  });
+                  if (!ok) return;
                 }
                 send({ type: 'saveProjectAs', name: n });
-              }
-              setOpen(false);
+              })();
             }}
           >
             save as…

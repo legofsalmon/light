@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import type { HeadSnap } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
+import { askConfirm } from '../dialog.tsx';
 
 const WORLD_W = 11; // metres shown horizontally (both views)
 // plan: depth axis (z), audience at the bottom
@@ -356,10 +357,13 @@ export function Previz2D() {
           if (e.detail >= 2) {
             // double-click removes the musician
             const pr = project.props?.find((x) => x.id === hit.id);
-            if (pr && window.confirm(`Remove this ${pr.kind}?`)) {
-              useStore.getState().mutate((p) => {
-                p.props = (p.props ?? []).filter((x) => x.id !== hit.id);
-                if (p.props.length === 0) delete p.props;
+            if (pr) {
+              void askConfirm(`Remove this ${pr.kind}?`, { confirmLabel: 'Remove', danger: true }).then((ok) => {
+                if (!ok) return;
+                useStore.getState().mutate((p) => {
+                  p.props = (p.props ?? []).filter((x) => x.id !== hit.id);
+                  if (p.props.length === 0) delete p.props;
+                });
               });
             }
             return;

@@ -107,7 +107,7 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
   const strobeLive = st.layerLive('layer-strobe');
   check('column skips flash look', strobeLive.lookId === null);
   const washLive = st.layerLive('layer-wash');
-  check('column fires wash', washLive.lookId === 'wash-amber');
+  check('column fires wash', washLive.lookId === 'wash-gold');
   const derbyLive = st.layerLive('layer-derby');
   check('column clears empty layer', derbyLive.lookId === null);
 

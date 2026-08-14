@@ -1,4 +1,5 @@
 import dgram from 'node:dgram';
+import net from 'node:net';
 import { randomBytes } from 'node:crypto';
 
 const SACN_PORT = 5568;
@@ -65,7 +66,12 @@ export class SacnOut {
     p[125] = 0; // DMX start code
     p.set(data.subarray(0, 512), 126);
 
-    const dest = unicast ?? `239.255.${(universe >> 8) & 0xff}.${universe & 0xff}`;
+    // IP literals only — a hostname (or a half-typed address) would trigger
+    // DNS resolution on the 40 Hz output path. Matches artnet.ts and the
+    // Rust core's parse-or-multicast fallback.
+    const dest = unicast && net.isIP(unicast)
+      ? unicast
+      : `239.255.${(universe >> 8) & 0xff}.${universe & 0xff}`;
     this.sock.send(p, SACN_PORT, dest, (err) => {
       if (!err) this.packets++;
     });

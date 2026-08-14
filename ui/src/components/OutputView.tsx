@@ -77,6 +77,13 @@ export function OutputView() {
   const stats = useStore((s) => s.snap?.stats);
   const mutate = useStore((s) => s.mutate);
   const [meterU, setMeterU] = useState(project.universes[0]?.id ?? '');
+  // a universe delete or project switch can strand the selection on a dead id
+  const meterUniverse = project.universes.some((u) => u.id === meterU)
+    ? meterU
+    : project.universes[0]?.id ?? '';
+  useEffect(() => {
+    if (meterUniverse !== meterU) setMeterU(meterUniverse);
+  }, [meterUniverse, meterU]);
 
   return (
     <div className="col" style={{ gap: 14 }}>
@@ -197,13 +204,13 @@ export function OutputView() {
       <div>
         <div className="row" style={{ marginBottom: 6 }}>
           <div className="sectionhead" style={{ margin: 0, border: 'none', padding: 0 }}>DMX monitor</div>
-          <select className="sel" value={meterU} onChange={(e) => setMeterU(e.target.value)}>
+          <select className="sel" value={meterUniverse} onChange={(e) => setMeterU(e.target.value)}>
             {project.universes.map((u) => (
               <option key={u.id} value={u.id}>{u.label}</option>
             ))}
           </select>
         </div>
-        <DmxMeters universeId={meterU} />
+        <DmxMeters universeId={meterUniverse} />
       </div>
     </div>
   );

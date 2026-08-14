@@ -1,6 +1,6 @@
 {
  "version": 1,
- "name": "Aug 2026 Rig",
+ "name": "LIGHT Demo Set",
  "universes": [
   {
    "id": "u1",
@@ -20,9 +20,9 @@
    "universeId": "u1",
    "address": 1,
    "pos": {
-    "x": -4.1,
+    "x": -2.6,
     "y": 3,
-    "z": -1.65
+    "z": 0
    },
    "rotY": 0
   },
@@ -33,9 +33,9 @@
    "universeId": "u1",
    "address": 11,
    "pos": {
-    "x": 3.85,
+    "x": 2.6,
     "y": 3,
-    "z": -1.65
+    "z": 0
    },
    "rotY": 0
   },
@@ -46,9 +46,9 @@
    "universeId": "u1",
    "address": 21,
    "pos": {
-    "x": -1.5,
+    "x": -1.4,
     "y": 3,
-    "z": -1.75
+    "z": 0
    },
    "rotY": 0
   },
@@ -59,9 +59,9 @@
    "universeId": "u1",
    "address": 51,
    "pos": {
-    "x": 1.5,
+    "x": 1.4,
     "y": 3,
-    "z": -1.8
+    "z": 0
    },
    "rotY": 0
   },
@@ -233,10 +233,52 @@
    ]
   }
  ],
+ "props": [
+  {
+   "id": "prop-voc",
+   "kind": "vocalist",
+   "pos": {
+    "x": 0,
+    "z": 1.9
+   }
+  },
+  {
+   "id": "prop-gtr",
+   "kind": "guitarist",
+   "pos": {
+    "x": -1.7,
+    "z": 1.2
+   }
+  },
+  {
+   "id": "prop-bass",
+   "kind": "bassist",
+   "pos": {
+    "x": 1.7,
+    "z": 1.2
+   }
+  },
+  {
+   "id": "prop-drums",
+   "kind": "drummer",
+   "pos": {
+    "x": 0,
+    "z": 0.1
+   }
+  },
+  {
+   "id": "prop-keys",
+   "kind": "keyboardist",
+   "pos": {
+    "x": -3,
+    "z": 0.6
+   }
+  }
+ ],
  "looks": {
-  "wash-amber": {
-   "id": "wash-amber",
-   "name": "Amber Wash",
+  "wash-gold": {
+   "id": "wash-gold",
+   "name": "Gold Wash",
    "parts": [
     {
      "id": "part1",
@@ -244,8 +286,8 @@
      "params": {
       "dimmer": 1,
       "color": {
-       "h": 32,
-       "s": 0.95
+       "h": 38,
+       "s": 0.9
       }
      },
      "effects": []
@@ -342,9 +384,27 @@
     }
    ]
   },
-  "wash-rainbow": {
-   "id": "wash-rainbow",
-   "name": "Rainbow Drift",
+  "wash-ice": {
+   "id": "wash-ice",
+   "name": "Ice Blue",
+   "parts": [
+    {
+     "id": "part7",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 205,
+       "s": 0.55
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "wash-uv": {
+   "id": "wash-uv",
+   "name": "UV Purple",
    "parts": [
     {
      "id": "part8",
@@ -352,22 +412,65 @@
      "params": {
       "dimmer": 1,
       "color": {
-       "h": 0,
+       "h": 268,
        "s": 1
       }
      },
-     "effects": [
-      {
-       "id": "fx7",
-       "rate": 16,
-       "size": 1,
-       "spread": 0.5,
-       "width": 0.5,
-       "phase": 0,
-       "target": "hue",
-       "wave": "sawUp"
+     "effects": []
+    }
+   ]
+  },
+  "wash-green": {
+   "id": "wash-green",
+   "name": "Emerald",
+   "parts": [
+    {
+     "id": "part9",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 140,
+       "s": 0.95
       }
-     ]
+     },
+     "effects": []
+    }
+   ]
+  },
+  "wash-pink": {
+   "id": "wash-pink",
+   "name": "Hot Pink",
+   "parts": [
+    {
+     "id": "part10",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 330,
+       "s": 0.85
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "wash-amber-dim": {
+   "id": "wash-amber-dim",
+   "name": "Warm Glow",
+   "parts": [
+    {
+     "id": "part11",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 30,
+       "s": 0.85
+      }
+     },
+     "effects": []
     }
    ]
   },
@@ -376,7 +479,7 @@
    "name": "Red/Blue Split",
    "parts": [
     {
-     "id": "part9",
+     "id": "part12",
      "groupId": "g-bar1",
      "params": {
       "dimmer": 1,
@@ -388,7 +491,7 @@
      "effects": []
     },
     {
-     "id": "part10",
+     "id": "part13",
      "groupId": "g-bar2",
      "params": {
       "dimmer": 1,
@@ -401,12 +504,169 @@
     }
    ]
   },
+  "wash-sunset": {
+   "id": "wash-sunset",
+   "name": "Sunset Split",
+   "parts": [
+    {
+     "id": "part14",
+     "groupId": "g-bar1",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 18,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "part15",
+     "groupId": "g-bar2",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 315,
+       "s": 0.8
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "wash-mint-uv": {
+   "id": "wash-mint-uv",
+   "name": "Mint / UV Split",
+   "parts": [
+    {
+     "id": "part16",
+     "groupId": "g-bar1",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 160,
+       "s": 0.8
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "part17",
+     "groupId": "g-bar2",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 268,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "wash-rainbow": {
+   "id": "wash-rainbow",
+   "name": "Rainbow Drift",
+   "parts": [
+    {
+     "id": "part19",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "fx18",
+       "rate": 16,
+       "size": 1,
+       "spread": 0.5,
+       "width": 0.5,
+       "phase": 0,
+       "target": "hue",
+       "wave": "sawUp"
+      }
+     ]
+    }
+   ]
+  },
+  "wash-ocean": {
+   "id": "wash-ocean",
+   "name": "Ocean Roll",
+   "parts": [
+    {
+     "id": "part21",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 195,
+       "s": 0.9
+      }
+     },
+     "effects": [
+      {
+       "id": "fx20",
+       "rate": 12,
+       "size": 0.25,
+       "spread": 0.6,
+       "width": 0.5,
+       "phase": 0,
+       "target": "hue",
+       "wave": "sine"
+      }
+     ]
+    }
+   ]
+  },
+  "wash-fire": {
+   "id": "wash-fire",
+   "name": "Fire Flicker",
+   "parts": [
+    {
+     "id": "part24",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 22,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "fx22",
+       "rate": 0.25,
+       "size": 0.5,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "target": "dimmer",
+       "wave": "random"
+      },
+      {
+       "id": "fx23",
+       "rate": 0.5,
+       "size": 0.12,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "target": "hue",
+       "wave": "random"
+      }
+     ]
+    }
+   ]
+  },
   "derby-red-spin": {
    "id": "derby-red-spin",
    "name": "Derby Red Spin",
    "parts": [
     {
-     "id": "part11",
+     "id": "part25",
      "groupId": "g-derbies",
      "params": {
       "dimmer": 1,
@@ -426,7 +686,7 @@
    "name": "Derby R+B Spin",
    "parts": [
     {
-     "id": "part12",
+     "id": "part26",
      "groupId": "g-derbies",
      "params": {
       "dimmer": 1,
@@ -443,7 +703,7 @@
    "name": "Derby G+B Slow",
    "parts": [
     {
-     "id": "part13",
+     "id": "part27",
      "groupId": "g-derbies",
      "params": {
       "dimmer": 1,
@@ -460,7 +720,7 @@
    "name": "Derby White Static",
    "parts": [
     {
-     "id": "part14",
+     "id": "part28",
      "groupId": "g-derbies",
      "params": {
       "dimmer": 1,
@@ -480,7 +740,7 @@
    "name": "Derby RGBW Fast",
    "parts": [
     {
-     "id": "part15",
+     "id": "part29",
      "groupId": "g-derbies",
      "params": {
       "dimmer": 1,
@@ -492,17 +752,85 @@
     }
    ]
   },
+  "derby-gw": {
+   "id": "derby-gw",
+   "name": "Derby G+W Spin",
+   "parts": [
+    {
+     "id": "part30",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "macro": 133,
+      "motorMode": "rotate",
+      "motorValue": 0.4
+     },
+     "effects": []
+    }
+   ]
+  },
+  "derby-bw-slow": {
+   "id": "derby-bw-slow",
+   "name": "Derby B+W Slow",
+   "parts": [
+    {
+     "id": "part31",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "macro": 148,
+      "motorMode": "rotate",
+      "motorValue": 0.12
+     },
+     "effects": []
+    }
+   ]
+  },
+  "derby-rg": {
+   "id": "derby-rg",
+   "name": "Derby R+G Spin",
+   "parts": [
+    {
+     "id": "part32",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "macro": 73,
+      "motorMode": "rotate",
+      "motorValue": 0.55
+     },
+     "effects": []
+    }
+   ]
+  },
+  "derby-colorchange": {
+   "id": "derby-colorchange",
+   "name": "Derby Auto Colours",
+   "parts": [
+    {
+     "id": "part33",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "macro": 223,
+      "motorMode": "rotate",
+      "motorValue": 0.6
+     },
+     "effects": []
+    }
+   ]
+  },
   "fx-chase": {
    "id": "fx-chase",
    "name": "Par Chase",
    "parts": [
     {
-     "id": "part17",
+     "id": "part35",
      "groupId": "g-pars",
      "params": {},
      "effects": [
       {
-       "id": "fx16",
+       "id": "fx34",
        "rate": 2,
        "size": 1,
        "spread": 0,
@@ -520,12 +848,12 @@
    "name": "Slow Swell",
    "parts": [
     {
-     "id": "part19",
+     "id": "part37",
      "groupId": "g-pars",
      "params": {},
      "effects": [
       {
-       "id": "fx18",
+       "id": "fx36",
        "rate": 8,
        "size": 0.8,
        "spread": 0,
@@ -543,12 +871,12 @@
    "name": "Beat Pulse",
    "parts": [
     {
-     "id": "part21",
+     "id": "part39",
      "groupId": "g-pars",
      "params": {},
      "effects": [
       {
-       "id": "fx20",
+       "id": "fx38",
        "rate": 1,
        "size": 0.9,
        "spread": 0,
@@ -566,12 +894,12 @@
    "name": "Random Flicker",
    "parts": [
     {
-     "id": "part23",
+     "id": "part41",
      "groupId": "g-pars",
      "params": {},
      "effects": [
       {
-       "id": "fx22",
+       "id": "fx40",
        "rate": 0.5,
        "size": 1,
        "spread": 0,
@@ -589,12 +917,12 @@
    "name": "Odd / Even",
    "parts": [
     {
-     "id": "part25",
+     "id": "part43",
      "groupId": "g-pars",
      "params": {},
      "effects": [
       {
-       "id": "fx24",
+       "id": "fx42",
        "rate": 2,
        "size": 1,
        "spread": 0.5,
@@ -607,12 +935,81 @@
     }
    ]
   },
+  "fx-halfbeat": {
+   "id": "fx-halfbeat",
+   "name": "Half-Beat Chop",
+   "parts": [
+    {
+     "id": "part45",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "id": "fx44",
+       "rate": 0.5,
+       "size": 1,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "target": "dimmer",
+       "wave": "square"
+      }
+     ]
+    }
+   ]
+  },
+  "fx-sweep": {
+   "id": "fx-sweep",
+   "name": "L→R Sweep",
+   "parts": [
+    {
+     "id": "part47",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "id": "fx46",
+       "rate": 4,
+       "size": 1,
+       "spread": 0,
+       "width": 0.45,
+       "phase": 0,
+       "target": "dimmer",
+       "wave": "chase"
+      }
+     ]
+    }
+   ]
+  },
+  "fx-breathe": {
+   "id": "fx-breathe",
+   "name": "Breathe",
+   "parts": [
+    {
+     "id": "part49",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "id": "fx48",
+       "rate": 16,
+       "size": 0.55,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "target": "dimmer",
+       "wave": "sine"
+      }
+     ]
+    }
+   ]
+  },
   "strobe-all": {
    "id": "strobe-all",
    "name": "Full Strobe",
    "parts": [
     {
-     "id": "part26",
+     "id": "part50",
      "groupId": "g-pars",
      "params": {
       "dimmer": 1,
@@ -625,7 +1022,7 @@
      "effects": []
     },
     {
-     "id": "part27",
+     "id": "part51",
      "groupId": "g-derbies",
      "params": {
       "dimmer": 1,
@@ -646,7 +1043,7 @@
    "name": "Ring Blinder",
    "parts": [
     {
-     "id": "part28",
+     "id": "part52",
      "groupId": "g-derbies",
      "params": {
       "white": 1
@@ -662,12 +1059,142 @@
    "name": "Ring Patterns",
    "parts": [
     {
-     "id": "part29",
+     "id": "part53",
      "groupId": "g-derbies",
      "params": {
       "ringFx": 0.55
      },
      "effects": []
+    }
+   ]
+  },
+  "strobe-red": {
+   "id": "strobe-red",
+   "name": "Red Strobe",
+   "parts": [
+    {
+     "id": "part54",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      },
+      "strobe": 0.85
+     },
+     "effects": []
+    }
+   ],
+   "flash": true,
+   "fade": 0
+  },
+  "strobe-slowmo": {
+   "id": "strobe-slowmo",
+   "name": "Slow-Mo Strobe",
+   "parts": [
+    {
+     "id": "part55",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0
+      },
+      "strobe": 0.25
+     },
+     "effects": []
+    }
+   ],
+   "flash": true,
+   "fade": 0
+  },
+  "cue-colourwheel": {
+   "id": "cue-colourwheel",
+   "name": "⛓ Colour Wheel",
+   "parts": [],
+   "steps": [
+    {
+     "lookId": "wash-red",
+     "beats": 4
+    },
+    {
+     "lookId": "wash-gold",
+     "beats": 4
+    },
+    {
+     "lookId": "wash-green",
+     "beats": 4
+    },
+    {
+     "lookId": "wash-teal",
+     "beats": 4
+    },
+    {
+     "lookId": "wash-blue",
+     "beats": 4
+    },
+    {
+     "lookId": "wash-uv",
+     "beats": 4
+    }
+   ]
+  },
+  "cue-verse": {
+   "id": "cue-verse",
+   "name": "⛓ Verse 8s",
+   "parts": [],
+   "steps": [
+    {
+     "lookId": "wash-ice",
+     "beats": 8
+    },
+    {
+     "lookId": "wash-teal",
+     "beats": 8
+    }
+   ]
+  },
+  "cue-drop": {
+   "id": "cue-drop",
+   "name": "⛓ Drop Snap",
+   "parts": [],
+   "steps": [
+    {
+     "lookId": "wash-white",
+     "beats": 1
+    },
+    {
+     "lookId": "wash-red",
+     "beats": 1
+    },
+    {
+     "lookId": "wash-white",
+     "beats": 1
+    },
+    {
+     "lookId": "wash-blue",
+     "beats": 1
+    }
+   ]
+  },
+  "cue-warm": {
+   "id": "cue-warm",
+   "name": "⛓ Warm Sway",
+   "parts": [],
+   "steps": [
+    {
+     "lookId": "wash-gold",
+     "beats": 8
+    },
+    {
+     "lookId": "wash-amber-dim",
+     "beats": 8
+    },
+    {
+     "lookId": "wash-pink",
+     "beats": 8
     }
    ]
   }
@@ -680,7 +1207,7 @@
    "master": 1,
    "fade": 0.8,
    "cells": [
-    "wash-amber",
+    "wash-gold",
     "wash-red",
     "wash-blue",
     "wash-magenta",
@@ -752,9 +1279,685 @@
   "Outro",
   "Chill"
  ],
+ "decks": [
+  {
+   "id": "deck-1",
+   "name": "01 · Opener — Gold",
+   "columns": [
+    "Intro",
+    "Build",
+    "Peak",
+    "Groove",
+    "Break",
+    "Drop",
+    "Outro",
+    "Chill"
+   ],
+   "cells": {
+    "layer-wash": [
+     "wash-gold",
+     "wash-red",
+     "wash-blue",
+     "wash-magenta",
+     "wash-teal",
+     "wash-duotone",
+     "wash-rainbow",
+     "wash-white"
+    ],
+    "layer-derby": [
+     null,
+     "derby-red-spin",
+     "derby-rb-spin",
+     "derby-gb-slow",
+     null,
+     "derby-rgbw-fast",
+     "derby-white-aim",
+     null
+    ],
+    "layer-fx": [
+     null,
+     "fx-pulse",
+     "fx-chase",
+     "fx-swell",
+     "fx-oddeven",
+     "fx-flicker",
+     null,
+     null
+    ],
+    "layer-strobe": [
+     "strobe-all",
+     "strobe-blinder",
+     "strobe-ringfx",
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-2",
+   "name": "02 · House — Teal",
+   "columns": [
+    "Intro",
+    "Build",
+    "Peak",
+    "Groove",
+    "Break",
+    "Drop",
+    "Outro",
+    "Chill"
+   ],
+   "cells": {
+    "layer-wash": [
+     "wash-teal",
+     "wash-ocean",
+     "wash-mint-uv",
+     "wash-blue",
+     "wash-ice",
+     "cue-verse",
+     "wash-teal",
+     "wash-amber-dim"
+    ],
+    "layer-derby": [
+     null,
+     "derby-gb-slow",
+     "derby-bw-slow",
+     "derby-gw",
+     null,
+     "derby-rgbw-fast",
+     null,
+     null
+    ],
+    "layer-fx": [
+     "fx-breathe",
+     "fx-pulse",
+     "fx-chase",
+     "fx-halfbeat",
+     null,
+     "fx-sweep",
+     "fx-swell",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     "strobe-blinder",
+     "strobe-all",
+     null,
+     null,
+     "strobe-slowmo",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-3",
+   "name": "03 · Disco — Rainbow",
+   "columns": [
+    "Intro",
+    "Build",
+    "Peak",
+    "Groove",
+    "Break",
+    "Drop",
+    "Outro",
+    "Chill"
+   ],
+   "cells": {
+    "layer-wash": [
+     "wash-rainbow",
+     "cue-colourwheel",
+     "wash-pink",
+     "wash-gold",
+     "wash-magenta",
+     "wash-duotone",
+     "wash-rainbow",
+     "wash-white"
+    ],
+    "layer-derby": [
+     "derby-colorchange",
+     "derby-rgbw-fast",
+     "derby-rb-spin",
+     "derby-rg",
+     null,
+     "derby-colorchange",
+     null,
+     null
+    ],
+    "layer-fx": [
+     "fx-chase",
+     "fx-oddeven",
+     "fx-sweep",
+     null,
+     "fx-swell",
+     "fx-chase",
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     "strobe-all",
+     "strobe-ringfx",
+     null,
+     null,
+     "strobe-blinder",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-4",
+   "name": "04 · Rock — Red",
+   "columns": [
+    "Intro",
+    "Build",
+    "Peak",
+    "Groove",
+    "Break",
+    "Drop",
+    "Outro",
+    "Chill"
+   ],
+   "cells": {
+    "layer-wash": [
+     "wash-red",
+     "wash-fire",
+     "wash-white",
+     "wash-duotone",
+     "wash-amber-dim",
+     "cue-drop",
+     "wash-red",
+     null
+    ],
+    "layer-derby": [
+     "derby-red-spin",
+     null,
+     "derby-white-aim",
+     "derby-rb-spin",
+     null,
+     "derby-rgbw-fast",
+     null,
+     null
+    ],
+    "layer-fx": [
+     null,
+     "fx-flicker",
+     "fx-pulse",
+     null,
+     "fx-swell",
+     "fx-halfbeat",
+     null,
+     null
+    ],
+    "layer-strobe": [
+     "strobe-red",
+     "strobe-all",
+     "strobe-blinder",
+     null,
+     null,
+     "strobe-red",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-5",
+   "name": "05 · Ballad — Ice",
+   "columns": [
+    "Intro",
+    "Build",
+    "Peak",
+    "Groove",
+    "Break",
+    "Drop",
+    "Outro",
+    "Chill"
+   ],
+   "cells": {
+    "layer-wash": [
+     "wash-ice",
+     "wash-blue",
+     "wash-white",
+     "wash-amber-dim",
+     "cue-warm",
+     "wash-ice",
+     "wash-amber-dim",
+     null
+    ],
+    "layer-derby": [
+     null,
+     "derby-bw-slow",
+     "derby-white-aim",
+     null,
+     null,
+     "derby-gb-slow",
+     null,
+     null
+    ],
+    "layer-fx": [
+     "fx-breathe",
+     "fx-swell",
+     null,
+     "fx-breathe",
+     null,
+     null,
+     "fx-swell",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     "strobe-ringfx",
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-6",
+   "name": "06 · Funk — Magenta",
+   "columns": [
+    "Intro",
+    "Build",
+    "Peak",
+    "Groove",
+    "Break",
+    "Drop",
+    "Outro",
+    "Chill"
+   ],
+   "cells": {
+    "layer-wash": [
+     "wash-magenta",
+     "wash-pink",
+     "wash-sunset",
+     "wash-gold",
+     "wash-duotone",
+     "cue-colourwheel",
+     "wash-magenta",
+     null
+    ],
+    "layer-derby": [
+     "derby-rb-spin",
+     "derby-rg",
+     "derby-colorchange",
+     null,
+     null,
+     "derby-rgbw-fast",
+     null,
+     null
+    ],
+    "layer-fx": [
+     "fx-oddeven",
+     "fx-chase",
+     "fx-sweep",
+     "fx-pulse",
+     null,
+     "fx-halfbeat",
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     "strobe-blinder",
+     "strobe-all",
+     null,
+     null,
+     "strobe-ringfx",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-7",
+   "name": "07 · Techno — White",
+   "columns": [
+    "Intro",
+    "Build",
+    "Peak",
+    "Groove",
+    "Break",
+    "Drop",
+    "Outro",
+    "Chill"
+   ],
+   "cells": {
+    "layer-wash": [
+     "wash-white",
+     "wash-ice",
+     "cue-drop",
+     "wash-blue",
+     "wash-uv",
+     "wash-white",
+     "wash-ice",
+     null
+    ],
+    "layer-derby": [
+     "derby-white-aim",
+     "derby-bw-slow",
+     "derby-rgbw-fast",
+     null,
+     null,
+     "derby-white-aim",
+     null,
+     null
+    ],
+    "layer-fx": [
+     "fx-halfbeat",
+     "fx-pulse",
+     "fx-chase",
+     "fx-oddeven",
+     null,
+     "fx-sweep",
+     null,
+     null
+    ],
+    "layer-strobe": [
+     "strobe-slowmo",
+     "strobe-all",
+     "strobe-blinder",
+     null,
+     null,
+     "strobe-all",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-8",
+   "name": "08 · Dub — Emerald",
+   "columns": [
+    "Intro",
+    "Build",
+    "Peak",
+    "Groove",
+    "Break",
+    "Drop",
+    "Outro",
+    "Chill"
+   ],
+   "cells": {
+    "layer-wash": [
+     "wash-green",
+     "wash-mint-uv",
+     "wash-uv",
+     "wash-teal",
+     "wash-amber-dim",
+     "cue-verse",
+     "wash-green",
+     null
+    ],
+    "layer-derby": [
+     "derby-gw",
+     "derby-gb-slow",
+     "derby-rg",
+     null,
+     null,
+     "derby-colorchange",
+     null,
+     null
+    ],
+    "layer-fx": [
+     "fx-breathe",
+     "fx-swell",
+     "fx-chase",
+     "fx-halfbeat",
+     null,
+     "fx-flicker",
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     "strobe-ringfx",
+     "strobe-blinder",
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-9",
+   "name": "09 · Indie — Pink",
+   "columns": [
+    "Intro",
+    "Build",
+    "Peak",
+    "Groove",
+    "Break",
+    "Drop",
+    "Outro",
+    "Chill"
+   ],
+   "cells": {
+    "layer-wash": [
+     "wash-pink",
+     "wash-sunset",
+     "wash-teal",
+     "wash-ice",
+     "wash-amber-dim",
+     "cue-warm",
+     "wash-pink",
+     null
+    ],
+    "layer-derby": [
+     null,
+     "derby-rb-spin",
+     "derby-bw-slow",
+     null,
+     null,
+     "derby-gw",
+     null,
+     null
+    ],
+    "layer-fx": [
+     "fx-swell",
+     "fx-pulse",
+     "fx-oddeven",
+     null,
+     "fx-breathe",
+     "fx-chase",
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     "strobe-blinder",
+     null,
+     null,
+     "strobe-slowmo",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-10",
+   "name": "10 · DnB — Chaos",
+   "columns": [
+    "Intro",
+    "Build",
+    "Peak",
+    "Groove",
+    "Break",
+    "Drop",
+    "Outro",
+    "Chill"
+   ],
+   "cells": {
+    "layer-wash": [
+     "wash-uv",
+     "cue-drop",
+     "wash-red",
+     "wash-white",
+     "wash-blue",
+     "cue-colourwheel",
+     "wash-uv",
+     null
+    ],
+    "layer-derby": [
+     "derby-rgbw-fast",
+     "derby-colorchange",
+     "derby-rb-spin",
+     "derby-rg",
+     null,
+     "derby-rgbw-fast",
+     null,
+     null
+    ],
+    "layer-fx": [
+     "fx-chase",
+     "fx-halfbeat",
+     "fx-sweep",
+     "fx-flicker",
+     null,
+     "fx-oddeven",
+     null,
+     null
+    ],
+    "layer-strobe": [
+     "strobe-all",
+     "strobe-red",
+     "strobe-blinder",
+     null,
+     null,
+     "strobe-all",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-11",
+   "name": "11 · Encore — Full",
+   "columns": [
+    "Intro",
+    "Build",
+    "Peak",
+    "Groove",
+    "Break",
+    "Drop",
+    "Outro",
+    "Chill"
+   ],
+   "cells": {
+    "layer-wash": [
+     "cue-colourwheel",
+     "wash-rainbow",
+     "wash-duotone",
+     "wash-gold",
+     "wash-magenta",
+     "cue-drop",
+     "wash-white",
+     null
+    ],
+    "layer-derby": [
+     "derby-colorchange",
+     "derby-rgbw-fast",
+     "derby-rb-spin",
+     "derby-gw",
+     null,
+     "derby-rgbw-fast",
+     "derby-white-aim",
+     null
+    ],
+    "layer-fx": [
+     "fx-sweep",
+     "fx-chase",
+     "fx-pulse",
+     "fx-oddeven",
+     null,
+     "fx-halfbeat",
+     null,
+     null
+    ],
+    "layer-strobe": [
+     "strobe-blinder",
+     "strobe-all",
+     "strobe-ringfx",
+     null,
+     null,
+     "strobe-red",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-12",
+   "name": "12 · Closer — Warm",
+   "columns": [
+    "Intro",
+    "Build",
+    "Peak",
+    "Groove",
+    "Break",
+    "Drop",
+    "Outro",
+    "Chill"
+   ],
+   "cells": {
+    "layer-wash": [
+     "wash-gold",
+     "cue-warm",
+     "wash-amber-dim",
+     "wash-sunset",
+     "wash-ice",
+     "wash-amber-dim",
+     "wash-gold",
+     null
+    ],
+    "layer-derby": [
+     null,
+     "derby-gb-slow",
+     "derby-bw-slow",
+     null,
+     null,
+     "derby-white-aim",
+     null,
+     null
+    ],
+    "layer-fx": [
+     "fx-breathe",
+     "fx-swell",
+     null,
+     "fx-breathe",
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     "strobe-ringfx",
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  }
+ ],
+ "activeDeckId": "deck-1",
  "midi": [],
  "sync": {
   "oscEnabled": true,
+  "linkEnabled": false,
   "oscPort": 7700,
   "followColumns": true,
   "bpmFromOsc": true

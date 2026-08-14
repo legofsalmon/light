@@ -5,6 +5,7 @@ import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
 import { type HeadKind } from '../../../shared/profiles.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
+import { askConfirm } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
@@ -357,28 +358,58 @@ export function LookEditor() {
   const look: Look | null = lookId ? project.looks[lookId] ?? null : null;
 
   if (!look || !lookId) {
+    // Looks are a shared pool across decks, so filling a cell from the pool is
+    // the primary authoring move — without it a new deck is 32 dead cells.
+    const pool = Object.values(project.looks).sort((a, b) => a.name.localeCompare(b.name));
     return (
       <div className="hint">
         <div style={{ marginBottom: 10 }}>
           Empty cell — {layer.name} · column {sel.col + 1}
         </div>
-        <button
-          className="btn"
-          onClick={() =>
-            mutate((p) => {
-              const id = uid('look');
-              p.looks[id] = {
-                id,
-                name: 'New look',
-                parts: [{ id: uid('part'), groupId: p.groups[0]?.id ?? '', params: { dimmer: 1 }, effects: [] }],
-              };
-              const ly = p.layers.find((l) => l.id === sel.layerId);
-              if (ly) ly.cells[sel.col] = id;
-            })
-          }
-        >
-          + create look here
-        </button>
+        <div className="row">
+          <button
+            className="btn"
+            onClick={() =>
+              mutate((p) => {
+                const id = uid('look');
+                p.looks[id] = {
+                  id,
+                  name: 'New look',
+                  parts: [{ id: uid('part'), groupId: p.groups[0]?.id ?? '', params: { dimmer: 1 }, effects: [] }],
+                };
+                const ly = p.layers.find((l) => l.id === sel.layerId);
+                if (ly) ly.cells[sel.col] = id;
+              })
+            }
+          >
+            + create look here
+          </button>
+          <select
+            className="sel"
+            value=""
+            disabled={pool.length === 0}
+            title="put an existing look from the pool into this cell"
+            onChange={(e) => {
+              const id = e.target.value;
+              if (!id) return;
+              mutate((p) => {
+                const ly = p.layers.find((l) => l.id === sel.layerId);
+                if (ly) ly.cells[sel.col] = id;
+              });
+            }}
+          >
+            <option value="">use existing look…</option>
+            {pool.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.steps?.length ? '⛓ ' : ''}{l.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="label" style={{ marginTop: 8 }}>
+          {pool.length} look{pool.length === 1 ? '' : 's'} in this project’s pool — the same look can sit in
+          many cells and decks.
+        </div>
       </div>
     );
   }
@@ -420,6 +451,27 @@ export function LookEditor() {
         <button className="btn small ghost" onClick={() => send({ type: 'trigger', layerId: layer.id, col: sel.col })}>
           ▶ fire
         </button>
+        <select
+          className="sel"
+          value={lookId}
+          title="swap this cell for another look from the pool"
+          onChange={(e) => {
+            const id = e.target.value;
+            if (!id || id === lookId) return;
+            mutate((p) => {
+              const ly = p.layers.find((l) => l.id === sel.layerId);
+              if (ly) ly.cells[sel.col] = id;
+            });
+          }}
+        >
+          {Object.values(project.looks)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.steps?.length ? '⛓ ' : ''}{l.name}
+              </option>
+            ))}
+        </select>
         <div className="grow" />
         <button
           className="btn small ghost"
@@ -433,23 +485,23 @@ export function LookEditor() {
         <button
           className="btn small ghost"
           onClick={() => {
-            const refs = Object.values(project.looks).filter(
-              (l) => l.steps?.some((st) => st.lookId === lookId),
-            );
-            if (
-              refs.length > 0 &&
-              !window.confirm(
-                `"${look.name}" is a step in ${refs.length} cue list(s) (${refs
-                  .map((l) => l.name)
-                  .join(', ')}) - those steps will go dark. Delete anyway?`,
-              )
-            ) {
-              return;
-            }
-            mutate((p) => {
-              delete p.looks[lookId];
-              for (const ly of p.layers) ly.cells = ly.cells.map((c) => (c === lookId ? null : c));
-            });
+            void (async () => {
+              const refs = Object.values(project.looks).filter(
+                (l) => l.steps?.some((st) => st.lookId === lookId),
+              );
+              if (refs.length > 0) {
+                const ok = await askConfirm(`Delete "${look.name}"?`, {
+                  body: `It is a step in ${refs.length} cue list(s): ${refs.map((l) => l.name).join(', ')}. Those steps will go dark.`,
+                  confirmLabel: 'Delete',
+                  danger: true,
+                });
+                if (!ok) return;
+              }
+              mutate((p) => {
+                delete p.looks[lookId];
+                for (const ly of p.layers) ly.cells = ly.cells.map((c) => (c === lookId ? null : c));
+              });
+            })();
           }}
         >
           delete look

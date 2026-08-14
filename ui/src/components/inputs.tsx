@@ -119,6 +119,11 @@ export function ScrubNumInput({ value, scrubStep, decimals, width, title, onSet,
     const onMove = (me: PointerEvent) => {
       const d = drag.current;
       if (!d) return;
+      if (!(me.buttons & 1)) {
+        // the button came up outside the window — end the scrub, don't stick
+        onUp();
+        return;
+      }
       const dx = me.clientX - d.x;
       if (!d.scrubbing) {
         if (Math.abs(dx) < 4) return;
@@ -137,6 +142,7 @@ export function ScrubNumInput({ value, scrubStep, decimals, width, title, onSet,
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
       const d = drag.current;
       drag.current = null;
       if (d?.scrubbing) {
@@ -147,6 +153,7 @@ export function ScrubNumInput({ value, scrubStep, decimals, width, title, onSet,
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
 
   return (

@@ -69,6 +69,16 @@ export class Server {
       });
     });
 
+    this.httpServer.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(
+          `[light] port ${port} is already in use — another LIGHT engine (or the packaged app) is running. Quit it and start again.`
+        );
+      } else {
+        console.error('[light] server error:', err.message);
+      }
+      process.exit(1);
+    });
     this.httpServer.listen(port);
     this.httpServer.on('error', (err) => {
       console.error(`[server] cannot listen on :${port} — is another engine running?`, err.message);

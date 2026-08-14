@@ -6,6 +6,7 @@ import { allProfileMetas, profileMeta } from '../profileInfo.ts';
 import { createGroupFromSelection } from '../selection.ts';
 import { ScrubNumInput } from './inputs.tsx';
 import { useStore } from '../store.ts';
+import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 
 /** true when the pointer event originated inside an editing control */
 function onControl(target: EventTarget | null): boolean {
@@ -379,12 +380,20 @@ export function PatchView() {
                     <button
                       className="btn small ghost"
                       onClick={() => {
-                        mutate((p) => {
-                          p.fixtures = p.fixtures.filter((x) => x.id !== f.id);
-                          for (const g of p.groups) g.heads = g.heads.filter((h) => h.fixtureId !== f.id);
-                        });
-                        const { fxSel: cur, setFxSel } = useStore.getState();
-                        if (cur.includes(f.id)) setFxSel(cur.filter((i) => i !== f.id));
+                        void (async () => {
+                          const ok = await askConfirm(`Delete "${f.name}"?`, {
+                            body: 'It is removed from the patch and from every group.',
+                            confirmLabel: 'Delete',
+                            danger: true,
+                          });
+                          if (!ok) return;
+                          mutate((p) => {
+                            p.fixtures = p.fixtures.filter((x) => x.id !== f.id);
+                            for (const g of p.groups) g.heads = g.heads.filter((h) => h.fixtureId !== f.id);
+                          });
+                          const { fxSel: cur, setFxSel } = useStore.getState();
+                          if (cur.includes(f.id)) setFxSel(cur.filter((i) => i !== f.id));
+                        })();
                       }}
                     >
                       ✕
@@ -427,14 +436,23 @@ export function PatchView() {
                 const reader = new FileReader();
                 reader.onload = () => {
                   const b64 = String(reader.result).split(',')[1] ?? '';
-                  if (isMvr) {
-                    const merge = window.confirm(
-                      `Import "${file.name}" and KEEP the current patch (merge)?\nCancel imports it as a full replacement.`
-                    );
-                    useStore.getState().send({ type: 'importMvr', name: file.name, data: b64, replace: !merge });
-                  } else {
+                  if (!isMvr) {
                     useStore.getState().send({ type: 'importGdtf', name: file.name, data: b64 });
+                    return;
                   }
+                  // three explicit choices — replacing the whole patch must
+                  // never be what Esc or Cancel does
+                  void askChoice(`Import "${file.name}"`, [
+                    { value: 'merge', label: 'Merge into patch', primary: true },
+                    { value: 'replace', label: 'Replace everything', danger: true },
+                  ], {
+                    body: 'Merge adds the scene’s fixtures to the current patch. Replace clears the patch, groups, and looks first — that cannot be undone.',
+                  }).then((choice) => {
+                    if (!choice) return;
+                    useStore.getState().send({
+                      type: 'importMvr', name: file.name, data: b64, replace: choice === 'replace',
+                    });
+                  });
                 };
                 reader.readAsDataURL(file);
                 e.target.value = '';
@@ -445,7 +463,11 @@ export function PatchView() {
             className="btn small ghost"
             title="re-address every fixture sequentially per universe, keeping the current order"
             onClick={() => {
-              if (!window.confirm('Re-address all fixtures sequentially per universe (keeps current order)?')) return;
+              void (async () => {
+              if (!(await askConfirm('Re-address every fixture?', {
+                body: 'Fixtures are packed sequentially per universe, keeping their current order. Your hardware DIP switches must match afterwards.',
+                confirmLabel: 'Re-address all',
+              }))) return;
               mutate((p) => {
                 for (const u of p.universes) {
                   let addr = 1;
@@ -458,6 +480,7 @@ export function PatchView() {
                   }
                 }
               });
+              })();
             }}
           >
             auto-pack addresses
@@ -492,7 +515,11 @@ export function PatchView() {
                 className="btn small ghost"
                 title="re-address the selected fixtures sequentially, keeping their current order"
                 onClick={() => {
-                  const startStr = window.prompt('Re-address selected sequentially from address:', '1');
+                  void (async () => {
+                  const startStr = await askPrompt('Re-address selected fixtures', '1', {
+                    body: 'They are packed sequentially from this start address, in table order.',
+                    confirmLabel: 'Re-address',
+                  });
                   if (startStr === null) return;
                   const start = Math.max(1, Math.min(512, Number(startStr) || 1));
                   mutate((p) => {
@@ -506,6 +533,7 @@ export function PatchView() {
                       addr += ch;
                     }
                   });
+                  })();
                 }}
               >
                 ⇢ re-address
@@ -542,12 +570,19 @@ export function PatchView() {
                 style={{ color: 'var(--hot)' }}
                 title="delete the selected fixtures"
                 onClick={() => {
-                  if (!window.confirm(`Delete ${fxSel.length} selected fixture(s)? Groups lose their heads.`)) return;
-                  mutate((p) => {
-                    p.fixtures = p.fixtures.filter((f) => !fxSel.includes(f.id));
-                    for (const g of p.groups) g.heads = g.heads.filter((h) => !fxSel.includes(h.fixtureId));
-                  });
-                  useStore.getState().setFxSel([]);
+                  void (async () => {
+                    const ok = await askConfirm(`Delete ${fxSel.length} selected fixture(s)?`, {
+                      body: 'Groups lose those heads. Undo (⌘Z) restores the patch.',
+                      confirmLabel: 'Delete',
+                      danger: true,
+                    });
+                    if (!ok) return;
+                    mutate((p) => {
+                      p.fixtures = p.fixtures.filter((f) => !fxSel.includes(f.id));
+                      for (const g of p.groups) g.heads = g.heads.filter((h) => !fxSel.includes(h.fixtureId));
+                    });
+                    useStore.getState().setFxSel([]);
+                  })();
                 }}
               >
                 ✕ delete
@@ -608,9 +643,25 @@ export function PatchView() {
             </div>
             <button
               className="btn small ghost"
-              onClick={() => mutate((p) => {
-                p.groups = p.groups.filter((x) => x.id !== g.id);
-              })}
+              title="delete group"
+              onClick={() => {
+                void (async () => {
+                  const users = Object.values(project.looks).filter((lk) =>
+                    lk.parts.some((pt) => pt.groupId === g.id),
+                  );
+                  if (users.length > 0) {
+                    const ok = await askConfirm(`Delete group "${g.name}"?`, {
+                      body: `${users.length} look(s) target it: ${users.map((l) => l.name).join(', ')}. Those parts will stop rendering until you point them at another group.`,
+                      confirmLabel: 'Delete group',
+                      danger: true,
+                    });
+                    if (!ok) return;
+                  }
+                  mutate((p) => {
+                    p.groups = p.groups.filter((x) => x.id !== g.id);
+                  });
+                })();
+              }}
             >
               ✕
             </button>

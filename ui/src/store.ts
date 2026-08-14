@@ -25,7 +25,12 @@ type Store = {
   showBand: boolean;
   learnMode: boolean;
   learnTarget: MidiAction | null;
+  /** derived display list: the engine's ports when it owns MIDI, else the browser's */
   midiInputs: string[];
+  /** ports reported by the engine (native MIDI); empty = engine has none */
+  engineMidiNames: string[];
+  /** ports seen by WebMIDI in this browser */
+  webMidiNames: string[];
   /** true when the engine owns native MIDI (Rust core) — the browser must not double-forward */
   engineMidi: boolean;
   lastMidi: string | null;
@@ -59,7 +64,7 @@ type Store = {
 };
 
 let ws: WebSocket | null = null;
-const pending: string[] = [];
+const pending: { slug: string | null; msg: string }[] = [];
 
 // Only edits are worth replaying after a reconnect — queued live commands
 // (triggers, tap, masters) would fire as a stale burst.
@@ -76,7 +81,7 @@ function wsSend(msg: string): void {
   } catch {
     return;
   }
-  if (pending.length < 50) pending.push(msg);
+  if (pending.length < 50) pending.push({ slug: currentSlug, msg });
 }
 
 // --- undo history: snapshots taken ONLY at the mutate() choke point — this
@@ -111,6 +116,26 @@ function pushUndo(p: Project): void {
   redoStack.length = 0;
 }
 
+let projectWriteTimer: ReturnType<typeof setTimeout> | null = null;
+let projectWriteFirst = 0;
+
+/** Throttle full-project writes to ~20/s with a bounded 250 ms max latency so
+ *  a continuous drag cannot postpone the authoritative echo indefinitely. */
+function queueProjectWrite(send: () => void): void {
+  const now = Date.now();
+  if (projectWriteTimer) {
+    if (now - projectWriteFirst < 250) return; // already scheduled, still fresh
+    clearTimeout(projectWriteTimer);
+  } else {
+    projectWriteFirst = now;
+  }
+  projectWriteTimer = setTimeout(() => {
+    projectWriteTimer = null;
+    projectWriteFirst = 0;
+    send();
+  }, 50);
+}
+
 /** entry usable only if it provably belongs to the current project */
 function entryUsable(e: HistoryEntry | undefined): e is HistoryEntry {
   return !!e && e.slug !== null && e.slug === currentSlug;
@@ -132,6 +157,8 @@ export const useStore = create<Store>()((set, get) => ({
   learnMode: false,
   learnTarget: null,
   midiInputs: [],
+  engineMidiNames: [],
+  webMidiNames: [],
   engineMidi: false,
   lastMidi: null,
   importMsg: null,
@@ -149,7 +176,10 @@ export const useStore = create<Store>()((set, get) => ({
     const next = structuredClone(cur);
     fn(next);
     set({ project: next, undoDepth: undoStack.length, redoDepth: redoStack.length });
-    get().send({ type: 'updateProject', project: next });
+    // Local state updates every event so the UI stays live, but the wire send
+    // is trailing-edge throttled: a scrub or fader drag emits dozens of edits
+    // a second and each one is a whole project.
+    queueProjectWrite(() => get().send({ type: 'updateProject', project: get().project! }));
   },
 
   undo: () => {
@@ -216,22 +246,69 @@ export const useStore = create<Store>()((set, get) => ({
     get().send({ type: 'midi', status, d1, d2 });
   },
 
-  setMidiInputs: (midiInputs) => set({ midiInputs }),
+  setMidiInputs: (names) =>
+    set((s) => ({
+      webMidiNames: names,
+      // the engine wins when it has ports; otherwise show what the browser sees
+      midiInputs: s.engineMidiNames.length > 0 ? s.engineMidiNames : names,
+    })),
 }));
 
-function connect(): void {
+/** Replay offline edits only if the engine still has the project they were
+ *  made against; consecutive project writes coalesce to the last one. */
+function flushPending(engineSlug: string): void {
+  if (pending.length === 0) return;
+  const queued = pending.splice(0);
+  const usable = queued.filter((q) => q.slug === null || q.slug === engineSlug);
+  const dropped = queued.length - usable.length;
+  // only the newest full-project write matters; earlier ones are supersets
+  let lastProjectWrite: string | null = null;
+  const others: string[] = [];
+  for (const q of usable) {
+    try {
+      if ((JSON.parse(q.msg) as { type: string }).type === 'updateProject') lastProjectWrite = q.msg;
+      else others.push(q.msg);
+    } catch {
+      /* unparseable — drop */
+    }
+  }
+  for (const m of others) ws?.send(m);
+  if (lastProjectWrite) ws?.send(lastProjectWrite);
+  if (dropped > 0) {
+    useStore.setState({
+      toast: {
+        ok: false,
+        text: `${dropped} offline edit(s) discarded — the engine changed project`,
+        at: Date.now(),
+      },
+    });
+  }
+}
+
+function wsUrl(): string {
   // Inside the Tauri shell the page origin is tauri://localhost (or
   // http://tauri.localhost on Windows) — the engine is always local there.
+  // Inside the Tauri shell the origin is tauri:// (engine is local). Served
+  // over http from the engine itself, reuse that host:port so a non-default
+  // LIGHT_PORT and LAN/tablet access both work; the Vite dev server (5173)
+  // still points at the default engine port.
+  const devServer = location.port === '5173' || location.port === '5177';
+  if (location.protocol.startsWith('http') && !location.hostname.endsWith('tauri.localhost') && !devServer) {
+    return `ws://${location.host}`;
+  }
   const host = !location.protocol.startsWith('http') || location.hostname.endsWith('tauri.localhost')
     ? 'localhost'
     : location.hostname;
-  const url = `ws://${host}:${WS_PORT}`;
-  ws = new WebSocket(url);
+  return `ws://${host}:${WS_PORT}`;
+}
+
+function connect(): void {
+  ws = new WebSocket(wsUrl());
   ws.onopen = () => {
     useStore.setState({ connected: true });
-    for (const m of pending.splice(0)) ws?.send(m);
-    // learn the current project slug right away — undo refuses to act on
-    // snapshots it cannot attribute to the loaded project
+    // Do NOT flush queued edits yet: the engine may have switched projects
+    // while we were offline, and a stale updateProject would overwrite a
+    // different show. Ask which project is loaded and decide in that handler.
     ws?.send(JSON.stringify({ type: 'projects' }));
   };
   ws.onmessage = (e) => {
@@ -259,13 +336,19 @@ function connect(): void {
       useStore.setState((s) => ({ oscLog: [ev.entry, ...s.oscLog].slice(0, 40) }));
     } else if (ev.type === 'saved') useStore.setState({ savedFlash: Date.now() });
     else if (ev.type === 'midiInputs') {
-      if (ev.names.length > 0) useStore.setState({ midiInputs: ev.names, engineMidi: true });
-      else useStore.setState({ engineMidi: false });
+      // take the list verbatim — an EMPTY list means the controller was
+      // unplugged, and the status dot must go dark within one rescan
+      useStore.setState((s) => ({
+        engineMidiNames: ev.names,
+        engineMidi: ev.names.length > 0,
+        midiInputs: ev.names.length > 0 ? ev.names : s.webMidiNames,
+      }));
     } else if (ev.type === 'learned') {
       useStore.setState({ learnMode: false, learnTarget: null, lastMidi: 'mapped ✓' });
     } else if (ev.type === 'importResult') {
       useStore.setState({ importMsg: { ok: ev.ok, text: ev.message } });
     } else if (ev.type === 'projects') {
+      flushPending(ev.current);
       if (currentSlug !== ev.current) {
         // different project identity — this window's history no longer applies
         clearHistory();
