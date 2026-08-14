@@ -105,6 +105,7 @@ pub fn run(mut cfg: EngineConfig) {
     let mut dirty_at: Option<Instant> = None;
     let mut dirty_first: Option<Instant> = None;
     let mut project_dirty = false;
+    let mut last_echo = Instant::now();
     let mut osc_log: (f64, u32) = (0.0, 0); // monitor rate-limit window
 
     // Keep the machine awake through a set — display sleep or App Nap
@@ -205,9 +206,12 @@ pub fn run(mut cfg: EngineConfig) {
             jitter_max = late;
         }
 
-        // one coalesced project echo per tick, however many edits arrived
-        if project_dirty {
+        // Coalesced project echo, rate-limited: continuous controls (faders,
+        // MIDI CC) dirty the project on every input event, and each echo is
+        // the WHOLE project.
+        if project_dirty && last_echo.elapsed() >= Duration::from_millis(100) {
             project_dirty = false;
+            last_echo = Instant::now();
             bc.broadcast(&project_event(&state));
         }
 
@@ -516,9 +520,13 @@ fn handle_msg(
             bc.send_to(id, json!({ "type": "midiInputs", "names": midi_names }).to_string());
         }
         EngineMsg::ClientDisconnected => {
-            // The protocol doesn't attribute holds to clients, so release on
-            // ANY disconnect: a spurious release beats a latched blinder.
-            state.release_all_held(t);
+            // Only when the LAST client goes: a tablet dropping off the WiFi
+            // must not release a blinder the console is holding. (Holds are
+            // still not attributed per client — that is the complete fix — but
+            // a latched blinder with nobody connected is the dangerous case.)
+            if bc.count() == 0 {
+                state.release_all_held(t);
+            }
             // Closing the window drops its socket — flush now rather than
             // gambling that the process lives long enough for the autosave
             // debounce (or that the host delivers a quit event at all).

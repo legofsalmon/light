@@ -149,10 +149,17 @@ state.onChange = () => {
   osc.listen(state.project.sync.oscPort, state.project.sync.oscEnabled);
 };
 
-/** Flush a coalesced project echo — called once per tick. */
+let lastEcho = 0;
+
+/** Flush a coalesced project echo — called every tick, but rate-limited to
+ *  ~10/s: continuous controls dirty the project per input event and each echo
+ *  is the whole project (12x the snapshot stream during a fader ride). */
 function flushProject(): void {
   if (!projectDirty) return;
+  const now = performance.now();
+  if (now - lastEcho < 100) return;
   projectDirty = false;
+  lastEcho = now;
   server.broadcast({ type: 'project', project: state.project });
 }
 
@@ -166,7 +173,9 @@ server.onConnect = (ws) => {
 // The protocol doesn't attribute holds to clients, so release on ANY
 // disconnect: a spurious release beats a blinder latched on stage.
 server.onDisconnect = () => {
-  state.releaseAllHeld();
+  // only when the LAST client goes — a tablet dropping off the WiFi must not
+  // release a blinder the console is holding
+  if (server.clientCount === 0) state.releaseAllHeld();
 };
 
 state.onLearned = (mapping) => {

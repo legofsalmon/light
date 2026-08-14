@@ -158,6 +158,13 @@ impl EngineState {
         true
     }
 
+    /// Held flashes must not survive a page change: the cell they were taken
+    /// from is swapped out, so the note-off can never find them again and the
+    /// blinder stays lit for the rest of the show.
+    fn release_holds_for_deck_change(&mut self, t: f64) {
+        self.release_all_held(t);
+    }
+
     pub fn deck_step(&mut self, dir: i32) -> bool {
         if self.project.decks.len() < 2 {
             return false;
@@ -570,6 +577,7 @@ impl EngineState {
             }
             Command::SwitchDeck { deck_id } => {
                 if self.switch_deck(&deck_id) {
+                    self.release_holds_for_deck_change(t);
                     out.project_changed = true;
                 }
             }

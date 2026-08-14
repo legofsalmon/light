@@ -111,6 +111,10 @@ export class EngineState {
       l.cells = cells;
     }
     this.project.activeDeckId = deckId;
+    // Held flashes must not survive a page change: the cell they were taken
+    // from is swapped out, so the note-off can never find them again and the
+    // blinder stays lit for the rest of the show.
+    this.releaseAllHeld();
     this.notify();
     return true;
   }

@@ -489,9 +489,32 @@ export function LookEditor() {
               const refs = Object.values(project.looks).filter(
                 (l) => l.steps?.some((st) => st.lookId === lookId),
               );
-              if (refs.length > 0) {
+              // the look lives in ONE pool shared by every song — deleting it
+              // blanks its cell in each of them, which was silent before
+              const decksHit = (project.decks ?? []).filter((d) =>
+                Object.values(d.cells).some((cells) => cells.includes(lookId)),
+              );
+              const cellCount = (project.decks ?? []).reduce(
+                (n, d) =>
+                  n + Object.values(d.cells).reduce((m, cells) => m + cells.filter((c) => c === lookId).length, 0),
+                0,
+              );
+              if (refs.length > 0 || decksHit.length > 0) {
+                const parts: string[] = [];
+                if (decksHit.length > 0) {
+                  parts.push(
+                    `It is used in ${cellCount} cell(s) across ${decksHit.length} song(s): ${decksHit
+                      .map((d) => d.name)
+                      .join(', ')}. Those cells will be emptied.`,
+                  );
+                }
+                if (refs.length > 0) {
+                  parts.push(
+                    `It is a step in ${refs.length} cue list(s): ${refs.map((l) => l.name).join(', ')}. Those steps will go dark.`,
+                  );
+                }
                 const ok = await askConfirm(`Delete "${look.name}"?`, {
-                  body: `It is a step in ${refs.length} cue list(s): ${refs.map((l) => l.name).join(', ')}. Those steps will go dark.`,
+                  body: parts.join('\n\n'),
                   confirmLabel: 'Delete',
                   danger: true,
                 });
@@ -500,6 +523,12 @@ export function LookEditor() {
               mutate((p) => {
                 delete p.looks[lookId];
                 for (const ly of p.layers) ly.cells = ly.cells.map((c) => (c === lookId ? null : c));
+                // stored decks hold their own copies of the cells
+                for (const d of p.decks ?? []) {
+                  for (const [lid, cells] of Object.entries(d.cells)) {
+                    d.cells[lid] = cells.map((c) => (c === lookId ? null : c));
+                  }
+                }
               });
             })();
           }}
