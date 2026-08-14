@@ -146,12 +146,13 @@
     fire them from columns, MIDI pads, or Resolume itself — with beat-synced effects,
     real 3D previz, and rock-solid Art-Net output at 40&nbsp;Hz.</p>
     <div class="cta">
-      <a class="btn primary" href="https://github.com/legofsalmon/light/releases/latest/download/LIGHT.zip">Download for macOS</a>
+      <a class="btn primary" href="https://github.com/legofsalmon/light/releases/latest/download/LIGHT.dmg">Download for macOS</a>
       <a class="btn" href="#start">Get started</a>
       <a class="btn" href="https://github.com/legofsalmon/light">View on GitHub</a>
     </div>
     <p style="font-size:12px;color:var(--dim);margin-top:10px">
-      Apple&nbsp;Silicon · unsigned build — right-click&nbsp;→&nbsp;Open on first launch.
+      Universal (Apple&nbsp;Silicon + Intel) · not notarised — first launch needs
+      <a href="#install" style="color:inherit">one extra step</a>.
     </p>
     <div class="mock" aria-hidden="true">
       <div class="mock-top">
@@ -259,6 +260,25 @@
       <div><span class="ok">ok</span>&nbsp;&nbsp; live column state parity</div>
       <div class="p">Parity: Rust core matches the Node reference.</div>
     </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>Installing.</h2>
+    <p class="lede">Open the .dmg and drag LIGHT to Applications. The build is ad-hoc signed rather than
+    notarised by Apple, so macOS asks once before it will run it — Control-click&nbsp;→&nbsp;Open no longer
+    works on macOS&nbsp;Sequoia and later.</p>
+    <div class="steps">
+      <div class="step"><h3>1 · Try it</h3><p>Double-click LIGHT. macOS refuses and says it cannot verify the developer. That is expected.</p></div>
+      <div class="step"><h3>2 · Allow it</h3><p>Open <b>System&nbsp;Settings → Privacy&nbsp;&amp;&nbsp;Security</b>, scroll to <b>Security</b>, and click <b>Open&nbsp;Anyway</b> beside the LIGHT message.</p></div>
+      <div class="step"><h3>3 · Confirm</h3><p>Click <b>Open</b>. Once only — every later launch is a normal double-click.</p></div>
+    </div>
+    <p style="font-size:12px;color:var(--dim);margin-top:14px">
+      The Open&nbsp;Anyway button only appears for about an hour after a blocked launch — if it has gone,
+      double-click the app again first. Prefer a terminal?
+      <code>xattr -dr com.apple.quarantine /Applications/LIGHT.app</code>
+    </p>
   </div>
 </section>
 

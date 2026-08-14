@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-macos:
-    name: build LIGHT.app (macOS, Apple Silicon)
+    name: build LIGHT.app (macOS, universal)
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
@@ -22,6 +22,10 @@ jobs:
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          # a universal bundle needs BOTH slices; without the x86_64 target the
+          # build fails late, after the full test suite has already run
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
 
       - uses: Swatinem/rust-cache@v2
 
@@ -39,11 +43,31 @@ jobs:
       - name: Differential parity (Node vs Rust)
         run: cargo build -p light-core && npm run test:parity
 
-      - name: Build the app (engine + previz + bundle, ad-hoc signed)
+      - name: Build the app (universal; signed + notarised when secrets exist)
+        # With no secrets set these are empty and the bundler falls back to the
+        # ad-hoc signature — same output as before. Add a Developer ID cert and
+        # an app-specific password as repo secrets and the SAME build starts
+        # producing a notarised app that opens on a double-click, with no other
+        # change to this workflow.
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run app:build
 
+      - name: Report how the bundle was signed
+        run: |
+          codesign -dv --verbose=2 target/universal-apple-darwin/release/bundle/macos/LIGHT.app 2>&1 | \
+            grep -E 'Authority|TeamIdentifier|Signature|flags' || true
+          echo "--- notarisation ticket (absent on ad-hoc builds) ---"
+          xcrun stapler validate target/universal-apple-darwin/release/bundle/macos/LIGHT.app || \
+            echo "not stapled — first launch needs the Privacy & Security > Open Anyway step"
+
       - name: Zip the bundle (ditto preserves signatures)
-        run: ditto -c -k --keepParent target/release/bundle/macos/LIGHT.app LIGHT.zip
+        run: ditto -c -k --keepParent target/universal-apple-darwin/release/bundle/macos/LIGHT.app LIGHT.zip
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -55,11 +79,25 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: LIGHT.zip
+          files: |
+            LIGHT.zip
+            target/universal-apple-darwin/release/bundle/macos/LIGHT.dmg
           generate_release_notes: true
           body: |
-            **LIGHT for macOS (Apple Silicon).**
+            **LIGHT for macOS** — universal (Apple Silicon + Intel).
 
-            The app is ad-hoc signed: after unzipping, right-click → Open the
-            first time (macOS Gatekeeper blocks a plain double-click on
-            downloaded unsigned apps).
+            Open the .dmg and drag LIGHT to Applications.
+
+            This build is ad-hoc signed rather than notarised by Apple, so the
+            first launch needs one extra step. Control-click → Open **no longer
+            works** on macOS Sequoia and later:
+
+            1. Double-click LIGHT. macOS refuses and says it cannot verify it.
+            2. Open **System Settings → Privacy & Security**, scroll to
+               **Security**, and click **Open Anyway** next to the LIGHT message.
+            3. Confirm **Open**. Only needed once.
+
+            The Open Anyway button only appears for about an hour after the
+            blocked launch — if it is gone, double-click the app again first.
+
+            Prefer a terminal? `xattr -dr com.apple.quarantine /Applications/LIGHT.app`
