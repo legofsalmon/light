@@ -58,7 +58,18 @@ elif [ "$P12" != "--export" ]; then
     echo "\"Developer ID Application\" certificate > Export > .p12, set a password." >&2
     exit 1
   fi
-  read -r -s -p "Password for $P12: " P12_PASS; echo
+  IFS= read -r -s -p "Password for $P12: " P12_PASS; echo
+  # Check it here rather than discovering it 40 minutes into a CI build, which
+  # is exactly how the first attempt failed: every test passed, both slices
+  # compiled, then the keychain import rejected the password.
+  if ! openssl pkcs12 -in "$P12" -noout -passin pass:"$P12_PASS" 2>/dev/null; then
+    echo >&2
+    echo "That password does not open $P12." >&2
+    echo "Check it by hand with:  openssl pkcs12 -in \"$P12\" -noout" >&2
+    echo "Or re-export the certificate from Keychain Access with a fresh one." >&2
+    exit 1
+  fi
+  echo "password verified against the certificate"
 else
   echo "Exporting: $IDENT"
   echo "macOS will show a permission dialog. It often opens BEHIND this window —"
@@ -89,18 +100,18 @@ USE_KEY=0
 if [ -n "$P8" ]; then
   KEY_ID=$(basename "$P8" | sed 's/AuthKey_\(.*\)\.p8/\1/')
   echo "Found App Store Connect key $KEY_ID at $P8"
-  read -r -p "Use it for notarisation instead of an app-specific password? [Y/n] " ANS
+  IFS= read -r -p "Use it for notarisation instead of an app-specific password? [Y/n] " ANS
   [ "$ANS" = "n" ] || [ "$ANS" = "N" ] || USE_KEY=1
 fi
 
 if [ "$USE_KEY" = "1" ]; then
   echo "Issuer ID is on the same App Store Connect page as the key:"
   echo "  Users and Access > Integrations > Keys — shown above the key list."
-  read -r -p "Issuer ID (UUID): " ISSUER
+  IFS= read -r -p "Issuer ID (UUID): " ISSUER
   [ -n "$ISSUER" ] || { echo "issuer id cannot be empty" >&2; exit 1; }
 else
-  read -r -p  "Apple ID email                          : " APPLE_ID_VALUE
-  read -r -s -p "App-specific password (xxxx-xxxx-xxxx-xxxx): " APP_PASS; echo
+  IFS= read -r -p  "Apple ID email                          : " APPLE_ID_VALUE
+  IFS= read -r -s -p "App-specific password (xxxx-xxxx-xxxx-xxxx): " APP_PASS; echo
   [ -n "$APPLE_ID_VALUE" ] || { echo "Apple ID cannot be empty" >&2; exit 1; }
   [ -n "$APP_PASS" ]       || { echo "app-specific password cannot be empty" >&2; exit 1; }
 fi
