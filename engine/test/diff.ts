@@ -68,6 +68,34 @@ async function currentProject(c: Client): Promise<Project> {
   throw new Error('no project received');
 }
 
+/** Wait until both engines have stopped changing, then compare.
+ *
+ *  Several scenarios end in a crossfade — all-stop, for one, leaves pan/tilt
+ *  travelling back to centre even though blackout has already killed
+ *  intensity. Comparing after a fixed sleep only works if that fade happens to
+ *  have finished, and the two engines start their fades a few milliseconds
+ *  apart because the commands arrive over separate sockets. Mid-fade, that
+ *  skew is a real byte difference and the suite fails on a slow runner while
+ *  passing on a fast one. Settling first removes the race instead of hiding it
+ *  behind a longer sleep: if the engines genuinely disagree, they still
+ *  disagree once both are still. */
+async function settle(a: Client, b: Client, maxMs = 4000): Promise<void> {
+  const snapshot = (c: Client) => (c.snap?.dmx['u1'] ?? []).join(',');
+  let prevA = snapshot(a);
+  let prevB = snapshot(b);
+  let stable = 0;
+  for (let waited = 0; waited < maxMs; waited += 100) {
+    await sleep(100);
+    const nowA = snapshot(a);
+    const nowB = snapshot(b);
+    // two consecutive identical frames on both sides = nothing is moving
+    stable = nowA === prevA && nowB === prevB ? stable + 1 : 0;
+    prevA = nowA;
+    prevB = nowB;
+    if (stable >= 2) return;
+  }
+}
+
 function compareDmx(name: string, a: Snapshot | null, b: Snapshot | null): void {
   const da = a?.dmx['u1'];
   const db = b?.dmx['u1'];
@@ -383,7 +411,7 @@ async function main(): Promise<void> {
 
     // all-stop: dark, quiet, and no overrides left behind
     both({ type: 'allStop' });
-    await sleep(900);
+    await settle(node, rust);
     compareDmx('all-stop parity', node.snap, rust.snap);
     // all-stop is about the room going dark and QUIET: every dimmer at zero,
     // the hazer and its fan stopped, derby motors stopped. (Colour channels
