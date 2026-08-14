@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- macOS 15+ asks the user before any app may talk to the local network,
+       sandboxed or not. LIGHT's entire job is on the LAN: Art-Net broadcast
+       and unicast, sACN multicast, ArtPoll discovery, and serving the UI to a
+       tablet. Without this string the consent dialog appears with no reason
+       given, and if it is declined the rig simply stops responding with
+       nothing on screen to explain why. -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>LIGHT sends DMX to your lighting rig over Art-Net and sACN, finds Art-Net nodes on the network, and serves its own interface to other devices. Without local network access it cannot reach any fixtures.</string>
+</dict>
+</plist>

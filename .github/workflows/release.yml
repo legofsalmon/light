@@ -12,7 +12,9 @@ jobs:
   build-macos:
     name: build LIGHT.app (macOS, universal)
     runs-on: macos-latest
-    timeout-minutes: 45
+    # a universal build compiles Bevy twice; 45 min was not enough from a cold
+    # cache and the job was cancelled mid-bundle after every test had passed
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 

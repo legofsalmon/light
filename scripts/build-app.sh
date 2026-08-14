@@ -40,11 +40,15 @@ else
 fi
 
 echo "==> re-signing (adding a binary invalidates the bundle seal)"
+# --entitlements is NOT optional here: re-signing without it silently drops the
+# entitlements Tauri applied, and the app ships hardened but stripped. Verified
+# the hard way — the first signed build came out with an empty entitlement set.
+ENTS="src-tauri/light.entitlements"
 if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   codesign --force --deep --options runtime --timestamp \
-    -s "$APPLE_SIGNING_IDENTITY" "$BUNDLE"
+    --entitlements "$ENTS" -s "$APPLE_SIGNING_IDENTITY" "$BUNDLE"
 else
-  codesign --force --deep -s - "$BUNDLE"
+  codesign --force --deep --entitlements "$ENTS" -s - "$BUNDLE"
 fi
 
 echo "==> dmg"
@@ -64,6 +68,8 @@ echo "dmg: $DMG_OUT"
 
 echo "==> result"
 codesign -dv --verbose=2 "$BUNDLE" 2>&1 | grep -E 'Authority|TeamIdentifier|Signature|flags' || true
+echo "-- entitlements --"
+codesign -d --entitlements - --xml "$BUNDLE" 2>/dev/null | plutil -p - 2>/dev/null || echo "  (none)"
 lipo -archs "$BUNDLE/Contents/MacOS/light-app"
 lipo -archs "$BUNDLE/Contents/MacOS/light-previz"
 du -sh "$BUNDLE"

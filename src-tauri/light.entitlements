@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Hardened runtime is required for notarisation. LIGHT needs almost none
+       of the usual exceptions: it is not sandboxed, so network access needs no
+       entitlement (local-network consent is a separate TCC prompt, see
+       Info.plist), and the previz binary it launches is signed with the same
+       identity inside the same bundle.
+
+       JIT is the one real requirement: the webview runs JavaScriptCore, and a
+       hardened runtime without this kills the JIT the UI depends on. -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+</dict>
+</plist>

@@ -35,6 +35,8 @@
     "resources": {
       "../ui/dist": "ui-dist"
     },
-    "macOS": {}
+    "macOS": {
+      "entitlements": "light.entitlements"
+    }
   }
 }
