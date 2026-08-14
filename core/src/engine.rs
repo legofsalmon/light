@@ -519,6 +519,15 @@ fn handle_msg(
             // The protocol doesn't attribute holds to clients, so release on
             // ANY disconnect: a spurious release beats a latched blinder.
             state.release_all_held(t);
+            // Closing the window drops its socket — flush now rather than
+            // gambling that the process lives long enough for the autosave
+            // debounce (or that the host delivers a quit event at all).
+            let slug = persist::current_slug(dir);
+            if let Err(e) = persist::save_project_slug(dir, &slug, &state.project) {
+                eprintln!("[persist] disconnect flush failed: {e}");
+            } else {
+                *dirty_at = None;
+            }
         }
     }
     false
