@@ -156,6 +156,8 @@ fn gdtf_import_end_to_end() {
         address: 200,
         pos: Vec3 { x: 0.0, y: 3.0, z: 0.0 },
         rot_y: 0.0,
+        rot_x: None,
+        rot_z: None,
     });
     st.project.groups.push(Group {
         id: "g-spot".into(),

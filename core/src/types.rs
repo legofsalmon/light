@@ -46,6 +46,12 @@ pub struct Fixture {
     pub address: usize,
     pub pos: Vec3,
     pub rot_y: f64,
+    /// mounting tilt (pitch, radians) — composes on the kind's default aim
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rot_x: Option<f64>,
+    /// mounting roll (radians)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rot_z: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

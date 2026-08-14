@@ -49,6 +49,7 @@ fn main() {
                 update::apply_live,
                 update::diag_state,
                 update::auto_screenshot,
+                scene::toggle_band,
                 camera::orbit_camera,
             )
                 .chain(),

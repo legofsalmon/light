@@ -479,6 +479,8 @@ impl EngineState {
                 address: f.address,
                 pos: crate::types::Vec3 { x: f.pos[0], y: f.pos[1], z: f.pos[2] },
                 rot_y: f.rot_y,
+                rot_x: None,
+                rot_z: None,
             });
         }
         for g in &bundle.groups {

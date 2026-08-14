@@ -39,7 +39,7 @@ function basicBox(w: number, h: number, d: number, color: number): THREE.Mesh {
 
 function fixtureSignature(p: Project): string {
   return JSON.stringify([
-    p.fixtures.map((f) => [f.id, f.profileId, f.pos, f.rotY]),
+    p.fixtures.map((f) => [f.id, f.profileId, f.pos, f.rotY, f.rotX ?? 0, f.rotZ ?? 0]),
     // imported profiles can change shape (e.g. pixel-head upgrades) without
     // any fixture field changing
     Object.entries(p.profiles ?? {}).map(([id, cp]) => [id, cp.heads.length, cp.beamDeg]),
@@ -55,7 +55,8 @@ function buildRig(project: Project): { group: THREE.Group; handles: HeadHandle[]
     if (!prof) continue;
     const fg = new THREE.Group();
     fg.position.set(f.pos.x, f.pos.y, f.pos.z);
-    fg.rotation.y = f.rotY;
+    fg.rotation.order = 'YXZ'; // yaw, then mounting tilt, then roll
+    fg.rotation.set(f.rotX ?? 0, f.rotY, f.rotZ ?? 0);
 
     // body
     if (prof.heads.length > 1) fg.add(basicBox(1.06, 0.09, 0.09, 0x2c2c33));

@@ -19,8 +19,15 @@ pub fn drain_ws(rx: Res<WsReceiver>, mut live: ResMut<Live>) {
                     .iter()
                     .map(|f| {
                         format!(
-                            "{}|{}|{:.2},{:.2},{:.2}|{:.3};",
-                            f.id, f.profile_id, f.pos.x, f.pos.y, f.pos.z, f.rot_y
+                            "{}|{}|{:.2},{:.2},{:.2}|{:.3},{:.3},{:.3};",
+                            f.id,
+                            f.profile_id,
+                            f.pos.x,
+                            f.pos.y,
+                            f.pos.z,
+                            f.rot_y,
+                            f.rot_x.unwrap_or(0.0),
+                            f.rot_z.unwrap_or(0.0)
                         )
                     })
                     .collect::<String>();

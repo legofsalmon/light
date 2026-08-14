@@ -26,6 +26,10 @@ pub struct FixtureLite {
     #[serde(default)]
     pub rot_y: f32,
     #[serde(default)]
+    pub rot_x: Option<f32>,
+    #[serde(default)]
+    pub rot_z: Option<f32>,
+    #[serde(default)]
     pub name: String,
 }
 

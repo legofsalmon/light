@@ -242,7 +242,7 @@ export function PatchView() {
           <thead>
             <tr>
               <th>Fixture</th><th>Profile</th><th>Universe</th><th>Address</th><th>Ch</th>
-              <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th></th>
+              <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th>Tilt°</th><th>Roll°</th><th></th>
             </tr>
           </thead>
           <tbody ref={tbodyRef}>
@@ -333,6 +333,40 @@ export function PatchView() {
                       onChange={(e) => mutate((p) => {
                         const x = p.fixtures.find((y) => y.id === f.id);
                         if (x) x.rotY = ((Number(e.target.value) || 0) * Math.PI) / 180;
+                      })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="num"
+                      style={{ width: 52 }}
+                      type="number"
+                      step="5"
+                      title="tilt (pitch) — composes on the fixture's default aim"
+                      value={Math.round(((f.rotX ?? 0) * 180) / Math.PI)}
+                      onChange={(e) => mutate((p) => {
+                        const x = p.fixtures.find((y) => y.id === f.id);
+                        if (!x) return;
+                        const v = ((Number(e.target.value) || 0) * Math.PI) / 180;
+                        if (v === 0) delete x.rotX;
+                        else x.rotX = v;
+                      })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="num"
+                      style={{ width: 52 }}
+                      type="number"
+                      step="5"
+                      title="roll"
+                      value={Math.round(((f.rotZ ?? 0) * 180) / Math.PI)}
+                      onChange={(e) => mutate((p) => {
+                        const x = p.fixtures.find((y) => y.id === f.id);
+                        if (!x) return;
+                        const v = ((Number(e.target.value) || 0) * Math.PI) / 180;
+                        if (v === 0) delete x.rotZ;
+                        else x.rotZ = v;
                       })}
                     />
                   </td>

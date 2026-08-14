@@ -26,6 +26,10 @@ export type Fixture = {
   pos: Vec3;
   /** radians, yaw for previz aim */
   rotY: number;
+  /** mounting tilt (pitch, radians) — composes on the kind's default aim */
+  rotX?: number;
+  /** mounting roll (radians) */
+  rotZ?: number;
 };
 
 export type HeadRef = { fixtureId: string; head: number };
@@ -393,6 +397,9 @@ export function sanitizeProject(p: Project): Project | null {
   for (const f of p.fixtures) {
     if (!Number.isFinite(f.address)) f.address = 1;
     if (!f.pos || typeof f.pos !== 'object') f.pos = { x: 0, y: 2, z: 0 };
+    if (!Number.isFinite(f.rotY)) f.rotY = 0;
+    if (f.rotX !== undefined && !Number.isFinite(f.rotX)) delete f.rotX;
+    if (f.rotZ !== undefined && !Number.isFinite(f.rotZ)) delete f.rotZ;
   }
   return p;
 }
