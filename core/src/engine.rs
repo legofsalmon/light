@@ -631,6 +631,16 @@ fn build_snapshot(
         identify: state.identify.clone(),
         overrides: state.overrides.values().map(|m| m.len()).sum(),
         osc_in: osc_status,
+        // a fixture pointing at a profile that no longer exists renders as
+        // nothing at all — both renderers skip it — so surface it rather than
+        // leaving an operator hunting a dead fixture on the truss
+        unknown_profiles: state
+            .project
+            .fixtures
+            .iter()
+            .filter(|f| !crate::renderer::profile_exists(&state.project, &f.profile_id))
+            .map(|f| f.id.clone())
+            .collect(),
         artnet_poll: match artnet.poll_status() {
             "off" => {
                 if state.project.universes.iter().any(|u| u.artnet) {

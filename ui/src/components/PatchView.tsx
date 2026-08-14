@@ -85,6 +85,7 @@ export function PatchView() {
   const fxSel = useStore((s) => s.fxSel);
   const send = useStore((s) => s.send);
   const muted = useStore((s) => s.snap?.muted) ?? [];
+  const unknownProfiles = useStore((s) => s.snap?.unknownProfiles) ?? [];
   const identify = useStore((s) => s.snap?.identify) ?? null;
   const conflicts = findConflicts(project);
   const uniOrder = new Map(project.universes.map((u, i) => [u.id, i]));
@@ -298,7 +299,16 @@ export function PatchView() {
               const prof = profileMeta(project, f.profileId);
               const selected = fxSel.includes(f.id) || marqueeHit.includes(f.id);
               return (
-                <tr key={f.id} data-fxid={f.id} className={selected ? 'rowsel' : ''}>
+                <tr
+                  key={f.id}
+                  data-fxid={f.id}
+                  className={`${selected ? 'rowsel' : ''} ${unknownProfiles.includes(f.id) ? 'rowdark' : ''}`}
+                  title={
+                    unknownProfiles.includes(f.id)
+                      ? 'this fixture\'s profile is missing — it renders as nothing at all. Re-import the profile or pick another one.'
+                      : undefined
+                  }
+                >
                   <td>
                     <input
                       className="text"

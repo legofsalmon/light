@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { Command, CompiledProfile, Snapshot } from '../shared/types.ts';
 import { WS_PORT, clamp, sanitizeProject } from '../shared/types.ts';
+import { PROFILES } from '../shared/profiles.ts';
 import { EngineState, LOCAL_CLIENT } from './state.ts';
 import { Renderer } from './renderer.ts';
 import { ArtnetOut } from './artnet.ts';
@@ -589,6 +590,19 @@ function loopBody(): void {
         };
       })(),
       ...(osc.status() ? { oscIn: osc.status() as 'on' | 'failed' } : {}),
+      ...((() => {
+        // a fixture pointing at a profile that no longer exists renders as
+        // nothing at all — surface it rather than leaving an operator hunting
+        // a dead fixture on the truss
+        const bad = state.project.fixtures
+          .filter(
+            (f) =>
+              !PROFILES[f.profileId] &&
+              !(state.project.profiles && Object.hasOwn(state.project.profiles, f.profileId)),
+          )
+          .map((f) => f.id);
+        return bad.length > 0 ? { unknownProfiles: bad } : {};
+      })()),
       stats,
     };
     server.broadcast(snap);

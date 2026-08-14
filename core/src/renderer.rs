@@ -8,6 +8,14 @@ use crate::state::EngineState;
 use crate::types::{clamp01, lerp, HeadSnap, LayerBlend, LayerSnap, MotorMode, Project};
 
 /// A fixture profile from either source: built-in code or imported data.
+/// Whether a fixture's profile id resolves to anything at all. A fixture whose
+/// profile is missing is skipped by the render loop — silently dark on stage —
+/// so the snapshot reports these rather than leaving them to be found by
+/// pointing at the truss and wondering which one died.
+pub fn profile_exists(project: &Project, profile_id: &str) -> bool {
+    Prof::resolve(project, profile_id).is_some()
+}
+
 enum Prof<'a> {
     Legacy(&'static Profile),
     Compiled(&'a CompiledProfile),

@@ -434,6 +434,8 @@ pub struct Snapshot {
     pub identify: Option<String>,
     #[serde(skip_serializing_if = "is_zero")]
     pub overrides: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unknown_profiles: Vec<String>,
     pub haze_fan: f64,
     pub heads: Vec<HeadSnap>,
     pub layers: Vec<LayerSnap>,

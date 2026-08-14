@@ -267,6 +267,10 @@ export type Snapshot = {
   identify?: string | null;
   /** number of raw channel overrides in force */
   overrides?: number;
+  /** Fixtures whose profile id resolves to nothing — they render as silently
+   *  dark, so the UI has to say so. Reachable by undoing past a GDTF import,
+   *  or by a hand-edited/older project file. */
+  unknownProfiles?: string[];
   hazeFan: number;
   heads: HeadSnap[];
   layers: LayerSnap[];

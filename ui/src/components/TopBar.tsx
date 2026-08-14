@@ -231,6 +231,14 @@ export function TopBar() {
           {snap!.muted!.length} muted
         </span>
       )}
+      {(snap?.unknownProfiles?.length ?? 0) > 0 && (
+        <span
+          className="mutedchip"
+          title="these fixtures reference a profile that no longer exists — they render as nothing at all. Re-import the fixture profile, or re-assign them in Fixtures."
+        >
+          {snap!.unknownProfiles!.length} dark (no profile)
+        </span>
+      )}
       {(snap?.overrides ?? 0) > 0 && (
         <span
           className="mutedchip"

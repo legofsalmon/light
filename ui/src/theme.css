@@ -719,3 +719,7 @@ table.tbl th { color: var(--text-dim); }
   color: var(--text-dim);
 }
 .colhead.addcol:hover { color: var(--text); }
+
+/* a fixture whose profile is missing renders as nothing — mark the row */
+.tbl tr.rowdark td { background: rgba(216, 64, 64, 0.10); }
+.tbl tr.rowdark td:first-child { box-shadow: inset 2px 0 0 var(--hot, #d84040); }
