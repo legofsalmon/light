@@ -12,6 +12,8 @@ export function PrevizPanel() {
   const setView2d = useStore((s) => s.setPreviz2dView);
   const hazeViz = useStore((s) => s.hazeViz);
   const setHazeViz = useStore((s) => s.setHazeViz);
+  const showBand = useStore((s) => s.showBand);
+  const setShowBand = useStore((s) => s.setShowBand);
   const fxSel = useStore((s) => s.fxSel);
 
   return (
@@ -24,7 +26,16 @@ export function PrevizPanel() {
         </div>
         <div className="grow" />
         {mode === '3d' && (
-          <Fader label="beam viz" width={110} value={hazeViz} onChange={setHazeViz} def={0.7} variant="dim" />
+          <>
+            <button
+              className={`btn small ${showBand ? 'on' : 'ghost'}`}
+              title="dummy band figures for scale (native previz window: press M)"
+              onClick={() => setShowBand(!showBand)}
+            >
+              band
+            </button>
+            <Fader label="beam viz" width={110} value={hazeViz} onChange={setHazeViz} def={0.7} variant="dim" />
+          </>
         )}
         {mode === '2d' && (
           <>

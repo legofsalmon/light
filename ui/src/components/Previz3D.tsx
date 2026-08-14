@@ -156,6 +156,90 @@ function disposeDeep(obj: THREE.Object3D): void {
   });
 }
 
+/** Dummy band, mirroring the native previz layout — five figures at real
+ *  human scale for judging blocking and throw distances. */
+function buildBand(): THREE.Group {
+  const g = new THREE.Group();
+  const cloth = new THREE.MeshStandardMaterial({ color: 0x232328, roughness: 0.92 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0x9e7861, roughness: 0.75 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x591f1a, roughness: 0.55 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x8c8c99, roughness: 0.35, metalness: 0.85 });
+  const brass = new THREE.MeshStandardMaterial({ color: 0xb5944a, roughness: 0.3, metalness: 0.9 });
+
+  const legsGeo = new THREE.CapsuleGeometry(0.13, 0.55, 4, 10);
+  const torsoGeo = new THREE.CapsuleGeometry(0.17, 0.4, 4, 10);
+  const headGeo = new THREE.SphereGeometry(0.11, 14, 10);
+
+  const standing = (x: number, z: number, yaw: number) => {
+    const p = new THREE.Group();
+    p.position.set(x, 0, z);
+    p.rotation.y = yaw;
+    const legs = new THREE.Mesh(legsGeo, cloth);
+    legs.position.y = 0.5;
+    const torso = new THREE.Mesh(torsoGeo, cloth);
+    torso.position.y = 1.17;
+    const head = new THREE.Mesh(headGeo, skin);
+    head.position.y = 1.62;
+    p.add(legs, torso, head);
+    g.add(p);
+  };
+
+  // vocalist + mic stand
+  standing(0, 1.9, 0);
+  const mic = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 1.55, 8), metal);
+  mic.position.set(0.3, 0.775, 2.15);
+  const micHead = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), cloth);
+  micHead.position.set(0.3, 1.56, 2.15);
+  g.add(mic, micHead);
+
+  // guitarist + bassist with instruments
+  for (const [x, yaw] of [[-1.7, -0.35], [1.7, 0.35]] as const) {
+    standing(x, 1.2, yaw);
+    const guitar = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.9, 0.09), wood);
+    guitar.position.set(x, 1.0, 1.42);
+    guitar.rotation.order = 'YXZ';
+    guitar.rotation.set(0, yaw, 0.55);
+    g.add(guitar);
+  }
+
+  // keyboardist + board
+  standing(-3.0, 0.6, -0.4);
+  const board = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.09, 0.32), cloth);
+  board.position.set(-3.0, 0.93, 0.95);
+  board.rotation.y = -0.4;
+  g.add(board);
+  for (const dx of [-0.45, 0.45]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.9, 0.05), metal);
+    leg.position.set(-3.0 + dx, 0.45, 0.95 + dx * 0.4);
+    leg.rotation.y = -0.4;
+    g.add(leg);
+  }
+
+  // drummer: stool + seated body + kick, snare, cymbals
+  const dz = 0.1;
+  const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.45, 10), cloth);
+  stool.position.set(0, 0.225, dz - 0.35);
+  const dtorso = new THREE.Mesh(torsoGeo, cloth);
+  dtorso.position.set(0, 0.85, dz - 0.35);
+  const dhead = new THREE.Mesh(headGeo, skin);
+  dhead.position.set(0, 1.3, dz - 0.35);
+  const kick = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.45, 16), wood);
+  kick.position.set(0, 0.28, dz + 0.25);
+  kick.rotation.x = Math.PI / 2;
+  const snare = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.14, 12), metal);
+  snare.position.set(-0.32, 0.55, dz - 0.05);
+  g.add(stool, dtorso, dhead, kick, snare);
+  for (const [cx, cy] of [[-0.5, 1.15], [0.5, 1.05]] as const) {
+    const cymbal = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.015, 16), brass);
+    cymbal.position.set(cx, cy, dz + 0.05);
+    cymbal.rotation.z = 0.08;
+    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, cy, 6), metal);
+    stand.position.set(cx, cy / 2, dz + 0.05);
+    g.add(cymbal, stand);
+  }
+  return g;
+}
+
 export function Previz3D() {
   const hostRef = useRef<HTMLDivElement>(null);
 
@@ -204,6 +288,13 @@ export function Previz3D() {
       scene.add(leg);
     }
 
+    // dummy band — scale/blocking reference (true illumination lives in the
+    // native previz window; this view's scenery is deliberately unlit)
+    const band = buildBand();
+    scene.add(band);
+    const bandLight = new THREE.HemisphereLight(0x9aa4c0, 0x1a1a20, 1.1);
+    scene.add(bandLight);
+
     let rig: { group: THREE.Group; handles: HeadHandle[] } | null = null;
     let lastProject: Project | null = null;
     let lastSig = '';
@@ -227,7 +318,8 @@ export function Previz3D() {
       const dt = Math.min(0.1, (now - lastT) / 1000);
       lastT = now;
 
-      const { project, snap, hazeViz } = useStore.getState();
+      const { project, snap, hazeViz, showBand } = useStore.getState();
+      band.visible = showBand;
 
       if (project && project !== lastProject) {
         lastProject = project;

@@ -21,6 +21,8 @@ type Store = {
   /** fixtures selected in the 2D previz (shift-click / marquee) for group building */
   fxSel: string[];
   hazeViz: number;
+  /** dummy band figures in the 3D previz views */
+  showBand: boolean;
   learnMode: boolean;
   learnTarget: MidiAction | null;
   midiInputs: string[];
@@ -48,6 +50,7 @@ type Store = {
   setPreviz2dView: (v: 'plan' | 'front') => void;
   setFxSel: (ids: string[]) => void;
   setHazeViz: (v: number) => void;
+  setShowBand: (v: boolean) => void;
   toggleLearnMode: () => void;
   /** In learn mode, a click on a mappable control arms it as the learn target. */
   armLearn: (a: MidiAction) => boolean;
@@ -125,6 +128,7 @@ export const useStore = create<Store>()((set, get) => ({
   previz2dView: 'plan',
   fxSel: [],
   hazeViz: 0.7,
+  showBand: true,
   learnMode: false,
   learnTarget: null,
   midiInputs: [],
@@ -188,6 +192,7 @@ export const useStore = create<Store>()((set, get) => ({
   setPreviz2dView: (previz2dView) => set({ previz2dView }),
   setFxSel: (fxSel) => set({ fxSel }),
   setHazeViz: (hazeViz) => set({ hazeViz }),
+  setShowBand: (showBand) => set({ showBand }),
   toggleLearnMode: () =>
     set((s) => {
       if (s.learnMode) get().send({ type: 'learn', action: null });
