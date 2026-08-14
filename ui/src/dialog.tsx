@@ -70,7 +70,9 @@ export function askPrompt(
         { value: 'cancel', label: 'Cancel' },
         { value: 'ok', label: opts.confirmLabel ?? 'OK', primary: true },
       ],
-      resolve: (v) => resolve(v === null || v === 'cancel' ? null : v),
+      // the host answers with the TYPED TEXT or null and never echoes a
+      // choice value, so "cancel" is a perfectly usable answer
+      resolve: (v) => resolve(v),
     });
   });
 }

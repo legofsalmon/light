@@ -12,5 +12,6 @@ fn main() {
         port,
         ui_dist: if dist.exists() { Some(dist) } else { None },
         with_midi: std::env::var("LIGHT_NO_MIDI").is_err(),
+        on_ready: None,
     });
 }

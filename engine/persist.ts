@@ -201,6 +201,12 @@ async function saveProjectAsync(p: Project): Promise<void> {
   await fs.promises.rename(tmp, file);
 }
 
+/** set by the engine so persistence failures can reach the operator's screen */
+let onSaveResult: ((error: string | null) => void) | null = null;
+export function setSaveReporter(fn: (error: string | null) => void): void {
+  onSaveResult = fn;
+}
+
 let timer: NodeJS.Timeout | null = null;
 let dirtySince: number | null = null;
 
@@ -216,9 +222,14 @@ export function saveProjectDebounced(get: () => Project, delayMs = 1200): void {
     () => {
       timer = null;
       dirtySince = null;
-      saveProjectAsync(get()).catch((err) => {
-        console.error('[persist] autosave failed:', (err as Error).message);
-      });
+      saveProjectAsync(get()).then(
+        () => onSaveResult?.(null),
+        (err) => {
+          const msg = (err as Error).message;
+          console.error('[persist] autosave failed:', msg);
+          onSaveResult?.(msg); // the operator must know their show is not on disk
+        },
+      );
     },
     overdue ? 0 : delayMs
   );

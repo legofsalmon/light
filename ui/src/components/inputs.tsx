@@ -100,16 +100,31 @@ export function ScrubNumInput({ value, scrubStep, decimals, width, title, onSet,
     pending: number;
     lastEmit: number;
   } | null>(null);
+  /** true while a scrub is in progress — the field must keep tracking the
+   *  value even though the press focused the input */
+  const scrubbing = React.useRef(false);
+  /** set when a scrub ends: the programmatic blur that follows must NOT
+   *  commit the pre-drag text over the value the scrub just produced */
+  const skipCommit = React.useRef(false);
 
   useEffect(() => {
-    if (document.activeElement !== ref.current) setDraft(fmt(value));
+    if (scrubbing.current || document.activeElement !== ref.current) setDraft(fmt(value));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, decimals]);
 
   const commit = () => {
+    if (skipCommit.current) {
+      skipCommit.current = false; // the scrub already applied its deltas
+      return;
+    }
     const v = Number(draft);
-    if (Number.isFinite(v)) onSet(v);
-    else setDraft(fmt(value));
+    if (!Number.isFinite(v) || draft.trim() === '') {
+      setDraft(fmt(value)); // unparseable or cleared — restore, never commit 0
+      return;
+    }
+    // no-op guard: focusing a field and clicking away must not stamp this
+    // row's value across a multi-selection
+    if (v !== value) onSet(v);
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLInputElement>) => {
@@ -128,6 +143,7 @@ export function ScrubNumInput({ value, scrubStep, decimals, width, title, onSet,
       if (!d.scrubbing) {
         if (Math.abs(dx) < 4) return;
         d.scrubbing = true;
+        scrubbing.current = true;
         try { el.setPointerCapture(me.pointerId); } catch { /* synthetic */ }
       }
       d.pending += (me.clientX - d.x) * scrubStep;
@@ -147,6 +163,8 @@ export function ScrubNumInput({ value, scrubStep, decimals, width, title, onSet,
       drag.current = null;
       if (d?.scrubbing) {
         if (d.pending !== 0) onDelta(d.pending); // flush the tail
+        scrubbing.current = false;
+        skipCommit.current = true; // the blur below must not revert the drag
         el.blur();
       }
       // plain click: fall through to normal focus/caret behaviour

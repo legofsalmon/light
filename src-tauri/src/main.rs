@@ -2,9 +2,18 @@
 
 use tauri::Manager;
 
+use std::sync::{Arc, Mutex};
+
 fn main() {
-    tauri::Builder::default()
-        .setup(|app| {
+    // the engine's message sender, once the engine thread is live — used to
+    // ask for a clean shutdown so ⌘Q cannot drop the last edits
+    let engine_tx: Arc<Mutex<Option<std::sync::mpsc::Sender<light_core::engine::EngineMsg>>>> =
+        Arc::new(Mutex::new(None));
+    let tx_for_setup = Arc::clone(&engine_tx);
+    let tx_for_exit = Arc::clone(&engine_tx);
+
+    let app = tauri::Builder::default()
+        .setup(move |app| {
             // The bundled UI is served over HTTP by the engine as well as
             // loaded in the window, so a phone or tablet on the same network
             // can drive the show at http://<mac>:9900.
@@ -33,6 +42,11 @@ fn main() {
                         // honor the same kill-switch as the standalone binary —
                         // test harnesses must keep the app off the controller
                         with_midi: std::env::var("LIGHT_NO_MIDI").is_err(),
+                        on_ready: Some(Box::new(move |tx| {
+                            if let Ok(mut slot) = tx_for_setup.lock() {
+                                *slot = Some(tx);
+                            }
+                        })),
                     });
                 });
                 match result {
@@ -43,6 +57,19 @@ fn main() {
             });
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running LIGHT");
+        .build(tauri::generate_context!())
+        .expect("error while building LIGHT");
+
+    app.run(move |_handle, event| {
+        if let tauri::RunEvent::ExitRequested { .. } = event {
+            // flush synchronously-ish: ask the engine to persist and give it a
+            // moment. Losing the last edits on quit is worse than a short wait.
+            if let Ok(slot) = tx_for_exit.lock() {
+                if let Some(tx) = slot.as_ref() {
+                    let _ = tx.send(light_core::engine::EngineMsg::Shutdown);
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(400));
+        }
+    });
 }

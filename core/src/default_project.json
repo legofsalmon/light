@@ -1112,7 +1112,7 @@
   },
   "cue-colourwheel": {
    "id": "cue-colourwheel",
-   "name": "⛓ Colour Wheel",
+   "name": "Colour Wheel",
    "parts": [],
    "steps": [
     {
@@ -1143,7 +1143,7 @@
   },
   "cue-verse": {
    "id": "cue-verse",
-   "name": "⛓ Verse 8s",
+   "name": "Verse 8s",
    "parts": [],
    "steps": [
     {
@@ -1158,7 +1158,7 @@
   },
   "cue-drop": {
    "id": "cue-drop",
-   "name": "⛓ Drop Snap",
+   "name": "Drop Snap",
    "parts": [],
    "steps": [
     {
@@ -1181,7 +1181,7 @@
   },
   "cue-warm": {
    "id": "cue-warm",
-   "name": "⛓ Warm Sway",
+   "name": "Warm Sway",
    "parts": [],
    "steps": [
     {
@@ -1954,7 +1954,583 @@
   }
  ],
  "activeDeckId": "deck-1",
- "midi": [],
+ "midi": [
+  {
+   "id": "midi56",
+   "type": "note",
+   "channel": 0,
+   "number": 32,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 0
+   }
+  },
+  {
+   "id": "midi57",
+   "type": "note",
+   "channel": 0,
+   "number": 33,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 1
+   }
+  },
+  {
+   "id": "midi58",
+   "type": "note",
+   "channel": 0,
+   "number": 34,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 2
+   }
+  },
+  {
+   "id": "midi59",
+   "type": "note",
+   "channel": 0,
+   "number": 35,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 3
+   }
+  },
+  {
+   "id": "midi60",
+   "type": "note",
+   "channel": 0,
+   "number": 36,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 4
+   }
+  },
+  {
+   "id": "midi61",
+   "type": "note",
+   "channel": 0,
+   "number": 37,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 5
+   }
+  },
+  {
+   "id": "midi62",
+   "type": "note",
+   "channel": 0,
+   "number": 38,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 6
+   }
+  },
+  {
+   "id": "midi63",
+   "type": "note",
+   "channel": 0,
+   "number": 39,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 7
+   }
+  },
+  {
+   "id": "midi64",
+   "type": "note",
+   "channel": 0,
+   "number": 82,
+   "action": {
+    "kind": "layerClear",
+    "layerId": "layer-strobe"
+   }
+  },
+  {
+   "id": "midi65",
+   "type": "note",
+   "channel": 0,
+   "number": 24,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 0
+   }
+  },
+  {
+   "id": "midi66",
+   "type": "note",
+   "channel": 0,
+   "number": 25,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 1
+   }
+  },
+  {
+   "id": "midi67",
+   "type": "note",
+   "channel": 0,
+   "number": 26,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 2
+   }
+  },
+  {
+   "id": "midi68",
+   "type": "note",
+   "channel": 0,
+   "number": 27,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 3
+   }
+  },
+  {
+   "id": "midi69",
+   "type": "note",
+   "channel": 0,
+   "number": 28,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 4
+   }
+  },
+  {
+   "id": "midi70",
+   "type": "note",
+   "channel": 0,
+   "number": 29,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 5
+   }
+  },
+  {
+   "id": "midi71",
+   "type": "note",
+   "channel": 0,
+   "number": 30,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 6
+   }
+  },
+  {
+   "id": "midi72",
+   "type": "note",
+   "channel": 0,
+   "number": 31,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 7
+   }
+  },
+  {
+   "id": "midi73",
+   "type": "note",
+   "channel": 0,
+   "number": 83,
+   "action": {
+    "kind": "layerClear",
+    "layerId": "layer-fx"
+   }
+  },
+  {
+   "id": "midi74",
+   "type": "note",
+   "channel": 0,
+   "number": 16,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 0
+   }
+  },
+  {
+   "id": "midi75",
+   "type": "note",
+   "channel": 0,
+   "number": 17,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 1
+   }
+  },
+  {
+   "id": "midi76",
+   "type": "note",
+   "channel": 0,
+   "number": 18,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 2
+   }
+  },
+  {
+   "id": "midi77",
+   "type": "note",
+   "channel": 0,
+   "number": 19,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 3
+   }
+  },
+  {
+   "id": "midi78",
+   "type": "note",
+   "channel": 0,
+   "number": 20,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 4
+   }
+  },
+  {
+   "id": "midi79",
+   "type": "note",
+   "channel": 0,
+   "number": 21,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 5
+   }
+  },
+  {
+   "id": "midi80",
+   "type": "note",
+   "channel": 0,
+   "number": 22,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 6
+   }
+  },
+  {
+   "id": "midi81",
+   "type": "note",
+   "channel": 0,
+   "number": 23,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 7
+   }
+  },
+  {
+   "id": "midi82",
+   "type": "note",
+   "channel": 0,
+   "number": 84,
+   "action": {
+    "kind": "layerClear",
+    "layerId": "layer-derby"
+   }
+  },
+  {
+   "id": "midi83",
+   "type": "note",
+   "channel": 0,
+   "number": 8,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 0
+   }
+  },
+  {
+   "id": "midi84",
+   "type": "note",
+   "channel": 0,
+   "number": 9,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 1
+   }
+  },
+  {
+   "id": "midi85",
+   "type": "note",
+   "channel": 0,
+   "number": 10,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 2
+   }
+  },
+  {
+   "id": "midi86",
+   "type": "note",
+   "channel": 0,
+   "number": 11,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 3
+   }
+  },
+  {
+   "id": "midi87",
+   "type": "note",
+   "channel": 0,
+   "number": 12,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 4
+   }
+  },
+  {
+   "id": "midi88",
+   "type": "note",
+   "channel": 0,
+   "number": 13,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 5
+   }
+  },
+  {
+   "id": "midi89",
+   "type": "note",
+   "channel": 0,
+   "number": 14,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 6
+   }
+  },
+  {
+   "id": "midi90",
+   "type": "note",
+   "channel": 0,
+   "number": 15,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 7
+   }
+  },
+  {
+   "id": "midi91",
+   "type": "note",
+   "channel": 0,
+   "number": 85,
+   "action": {
+    "kind": "layerClear",
+    "layerId": "layer-wash"
+   }
+  },
+  {
+   "id": "midi92",
+   "type": "note",
+   "channel": 0,
+   "number": 0,
+   "action": {
+    "kind": "column",
+    "col": 0
+   }
+  },
+  {
+   "id": "midi93",
+   "type": "note",
+   "channel": 0,
+   "number": 1,
+   "action": {
+    "kind": "column",
+    "col": 1
+   }
+  },
+  {
+   "id": "midi94",
+   "type": "note",
+   "channel": 0,
+   "number": 2,
+   "action": {
+    "kind": "column",
+    "col": 2
+   }
+  },
+  {
+   "id": "midi95",
+   "type": "note",
+   "channel": 0,
+   "number": 3,
+   "action": {
+    "kind": "column",
+    "col": 3
+   }
+  },
+  {
+   "id": "midi96",
+   "type": "note",
+   "channel": 0,
+   "number": 4,
+   "action": {
+    "kind": "column",
+    "col": 4
+   }
+  },
+  {
+   "id": "midi97",
+   "type": "note",
+   "channel": 0,
+   "number": 5,
+   "action": {
+    "kind": "column",
+    "col": 5
+   }
+  },
+  {
+   "id": "midi98",
+   "type": "note",
+   "channel": 0,
+   "number": 6,
+   "action": {
+    "kind": "column",
+    "col": 6
+   }
+  },
+  {
+   "id": "midi99",
+   "type": "note",
+   "channel": 0,
+   "number": 7,
+   "action": {
+    "kind": "column",
+    "col": 7
+   }
+  },
+  {
+   "id": "midi100",
+   "type": "note",
+   "channel": 0,
+   "number": 86,
+   "action": {
+    "kind": "blackout"
+   }
+  },
+  {
+   "id": "midi101",
+   "type": "note",
+   "channel": 0,
+   "number": 99,
+   "action": {
+    "kind": "tap"
+   }
+  },
+  {
+   "id": "midi102",
+   "type": "note",
+   "channel": 0,
+   "number": 97,
+   "action": {
+    "kind": "deckPrev"
+   }
+  },
+  {
+   "id": "midi103",
+   "type": "note",
+   "channel": 0,
+   "number": 96,
+   "action": {
+    "kind": "deckNext"
+   }
+  },
+  {
+   "id": "midi104",
+   "type": "cc",
+   "channel": 0,
+   "number": 7,
+   "action": {
+    "kind": "layerMaster",
+    "layerId": "layer-wash"
+   }
+  },
+  {
+   "id": "midi105",
+   "type": "cc",
+   "channel": 1,
+   "number": 7,
+   "action": {
+    "kind": "layerMaster",
+    "layerId": "layer-derby"
+   }
+  },
+  {
+   "id": "midi106",
+   "type": "cc",
+   "channel": 2,
+   "number": 7,
+   "action": {
+    "kind": "layerMaster",
+    "layerId": "layer-fx"
+   }
+  },
+  {
+   "id": "midi107",
+   "type": "cc",
+   "channel": 3,
+   "number": 7,
+   "action": {
+    "kind": "layerMaster",
+    "layerId": "layer-strobe"
+   }
+  },
+  {
+   "id": "midi108",
+   "type": "cc",
+   "channel": 4,
+   "number": 7,
+   "action": {
+    "kind": "haze"
+   }
+  },
+  {
+   "id": "midi109",
+   "type": "cc",
+   "channel": 5,
+   "number": 7,
+   "action": {
+    "kind": "speed"
+   }
+  },
+  {
+   "id": "midi110",
+   "type": "cc",
+   "channel": 0,
+   "number": 14,
+   "action": {
+    "kind": "grand"
+   }
+  }
+ ],
  "sync": {
   "oscEnabled": true,
   "linkEnabled": false,

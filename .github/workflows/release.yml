@@ -27,6 +27,18 @@ jobs:
 
       - run: npm ci
 
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Engine smoke tests
+        run: npm test
+
+      - name: Rust core tests
+        run: cargo test -p light-core
+
+      - name: Differential parity (Node vs Rust)
+        run: cargo build -p light-core && npm run test:parity
+
       - name: Build the app (engine + previz + bundle, ad-hoc signed)
         run: npm run app:build
 

@@ -15,6 +15,9 @@ import fs from 'node:fs';
 import type { MvrBundle, Project } from '../shared/types.ts';
 import { uid } from '../shared/types.ts';
 
+/** set when the saved project could not be read, shown to the first client */
+let bootWarning: string | null = null;
+
 /** Mirror of the Rust engine's apply_mvr — keep them in step. */
 function applyMvrBundle(p: Project, bundle: MvrBundle, replace: boolean): string {
   if (replace) {
@@ -100,6 +103,7 @@ const PORT = Number(process.env.LIGHT_PORT ?? WS_PORT);
 let project = persist.loadProject();
 if (!project) {
   project = sanitizeProject(defaultProject())!;
+  bootWarning = 'saved project could not be read — started from the demo show (your file was left untouched)';
   try {
     persist.saveProjectNow(project);
     console.log(`[light] created default project at ${persist.projectPath()}`);
@@ -111,6 +115,14 @@ if (!project) {
 const state = new EngineState(project);
 const renderer = new Renderer(state);
 const artnet = new ArtnetOut();
+
+// a failed write is the one error the operator MUST see: their show is not
+// on disk, and everything still looks normal
+persist.setSaveReporter((error) => {
+  if (error) {
+    server.broadcast({ type: 'toast', ok: false, message: `SAVE FAILED — ${error}` });
+  }
+});
 
 function broadcastProjects(): void {
   server.broadcast({
@@ -146,6 +158,7 @@ function flushProject(): void {
 
 server.onConnect = (ws) => {
   server.send(ws, { type: 'project', project: state.project });
+  if (bootWarning) server.send(ws, { type: 'toast', ok: false, message: bootWarning });
   server.send(ws, { type: 'midiInputs', names: [] }); // Node dev engine has no native MIDI
 };
 

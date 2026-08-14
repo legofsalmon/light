@@ -17,6 +17,8 @@ use crate::types::{Command, EngineStats, Snapshot};
 const TICK_MS: u64 = 25; // 40 Hz DMX refresh
 
 pub enum EngineMsg {
+    /// quit requested — flush the project to disk, then let run() return
+    Shutdown,
     Cmd(Command),
     Osc(OscMessage),
     Midi(u8, u8, u8),
@@ -29,11 +31,14 @@ pub struct EngineConfig {
     pub port: u16,
     pub ui_dist: Option<PathBuf>,
     pub with_midi: bool,
+    /// receives the engine's message sender once it is live, so the host app
+    /// can ask for a clean shutdown (⌘Q must not drop the last edits)
+    pub on_ready: Option<Box<dyn FnOnce(Sender<EngineMsg>) + Send>>,
 }
 
 impl Default for EngineConfig {
     fn default() -> Self {
-        EngineConfig { port: 9900, ui_dist: None, with_midi: true }
+        EngineConfig { port: 9900, ui_dist: None, with_midi: true, on_ready: None }
     }
 }
 
@@ -57,7 +62,7 @@ fn ensure_osc(osc: &mut OscIn, state: &EngineState, tx: &Sender<EngineMsg>) {
 
 /// Blocking engine loop — spawn on a dedicated thread from the Tauri shell,
 /// or call directly from the standalone binary.
-pub fn run(cfg: EngineConfig) {
+pub fn run(mut cfg: EngineConfig) {
     let epoch = Instant::now();
     let now_ms = move || epoch.elapsed().as_secs_f64() * 1000.0;
 
@@ -72,6 +77,9 @@ pub fn run(cfg: EngineConfig) {
     });
 
     let (tx, rx) = mpsc::channel::<EngineMsg>();
+    if let Some(ready) = cfg.on_ready.take() {
+        ready(tx.clone());
+    }
     let bc = Broadcaster::new();
     if let Err(e) = crate::server::start(cfg.port, cfg.ui_dist.clone(), tx.clone(), bc.clone()) {
         eprintln!("[light] cannot listen on :{} — is another engine running? {e}", cfg.port);
@@ -154,6 +162,16 @@ pub fn run(cfg: EngineConfig) {
                 break;
             }
             match rx.recv_timeout(next - now) {
+                Ok(EngineMsg::Shutdown) => {
+                    // final flush: an edit inside the autosave debounce window
+                    // must survive ⌘Q
+                    let slug = persist::current_slug(&dir);
+                    match persist::save_project_slug(&dir, &slug, &state.project) {
+                        Ok(_) => println!("[light] project flushed on shutdown"),
+                        Err(e) => eprintln!("[persist] shutdown flush failed: {e}"),
+                    }
+                    return;
+                }
                 Ok(msg) => {
                     let bpm_before = state.clock.bpm;
                     let align = handle_msg(
@@ -258,9 +276,16 @@ pub fn run(cfg: EngineConfig) {
                 // capture the slug HERE, on the tick thread — the worker must
                 // never re-read .current mid-save and race a project switch
                 let slug = persist::current_slug(&dir);
+                let bc2 = bc.clone();
                 std::thread::spawn(move || {
                     if let Err(e) = persist::save_project_slug(&d, &slug, &p) {
                         eprintln!("[persist] autosave failed: {e}");
+                        // the operator must know the show is not on disk —
+                        // everything else still looks completely normal
+                        bc2.broadcast(
+                            &json!({"type":"toast","ok":false,"message":format!("SAVE FAILED — {e}")})
+                                .to_string(),
+                        );
                     }
                 });
                 dirty_at = None;
@@ -357,7 +382,12 @@ fn apply_outcome(
             Ok(path) => bc.broadcast(
                 &json!({ "type": "saved", "path": path.to_string_lossy() }).to_string(),
             ),
-            Err(e) => eprintln!("[persist] save failed: {e}"),
+            Err(e) => {
+                eprintln!("[persist] save failed: {e}");
+                bc.broadcast(
+                    &json!({"type":"toast","ok":false,"message":format!("SAVE FAILED — {e}")}).to_string(),
+                );
+            }
         }
     }
 }
@@ -377,6 +407,8 @@ fn handle_msg(
     project_dirty: &mut bool,
 ) -> bool {
     match msg {
+        // handled by the drain loop before it reaches here
+        EngineMsg::Shutdown => {}
         EngineMsg::Cmd(cmd) => {
             // project FILE commands live here — the state machine has no
             // filesystem access, mirroring the Node reference's split

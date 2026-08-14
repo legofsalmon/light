@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import type { Layer, LayerSnap } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
@@ -96,14 +96,45 @@ function DeckBar() {
   const send = useStore((s) => s.send);
   const mutate = useStore((s) => s.mutate);
   const decks = project.decks ?? [];
+  const activeChipRef = useRef<HTMLDivElement>(null);
+  // a deck change from the APC bank arrows (or [ / ]) must bring the live
+  // song on screen — with 12 songs the active chip is often scrolled away
+  useEffect(() => {
+    activeChipRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [project.activeDeckId]);
   if (decks.length === 0) return null;
 
   return (
     <div className="deckbar">
       <span className="label">deck</span>
+      <button
+        className="btn small ghost"
+        title="previous song ( [ )"
+        disabled={decks.length < 2}
+        onClick={() => {
+          const i = decks.findIndex((x) => x.id === project.activeDeckId);
+          const n = decks.length;
+          send({ type: 'switchDeck', deckId: decks[((i < 0 ? 0 : i) - 1 + n) % n].id });
+        }}
+      >
+        ◀
+      </button>
+      <button
+        className="btn small ghost"
+        title="next song ( ] )"
+        disabled={decks.length < 2}
+        onClick={() => {
+          const i = decks.findIndex((x) => x.id === project.activeDeckId);
+          const n = decks.length;
+          send({ type: 'switchDeck', deckId: decks[((i < 0 ? 0 : i) + 1) % n].id });
+        }}
+      >
+        ▶
+      </button>
       {decks.map((d) => (
         <div
           key={d.id}
+          ref={d.id === project.activeDeckId ? activeChipRef : undefined}
           className={`deckchip ${d.id === project.activeDeckId ? 'on' : ''}`}
           title="click to switch · double-click to rename"
           onClick={() => send({ type: 'switchDeck', deckId: d.id })}
@@ -146,36 +177,35 @@ function DeckBar() {
       <button
         className="btn small ghost"
         title="new empty deck"
-        onClick={() =>
+        onClick={() => {
+          const id = uid('deck');
           mutate((p) => {
             p.decks ??= [];
-            p.decks.push({
-              id: uid('deck'),
-              name: `Song ${p.decks.length + 1}`,
-              columns: [...p.columns],
-              cells: {},
-            });
-          })
-        }
+            p.decks.push({ id, name: `Song ${p.decks.length + 1}`, columns: [...p.columns], cells: {} });
+          });
+          send({ type: 'switchDeck', deckId: id }); // land on the deck you just made
+        }}
       >
         + deck
       </button>
       <button
         className="btn small ghost"
         title="copy the current deck's cells into a new deck — the usual way to start the next song"
-        onClick={() =>
+        onClick={() => {
+          const id = uid('deck');
           mutate((p) => {
             p.decks ??= [];
             const src = p.decks.find((d) => d.id === p.activeDeckId);
             p.decks.push({
-              id: uid('deck'),
+              id,
               name: `${src?.name ?? 'Song'} copy`,
               columns: [...p.columns],
               // the live layer cells ARE the active deck — copy those
               cells: Object.fromEntries(p.layers.map((l) => [l.id, [...l.cells]])),
             });
-          })
-        }
+          });
+          send({ type: 'switchDeck', deckId: id });
+        }}
       >
         ⧉ duplicate
       </button>

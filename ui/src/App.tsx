@@ -81,6 +81,17 @@ export function App() {
       // Held keys must not machine-gun cues/tap/blackout, and browser
       // shortcuts (⌘1 etc.) must not double as ours.
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      // [ and ] step songs — the APC bank arrows do this, the keyboard should too
+      if (e.key === '[' || e.key === ']') {
+        const decks = st.project?.decks ?? [];
+        if (decks.length > 1) {
+          const i = decks.findIndex((d) => d.id === st.project?.activeDeckId);
+          const n = decks.length;
+          const next = decks[((i < 0 ? 0 : i) + (e.key === ']' ? 1 : -1) + n) % n];
+          st.send({ type: 'switchDeck', deckId: next.id });
+        }
+        return;
+      }
       if (e.key >= '1' && e.key <= '9') {
         const col = Number(e.key) - 1;
         if (st.project && col < st.project.columns.length) st.send({ type: 'column', col });
@@ -119,6 +130,11 @@ export function App() {
         ['--bottom-h' as string]: `${layout.bottomH}px`,
       }}
     >
+      {!connected && (
+        <div className="offlinebar">
+          ENGINE OFFLINE — reconnecting… nothing you press is reaching the rig
+        </div>
+      )}
       <Region name="top bar"><TopBar /></Region>
       <div className="gridwrap">
         <Region name="look grid"><LookGrid /></Region>

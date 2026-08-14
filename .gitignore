@@ -11,3 +11,7 @@ projects/
 # local tooling
 .claude/settings.local.json
 .DS_Store
+
+# stray review-agent scratch
+probe.tmp.*
+*.tmp.mjs

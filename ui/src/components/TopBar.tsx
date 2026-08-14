@@ -255,7 +255,12 @@ export function TopBar() {
       )}
 
       <div className="statusdots">
-        <StatusDot ok={engineOk} label={`engine ${snap?.stats.fps ?? 0}fps`} />
+        <StatusDot
+          ok={engineOk}
+          warn={!connected}
+          label={connected ? `engine ${snap?.stats.fps ?? 0}fps` : 'engine offline'}
+          title={connected ? 'engine tick rate' : 'the engine is not responding — commands are not reaching the rig'}
+        />
         {(() => {
           // "sending" must reflect the CURRENT config, not the cumulative
           // packet counter — a warn dot must clear when Art-Net is disabled

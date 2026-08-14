@@ -81,7 +81,10 @@ function wsSend(msg: string): void {
   } catch {
     return;
   }
-  if (pending.length < 50) pending.push({ slug: currentSlug, msg });
+  // keep the NEWEST edits: dropping incoming writes would silently discard
+  // the tail of an offline session (the part the operator just did)
+  pending.push({ slug: currentSlug, msg });
+  while (pending.length > 50) pending.shift();
 }
 
 // --- undo history: snapshots taken ONLY at the mutate() choke point — this
@@ -272,16 +275,20 @@ function flushPending(engineSlug: string): void {
       /* unparseable — drop */
     }
   }
-  for (const m of others) ws?.send(m);
+  // the project write must land BEFORE a queued save, or ⌘S persists the
+  // pre-edit project
   if (lastProjectWrite) ws?.send(lastProjectWrite);
+  for (const m of others) ws?.send(m);
   if (dropped > 0) {
+    const at = Date.now();
     useStore.setState({
-      toast: {
-        ok: false,
-        text: `${dropped} offline edit(s) discarded — the engine changed project`,
-        at: Date.now(),
-      },
+      toast: { ok: false, text: `${dropped} offline edit(s) discarded — the engine changed project`, at },
     });
+    // toasts set outside the WS 'toast' handler had no expiry and stuck forever
+    setTimeout(() => {
+      const t = useStore.getState().toast;
+      if (t && t.at === at) useStore.setState({ toast: null });
+    }, 6000);
   }
 }
 

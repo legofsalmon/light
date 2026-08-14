@@ -44,9 +44,10 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
   display: grid;
   height: 100%;
   /* splitter-adjustable tracks — React sets the variables from saved sizes */
-  grid-template-rows: 46px minmax(0, 1fr) 6px var(--bottom-h, 292px);
+  grid-template-rows: auto 46px minmax(0, 1fr) 6px var(--bottom-h, 292px);
   grid-template-columns: minmax(0, 1fr) 6px var(--previz-w, 27vw);
   grid-template-areas:
+    'offline offline offline'
     'top top top'
     'grid vsplit previz'
     'hsplit vsplit previz'
@@ -632,3 +633,16 @@ table.tbl th { color: var(--text-dim); }
 .deckchip .deckx { opacity: 0; transition: opacity 0.12s; }
 .deckchip:hover .deckx { opacity: 0.75; }
 .deckchip .deckx:hover { opacity: 1; }
+
+/* ---------- engine offline: impossible to miss, mid-show ---------- */
+.offlinebar {
+  grid-area: offline;
+  background: var(--hot, #d84040);
+  color: #fff;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-align: center;
+  padding: 5px 8px;
+  animation: offlinepulse 1.6s ease-in-out infinite;
+}
+@keyframes offlinepulse { 50% { filter: brightness(0.72); } }

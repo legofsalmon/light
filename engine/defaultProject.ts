@@ -1,4 +1,4 @@
-import type { CueStep, Deck, Effect, Look, LookPart, PartParams, Project, StageProp } from '../shared/types.ts';
+import type { CueStep, Deck, Effect, Look, LookPart, MidiAction, MidiMapping, PartParams, Project, StageProp } from '../shared/types.ts';
 
 // ---------------------------------------------------------------------------
 // The first-load DEMO show: the standard small-rig patch (2 derbies, 2 party
@@ -129,16 +129,16 @@ export function defaultProject(): Project {
 
   // --- cue-list chasers (⛓): step through looks on the beat ---
   const steps = (list: [string, number][]): CueStep[] => list.map(([lookId, beats]) => ({ lookId, beats }));
-  add(look('cue-colourwheel', '⛓ Colour Wheel', [], {
+  add(look('cue-colourwheel', 'Colour Wheel', [], {
     steps: steps([['wash-red', 4], ['wash-gold', 4], ['wash-green', 4], ['wash-teal', 4], ['wash-blue', 4], ['wash-uv', 4]]),
   }));
-  add(look('cue-verse', '⛓ Verse 8s', [], {
+  add(look('cue-verse', 'Verse 8s', [], {
     steps: steps([['wash-ice', 8], ['wash-teal', 8]]),
   }));
-  add(look('cue-drop', '⛓ Drop Snap', [], {
+  add(look('cue-drop', 'Drop Snap', [], {
     steps: steps([['wash-white', 1], ['wash-red', 1], ['wash-white', 1], ['wash-blue', 1]]),
   }));
-  add(look('cue-warm', '⛓ Warm Sway', [], {
+  add(look('cue-warm', 'Warm Sway', [], {
     steps: steps([['wash-gold', 8], ['wash-amber-dim', 8], ['wash-pink', 8]]),
   }));
 
@@ -234,6 +234,29 @@ export function defaultProject(): Project {
     { id: 'prop-keys', kind: 'keyboardist', pos: { x: -3.0, z: 0.6 } },
   ];
 
+  // APC40 mk2 factory layout, seeded so the controller WORKS on first launch —
+  // an unmapped APC on a demo show looks like the app is broken. Identical to
+  // the "load APC40 mk2 preset" button in Sync · MIDI.
+  const midi: MidiMapping[] = [];
+  const addMidi = (type: 'note' | 'cc', channel: number, number: number, action: MidiAction) =>
+    midi.push({ id: id('midi'), type, channel, number, action });
+  const layerIds = ['layer-wash', 'layer-derby', 'layer-fx', 'layer-strobe'];
+  // grid: top pad row (notes 32-39) = top on-screen layer = STROBE
+  [...layerIds].reverse().forEach((layerId, row) => {
+    const base = 32 - row * 8;
+    for (let col = 0; col < 8; col++) addMidi('note', 0, base + col, { kind: 'cell', layerId, col });
+    addMidi('note', 0, 82 + row, { kind: 'layerClear', layerId });
+  });
+  for (let col = 0; col < 8; col++) addMidi('note', 0, col, { kind: 'column', col });
+  addMidi('note', 0, 86, { kind: 'blackout' });
+  addMidi('note', 0, 99, { kind: 'tap' });
+  addMidi('note', 0, 97, { kind: 'deckPrev' });
+  addMidi('note', 0, 96, { kind: 'deckNext' });
+  layerIds.forEach((layerId, i) => addMidi('cc', i, 7, { kind: 'layerMaster', layerId }));
+  addMidi('cc', 4, 7, { kind: 'haze' });
+  addMidi('cc', 5, 7, { kind: 'speed' });
+  addMidi('cc', 0, 14, { kind: 'grand' });
+
   const project: Project = {
     version: 1,
     name: 'LIGHT Demo Set',
@@ -303,7 +326,7 @@ export function defaultProject(): Project {
     columns: ['Intro', 'Build', 'Peak', 'Groove', 'Break', 'Drop', 'Outro', 'Chill'],
     decks,
     activeDeckId: 'deck-1',
-    midi: [],
+    midi,
     sync: { oscEnabled: true, oscPort: 7700, followColumns: true, bpmFromOsc: true, linkEnabled: false },
     settings: { haze: 0, hazeFan: 0.35 },
   };
