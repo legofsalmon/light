@@ -20,7 +20,7 @@ export function Previz2D() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{
     id: string;
-    kind: 'move' | 'rotate';
+    kind: 'move' | 'rotate' | 'prop';
     lastSend: number;
     x: number;
     v: number;
@@ -246,6 +246,36 @@ export function Previz2D() {
         ctx.fillText(label, fx, fy + 0.42 * m.scale + 8);
       }
 
+      // stage props (musicians) — plan view only; front view stays fixtures
+      if (view === 'plan') {
+        const LETTER: Record<string, string> = {
+          vocalist: 'V', guitarist: 'G', bassist: 'B', drummer: 'D', keyboardist: 'K',
+        };
+        for (const pr of project.props ?? []) {
+          const px = m.toX(pr.pos.x);
+          const py = m.toY(pr.pos.z);
+          const rad = 0.24 * m.scale;
+          // shoulders + head silhouette
+          ctx.beginPath();
+          ctx.ellipse(px, py, rad, rad * 0.62, pr.rotY ?? 0, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(214,188,150,0.28)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(214,188,150,0.75)';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(px, py, rad * 0.4, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(214,188,150,0.85)';
+          ctx.fill();
+          ctx.fillStyle = 'rgba(20,20,24,0.9)';
+          ctx.font = `bold ${Math.max(8, rad * 0.55)}px -apple-system, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(LETTER[pr.kind] ?? '?', px, py + 0.5);
+          ctx.textBaseline = 'alphabetic';
+        }
+      }
+
       // marquee rectangle
       const mq = marqueeRef.current;
       if (mq && mq.moved) {
@@ -290,6 +320,15 @@ export function Previz2D() {
       });
     };
 
+    const applyPropDrag = (id: string, x: number, v: number) => {
+      useStore.getState().mutate((p) => {
+        const pr = (p.props ?? []).find((y) => y.id === id);
+        if (!pr) return;
+        pr.pos.x = Math.round(x * 20) / 20;
+        pr.pos.z = Math.round(v * 20) / 20;
+      });
+    };
+
     const applyRotate = (id: string, rot: number) => {
       useStore.getState().mutate((p) => {
         const f = p.fixtures.find((fx) => fx.id === id);
@@ -305,6 +344,31 @@ export function Previz2D() {
       const m = mapping(view);
       const pos = m.fromPx(e.clientX - rect.left, e.clientY - rect.top);
       const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+      // stage props hit-test first (plan view only) — they render on top
+      if (view === 'plan' && !additive) {
+        let bestProp: { id: string; d: number } | null = null;
+        for (const pr of project.props ?? []) {
+          const d = Math.hypot(pr.pos.x - pos.x, pr.pos.z - pos.v);
+          if (d < 0.35 && (!bestProp || d < bestProp.d)) bestProp = { id: pr.id, d };
+        }
+        if (bestProp) {
+          const hit = bestProp;
+          if (e.detail >= 2) {
+            // double-click removes the musician
+            const pr = project.props?.find((x) => x.id === hit.id);
+            if (pr && window.confirm(`Remove this ${pr.kind}?`)) {
+              useStore.getState().mutate((p) => {
+                p.props = (p.props ?? []).filter((x) => x.id !== hit.id);
+                if (p.props.length === 0) delete p.props;
+              });
+            }
+            return;
+          }
+          dragRef.current = { id: hit.id, kind: 'prop', lastSend: 0, x: pos.x, v: pos.v, rot: 0, others: [] };
+          try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointers */ }
+          return;
+        }
+      }
       let best: { id: string; d: number } | null = null;
       for (const f of project.fixtures) {
         const d = Math.hypot(f.pos.x - pos.x, vertOf(f.pos, view) - pos.v);
@@ -381,6 +445,7 @@ export function Previz2D() {
       if (now - drag.lastSend < 90) return;
       drag.lastSend = now;
       if (drag.kind === 'rotate') applyRotate(drag.id, drag.rot);
+      else if (drag.kind === 'prop') applyPropDrag(drag.id, drag.x, drag.v);
       else applyDrag(drag.id, drag.x, drag.v, drag.others);
     };
     const onPointerUp = () => {
@@ -410,6 +475,7 @@ export function Previz2D() {
       // flush the final value — the move throttle must not drop it
       if (!drag) return;
       if (drag.kind === 'rotate') applyRotate(drag.id, drag.rot);
+      else if (drag.kind === 'prop') applyPropDrag(drag.id, drag.x, drag.v);
       else applyDrag(drag.id, drag.x, drag.v, drag.others);
     };
     const onKeyDown = (e: KeyboardEvent) => {

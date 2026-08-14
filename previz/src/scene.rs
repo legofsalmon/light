@@ -156,8 +156,6 @@ pub fn setup_stage(
         ));
     }
 
-    spawn_band(&mut commands, &mut meshes, &mut materials);
-
     // participating medium — density driven live by the engine's haze value.
     // Stage haze scatters close to isotropically: the default forward-biased
     // asymmetry (0.5) makes side-on beams nearly invisible from FOH.
@@ -173,15 +171,16 @@ pub fn setup_stage(
     ));
 }
 
-/// Dummy musicians: capsule-and-sphere figures at real human scale (~1.75 m
-/// standing), matte cloth and skin so pools, shafts, and colour read on them
-/// the way they will on the actual band. Layout matches a small stage:
-/// drums centre-rear, vocal centre-front, guitar/bass either side, keys far
-/// stage-right. Press M in the previz window to show/hide.
-fn spawn_band(
+/// Dummy musicians: capsule-and-sphere figures at real human scale
+/// (~1.75 m standing), matte cloth and skin so pools, shafts, and colour
+/// read on them the way they will on the actual band. Spawned from the
+/// project's placed props (2D plan: "+ musician…", drag to move,
+/// double-click to remove). Press M in this window to show/hide them all.
+fn spawn_props(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    props: &[crate::protocol::PropLite],
 ) {
     let cloth = materials.add(StandardMaterial {
         base_color: Color::srgb(0.14, 0.14, 0.16),
@@ -215,118 +214,93 @@ fn spawn_band(
     let torso_mesh = meshes.add(Capsule3d::new(0.17, 0.40));
     let head_mesh = meshes.add(Sphere::new(0.11));
 
-    let band = commands
-        .spawn((BandRoot, Transform::default(), Visibility::default()))
-        .id();
-
-    // standing figure: legs + torso + head, ~1.75 m to crown
-    #[allow(clippy::too_many_arguments)]
-    fn standing(
-        commands: &mut Commands,
-        band: Entity,
-        legs: &Handle<Mesh>,
-        torso: &Handle<Mesh>,
-        head: &Handle<Mesh>,
-        cloth: &Handle<StandardMaterial>,
-        skin: &Handle<StandardMaterial>,
-        x: f32,
-        z: f32,
-        yaw: f32,
-    ) {
-        commands.entity(band).with_children(|b| {
-            b.spawn((
-                Transform::from_xyz(x, 0.0, z).with_rotation(Quat::from_rotation_y(yaw)),
+    for pr in props {
+        let root = commands
+            .spawn((
+                BandRoot,
+                Transform::from_xyz(pr.pos.x, 0.0, pr.pos.z)
+                    .with_rotation(Quat::from_rotation_y(pr.rot_y.unwrap_or(0.0))),
                 Visibility::default(),
             ))
-            .with_children(|p| {
-                p.spawn((Mesh3d(legs.clone()), MeshMaterial3d(cloth.clone()), Transform::from_xyz(0.0, 0.5, 0.0)));
-                p.spawn((Mesh3d(torso.clone()), MeshMaterial3d(cloth.clone()), Transform::from_xyz(0.0, 1.17, 0.0)));
-                p.spawn((Mesh3d(head.clone()), MeshMaterial3d(skin.clone()), Transform::from_xyz(0.0, 1.62, 0.0)));
-            });
-        });
-    }
-
-    // vocalist, centre-front, with a mic stand
-    standing(commands, band, &legs_mesh, &torso_mesh, &head_mesh, &cloth, &skin, 0.0, 1.9, 0.0);
-    commands.entity(band).with_children(|b| {
-        b.spawn((
-            Mesh3d(meshes.add(Cylinder::new(0.013, 1.55))),
-            MeshMaterial3d(metal.clone()),
-            Transform::from_xyz(0.3, 0.775, 2.15),
-        ));
-        b.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.04))),
-            MeshMaterial3d(cloth.clone()),
-            Transform::from_xyz(0.3, 1.56, 2.15),
-        ));
-    });
-
-    // guitarist and bassist, angled slightly inward, instrument across the body
-    for (x, yaw) in [(-1.7f32, -0.35f32), (1.7, 0.35)] {
-        standing(commands, band, &legs_mesh, &torso_mesh, &head_mesh, &cloth, &skin, x, 1.2, yaw);
-        commands.entity(band).with_children(|b| {
-            b.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.32, 0.9, 0.09))),
-                MeshMaterial3d(wood.clone()),
-                Transform::from_xyz(x, 1.0, 1.2 + 0.22)
-                    .with_rotation(Quat::from_rotation_y(yaw) * Quat::from_rotation_z(0.55)),
-            ));
-        });
-    }
-
-    // keyboardist, far stage-right, behind the board
-    standing(commands, band, &legs_mesh, &torso_mesh, &head_mesh, &cloth, &skin, -3.0, 0.6, -0.4);
-    commands.entity(band).with_children(|b| {
-        b.spawn((
-            Mesh3d(meshes.add(Cuboid::new(1.15, 0.09, 0.32))),
-            MeshMaterial3d(cloth.clone()),
-            Transform::from_xyz(-3.0, 0.93, 0.95).with_rotation(Quat::from_rotation_y(-0.4)),
-        ));
-        for dx in [-0.45f32, 0.45] {
-            b.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.05, 0.9, 0.05))),
-                MeshMaterial3d(metal.clone()),
-                Transform::from_xyz(-3.0 + dx, 0.45, 0.95 + dx * 0.4)
-                    .with_rotation(Quat::from_rotation_y(-0.4)),
-            ));
-        }
-    });
-
-    // drummer, centre-rear: seated figure + kick, snare, two cymbals
-    commands.entity(band).with_children(|b| {
-        b.spawn((Transform::from_xyz(0.0, 0.0, 0.1), Visibility::default())).with_children(|p| {
-            // stool + seated body (shorter stack than a standing figure)
-            p.spawn((Mesh3d(meshes.add(Cylinder::new(0.16, 0.45))), MeshMaterial3d(cloth.clone()), Transform::from_xyz(0.0, 0.225, -0.35)));
-            p.spawn((Mesh3d(torso_mesh.clone()), MeshMaterial3d(cloth.clone()), Transform::from_xyz(0.0, 0.85, -0.35)));
-            p.spawn((Mesh3d(head_mesh.clone()), MeshMaterial3d(skin.clone()), Transform::from_xyz(0.0, 1.3, -0.35)));
-            // kick drum faces the audience
-            p.spawn((
-                Mesh3d(meshes.add(Cylinder::new(0.28, 0.45))),
-                MeshMaterial3d(wood.clone()),
-                Transform::from_xyz(0.0, 0.28, 0.25)
-                    .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
-            ));
-            // snare
-            p.spawn((
-                Mesh3d(meshes.add(Cylinder::new(0.17, 0.14))),
-                MeshMaterial3d(metal.clone()),
-                Transform::from_xyz(-0.32, 0.55, -0.05),
-            ));
-            // cymbals
-            for (cx, cy) in [(-0.5f32, 1.15f32), (0.5, 1.05)] {
-                p.spawn((
-                    Mesh3d(meshes.add(Cylinder::new(0.19, 0.015))),
-                    MeshMaterial3d(brass.clone()),
-                    Transform::from_xyz(cx, cy, 0.05).with_rotation(Quat::from_rotation_z(0.08)),
-                ));
-                p.spawn((
-                    Mesh3d(meshes.add(Cylinder::new(0.012, cy))),
-                    MeshMaterial3d(metal.clone()),
-                    Transform::from_xyz(cx, cy / 2.0, 0.05),
-                ));
+            .id();
+        commands.entity(root).with_children(|p| {
+            let standing = |p: &mut ChildSpawnerCommands| {
+                p.spawn((Mesh3d(legs_mesh.clone()), MeshMaterial3d(cloth.clone()), Transform::from_xyz(0.0, 0.5, 0.0)));
+                p.spawn((Mesh3d(torso_mesh.clone()), MeshMaterial3d(cloth.clone()), Transform::from_xyz(0.0, 1.17, 0.0)));
+                p.spawn((Mesh3d(head_mesh.clone()), MeshMaterial3d(skin.clone()), Transform::from_xyz(0.0, 1.62, 0.0)));
+            };
+            match pr.kind.as_str() {
+                "vocalist" => {
+                    standing(p);
+                    p.spawn((
+                        Mesh3d(meshes.add(Cylinder::new(0.013, 1.55))),
+                        MeshMaterial3d(metal.clone()),
+                        Transform::from_xyz(0.3, 0.775, 0.25),
+                    ));
+                    p.spawn((
+                        Mesh3d(meshes.add(Sphere::new(0.04))),
+                        MeshMaterial3d(cloth.clone()),
+                        Transform::from_xyz(0.3, 1.56, 0.25),
+                    ));
+                }
+                "guitarist" | "bassist" => {
+                    standing(p);
+                    p.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(0.32, 0.9, 0.09))),
+                        MeshMaterial3d(wood.clone()),
+                        Transform::from_xyz(0.0, 1.0, 0.22)
+                            .with_rotation(Quat::from_rotation_z(0.55)),
+                    ));
+                }
+                "keyboardist" => {
+                    standing(p);
+                    p.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(1.15, 0.09, 0.32))),
+                        MeshMaterial3d(cloth.clone()),
+                        Transform::from_xyz(0.0, 0.93, 0.35),
+                    ));
+                    for dx in [-0.45f32, 0.45] {
+                        p.spawn((
+                            Mesh3d(meshes.add(Cuboid::new(0.05, 0.9, 0.05))),
+                            MeshMaterial3d(metal.clone()),
+                            Transform::from_xyz(dx, 0.45, 0.35),
+                        ));
+                    }
+                }
+                "drummer" => {
+                    // seated: stool + shorter stack, kit facing local +Z
+                    p.spawn((Mesh3d(meshes.add(Cylinder::new(0.16, 0.45))), MeshMaterial3d(cloth.clone()), Transform::from_xyz(0.0, 0.225, -0.45)));
+                    p.spawn((Mesh3d(torso_mesh.clone()), MeshMaterial3d(cloth.clone()), Transform::from_xyz(0.0, 0.85, -0.45)));
+                    p.spawn((Mesh3d(head_mesh.clone()), MeshMaterial3d(skin.clone()), Transform::from_xyz(0.0, 1.3, -0.45)));
+                    p.spawn((
+                        Mesh3d(meshes.add(Cylinder::new(0.28, 0.45))),
+                        MeshMaterial3d(wood.clone()),
+                        Transform::from_xyz(0.0, 0.28, 0.15)
+                            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                    ));
+                    p.spawn((
+                        Mesh3d(meshes.add(Cylinder::new(0.17, 0.14))),
+                        MeshMaterial3d(metal.clone()),
+                        Transform::from_xyz(-0.32, 0.55, -0.15),
+                    ));
+                    for (cx, cy) in [(-0.5f32, 1.15f32), (0.5, 1.05)] {
+                        p.spawn((
+                            Mesh3d(meshes.add(Cylinder::new(0.19, 0.015))),
+                            MeshMaterial3d(brass.clone()),
+                            Transform::from_xyz(cx, cy, -0.05)
+                                .with_rotation(Quat::from_rotation_z(0.08)),
+                        ));
+                        p.spawn((
+                            Mesh3d(meshes.add(Cylinder::new(0.012, cy))),
+                            MeshMaterial3d(metal.clone()),
+                            Transform::from_xyz(cx, cy / 2.0, -0.05),
+                        ));
+                    }
+                }
+                _ => standing(p),
             }
         });
-    });
+    }
 }
 
 /// M toggles the dummy band.
@@ -352,6 +326,7 @@ pub fn rebuild_fixtures(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     existing: Query<Entity, With<FixtureRoot>>,
+    existing_props: Query<Entity, With<BandRoot>>,
 ) {
     if live.project_rev == live.built_rev {
         return;
@@ -361,7 +336,11 @@ pub fn rebuild_fixtures(
     for e in &existing {
         commands.entity(e).despawn();
     }
+    for e in &existing_props {
+        commands.entity(e).despawn();
+    }
     let Some(project) = live.project.clone() else { return };
+    spawn_props(&mut commands, &mut meshes, &mut materials, &project.props);
 
     let body_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.16, 0.16, 0.18),

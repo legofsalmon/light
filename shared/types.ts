@@ -33,6 +33,16 @@ export type Fixture = {
 };
 
 export type HeadRef = { fixtureId: string; head: number };
+
+export type StagePropKind = 'vocalist' | 'guitarist' | 'bassist' | 'drummer' | 'keyboardist';
+/** A dummy performer on the stage — previz-only scenery, placed like a
+ *  fixture in the 2D plan, rendered as a figure in both 3D views. */
+export type StageProp = {
+  id: string;
+  kind: StagePropKind;
+  pos: { x: number; z: number };
+  rotY?: number;
+};
 export type Group = { id: string; name: string; heads: HeadRef[] };
 
 export type ColorHS = { h: number; s: number }; // hue 0..360, sat 0..1
@@ -181,6 +191,8 @@ export type Project = {
   universes: UniverseCfg[];
   fixtures: Fixture[];
   groups: Group[];
+  /** dummy performers for the previz (optional; absent = empty stage) */
+  props?: StageProp[];
   looks: Record<string, Look>;
   /** stack order: index 0 = bottom of the stack (UI shows it as the last row) */
   layers: Layer[];
@@ -393,6 +405,23 @@ export function sanitizeProject(p: Project): Project | null {
   if (!p.decks.some((d) => d.id === p.activeDeckId)) p.activeDeckId = p.decks[0].id;
   for (const g of p.groups) {
     if (!Array.isArray(g.heads)) g.heads = [];
+  }
+  if (p.props !== undefined) {
+    if (!Array.isArray(p.props)) delete p.props;
+    else {
+      const KINDS = new Set(['vocalist', 'guitarist', 'bassist', 'drummer', 'keyboardist']);
+      p.props = p.props.filter(
+        (pr): pr is StageProp =>
+          !!pr && typeof pr === 'object' && typeof pr.id === 'string' && KINDS.has(pr.kind as string),
+      );
+      for (const pr of p.props) {
+        if (!pr.pos || typeof pr.pos !== 'object') pr.pos = { x: 0, z: 1 };
+        if (!Number.isFinite(pr.pos.x)) pr.pos.x = 0;
+        if (!Number.isFinite(pr.pos.z)) pr.pos.z = 1;
+        if (pr.rotY !== undefined && !Number.isFinite(pr.rotY)) delete pr.rotY;
+      }
+      if (p.props.length === 0) delete p.props;
+    }
   }
   for (const f of p.fixtures) {
     if (!Number.isFinite(f.address)) f.address = 1;

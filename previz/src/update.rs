@@ -31,6 +31,16 @@ pub fn drain_ws(rx: Res<WsReceiver>, mut live: ResMut<Live>) {
                         )
                     })
                     .collect::<String>();
+                for pr in &p.props {
+                    sig.push_str(&format!(
+                        "P{}|{}|{:.2},{:.2}|{:.2};",
+                        pr.id,
+                        pr.kind,
+                        pr.pos.x,
+                        pr.pos.z,
+                        pr.rot_y.unwrap_or(0.0)
+                    ));
+                }
                 let mut prof_ids: Vec<_> = p.profiles.iter().collect();
                 prof_ids.sort_by_key(|(id, _)| id.clone());
                 for (id, cp) in prof_ids {

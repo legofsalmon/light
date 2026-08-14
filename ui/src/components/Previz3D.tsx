@@ -156,9 +156,9 @@ function disposeDeep(obj: THREE.Object3D): void {
   });
 }
 
-/** Dummy band, mirroring the native previz layout — five figures at real
- *  human scale for judging blocking and throw distances. */
-function buildBand(): THREE.Group {
+/** Dummy musicians from the project's placed props — figures at real human
+ *  scale for judging blocking and throw distances. */
+function buildProps(props: { kind: string; pos: { x: number; z: number }; rotY?: number }[]): THREE.Group {
   const g = new THREE.Group();
   const cloth = new THREE.MeshStandardMaterial({ color: 0x232328, roughness: 0.92 });
   const skin = new THREE.MeshStandardMaterial({ color: 0x9e7861, roughness: 0.75 });
@@ -170,72 +170,77 @@ function buildBand(): THREE.Group {
   const torsoGeo = new THREE.CapsuleGeometry(0.17, 0.4, 4, 10);
   const headGeo = new THREE.SphereGeometry(0.11, 14, 10);
 
-  const standing = (x: number, z: number, yaw: number) => {
-    const p = new THREE.Group();
-    p.position.set(x, 0, z);
-    p.rotation.y = yaw;
-    const legs = new THREE.Mesh(legsGeo, cloth);
-    legs.position.y = 0.5;
-    const torso = new THREE.Mesh(torsoGeo, cloth);
-    torso.position.y = 1.17;
-    const head = new THREE.Mesh(headGeo, skin);
-    head.position.y = 1.62;
-    p.add(legs, torso, head);
-    g.add(p);
-  };
-
-  // vocalist + mic stand
-  standing(0, 1.9, 0);
-  const mic = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 1.55, 8), metal);
-  mic.position.set(0.3, 0.775, 2.15);
-  const micHead = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), cloth);
-  micHead.position.set(0.3, 1.56, 2.15);
-  g.add(mic, micHead);
-
-  // guitarist + bassist with instruments
-  for (const [x, yaw] of [[-1.7, -0.35], [1.7, 0.35]] as const) {
-    standing(x, 1.2, yaw);
-    const guitar = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.9, 0.09), wood);
-    guitar.position.set(x, 1.0, 1.42);
-    guitar.rotation.order = 'YXZ';
-    guitar.rotation.set(0, yaw, 0.55);
-    g.add(guitar);
-  }
-
-  // keyboardist + board
-  standing(-3.0, 0.6, -0.4);
-  const board = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.09, 0.32), cloth);
-  board.position.set(-3.0, 0.93, 0.95);
-  board.rotation.y = -0.4;
-  g.add(board);
-  for (const dx of [-0.45, 0.45]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.9, 0.05), metal);
-    leg.position.set(-3.0 + dx, 0.45, 0.95 + dx * 0.4);
-    leg.rotation.y = -0.4;
-    g.add(leg);
-  }
-
-  // drummer: stool + seated body + kick, snare, cymbals
-  const dz = 0.1;
-  const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.45, 10), cloth);
-  stool.position.set(0, 0.225, dz - 0.35);
-  const dtorso = new THREE.Mesh(torsoGeo, cloth);
-  dtorso.position.set(0, 0.85, dz - 0.35);
-  const dhead = new THREE.Mesh(headGeo, skin);
-  dhead.position.set(0, 1.3, dz - 0.35);
-  const kick = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.45, 16), wood);
-  kick.position.set(0, 0.28, dz + 0.25);
-  kick.rotation.x = Math.PI / 2;
-  const snare = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.14, 12), metal);
-  snare.position.set(-0.32, 0.55, dz - 0.05);
-  g.add(stool, dtorso, dhead, kick, snare);
-  for (const [cx, cy] of [[-0.5, 1.15], [0.5, 1.05]] as const) {
-    const cymbal = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.015, 16), brass);
-    cymbal.position.set(cx, cy, dz + 0.05);
-    cymbal.rotation.z = 0.08;
-    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, cy, 6), metal);
-    stand.position.set(cx, cy / 2, dz + 0.05);
-    g.add(cymbal, stand);
+  for (const pr of props) {
+    const root = new THREE.Group();
+    root.position.set(pr.pos.x, 0, pr.pos.z);
+    root.rotation.y = pr.rotY ?? 0;
+    g.add(root);
+    const addStanding = () => {
+      const legs = new THREE.Mesh(legsGeo, cloth);
+      legs.position.y = 0.5;
+      const torso = new THREE.Mesh(torsoGeo, cloth);
+      torso.position.y = 1.17;
+      const head = new THREE.Mesh(headGeo, skin);
+      head.position.y = 1.62;
+      root.add(legs, torso, head);
+    };
+    switch (pr.kind) {
+      case 'vocalist': {
+        addStanding();
+        const mic = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 1.55, 8), metal);
+        mic.position.set(0.3, 0.775, 0.25);
+        const micHead = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), cloth);
+        micHead.position.set(0.3, 1.56, 0.25);
+        root.add(mic, micHead);
+        break;
+      }
+      case 'guitarist':
+      case 'bassist': {
+        addStanding();
+        const guitar = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.9, 0.09), wood);
+        guitar.position.set(0, 1.0, 0.22);
+        guitar.rotation.z = 0.55;
+        root.add(guitar);
+        break;
+      }
+      case 'keyboardist': {
+        addStanding();
+        const board = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.09, 0.32), cloth);
+        board.position.set(0, 0.93, 0.35);
+        root.add(board);
+        for (const dx of [-0.45, 0.45]) {
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.9, 0.05), metal);
+          leg.position.set(dx, 0.45, 0.35);
+          root.add(leg);
+        }
+        break;
+      }
+      case 'drummer': {
+        const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.45, 10), cloth);
+        stool.position.set(0, 0.225, -0.45);
+        const dtorso = new THREE.Mesh(torsoGeo, cloth);
+        dtorso.position.set(0, 0.85, -0.45);
+        const dhead = new THREE.Mesh(headGeo, skin);
+        dhead.position.set(0, 1.3, -0.45);
+        const kick = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.45, 16), wood);
+        kick.position.set(0, 0.28, 0.15);
+        kick.rotation.x = Math.PI / 2;
+        const snare = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.14, 12), metal);
+        snare.position.set(-0.32, 0.55, -0.15);
+        root.add(stool, dtorso, dhead, kick, snare);
+        for (const [cx, cy] of [[-0.5, 1.15], [0.5, 1.05]] as const) {
+          const cymbal = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.015, 16), brass);
+          cymbal.position.set(cx, cy, -0.05);
+          cymbal.rotation.z = 0.08;
+          const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, cy, 6), metal);
+          stand.position.set(cx, cy / 2, -0.05);
+          root.add(cymbal, stand);
+        }
+        break;
+      }
+      default:
+        addStanding();
+    }
   }
   return g;
 }
@@ -260,6 +265,28 @@ export function Previz3D() {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 1.6, 0);
+    // restore the last camera pose — switching to 2D and back (or reloading)
+    // must not reset the view
+    try {
+      const saved = JSON.parse(localStorage.getItem('previz3d.camera') ?? 'null');
+      if (saved?.pos && saved?.target) {
+        camera.position.set(saved.pos[0], saved.pos[1], saved.pos[2]);
+        controls.target.set(saved.target[0], saved.target[1], saved.target[2]);
+      }
+    } catch { /* corrupt/absent — defaults stand */ }
+    controls.update();
+    let lastCamSave = 0;
+    controls.addEventListener('change', () => {
+      const now = performance.now();
+      if (now - lastCamSave < 500) return;
+      lastCamSave = now;
+      try {
+        localStorage.setItem('previz3d.camera', JSON.stringify({
+          pos: camera.position.toArray(),
+          target: controls.target.toArray(),
+        }));
+      } catch { /* storage full/blocked — non-essential */ }
+    });
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.maxPolarAngle = Math.PI * 0.55;
@@ -288,10 +315,11 @@ export function Previz3D() {
       scene.add(leg);
     }
 
-    // dummy band — scale/blocking reference (true illumination lives in the
-    // native previz window; this view's scenery is deliberately unlit)
-    const band = buildBand();
+    // dummy musicians from placed props — scale/blocking reference (true
+    // illumination lives in the native previz window)
+    let band = new THREE.Group();
     scene.add(band);
+    let propsSig = '';
     const bandLight = new THREE.HemisphereLight(0x9aa4c0, 0x1a1a20, 1.1);
     scene.add(bandLight);
 
@@ -319,6 +347,13 @@ export function Previz3D() {
       lastT = now;
 
       const { project, snap, hazeViz, showBand } = useStore.getState();
+      const sig = JSON.stringify(project?.props ?? []);
+      if (sig !== propsSig) {
+        propsSig = sig;
+        scene.remove(band);
+        band = buildProps(project?.props ?? []);
+        scene.add(band);
+      }
       band.visible = showBand;
 
       if (project && project !== lastProject) {

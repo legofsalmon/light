@@ -4,6 +4,7 @@ import { uid } from '../../../shared/types.ts';
 import { PROFILES } from '../../../shared/profiles.ts';
 import { allProfileMetas, profileMeta } from '../profileInfo.ts';
 import { createGroupFromSelection } from '../selection.ts';
+import { ScrubNumInput } from './inputs.tsx';
 import { useStore } from '../store.ts';
 
 /** true when the pointer event originated inside an editing control */
@@ -215,6 +216,30 @@ export function PatchView() {
     dragTeardownRef.current = teardown;
   };
 
+  // editing a fixture that is part of the multi-selection edits ALL selected
+  // fixtures: typed values set them identically, scrubs move them together
+  const editTargets = (fid: string): string[] =>
+    fxSel.includes(fid) && fxSel.length > 1 ? fxSel : [fid];
+  const eachTarget = (fid: string, fn: (x: Project['fixtures'][number]) => void) =>
+    mutate((p) => {
+      for (const id of editTargets(fid)) {
+        const x = p.fixtures.find((y) => y.id === id);
+        if (x) fn(x);
+      }
+    });
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  const DEG = Math.PI / 180;
+  const setRot = (fid: string, key: 'rotY' | 'rotX' | 'rotZ', deg: number) =>
+    eachTarget(fid, (x) => {
+      const rad = deg * DEG;
+      if (key !== 'rotY' && Math.abs(rad) < 1e-9) delete x[key];
+      else x[key] = rad;
+    });
+  const nudgeRot = (fid: string, key: 'rotY' | 'rotX' | 'rotZ', dDeg: number) =>
+    eachTarget(fid, (x) => {
+      x[key] = (x[key] ?? 0) + dDeg * DEG;
+    });
+
   return (
     <div className="col" style={{ gap: 14 }}>
       {marquee && (() => {
@@ -310,64 +335,44 @@ export function PatchView() {
                   <td className="mono">{prof?.channels ?? '?'}</td>
                   {(['x', 'y', 'z'] as const).map((axis) => (
                     <td key={axis}>
-                      <input
-                        className="num"
-                        style={{ width: 52 }}
-                        type="number"
-                        step="0.1"
+                      <ScrubNumInput
                         value={f.pos[axis]}
-                        onChange={(e) => mutate((p) => {
-                          const x = p.fixtures.find((y) => y.id === f.id);
-                          if (x) x.pos[axis] = Number(e.target.value) || 0;
-                        })}
+                        scrubStep={0.02}
+                        decimals={2}
+                        title={axis.toUpperCase()}
+                        onSet={(v) => eachTarget(f.id, (x) => { x.pos[axis] = round2(v); })}
+                        onDelta={(d) => eachTarget(f.id, (x) => { x.pos[axis] = round2(x.pos[axis] + d); })}
                       />
                     </td>
                   ))}
                   <td>
-                    <input
-                      className="num"
-                      style={{ width: 52 }}
-                      type="number"
-                      step="5"
+                    <ScrubNumInput
                       value={Math.round((f.rotY * 180) / Math.PI)}
-                      onChange={(e) => mutate((p) => {
-                        const x = p.fixtures.find((y) => y.id === f.id);
-                        if (x) x.rotY = ((Number(e.target.value) || 0) * Math.PI) / 180;
-                      })}
+                      scrubStep={1}
+                      decimals={0}
+                      title="rotation (yaw)"
+                      onSet={(v) => setRot(f.id, 'rotY', v)}
+                      onDelta={(d) => nudgeRot(f.id, 'rotY', d)}
                     />
                   </td>
                   <td>
-                    <input
-                      className="num"
-                      style={{ width: 52 }}
-                      type="number"
-                      step="5"
-                      title="tilt (pitch) — composes on the fixture's default aim"
+                    <ScrubNumInput
                       value={Math.round(((f.rotX ?? 0) * 180) / Math.PI)}
-                      onChange={(e) => mutate((p) => {
-                        const x = p.fixtures.find((y) => y.id === f.id);
-                        if (!x) return;
-                        const v = ((Number(e.target.value) || 0) * Math.PI) / 180;
-                        if (v === 0) delete x.rotX;
-                        else x.rotX = v;
-                      })}
+                      scrubStep={1}
+                      decimals={0}
+                      title="tilt (pitch) — composes on the fixture's default aim"
+                      onSet={(v) => setRot(f.id, 'rotX', v)}
+                      onDelta={(d) => nudgeRot(f.id, 'rotX', d)}
                     />
                   </td>
                   <td>
-                    <input
-                      className="num"
-                      style={{ width: 52 }}
-                      type="number"
-                      step="5"
-                      title="roll"
+                    <ScrubNumInput
                       value={Math.round(((f.rotZ ?? 0) * 180) / Math.PI)}
-                      onChange={(e) => mutate((p) => {
-                        const x = p.fixtures.find((y) => y.id === f.id);
-                        if (!x) return;
-                        const v = ((Number(e.target.value) || 0) * Math.PI) / 180;
-                        if (v === 0) delete x.rotZ;
-                        else x.rotZ = v;
-                      })}
+                      scrubStep={1}
+                      decimals={0}
+                      title="roll"
+                      onSet={(v) => setRot(f.id, 'rotZ', v)}
+                      onDelta={(d) => nudgeRot(f.id, 'rotZ', d)}
                     />
                   </td>
                   <td>
@@ -554,7 +559,7 @@ export function PatchView() {
               {conflicts.size} address conflict{conflicts.size > 1 ? 's' : ''}
             </span>
           )}
-          <span className="label">click / ⇧-range / drag-box selects rows · drag fixtures in the 2D previz to place them</span>
+          <span className="label">click / ⇧-range / drag-box selects rows · number fields scrub by dragging · edits apply to every selected row</span>
           {importMsg && (
             <span className="label" style={{ color: importMsg.ok ? 'var(--good)' : 'var(--hot)' }}>
               {importMsg.text}

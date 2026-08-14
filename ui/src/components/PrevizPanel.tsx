@@ -1,4 +1,6 @@
 import React from 'react';
+import { uid } from '../../../shared/types.ts';
+import type { StagePropKind } from '../../../shared/types.ts';
 import { createGroupFromSelection } from '../selection.ts';
 import { useStore } from '../store.ts';
 import { Fader } from './Fader.tsx';
@@ -15,6 +17,23 @@ export function PrevizPanel() {
   const showBand = useStore((s) => s.showBand);
   const setShowBand = useStore((s) => s.setShowBand);
   const fxSel = useStore((s) => s.fxSel);
+  const mutate = useStore((s) => s.mutate);
+
+  const addMusician = (kind: string) => {
+    const KINDS: StagePropKind[] = ['vocalist', 'guitarist', 'bassist', 'drummer', 'keyboardist'];
+    mutate((p) => {
+      p.props ??= [];
+      if (kind === 'band') {
+        const layout: [StagePropKind, number, number][] = [
+          ['vocalist', 0, 1.9], ['guitarist', -1.7, 1.2], ['bassist', 1.7, 1.2],
+          ['drummer', 0, 0.1], ['keyboardist', -3.0, 0.6],
+        ];
+        for (const [k, x, z] of layout) p.props.push({ id: uid('prop'), kind: k, pos: { x, z } });
+      } else if ((KINDS as string[]).includes(kind)) {
+        p.props.push({ id: uid('prop'), kind: kind as StagePropKind, pos: { x: 0, z: 1.2 } });
+      }
+    });
+  };
 
   return (
     <>
@@ -44,6 +63,23 @@ export function PrevizPanel() {
                 ⊕ group from {fxSel.length} selected
               </button>
             )}
+            <select
+              className="sel"
+              value=""
+              title="add a dummy musician — drag to place in the plan, double-click to remove"
+              onChange={(e) => {
+                if (e.target.value) addMusician(e.target.value);
+                e.target.value = '';
+              }}
+            >
+              <option value="">+ musician…</option>
+              <option value="vocalist">vocalist</option>
+              <option value="guitarist">guitarist</option>
+              <option value="bassist">bassist</option>
+              <option value="drummer">drummer</option>
+              <option value="keyboardist">keyboardist</option>
+              <option value="band">full band</option>
+            </select>
             <div className="seg">
               <button className={view2d === 'plan' ? 'on' : ''} onClick={() => setView2d('plan')}>Plan</button>
               <button className={view2d === 'front' ? 'on' : ''} onClick={() => setView2d('front')}>Front</button>

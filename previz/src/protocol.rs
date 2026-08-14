@@ -34,8 +34,28 @@ pub struct FixtureLite {
 }
 
 #[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct PropLite {
+    pub id: String,
+    pub kind: String,
+    pub pos: PropPosLite,
+    #[serde(default)]
+    pub rot_y: Option<f32>,
+}
+
+#[derive(Deserialize, Clone, Copy, Debug)]
+pub struct PropPosLite {
+    pub x: f32,
+    pub z: f32,
+}
+
+#[derive(Deserialize, Clone, Debug)]
 pub struct ProjectLite {
     pub fixtures: Vec<FixtureLite>,
+    /// dummy performers placed in the 2D plan
+    #[serde(default)]
+    pub props: Vec<PropLite>,
     /// imported (GDTF-compiled) profiles — needed for head layout + beam angle
     #[serde(default)]
     pub profiles: std::collections::HashMap<String, light_core::cprofile::CompiledProfile>,

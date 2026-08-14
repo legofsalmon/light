@@ -68,6 +68,36 @@ pub struct Group {
     pub heads: Vec<HeadRef>,
 }
 
+/// A dummy performer on the stage — previz-only scenery. Tolerantly decoded
+/// (mirroring the TS sanitize): malformed entries drop, never reject the
+/// whole project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StageProp {
+    pub id: String,
+    pub kind: String,
+    pub pos: PropPos,
+    #[serde(rename = "rotY", default, skip_serializing_if = "Option::is_none")]
+    pub rot_y: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PropPos {
+    pub x: f64,
+    pub z: f64,
+}
+
+fn de_props<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<Vec<StageProp>>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    let Some(serde_json::Value::Array(items)) = v else { return Ok(None) };
+    let props: Vec<StageProp> = items
+        .into_iter()
+        .filter_map(|item| serde_json::from_value::<StageProp>(item).ok())
+        .collect();
+    Ok(if props.is_empty() { None } else { Some(props) })
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ColorHS {
     pub h: f64,
@@ -298,6 +328,8 @@ pub struct Project {
     pub universes: Vec<UniverseCfg>,
     pub fixtures: Vec<Fixture>,
     pub groups: Vec<Group>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "de_props")]
+    pub props: Option<Vec<StageProp>>,
     pub looks: HashMap<String, Look>,
     pub layers: Vec<Layer>,
     pub columns: Vec<String>,
