@@ -120,9 +120,22 @@ export function DialogHost() {
         e.preventDefault();
         e.stopPropagation();
         settle(req.id, null);
+        return;
       }
+      // Enter confirms — the primary choice, or OK on a plain confirm
+      if (e.key === 'Enter' && !req.input) {
+        e.preventDefault();
+        e.stopPropagation();
+        const primary = req.choices.find((c) => c.primary || c.danger) ?? req.choices.at(-1);
+        if (primary) settle(req.id, primary.value);
+        return;
+      }
+      // A modal must swallow the app's global hotkeys: without this, typing
+      // over a confirm dialog still fired cues (1-9), tap (T) and blackout (B)
+      // on the rig underneath it.
+      e.stopPropagation();
     };
-    // capture: the app's global hotkeys must not see keys aimed at the dialog
+    // capture on window runs before the app's bubble-phase global handler
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [req, settle]);
