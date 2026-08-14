@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import type { Layer, LayerSnap } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
-import { askConfirm, askPrompt } from '../dialog.tsx';
+import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
 import { lookSwatch } from '../lookColors.ts';
 
@@ -290,16 +290,71 @@ export function LookGrid() {
   const learnMode = useStore((s) => s.learnMode);
   const learnTarget = useStore((s) => s.learnTarget);
   const send = useStore((s) => s.send);
+  const mutate = useStore((s) => s.mutate);
 
   const cols = project.columns;
   const layers = [...project.layers].reverse(); // top of stack first
+
+  /** Column edits touch three places that must stay the same length: the live
+   *  columns, every layer's cells, and the active deck's stored copy of both.
+   *  The engine only syncs the deck when you switch away, so doing it here
+   *  keeps a saved show consistent even if you never leave the song. */
+  const editColumns = (fn: (cols: string[], cellsOf: (layerId: string) => (string | null)[]) => void) =>
+    mutate((p) => {
+      const cellArrays = new Map(p.layers.map((l) => [l.id, l.cells]));
+      fn(p.columns, (id) => cellArrays.get(id)!);
+      const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
+      if (deck) {
+        deck.columns = [...p.columns];
+        deck.cells = Object.fromEntries(p.layers.map((l) => [l.id, [...l.cells]]));
+      }
+    });
+
+  const renameColumn = (col: number) => {
+    void askPrompt(`Rename column ${col + 1}`, cols[col] ?? '', {
+      body: 'Column names are per song — naming them after the song’s sections is the point.',
+      confirmLabel: 'Rename',
+    }).then((name) => {
+      if (name === null) return;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      editColumns((c) => {
+        c[col] = trimmed;
+      });
+    });
+  };
+
+  const insertColumn = (after: number) => {
+    editColumns((c, cellsOf) => {
+      c.splice(after + 1, 0, `Col ${c.length + 1}`);
+      for (const l of layers) cellsOf(l.id).splice(after + 1, 0, null);
+    });
+  };
+
+  const deleteColumn = (col: number) => {
+    const filled = layers.filter((l) => l.cells[col]).length;
+    void askConfirm(`Delete column ${col + 1}${cols[col] ? ` · ${cols[col]}` : ''}?`, {
+      body:
+        filled > 0
+          ? `${filled} cell(s) in this column will be removed from this song. The looks themselves stay in the pool.`
+          : 'The column is empty.',
+      confirmLabel: 'Delete',
+      danger: true,
+    }).then((ok) => {
+      if (!ok) return;
+      editColumns((c, cellsOf) => {
+        c.splice(col, 1);
+        for (const l of layers) cellsOf(l.id).splice(col, 1);
+      });
+    });
+  };
 
   return (
     <>
     <DeckBar />
     <div
       className="lookgrid"
-      style={{ gridTemplateColumns: `168px repeat(${cols.length}, 108px)` }}
+      style={{ gridTemplateColumns: `168px repeat(${cols.length}, 108px) 30px` }}
     >
       <div
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
@@ -311,14 +366,37 @@ export function LookGrid() {
         <div
           key={col}
           className={`colhead ${learnTarget?.kind === 'column' && learnTarget.col === col ? 'learn-armed' : ''}`}
-          title={`trigger column ${col + 1} (key ${col + 1})`}
+          title={`trigger column ${col + 1} (key ${col + 1}) · right-click to rename, insert or delete`}
           onClick={() => {
             if (!useStore.getState().armLearn({ kind: 'column', col })) send({ type: 'column', col });
+          }}
+          // right-click, never left: a left click fires the column, so editing
+          // must not be reachable by the gesture that triggers cues
+          onContextMenu={(e) => {
+            e.preventDefault();
+            void askChoice(`Column ${col + 1}${name ? ` · ${name}` : ''}`, [
+              { value: 'rename', label: 'Rename…', primary: true },
+              { value: 'insert', label: 'Insert column after' },
+              ...(cols.length > 1
+                ? [{ value: 'delete', label: 'Delete column', danger: true }]
+                : []),
+            ]).then((choice) => {
+              if (choice === 'rename') renameColumn(col);
+              else if (choice === 'insert') insertColumn(col);
+              else if (choice === 'delete') deleteColumn(col);
+            });
           }}
         >
           {col + 1} · {name}
         </div>
       ))}
+      <div
+        className="colhead addcol"
+        title="add a column to this song"
+        onClick={() => insertColumn(cols.length - 1)}
+      >
+        +
+      </div>
       {layers.map((layer) => {
         const live = liveLayers?.find((l) => l.id === layer.id);
         return (
@@ -327,6 +405,9 @@ export function LookGrid() {
             {cols.map((_, col) => (
               <Cell key={col} layer={layer} col={col} live={live} />
             ))}
+            {/* grid auto-flow is continuous, so every row must fill the
+                add-column track or the next layer head slides up into it */}
+            <div className="gridfiller" />
           </React.Fragment>
         );
       })}

@@ -101,6 +101,11 @@ export function DialogHost() {
   const req = queue[0];
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  /** The capture-phase key handler below settles the dialog itself, and its
+   *  effect does not re-subscribe per keystroke — so it needs the live text,
+   *  not the value closed over when the dialog opened. */
+  const textRef = useRef('');
+  textRef.current = text;
   const id = req?.id;
 
   useEffect(() => {
@@ -124,12 +129,19 @@ export function DialogHost() {
         settle(req.id, null);
         return;
       }
-      // Enter confirms — the primary choice, or OK on a plain confirm
-      if (e.key === 'Enter' && !req.input) {
+      // Enter confirms. This must be handled HERE even for a text prompt:
+      // the swallow below runs in the capture phase, so it would otherwise
+      // stop Enter before it ever reached the input's own keydown handler —
+      // which silently made Enter do nothing in every rename dialog.
+      if (e.key === 'Enter') {
         e.preventDefault();
         e.stopPropagation();
-        const primary = req.choices.find((c) => c.primary || c.danger) ?? req.choices.at(-1);
-        if (primary) settle(req.id, primary.value);
+        if (req.input) {
+          settle(req.id, textRef.current.trim() || null);
+        } else {
+          const primary = req.choices.find((c) => c.primary || c.danger) ?? req.choices.at(-1);
+          if (primary) settle(req.id, primary.value);
+        }
         return;
       }
       // A modal must swallow the app's global hotkeys: without this, typing
