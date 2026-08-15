@@ -306,8 +306,10 @@ function wsUrl(): string {
   const host = !location.protocol.startsWith('http') || location.hostname.endsWith('tauri.localhost')
     ? 'localhost'
     : location.hostname;
-  // The desktop shell sets this when :9900 was taken and it moved the engine
-  // elsewhere; without it the window would connect to a port nothing is on.
+  // Legacy escape hatch. The shell no longer sets this: when :9900 is taken it
+  // moves the engine and navigates the window to http://127.0.0.1:<port>/, so
+  // the port arrives in the origin and the http branch above handles it. Kept
+  // because it costs one property read and still works if anything sets it.
   const shellPort = (window as unknown as { __LIGHT_PORT__?: number }).__LIGHT_PORT__;
   return `ws://${host}:${shellPort ?? WS_PORT}`;
 }

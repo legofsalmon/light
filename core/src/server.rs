@@ -63,26 +63,44 @@ pub fn start(
     bc: Broadcaster,
 ) -> std::io::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port))?;
-    // A second engine binding [::]:port could answer localhost requests too
-    // (macOS defaults IPV6_V6ONLY on, so the v6 wildcard is a separate
-    // socket), giving two engines driving one rig. Claim it as well — but
-    // best-effort only: on Linux `::` is dual-stack by default and therefore
-    // *always* collides with the 0.0.0.0 socket we just took. A second engine
-    // is still locked out either way, because it hits AddrInUse on the v4
-    // wildcard above before it ever gets here.
-    let v6_guard = TcpListener::bind(("::", port)).ok();
-    std::thread::spawn(move || {
-        let _v6_guard = v6_guard; // held for the process lifetime
-        for stream in listener.incoming() {
-            let Ok(stream) = stream else { continue };
-            let tx = tx.clone();
-            let bc = bc.clone();
-            let dist = dist.clone();
-            std::thread::spawn(move || {
-                let _ = handle_conn(stream, dist, tx, bc);
-            });
-        }
-    });
+    // Also take the v6 wildcard, and SERVE it — do not merely hold it.
+    //
+    // macOS defaults IPV6_V6ONLY on, so [::]:port is a separate socket from
+    // the v4 wildcard above, and `localhost` resolves to ::1 *first*. This
+    // socket was once bound and never accepted on, to stop a second engine
+    // claiming it and driving the same rig. That guard worked, and cost us
+    // the app: the window loads tauri://localhost, so wsUrl() dials
+    // ws://localhost:9900, which lands on ::1, completes the TCP handshake
+    // against a socket nobody accepts from, and waits forever. The engine is
+    // healthy the whole time and the UI reports it as not responding.
+    //
+    // A black hole is worse than a closed port: refusing the connection would
+    // have let the browser fall back to IPv4 in milliseconds. So answer on
+    // both families. The second-engine guard is preserved — strengthened,
+    // even, since the socket is now a real server rather than a decoy.
+    //
+    // Best-effort: on Linux `::` is dual-stack and therefore always collides
+    // with the v4 wildcard we just took, leaving None here. A second engine
+    // is still locked out, because it hits AddrInUse on v4 before reaching
+    // this line. Node's http.listen(port) binds dual-stack and has always
+    // served both — this brings the Rust core in line with it.
+    let v6 = TcpListener::bind(("::", port)).ok();
+    for l in std::iter::once(listener).chain(v6) {
+        let tx = tx.clone();
+        let bc = bc.clone();
+        let dist = dist.clone();
+        std::thread::spawn(move || {
+            for stream in l.incoming() {
+                let Ok(stream) = stream else { continue };
+                let tx = tx.clone();
+                let bc = bc.clone();
+                let dist = dist.clone();
+                std::thread::spawn(move || {
+                    let _ = handle_conn(stream, dist, tx, bc);
+                });
+            }
+        });
+    }
     Ok(())
 }
 
