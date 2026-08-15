@@ -50,6 +50,15 @@ echo "==> re-signing (adding a binary invalidates the bundle seal)"
 # the hard way — the first signed build came out with an empty entitlement set.
 ENTS="src-tauri/light.entitlements"
 if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+  # In CI the identity lives in a keychain the workflow set up; Tauri's own
+  # temporary keychain is not on the search list, so this call failed with
+  # "no identity found" even though Tauri had just signed successfully.
+  if ! security find-identity -v -p codesigning | grep -qF "$APPLE_SIGNING_IDENTITY"; then
+    echo "codesign cannot see \"$APPLE_SIGNING_IDENTITY\"." >&2
+    echo "Keychains on the search list:" >&2
+    security list-keychains -d user >&2
+    exit 1
+  fi
   codesign --force --deep --options runtime --timestamp \
     --entitlements "$ENTS" -s "$APPLE_SIGNING_IDENTITY" "$BUNDLE"
 else
