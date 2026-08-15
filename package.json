@@ -1,6 +1,6 @@
 {
   "name": "light",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "type": "module",
   "description": "LIGHT \u2014 a look engine that sits between Resolume and your lighting network. Art-Net/sACN out, MIDI in, OSC sync, 2D/3D previz.",
