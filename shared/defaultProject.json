@@ -1,0 +1,8590 @@
+{
+ "version": 1,
+ "name": "Electronic Set",
+ "universes": [
+  {
+   "id": "u1",
+   "label": "Art-Net node (U1)",
+   "artnetUniverse": 1,
+   "sacnUniverse": 1,
+   "artnet": true,
+   "sacn": false,
+   "unicast": null
+  },
+  {
+   "id": "u0",
+   "label": "Octostrips (U0)",
+   "artnetUniverse": 0,
+   "sacnUniverse": 1,
+   "artnet": true,
+   "sacn": false,
+   "unicast": null
+  }
+ ],
+ "fixtures": [
+  {
+   "id": "derby1",
+   "name": "Derby 1",
+   "profileId": "varytec-derby-st-4ch",
+   "universeId": "u1",
+   "address": 1,
+   "pos": {
+    "x": -2.6,
+    "y": 2.6,
+    "z": -1.0
+   },
+   "rotY": 0
+  },
+  {
+   "id": "derby2",
+   "name": "Derby 2",
+   "profileId": "varytec-derby-st-4ch",
+   "universeId": "u1",
+   "address": 5,
+   "pos": {
+    "x": 2.6,
+    "y": 2.6,
+    "z": -1.0
+   },
+   "rotY": 0
+  },
+  {
+   "id": "partybar1",
+   "name": "Partybar 1",
+   "profileId": "kam-partybar-wfs-20ch",
+   "universeId": "u1",
+   "address": 33,
+   "pos": {
+    "x": -1.4,
+    "y": 3.2,
+    "z": -1.0
+   },
+   "rotY": 0
+  },
+  {
+   "id": "partybar2",
+   "name": "Partybar 2",
+   "profileId": "kam-partybar-wfs-20ch",
+   "universeId": "u1",
+   "address": 53,
+   "pos": {
+    "x": 1.4,
+    "y": 3.2,
+    "z": -1.0
+   },
+   "rotY": 0
+  },
+  {
+   "id": "hazer",
+   "name": "Hazer",
+   "profileId": "generic-hazer-2ch",
+   "universeId": "u1",
+   "address": 73,
+   "pos": {
+    "x": 0.0,
+    "y": 3.2,
+    "z": -1.0
+   },
+   "rotY": 0
+  },
+  {
+   "id": "strip1",
+   "name": "Strip 1",
+   "profileId": "gdtf-showtec-octostrip-set-mkii-192-ch-mode--single-strip-",
+   "universeId": "u0",
+   "address": 1,
+   "pos": {
+    "x": -5.6,
+    "y": 3.6,
+    "z": -2.2
+   },
+   "rotY": 0
+  },
+  {
+   "id": "strip2",
+   "name": "Strip 2",
+   "profileId": "gdtf-showtec-octostrip-set-mkii-192-ch-mode--single-strip-",
+   "universeId": "u0",
+   "address": 25,
+   "pos": {
+    "x": -3.9999999999999996,
+    "y": 3.6,
+    "z": -2.2
+   },
+   "rotY": 0
+  },
+  {
+   "id": "strip3",
+   "name": "Strip 3",
+   "profileId": "gdtf-showtec-octostrip-set-mkii-192-ch-mode--single-strip-",
+   "universeId": "u0",
+   "address": 49,
+   "pos": {
+    "x": -2.3999999999999995,
+    "y": 3.6,
+    "z": -2.2
+   },
+   "rotY": 0
+  },
+  {
+   "id": "strip4",
+   "name": "Strip 4",
+   "profileId": "gdtf-showtec-octostrip-set-mkii-192-ch-mode--single-strip-",
+   "universeId": "u0",
+   "address": 73,
+   "pos": {
+    "x": -0.7999999999999989,
+    "y": 3.6,
+    "z": -2.2
+   },
+   "rotY": 0
+  },
+  {
+   "id": "strip5",
+   "name": "Strip 5",
+   "profileId": "gdtf-showtec-octostrip-set-mkii-192-ch-mode--single-strip-",
+   "universeId": "u0",
+   "address": 97,
+   "pos": {
+    "x": 0.8000000000000007,
+    "y": 3.6,
+    "z": -2.2
+   },
+   "rotY": 0
+  },
+  {
+   "id": "strip6",
+   "name": "Strip 6",
+   "profileId": "gdtf-showtec-octostrip-set-mkii-192-ch-mode--single-strip-",
+   "universeId": "u0",
+   "address": 121,
+   "pos": {
+    "x": 2.4000000000000004,
+    "y": 3.6,
+    "z": -2.2
+   },
+   "rotY": 0
+  },
+  {
+   "id": "strip7",
+   "name": "Strip 7",
+   "profileId": "gdtf-showtec-octostrip-set-mkii-192-ch-mode--single-strip-",
+   "universeId": "u0",
+   "address": 145,
+   "pos": {
+    "x": 4.000000000000002,
+    "y": 3.6,
+    "z": -2.2
+   },
+   "rotY": 0
+  },
+  {
+   "id": "strip8",
+   "name": "Strip 8",
+   "profileId": "gdtf-showtec-octostrip-set-mkii-192-ch-mode--single-strip-",
+   "universeId": "u0",
+   "address": 169,
+   "pos": {
+    "x": 5.600000000000001,
+    "y": 3.6,
+    "z": -2.2
+   },
+   "rotY": 0
+  }
+ ],
+ "groups": [
+  {
+   "id": "g-all",
+   "name": "All",
+   "heads": [
+    {
+     "fixtureId": "derby1",
+     "head": 0
+    },
+    {
+     "fixtureId": "derby2",
+     "head": 0
+    },
+    {
+     "fixtureId": "partybar1",
+     "head": 0
+    },
+    {
+     "fixtureId": "partybar1",
+     "head": 1
+    },
+    {
+     "fixtureId": "partybar1",
+     "head": 2
+    },
+    {
+     "fixtureId": "partybar1",
+     "head": 3
+    },
+    {
+     "fixtureId": "partybar2",
+     "head": 0
+    },
+    {
+     "fixtureId": "partybar2",
+     "head": 1
+    },
+    {
+     "fixtureId": "partybar2",
+     "head": 2
+    },
+    {
+     "fixtureId": "partybar2",
+     "head": 3
+    }
+   ]
+  },
+  {
+   "id": "g-derbies",
+   "name": "Derbies",
+   "heads": [
+    {
+     "fixtureId": "derby1",
+     "head": 0
+    },
+    {
+     "fixtureId": "derby2",
+     "head": 0
+    }
+   ]
+  },
+  {
+   "id": "g-pars",
+   "name": "Bar Pars L\u2192R",
+   "heads": [
+    {
+     "fixtureId": "partybar1",
+     "head": 0
+    },
+    {
+     "fixtureId": "partybar1",
+     "head": 1
+    },
+    {
+     "fixtureId": "partybar1",
+     "head": 2
+    },
+    {
+     "fixtureId": "partybar1",
+     "head": 3
+    },
+    {
+     "fixtureId": "partybar2",
+     "head": 0
+    },
+    {
+     "fixtureId": "partybar2",
+     "head": 1
+    },
+    {
+     "fixtureId": "partybar2",
+     "head": 2
+    },
+    {
+     "fixtureId": "partybar2",
+     "head": 3
+    }
+   ]
+  },
+  {
+   "id": "g-bar1",
+   "name": "Bar 1",
+   "heads": [
+    {
+     "fixtureId": "partybar1",
+     "head": 0
+    },
+    {
+     "fixtureId": "partybar1",
+     "head": 1
+    },
+    {
+     "fixtureId": "partybar1",
+     "head": 2
+    },
+    {
+     "fixtureId": "partybar1",
+     "head": 3
+    }
+   ]
+  },
+  {
+   "id": "g-bar2",
+   "name": "Bar 2",
+   "heads": [
+    {
+     "fixtureId": "partybar2",
+     "head": 0
+    },
+    {
+     "fixtureId": "partybar2",
+     "head": 1
+    },
+    {
+     "fixtureId": "partybar2",
+     "head": 2
+    },
+    {
+     "fixtureId": "partybar2",
+     "head": 3
+    }
+   ]
+  },
+  {
+   "id": "g-strips",
+   "name": "Strips L\u2192R",
+   "heads": [
+    {
+     "fixtureId": "strip1",
+     "head": 0
+    },
+    {
+     "fixtureId": "strip1",
+     "head": 1
+    },
+    {
+     "fixtureId": "strip1",
+     "head": 2
+    },
+    {
+     "fixtureId": "strip1",
+     "head": 3
+    },
+    {
+     "fixtureId": "strip1",
+     "head": 4
+    },
+    {
+     "fixtureId": "strip1",
+     "head": 5
+    },
+    {
+     "fixtureId": "strip1",
+     "head": 6
+    },
+    {
+     "fixtureId": "strip1",
+     "head": 7
+    },
+    {
+     "fixtureId": "strip2",
+     "head": 0
+    },
+    {
+     "fixtureId": "strip2",
+     "head": 1
+    },
+    {
+     "fixtureId": "strip2",
+     "head": 2
+    },
+    {
+     "fixtureId": "strip2",
+     "head": 3
+    },
+    {
+     "fixtureId": "strip2",
+     "head": 4
+    },
+    {
+     "fixtureId": "strip2",
+     "head": 5
+    },
+    {
+     "fixtureId": "strip2",
+     "head": 6
+    },
+    {
+     "fixtureId": "strip2",
+     "head": 7
+    },
+    {
+     "fixtureId": "strip3",
+     "head": 0
+    },
+    {
+     "fixtureId": "strip3",
+     "head": 1
+    },
+    {
+     "fixtureId": "strip3",
+     "head": 2
+    },
+    {
+     "fixtureId": "strip3",
+     "head": 3
+    },
+    {
+     "fixtureId": "strip3",
+     "head": 4
+    },
+    {
+     "fixtureId": "strip3",
+     "head": 5
+    },
+    {
+     "fixtureId": "strip3",
+     "head": 6
+    },
+    {
+     "fixtureId": "strip3",
+     "head": 7
+    },
+    {
+     "fixtureId": "strip4",
+     "head": 0
+    },
+    {
+     "fixtureId": "strip4",
+     "head": 1
+    },
+    {
+     "fixtureId": "strip4",
+     "head": 2
+    },
+    {
+     "fixtureId": "strip4",
+     "head": 3
+    },
+    {
+     "fixtureId": "strip4",
+     "head": 4
+    },
+    {
+     "fixtureId": "strip4",
+     "head": 5
+    },
+    {
+     "fixtureId": "strip4",
+     "head": 6
+    },
+    {
+     "fixtureId": "strip4",
+     "head": 7
+    },
+    {
+     "fixtureId": "strip5",
+     "head": 0
+    },
+    {
+     "fixtureId": "strip5",
+     "head": 1
+    },
+    {
+     "fixtureId": "strip5",
+     "head": 2
+    },
+    {
+     "fixtureId": "strip5",
+     "head": 3
+    },
+    {
+     "fixtureId": "strip5",
+     "head": 4
+    },
+    {
+     "fixtureId": "strip5",
+     "head": 5
+    },
+    {
+     "fixtureId": "strip5",
+     "head": 6
+    },
+    {
+     "fixtureId": "strip5",
+     "head": 7
+    },
+    {
+     "fixtureId": "strip6",
+     "head": 0
+    },
+    {
+     "fixtureId": "strip6",
+     "head": 1
+    },
+    {
+     "fixtureId": "strip6",
+     "head": 2
+    },
+    {
+     "fixtureId": "strip6",
+     "head": 3
+    },
+    {
+     "fixtureId": "strip6",
+     "head": 4
+    },
+    {
+     "fixtureId": "strip6",
+     "head": 5
+    },
+    {
+     "fixtureId": "strip6",
+     "head": 6
+    },
+    {
+     "fixtureId": "strip6",
+     "head": 7
+    },
+    {
+     "fixtureId": "strip7",
+     "head": 0
+    },
+    {
+     "fixtureId": "strip7",
+     "head": 1
+    },
+    {
+     "fixtureId": "strip7",
+     "head": 2
+    },
+    {
+     "fixtureId": "strip7",
+     "head": 3
+    },
+    {
+     "fixtureId": "strip7",
+     "head": 4
+    },
+    {
+     "fixtureId": "strip7",
+     "head": 5
+    },
+    {
+     "fixtureId": "strip7",
+     "head": 6
+    },
+    {
+     "fixtureId": "strip7",
+     "head": 7
+    },
+    {
+     "fixtureId": "strip8",
+     "head": 0
+    },
+    {
+     "fixtureId": "strip8",
+     "head": 1
+    },
+    {
+     "fixtureId": "strip8",
+     "head": 2
+    },
+    {
+     "fixtureId": "strip8",
+     "head": 3
+    },
+    {
+     "fixtureId": "strip8",
+     "head": 4
+    },
+    {
+     "fixtureId": "strip8",
+     "head": 5
+    },
+    {
+     "fixtureId": "strip8",
+     "head": 6
+    },
+    {
+     "fixtureId": "strip8",
+     "head": 7
+    }
+   ]
+  },
+  {
+   "id": "g-hazer",
+   "name": "Hazer",
+   "heads": [
+    {
+     "fixtureId": "hazer",
+     "head": 0
+    }
+   ]
+  }
+ ],
+ "props": [
+  {
+   "id": "prop-voc",
+   "kind": "vocalist",
+   "pos": {
+    "x": 0,
+    "z": 1.9
+   }
+  },
+  {
+   "id": "prop-gtr",
+   "kind": "guitarist",
+   "pos": {
+    "x": -1.7,
+    "z": 1.2
+   }
+  },
+  {
+   "id": "prop-bass",
+   "kind": "bassist",
+   "pos": {
+    "x": 1.7,
+    "z": 1.2
+   }
+  },
+  {
+   "id": "prop-drums",
+   "kind": "drummer",
+   "pos": {
+    "x": 0,
+    "z": 0.1
+   }
+  },
+  {
+   "id": "prop-keys",
+   "kind": "keyboardist",
+   "pos": {
+    "x": -3,
+    "z": 0.6
+   }
+  }
+ ],
+ "looks": {
+  "s01-wash-still": {
+   "id": "s01-wash-still",
+   "name": "Still Air \u2014 Strip Bed",
+   "parts": [
+    {
+     "id": "s01-wash-still-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.28,
+      "color": {
+       "h": 224,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s01e1",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.18,
+       "spread": 0.5,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s01-wash-rise": {
+   "id": "s01-wash-rise",
+   "name": "Still Air \u2014 Slow Rise",
+   "parts": [
+    {
+     "id": "s01-wash-rise-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 222,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s01e2",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 24,
+       "size": 0.22,
+       "spread": 0.6,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s01-wash-cold-seam": {
+   "id": "s01-wash-cold-seam",
+   "name": "Cold Seam",
+   "parts": [
+    {
+     "id": "s01-wash-cold-seam-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.34,
+      "color": {
+       "h": 206,
+       "s": 0.22
+      }
+     },
+     "effects": [
+      {
+       "id": "s01e3",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.12,
+       "spread": 0.8,
+       "width": 0.5,
+       "phase": 0.25
+      }
+     ]
+    }
+   ]
+  },
+  "s01-wash-open": {
+   "id": "s01-wash-open",
+   "name": "Open Blue",
+   "parts": [
+    {
+     "id": "s01-wash-open-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.62,
+      "color": {
+       "h": 228,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s01e4",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.15,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s01-wash-field": {
+   "id": "s01-wash-field",
+   "name": "Blue Field",
+   "parts": [
+    {
+     "id": "s01-wash-field-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.72,
+      "color": {
+       "h": 218,
+       "s": 0.88
+      }
+     },
+     "effects": [
+      {
+       "id": "s01e5",
+       "target": "hue",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.06,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      },
+      {
+       "id": "s01e6",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 24,
+       "size": 0.12,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0.5
+      }
+     ]
+    }
+   ]
+  },
+  "s01-wash-ember": {
+   "id": "s01-wash-ember",
+   "name": "Ember Blue",
+   "parts": [
+    {
+     "id": "s01-wash-ember-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.08,
+      "color": {
+       "h": 230,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s01-fx-drift": {
+   "id": "s01-fx-drift",
+   "name": "Drift (very slow)",
+   "parts": [
+    {
+     "id": "s01-fx-drift-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 210,
+       "s": 0.35
+      }
+     },
+     "effects": [
+      {
+       "id": "s01e7",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 48,
+       "size": 0.9,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s01-fx-tide": {
+   "id": "s01-fx-tide",
+   "name": "Tide (slow roll)",
+   "parts": [
+    {
+     "id": "s01-fx-tide-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.5,
+      "color": {
+       "h": 216,
+       "s": 0.6
+      }
+     },
+     "effects": [
+      {
+       "id": "s01e8",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 24,
+       "size": 1,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s02-wash-teal-bed": {
+   "id": "s02-wash-teal-bed",
+   "name": "Teal Bed",
+   "parts": [
+    {
+     "id": "s02-wash-teal-bed-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.35,
+      "color": {
+       "h": 176,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s02e1",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.15,
+       "spread": 0.5,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s02-wash-teal-rise": {
+   "id": "s02-wash-teal-rise",
+   "name": "Teal Rise (bars in)",
+   "parts": [
+    {
+     "id": "s02-wash-teal-rise-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.5,
+      "color": {
+       "h": 186,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s02-wash-teal-rise-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.22,
+      "color": {
+       "h": 172,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s02-wash-undertow": {
+   "id": "s02-wash-undertow",
+   "name": "Undertow (hue drift)",
+   "parts": [
+    {
+     "id": "s02-wash-undertow-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 196,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s02e2",
+       "target": "hue",
+       "wave": "sine",
+       "rate": 48,
+       "size": 0.08,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    },
+    {
+     "id": "s02-wash-undertow-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.3,
+      "color": {
+       "h": 182,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s02-wash-teal-open": {
+   "id": "s02-wash-teal-open",
+   "name": "Teal Open",
+   "parts": [
+    {
+     "id": "s02-wash-teal-open-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.66,
+      "color": {
+       "h": 180,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s02-wash-teal-open-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 190,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s02-wash-flood": {
+   "id": "s02-wash-flood",
+   "name": "Teal Flood",
+   "parts": [
+    {
+     "id": "s02-wash-flood-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.72,
+      "color": {
+       "h": 174,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s02e3",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.12,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    },
+    {
+     "id": "s02-wash-flood-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.55,
+      "color": {
+       "h": 186,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s02-wash-ebb": {
+   "id": "s02-wash-ebb",
+   "name": "Ebb",
+   "parts": [
+    {
+     "id": "s02-wash-ebb-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.1,
+      "color": {
+       "h": 190,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s02-fx-bar-chase": {
+   "id": "s02-fx-bar-chase",
+   "name": "Bar Chase L>R (slow)",
+   "parts": [
+    {
+     "id": "s02-fx-bar-chase-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.85,
+      "color": {
+       "h": 168,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s02e4",
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 16,
+       "size": 1,
+       "spread": 1,
+       "width": 0.3,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s02-fx-bar-chase-2": {
+   "id": "s02-fx-bar-chase-2",
+   "name": "Bar Chase L>R (double rate)",
+   "parts": [
+    {
+     "id": "s02-fx-bar-chase-2-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.9,
+      "color": {
+       "h": 178,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s02e5",
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 8,
+       "size": 1,
+       "spread": 1,
+       "width": 0.25,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s02-fx-strip-swell": {
+   "id": "s02-fx-strip-swell",
+   "name": "Strip Swell",
+   "parts": [
+    {
+     "id": "s02-fx-strip-swell-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.5,
+      "color": {
+       "h": 192,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s02e6",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 24,
+       "size": 0.8,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s03-wash-red-bed": {
+   "id": "s03-wash-red-bed",
+   "name": "Furnace Bed",
+   "parts": [
+    {
+     "id": "s03-wash-red-bed-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.4,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s03-wash-red-bed-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.3,
+      "color": {
+       "h": 4,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s03-wash-red-build": {
+   "id": "s03-wash-red-build",
+   "name": "Red Build",
+   "parts": [
+    {
+     "id": "s03-wash-red-build-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.55,
+      "color": {
+       "h": 2,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s03e1",
+       "target": "hue",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.05,
+       "spread": 0.6,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    },
+    {
+     "id": "s03-wash-red-build-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 14,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s03-wash-amber-break": {
+   "id": "s03-wash-amber-break",
+   "name": "Amber Break",
+   "parts": [
+    {
+     "id": "s03-wash-amber-break-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.4,
+      "color": {
+       "h": 28,
+       "s": 0.95
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s03-wash-amber-break-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.3,
+      "color": {
+       "h": 12,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s03-wash-furnace": {
+   "id": "s03-wash-furnace",
+   "name": "Furnace Open",
+   "parts": [
+    {
+     "id": "s03-wash-furnace-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.75,
+      "color": {
+       "h": 8,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s03-wash-furnace-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.65,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s03-wash-forge": {
+   "id": "s03-wash-forge",
+   "name": "Forge (peak)",
+   "parts": [
+    {
+     "id": "s03-wash-forge-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.85,
+      "color": {
+       "h": 18,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s03e2",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 8,
+       "size": 0.12,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    },
+    {
+     "id": "s03-wash-forge-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.7,
+      "color": {
+       "h": 4,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s03-wash-coals": {
+   "id": "s03-wash-coals",
+   "name": "Coals",
+   "parts": [
+    {
+     "id": "s03-wash-coals-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.12,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s03-derby-warm": {
+   "id": "s03-derby-warm",
+   "name": "Derby Warm Wake",
+   "parts": [
+    {
+     "id": "s03-derby-warm-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 16,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.12
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s03-derby-red-spin": {
+   "id": "s03-derby-red-spin",
+   "name": "Derby Red Spin",
+   "parts": [
+    {
+     "id": "s03-derby-red-spin-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.3
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s03-derby-amber-aim": {
+   "id": "s03-derby-amber-aim",
+   "name": "Derby Amber Hold",
+   "parts": [
+    {
+     "id": "s03-derby-amber-aim-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 30,
+       "s": 0.95
+      },
+      "motorMode": "aim",
+      "motorValue": 0.5
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s03-fx-amber-pulse": {
+   "id": "s03-fx-amber-pulse",
+   "name": "Amber Bar Stabs",
+   "parts": [
+    {
+     "id": "s03-fx-amber-pulse-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.9,
+      "color": {
+       "h": 30,
+       "s": 0.95
+      }
+     },
+     "effects": [
+      {
+       "id": "s03e3",
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 4,
+       "size": 1,
+       "spread": 0.5,
+       "width": 0.35,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s03-fx-strip-chase": {
+   "id": "s03-fx-strip-chase",
+   "name": "Warm Strip Chase",
+   "parts": [
+    {
+     "id": "s03-fx-strip-chase-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.85,
+      "color": {
+       "h": 10,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s03e4",
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 8,
+       "size": 1,
+       "spread": 1,
+       "width": 0.45,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s03-fx-full-roll": {
+   "id": "s03-fx-full-roll",
+   "name": "Furnace Roll (bars + strips)",
+   "parts": [
+    {
+     "id": "s03-fx-full-roll-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.9,
+      "color": {
+       "h": 6,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s03e5",
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 4,
+       "size": 1,
+       "spread": 1,
+       "width": 0.4,
+       "phase": 0
+      }
+     ]
+    },
+    {
+     "id": "s03-fx-full-roll-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.85,
+      "color": {
+       "h": 26,
+       "s": 0.95
+      }
+     },
+     "effects": [
+      {
+       "id": "s03e6",
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 4,
+       "size": 0.85,
+       "spread": 1,
+       "width": 0.3,
+       "phase": 0.5
+      }
+     ]
+    }
+   ]
+  },
+  "s04-wash-glass": {
+   "id": "s04-wash-glass",
+   "name": "Glass",
+   "parts": [
+    {
+     "id": "s04-wash-glass-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.5,
+      "color": {
+       "h": 200,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s04-wash-glass-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.5,
+      "color": {
+       "h": 192,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s04-wash-atlas-build": {
+   "id": "s04-wash-atlas-build",
+   "name": "Atlas Build",
+   "parts": [
+    {
+     "id": "s04-wash-atlas-build-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.7,
+      "color": {
+       "h": 196,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s04e1",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.15,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    },
+    {
+     "id": "s04-wash-atlas-build-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.6,
+      "color": {
+       "h": 204,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s04-wash-cyan-break": {
+   "id": "s04-wash-cyan-break",
+   "name": "Cyan Break",
+   "parts": [
+    {
+     "id": "s04-wash-cyan-break-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 186,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s04-wash-cyan-break-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.4,
+      "color": {
+       "h": 210,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s04e2",
+       "target": "hue",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.1,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s04-wash-wide-open": {
+   "id": "s04-wash-wide-open",
+   "name": "Wide Open",
+   "parts": [
+    {
+     "id": "s04-wash-wide-open-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 198,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s04-wash-wide-open-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.95,
+      "color": {
+       "h": 188,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s04-wash-horizon": {
+   "id": "s04-wash-horizon",
+   "name": "Horizon (peak)",
+   "parts": [
+    {
+     "id": "s04-wash-horizon-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 206,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s04e3",
+       "target": "hue",
+       "wave": "sine",
+       "rate": 64,
+       "size": 0.08,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    },
+    {
+     "id": "s04-wash-horizon-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 180,
+       "s": 0.92
+      }
+     },
+     "effects": [
+      {
+       "id": "s04e4",
+       "target": "hue",
+       "wave": "sine",
+       "rate": 64,
+       "size": 0.08,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0.5
+      }
+     ]
+    }
+   ]
+  },
+  "s04-wash-deep-low": {
+   "id": "s04-wash-deep-low",
+   "name": "Deep Low",
+   "parts": [
+    {
+     "id": "s04-wash-deep-low-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.12,
+      "color": {
+       "h": 214,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s04-derby-cyan": {
+   "id": "s04-derby-cyan",
+   "name": "Derby Cyan Turn",
+   "parts": [
+    {
+     "id": "s04-derby-cyan-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 188,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.25
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s04-derby-blue-fast": {
+   "id": "s04-derby-blue-fast",
+   "name": "Derby Blue Spin",
+   "parts": [
+    {
+     "id": "s04-derby-blue-fast-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 214,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.5
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s04-derby-hold": {
+   "id": "s04-derby-hold",
+   "name": "Derby Hold",
+   "parts": [
+    {
+     "id": "s04-derby-hold-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 200,
+       "s": 1
+      },
+      "motorMode": "aim",
+      "motorValue": 0.35
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s04-fx-bar-sweep": {
+   "id": "s04-fx-bar-sweep",
+   "name": "Bar Sweep Wide",
+   "parts": [
+    {
+     "id": "s04-fx-bar-sweep-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.8,
+      "color": {
+       "h": 204,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s04e5",
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 8,
+       "size": 0.9,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s04-fx-strip-chase-wide": {
+   "id": "s04-fx-strip-chase-wide",
+   "name": "Strip Chase Wide",
+   "parts": [
+    {
+     "id": "s04-fx-strip-chase-wide-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.9,
+      "color": {
+       "h": 196,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s04e6",
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 8,
+       "size": 1,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s04-fx-double": {
+   "id": "s04-fx-double",
+   "name": "Atlas Double (strips + bars)",
+   "parts": [
+    {
+     "id": "s04-fx-double-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.95,
+      "color": {
+       "h": 190,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s04e7",
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 4,
+       "size": 1,
+       "spread": 1,
+       "width": 0.35,
+       "phase": 0
+      }
+     ]
+    },
+    {
+     "id": "s04-fx-double-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.85,
+      "color": {
+       "h": 208,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s04e8",
+       "target": "dimmer",
+       "wave": "triangle",
+       "rate": 8,
+       "size": 0.8,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0.25
+      }
+     ]
+    }
+   ]
+  },
+  "s05-wash-verdigris": {
+   "id": "s05-wash-verdigris",
+   "name": "Verdigris Bed",
+   "parts": [
+    {
+     "id": "s05-wash-verdigris-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 92,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s05-wash-verdigris-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.35,
+      "color": {
+       "h": 64,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s05-wash-acid-rise": {
+   "id": "s05-wash-acid-rise",
+   "name": "Acid Rise",
+   "parts": [
+    {
+     "id": "s05-wash-acid-rise-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.55,
+      "color": {
+       "h": 84,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s05e1",
+       "target": "hue",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.06,
+       "spread": 0.7,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    },
+    {
+     "id": "s05-wash-acid-rise-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 58,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s05-wash-patina": {
+   "id": "s05-wash-patina",
+   "name": "Patina Break",
+   "parts": [
+    {
+     "id": "s05-wash-patina-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.3,
+      "color": {
+       "h": 100,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s05-wash-patina-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.4,
+      "color": {
+       "h": 70,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s05-wash-bloom": {
+   "id": "s05-wash-bloom",
+   "name": "Acid Bloom",
+   "parts": [
+    {
+     "id": "s05-wash-bloom-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.7,
+      "color": {
+       "h": 62,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s05-wash-bloom-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.65,
+      "color": {
+       "h": 96,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s05-wash-oxide": {
+   "id": "s05-wash-oxide",
+   "name": "Oxide (peak)",
+   "parts": [
+    {
+     "id": "s05-wash-oxide-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.75,
+      "color": {
+       "h": 88,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s05e2",
+       "target": "hue",
+       "wave": "triangle",
+       "rate": 32,
+       "size": 0.1,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    },
+    {
+     "id": "s05-wash-oxide-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.7,
+      "color": {
+       "h": 60,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s05e3",
+       "target": "hue",
+       "wave": "triangle",
+       "rate": 32,
+       "size": 0.1,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0.5
+      }
+     ]
+    }
+   ]
+  },
+  "s05-wash-residue": {
+   "id": "s05-wash-residue",
+   "name": "Residue",
+   "parts": [
+    {
+     "id": "s05-wash-residue-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.1,
+      "color": {
+       "h": 90,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s05-derby-acid": {
+   "id": "s05-derby-acid",
+   "name": "Derby Acid Hold",
+   "parts": [
+    {
+     "id": "s05-derby-acid-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 72,
+       "s": 1
+      },
+      "motorMode": "aim",
+      "motorValue": 0.4
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s05-derby-green-spin": {
+   "id": "s05-derby-green-spin",
+   "name": "Derby Green Turn",
+   "parts": [
+    {
+     "id": "s05-derby-green-spin-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 96,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.2
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s05-fx-bar-alt": {
+   "id": "s05-fx-bar-alt",
+   "name": "Bar Alternate (odd/even)",
+   "parts": [
+    {
+     "id": "s05-fx-bar-alt-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.85,
+      "color": {
+       "h": 60,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s05e4",
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 4,
+       "size": 1,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s05-fx-strip-chase-back": {
+   "id": "s05-fx-strip-chase-back",
+   "name": "Strip Chase R>L",
+   "parts": [
+    {
+     "id": "s05-fx-strip-chase-back-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.85,
+      "color": {
+       "h": 94,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s05e5",
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 8,
+       "size": 1,
+       "spread": 1,
+       "width": 0.4,
+       "phase": 0.5
+      }
+     ]
+    }
+   ]
+  },
+  "s05-fx-flicker": {
+   "id": "s05-fx-flicker",
+   "name": "Acid Flicker",
+   "parts": [
+    {
+     "id": "s05-fx-flicker-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.7,
+      "color": {
+       "h": 66,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "id": "s05e6",
+       "target": "dimmer",
+       "wave": "random",
+       "rate": 2,
+       "size": 0.6,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0
+      }
+     ]
+    }
+   ]
+  },
+  "s06-wash-split-low": {
+   "id": "s06-wash-split-low",
+   "name": "Split Bed Low",
+   "parts": [
+    {
+     "id": "s06-wash-split-low-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 240,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "square",
+       "rate": 8,
+       "size": 0.334,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s06-wash-split-low-e0"
+      }
+     ]
+    },
+    {
+     "id": "s06-wash-split-low-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.3,
+      "color": {
+       "h": 188,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s06-wash-split-full": {
+   "id": "s06-wash-split-full",
+   "name": "Split Bed Full",
+   "parts": [
+    {
+     "id": "s06-wash-split-full-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.95,
+      "color": {
+       "h": 240,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "square",
+       "rate": 8,
+       "size": 0.334,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s06-wash-split-full-e0"
+      }
+     ]
+    },
+    {
+     "id": "s06-wash-split-full-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.8,
+      "color": {
+       "h": 240,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "square",
+       "rate": 8,
+       "size": 0.334,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s06-wash-split-full-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s06-wash-cyan-bed": {
+   "id": "s06-wash-cyan-bed",
+   "name": "Cyan Bed",
+   "parts": [
+    {
+     "id": "s06-wash-cyan-bed-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.4,
+      "color": {
+       "h": 186,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s06-wash-cyan-bed-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.12,
+      "color": {
+       "h": 192,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s06-wash-mag-bloom": {
+   "id": "s06-wash-mag-bloom",
+   "name": "Magenta Bloom",
+   "parts": [
+    {
+     "id": "s06-wash-mag-bloom-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.65,
+      "color": {
+       "h": 305,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.5,
+       "spread": 0.5,
+       "phase": 0,
+       "id": "s06-wash-mag-bloom-e0",
+       "width": 0.5
+      }
+     ]
+    },
+    {
+     "id": "s06-wash-mag-bloom-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.3,
+      "color": {
+       "h": 300,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s06-wash-ghost": {
+   "id": "s06-wash-ghost",
+   "name": "Ghost Cyan",
+   "parts": [
+    {
+     "id": "s06-wash-ghost-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.08,
+      "color": {
+       "h": 190,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s06-derby-cyan-aim": {
+   "id": "s06-derby-cyan-aim",
+   "name": "Derby Cyan Still",
+   "parts": [
+    {
+     "id": "s06-derby-cyan-aim-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 186,
+       "s": 1
+      },
+      "motorMode": "aim",
+      "motorValue": 0.5
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s06-derby-split-spin": {
+   "id": "s06-derby-split-spin",
+   "name": "Derby Split Spin",
+   "parts": [
+    {
+     "id": "s06-derby-split-spin-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 240,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.45
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "square",
+       "rate": 4,
+       "size": 0.334,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s06-derby-split-spin-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s06-fx-chase-strips": {
+   "id": "s06-fx-chase-strips",
+   "name": "Cyan Chase",
+   "parts": [
+    {
+     "id": "s06-fx-chase-strips-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 186,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 4,
+       "size": 1,
+       "spread": 1,
+       "width": 0.12,
+       "phase": 0,
+       "id": "s06-fx-chase-strips-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s06-fx-bloom-pulse": {
+   "id": "s06-fx-bloom-pulse",
+   "name": "Bloom Pulse",
+   "parts": [
+    {
+     "id": "s06-fx-bloom-pulse-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 300,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 8,
+       "size": 0.8,
+       "spread": 0.5,
+       "phase": 0,
+       "id": "s06-fx-bloom-pulse-e0",
+       "width": 0.5
+      }
+     ]
+    }
+   ]
+  },
+  "s06-fx-chase-fast": {
+   "id": "s06-fx-chase-fast",
+   "name": "Split Chase Fast",
+   "parts": [
+    {
+     "id": "s06-fx-chase-fast-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 300,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 2,
+       "size": 1,
+       "spread": 1,
+       "width": 0.09,
+       "phase": 0,
+       "id": "s06-fx-chase-fast-e0"
+      }
+     ]
+    },
+    {
+     "id": "s06-fx-chase-fast-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 186,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 2,
+       "size": 0.9,
+       "spread": 0.5,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s06-fx-chase-fast-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s06-strobe-cyan-accent": {
+   "id": "s06-strobe-cyan-accent",
+   "name": "Cyan Accent Hit",
+   "parts": [
+    {
+     "id": "s06-strobe-cyan-accent-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 186,
+       "s": 0.85
+      },
+      "strobe": 0.55
+     },
+     "effects": []
+    },
+    {
+     "id": "s06-strobe-cyan-accent-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 186,
+       "s": 0.8
+      },
+      "strobe": 0.55
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s06-strobe-mag-accent": {
+   "id": "s06-strobe-mag-accent",
+   "name": "Magenta Accent Hit",
+   "parts": [
+    {
+     "id": "s06-strobe-mag-accent-p0",
+     "groupId": "g-all",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 305,
+       "s": 0.9
+      },
+      "strobe": 0.7
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s07-wash-red-low": {
+   "id": "s07-wash-red-low",
+   "name": "Red Floor",
+   "parts": [
+    {
+     "id": "s07-wash-red-low-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.35,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s07-wash-red-low-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.2,
+      "color": {
+       "h": 2,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s07-wash-red-pump": {
+   "id": "s07-wash-red-pump",
+   "name": "Red Pump",
+   "parts": [
+    {
+     "id": "s07-wash-red-pump-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 2,
+       "size": 0.75,
+       "spread": 0,
+       "width": 0.45,
+       "phase": 0,
+       "id": "s07-wash-red-pump-e0"
+      }
+     ]
+    },
+    {
+     "id": "s07-wash-red-pump-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.9,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 2,
+       "size": 0.75,
+       "spread": 0,
+       "width": 0.45,
+       "phase": 0.5,
+       "id": "s07-wash-red-pump-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s07-wash-red-full": {
+   "id": "s07-wash-red-full",
+   "name": "Red Full",
+   "parts": [
+    {
+     "id": "s07-wash-red-full-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s07-wash-red-full-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 355,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s07-wash-ember": {
+   "id": "s07-wash-ember",
+   "name": "Ember",
+   "parts": [
+    {
+     "id": "s07-wash-ember-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s07-derby-red-aim": {
+   "id": "s07-derby-red-aim",
+   "name": "Derby Red Static",
+   "parts": [
+    {
+     "id": "s07-derby-red-aim-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      },
+      "motorMode": "aim",
+      "motorValue": 0.4
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s07-derby-red-spin-fast": {
+   "id": "s07-derby-red-spin-fast",
+   "name": "Derby Red Spin Fast",
+   "parts": [
+    {
+     "id": "s07-derby-red-spin-fast-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.85
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s07-derby-red-ring-glow": {
+   "id": "s07-derby-red-ring-glow",
+   "name": "Derby Ring Glow",
+   "parts": [
+    {
+     "id": "s07-derby-red-ring-glow-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      },
+      "white": 0.35,
+      "ringFx": 0.4,
+      "motorMode": "rotate",
+      "motorValue": 0.7
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s07-fx-chase-hard": {
+   "id": "s07-fx-chase-hard",
+   "name": "Hard Red Chase",
+   "parts": [
+    {
+     "id": "s07-fx-chase-hard-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 2,
+       "size": 1,
+       "spread": 1,
+       "width": 0.1,
+       "phase": 0,
+       "id": "s07-fx-chase-hard-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s07-fx-stab-bars": {
+   "id": "s07-fx-stab-bars",
+   "name": "Bar Stabs",
+   "parts": [
+    {
+     "id": "s07-fx-stab-bars-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 1,
+       "size": 1,
+       "spread": 0,
+       "width": 0.3,
+       "phase": 0,
+       "id": "s07-fx-stab-bars-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s07-fx-sweep-out": {
+   "id": "s07-fx-sweep-out",
+   "name": "Flare Sweep",
+   "parts": [
+    {
+     "id": "s07-fx-sweep-out-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sawDown",
+       "rate": 4,
+       "size": 0.95,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s07-fx-sweep-out-e0"
+      }
+     ]
+    },
+    {
+     "id": "s07-fx-sweep-out-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 358,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sawUp",
+       "rate": 4,
+       "size": 0.9,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s07-fx-sweep-out-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s07-strobe-blinder": {
+   "id": "s07-strobe-blinder",
+   "name": "White Blinder",
+   "parts": [
+    {
+     "id": "s07-strobe-blinder-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "white": 1
+     },
+     "effects": []
+    },
+    {
+     "id": "s07-strobe-blinder-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0
+      }
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s07-strobe-red-machine": {
+   "id": "s07-strobe-red-machine",
+   "name": "Red Machine",
+   "parts": [
+    {
+     "id": "s07-strobe-red-machine-p0",
+     "groupId": "g-all",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      },
+      "strobe": 0.9
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s07-strobe-ring-punch": {
+   "id": "s07-strobe-ring-punch",
+   "name": "Ring Punch",
+   "parts": [
+    {
+     "id": "s07-strobe-ring-punch-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "white": 1,
+      "motorMode": "rotate",
+      "motorValue": 1
+     },
+     "effects": []
+    },
+    {
+     "id": "s07-strobe-ring-punch-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0
+      },
+      "strobe": 0.8
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s08-wash-deep-teal": {
+   "id": "s08-wash-deep-teal",
+   "name": "Deep Teal",
+   "parts": [
+    {
+     "id": "s08-wash-deep-teal-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.35,
+      "color": {
+       "h": 192,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s08-wash-deep-teal-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.18,
+      "color": {
+       "h": 205,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s08-wash-green-drift": {
+   "id": "s08-wash-green-drift",
+   "name": "Green Drift",
+   "parts": [
+    {
+     "id": "s08-wash-green-drift-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.3,
+      "color": {
+       "h": 158,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.12,
+       "spread": 0.5,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s08-wash-green-drift-e0"
+      }
+     ]
+    },
+    {
+     "id": "s08-wash-green-drift-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.1,
+      "color": {
+       "h": 180,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s08-wash-blue-floor": {
+   "id": "s08-wash-blue-floor",
+   "name": "Blue Floor",
+   "parts": [
+    {
+     "id": "s08-wash-blue-floor-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.28,
+      "color": {
+       "h": 216,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s08-wash-swell": {
+   "id": "s08-wash-swell",
+   "name": "Deep Swell",
+   "parts": [
+    {
+     "id": "s08-wash-swell-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.5,
+      "color": {
+       "h": 196,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.55,
+       "spread": 0.2,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s08-wash-swell-e0"
+      }
+     ]
+    },
+    {
+     "id": "s08-wash-swell-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.25,
+      "color": {
+       "h": 210,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.5,
+       "spread": 0.1,
+       "width": 0.5,
+       "phase": 0.5,
+       "id": "s08-wash-swell-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s08-wash-gradient-hold": {
+   "id": "s08-wash-gradient-hold",
+   "name": "Standing Gradient",
+   "parts": [
+    {
+     "id": "s08-wash-gradient-hold-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 186,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 64,
+       "size": 0.45,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s08-wash-gradient-hold-e0"
+      },
+      {
+       "target": "hue",
+       "wave": "sine",
+       "rate": 64,
+       "size": 0.1,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s08-wash-gradient-hold-e1"
+      }
+     ]
+    }
+   ]
+  },
+  "s08-wash-ghost": {
+   "id": "s08-wash-ghost",
+   "name": "Ghost Field",
+   "parts": [
+    {
+     "id": "s08-wash-ghost-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.07,
+      "color": {
+       "h": 200,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s09-wash-cold-low": {
+   "id": "s09-wash-cold-low",
+   "name": "Cold Low",
+   "parts": [
+    {
+     "id": "s09-wash-cold-low-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.25,
+      "color": {
+       "h": 212,
+       "s": 0.85
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s09-wash-cold-low-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.12,
+      "color": {
+       "h": 215,
+       "s": 0.6
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s09-wash-blue-breath": {
+   "id": "s09-wash-blue-breath",
+   "name": "Blue Breath",
+   "parts": [
+    {
+     "id": "s09-wash-blue-breath-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.3,
+      "color": {
+       "h": 218,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.35,
+       "spread": 0.15,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s09-wash-blue-breath-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s09-wash-white-seam": {
+   "id": "s09-wash-white-seam",
+   "name": "Cold White Seam",
+   "parts": [
+    {
+     "id": "s09-wash-white-seam-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.2,
+      "color": {
+       "h": 205,
+       "s": 0.15
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s09-wash-cold-open": {
+   "id": "s09-wash-cold-open",
+   "name": "Cold Open",
+   "parts": [
+    {
+     "id": "s09-wash-cold-open-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 210,
+       "s": 0.8
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s09-wash-cold-open-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.3,
+      "color": {
+       "h": 214,
+       "s": 0.7
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s09-wash-lid": {
+   "id": "s09-wash-lid",
+   "name": "The Lid",
+   "parts": [
+    {
+     "id": "s09-wash-lid-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.22,
+      "color": {
+       "h": 212,
+       "s": 0.75
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s09-wash-ghost": {
+   "id": "s09-wash-ghost",
+   "name": "Ghost Blue",
+   "parts": [
+    {
+     "id": "s09-wash-ghost-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.06,
+      "color": {
+       "h": 210,
+       "s": 0.9
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s10-wash-mag-over-cyan": {
+   "id": "s10-wash-mag-over-cyan",
+   "name": "Magenta Over Cyan",
+   "parts": [
+    {
+     "id": "s10-wash-mag-over-cyan-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.35,
+      "color": {
+       "h": 305,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s10-wash-mag-over-cyan-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.3,
+      "color": {
+       "h": 186,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s10-wash-trail-open": {
+   "id": "s10-wash-trail-open",
+   "name": "Trail Open",
+   "parts": [
+    {
+     "id": "s10-wash-trail-open-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.55,
+      "color": {
+       "h": 308,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s10-wash-trail-open-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.5,
+      "color": {
+       "h": 184,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s10-wash-cyan-bed": {
+   "id": "s10-wash-cyan-bed",
+   "name": "Cyan Underlay",
+   "parts": [
+    {
+     "id": "s10-wash-cyan-bed-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.35,
+      "color": {
+       "h": 188,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s10-wash-mag-lid": {
+   "id": "s10-wash-mag-lid",
+   "name": "Magenta Lid",
+   "parts": [
+    {
+     "id": "s10-wash-mag-lid-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 302,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s10-wash-mag-lid-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.15,
+      "color": {
+       "h": 190,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s10-wash-ghost": {
+   "id": "s10-wash-ghost",
+   "name": "Ghost Magenta",
+   "parts": [
+    {
+     "id": "s10-wash-ghost-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.07,
+      "color": {
+       "h": 300,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s10-derby-cyan-drift": {
+   "id": "s10-derby-cyan-drift",
+   "name": "Derby Cyan Drift",
+   "parts": [
+    {
+     "id": "s10-derby-cyan-drift-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 186,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.1
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s10-derby-mag-slow": {
+   "id": "s10-derby-mag-slow",
+   "name": "Derby Magenta Slow",
+   "parts": [
+    {
+     "id": "s10-derby-mag-slow-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 305,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.2
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s10-fx-vapour-hue": {
+   "id": "s10-fx-vapour-hue",
+   "name": "Vapour Hue Drift",
+   "parts": [
+    {
+     "id": "s10-fx-vapour-hue-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 200,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "triangle",
+       "rate": 16,
+       "size": 0.12,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s10-fx-vapour-hue-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s10-fx-trail-strips": {
+   "id": "s10-fx-trail-strips",
+   "name": "Long Trail",
+   "parts": [
+    {
+     "id": "s10-fx-trail-strips-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.8,
+      "color": {
+       "h": 188,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 8,
+       "size": 0.85,
+       "spread": 1,
+       "width": 0.18,
+       "phase": 0,
+       "id": "s10-fx-trail-strips-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s10-fx-slow-sweep-bars": {
+   "id": "s10-fx-slow-sweep-bars",
+   "name": "Slow Bar Sweep",
+   "parts": [
+    {
+     "id": "s10-fx-slow-sweep-bars-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.8,
+      "color": {
+       "h": 305,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sawDown",
+       "rate": 8,
+       "size": 0.7,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s10-fx-slow-sweep-bars-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s10-fx-double-trail": {
+   "id": "s10-fx-double-trail",
+   "name": "Double Trail",
+   "parts": [
+    {
+     "id": "s10-fx-double-trail-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.9,
+      "color": {
+       "h": 186,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 4,
+       "size": 0.9,
+       "spread": 1,
+       "width": 0.12,
+       "phase": 0,
+       "id": "s10-fx-double-trail-e0"
+      }
+     ]
+    },
+    {
+     "id": "s10-fx-double-trail-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.85,
+      "color": {
+       "h": 305,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 4,
+       "size": 0.8,
+       "spread": 1,
+       "width": 0.25,
+       "phase": 0.5,
+       "id": "s10-fx-double-trail-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s11-wash-low": {
+   "id": "s11-wash-low",
+   "name": "Acid Bed Low",
+   "parts": [
+    {
+     "id": "s11-wash-low-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.42,
+      "color": {
+       "h": 88,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s11-wash-low-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.18,
+      "color": {
+       "h": 72,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s11-wash-acid": {
+   "id": "s11-wash-acid",
+   "name": "Acid Green Wash",
+   "parts": [
+    {
+     "id": "s11-wash-acid-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.78,
+      "color": {
+       "h": 95,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s11-wash-acid-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.72,
+      "color": {
+       "h": 74,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s11-wash-lime-split": {
+   "id": "s11-wash-lime-split",
+   "name": "Yellow Bars / Green Strips",
+   "parts": [
+    {
+     "id": "s11-wash-lime-split-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.95,
+      "color": {
+       "h": 54,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s11-wash-lime-split-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.9,
+      "color": {
+       "h": 100,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "triangle",
+       "rate": 8,
+       "size": 0.12,
+       "spread": 0.6,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s11-wash-lime-split-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s11-derby-green-spin": {
+   "id": "s11-derby-green-spin",
+   "name": "Derby Acid Spin",
+   "parts": [
+    {
+     "id": "s11-derby-green-spin-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 95,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.45
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s11-derby-lime-fast": {
+   "id": "s11-derby-lime-fast",
+   "name": "Derby Lime Fast",
+   "parts": [
+    {
+     "id": "s11-derby-lime-fast-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 68,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.8
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "square",
+       "rate": 2,
+       "size": 0.14,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s11-derby-lime-fast-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s11-fx-chase-half": {
+   "id": "s11-fx-chase-half",
+   "name": "Strip Chase /2",
+   "parts": [
+    {
+     "id": "s11-fx-chase-half-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 2,
+       "size": 1,
+       "spread": 1,
+       "width": 0.22,
+       "phase": 0,
+       "id": "s11-fx-chase-half-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s11-fx-chase-double": {
+   "id": "s11-fx-chase-double",
+   "name": "Strip Chase x2",
+   "parts": [
+    {
+     "id": "s11-fx-chase-double-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 1,
+       "size": 1,
+       "spread": 1,
+       "width": 0.16,
+       "phase": 0,
+       "id": "s11-fx-chase-double-e0"
+      }
+     ]
+    },
+    {
+     "id": "s11-fx-chase-double-p1",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 2,
+       "size": 0.5,
+       "spread": 0.5,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s11-fx-chase-double-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s11-fx-chase-quad": {
+   "id": "s11-fx-chase-quad",
+   "name": "Strip Chase x4",
+   "parts": [
+    {
+     "id": "s11-fx-chase-quad-p0",
+     "groupId": "g-strips",
+     "params": {
+      "color": {
+       "h": 88,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 0.5,
+       "size": 1,
+       "spread": 1,
+       "width": 0.1,
+       "phase": 0,
+       "id": "s11-fx-chase-quad-e0"
+      },
+      {
+       "target": "hue",
+       "wave": "sawUp",
+       "rate": 4,
+       "size": 0.18,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s11-fx-chase-quad-e1"
+      }
+     ]
+    },
+    {
+     "id": "s11-fx-chase-quad-p1",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sawDown",
+       "rate": 1,
+       "size": 0.7,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s11-fx-chase-quad-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s11-strobe-acid": {
+   "id": "s11-strobe-acid",
+   "name": "Acid Hit",
+   "parts": [
+    {
+     "id": "s11-strobe-acid-p0",
+     "groupId": "g-all",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 80,
+       "s": 1
+      },
+      "strobe": 0.72
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s12-wash-blue-deep": {
+   "id": "s12-wash-blue-deep",
+   "name": "Deep Blue Bed",
+   "parts": [
+    {
+     "id": "s12-wash-blue-deep-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.62,
+      "color": {
+       "h": 232,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s12-wash-blue-deep-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.55,
+      "color": {
+       "h": 205,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s12-wash-cyan-wide": {
+   "id": "s12-wash-cyan-wide",
+   "name": "Cyan Wide",
+   "parts": [
+    {
+     "id": "s12-wash-cyan-wide-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.9,
+      "color": {
+       "h": 185,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s12-wash-cyan-wide-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.85,
+      "color": {
+       "h": 222,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.15,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s12-wash-cyan-wide-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s12-wash-full-open": {
+   "id": "s12-wash-full-open",
+   "name": "Full Open",
+   "parts": [
+    {
+     "id": "s12-wash-full-open-p0",
+     "groupId": "g-all",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 188,
+       "s": 0.96
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s12-wash-full-open-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 215,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s12-derby-cyan-spin": {
+   "id": "s12-derby-cyan-spin",
+   "name": "Derby Cyan Spin",
+   "parts": [
+    {
+     "id": "s12-derby-cyan-spin-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 185,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.55
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s12-derby-blue-fast": {
+   "id": "s12-derby-blue-fast",
+   "name": "Derby Blue Fast",
+   "parts": [
+    {
+     "id": "s12-derby-blue-fast-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 228,
+       "s": 1
+      },
+      "ringFx": 0.4,
+      "motorMode": "rotate",
+      "motorValue": 0.9
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "triangle",
+       "rate": 4,
+       "size": 0.2,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s12-derby-blue-fast-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s12-fx-tide": {
+   "id": "s12-fx-tide",
+   "name": "Tide",
+   "parts": [
+    {
+     "id": "s12-fx-tide-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 8,
+       "size": 0.5,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s12-fx-tide-e0"
+      }
+     ]
+    },
+    {
+     "id": "s12-fx-tide-p1",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 8,
+       "size": 0.35,
+       "spread": 0.5,
+       "width": 0.5,
+       "phase": 0.5,
+       "id": "s12-fx-tide-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s12-fx-sweep": {
+   "id": "s12-fx-sweep",
+   "name": "Wide Sweep",
+   "parts": [
+    {
+     "id": "s12-fx-sweep-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sawUp",
+       "rate": 4,
+       "size": 0.8,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s12-fx-sweep-e0"
+      }
+     ]
+    },
+    {
+     "id": "s12-fx-sweep-p1",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sawUp",
+       "rate": 4,
+       "size": 0.6,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s12-fx-sweep-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s12-fx-surge": {
+   "id": "s12-fx-surge",
+   "name": "Surge",
+   "parts": [
+    {
+     "id": "s12-fx-surge-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 1,
+       "size": 1,
+       "spread": 1,
+       "width": 0.4,
+       "phase": 0,
+       "id": "s12-fx-surge-e0"
+      }
+     ]
+    },
+    {
+     "id": "s12-fx-surge-p1",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 2,
+       "size": 0.8,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s12-fx-surge-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s12-strobe-drop": {
+   "id": "s12-strobe-drop",
+   "name": "Cyan Drop Strobe",
+   "parts": [
+    {
+     "id": "s12-strobe-drop-p0",
+     "groupId": "g-all",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 186,
+       "s": 0.85
+      },
+      "strobe": 0.9
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s12-strobe-ring": {
+   "id": "s12-strobe-ring",
+   "name": "Derby Ring Accent",
+   "parts": [
+    {
+     "id": "s12-strobe-ring-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 190,
+       "s": 0.9
+      },
+      "ringFx": 0.7,
+      "strobe": 0.6
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s13-wash-ember": {
+   "id": "s13-wash-ember",
+   "name": "Ember Bed",
+   "parts": [
+    {
+     "id": "s13-wash-ember-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.5,
+      "color": {
+       "h": 5,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s13-wash-ember-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.42,
+      "color": {
+       "h": 352,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s13-wash-blood": {
+   "id": "s13-wash-blood",
+   "name": "Blood Red Wash",
+   "parts": [
+    {
+     "id": "s13-wash-blood-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.85,
+      "color": {
+       "h": 358,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s13-wash-blood-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.75,
+      "color": {
+       "h": 350,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.08,
+       "spread": 0.7,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s13-wash-blood-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s13-wash-full-red": {
+   "id": "s13-wash-full-red",
+   "name": "Full Red",
+   "parts": [
+    {
+     "id": "s13-wash-full-red-p0",
+     "groupId": "g-all",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s13-wash-full-red-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.95,
+      "color": {
+       "h": 356,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s13-wash-ash": {
+   "id": "s13-wash-ash",
+   "name": "Ash",
+   "parts": [
+    {
+     "id": "s13-wash-ash-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.12,
+      "color": {
+       "h": 354,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s13-derby-red-slow": {
+   "id": "s13-derby-red-slow",
+   "name": "Derby Red Slow",
+   "parts": [
+    {
+     "id": "s13-derby-red-slow-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.18
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s13-derby-red-heavy": {
+   "id": "s13-derby-red-heavy",
+   "name": "Derby Red Heavy",
+   "parts": [
+    {
+     "id": "s13-derby-red-heavy-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 350,
+       "s": 1
+      },
+      "ringFx": 0.35,
+      "motorMode": "rotate",
+      "motorValue": 0.55
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "triangle",
+       "rate": 4,
+       "size": 0.3,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s13-derby-red-heavy-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s13-fx-heartbeat": {
+   "id": "s13-fx-heartbeat",
+   "name": "Heartbeat",
+   "parts": [
+    {
+     "id": "s13-fx-heartbeat-p0",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sawDown",
+       "rate": 2,
+       "size": 0.7,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s13-fx-heartbeat-e0"
+      }
+     ]
+    },
+    {
+     "id": "s13-fx-heartbeat-p1",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 4,
+       "size": 0.45,
+       "spread": 0.5,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s13-fx-heartbeat-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s13-fx-slow-sweep": {
+   "id": "s13-fx-slow-sweep",
+   "name": "Heavy Sweep",
+   "parts": [
+    {
+     "id": "s13-fx-slow-sweep-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sawDown",
+       "rate": 8,
+       "size": 0.6,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s13-fx-slow-sweep-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s13-fx-throb": {
+   "id": "s13-fx-throb",
+   "name": "Throb",
+   "parts": [
+    {
+     "id": "s13-fx-throb-p0",
+     "groupId": "g-all",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "triangle",
+       "rate": 1,
+       "size": 0.8,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s13-fx-throb-e0"
+      }
+     ]
+    },
+    {
+     "id": "s13-fx-throb-p1",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 2,
+       "size": 0.85,
+       "spread": 1,
+       "width": 0.6,
+       "phase": 0,
+       "id": "s13-fx-throb-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s13-strobe-red-hit": {
+   "id": "s13-strobe-red-hit",
+   "name": "Red Hit",
+   "parts": [
+    {
+     "id": "s13-strobe-red-hit-p0",
+     "groupId": "g-all",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      },
+      "strobe": 0.6
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s13-strobe-derby-red": {
+   "id": "s13-strobe-derby-red",
+   "name": "Derby Red Snap",
+   "parts": [
+    {
+     "id": "s13-strobe-derby-red-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      },
+      "ringFx": 0.55,
+      "strobe": 0.45
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s14-wash-void": {
+   "id": "s14-wash-void",
+   "name": "Void + Haze",
+   "parts": [
+    {
+     "id": "s14-wash-void-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.1,
+      "color": {
+       "h": 232,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s14-wash-deepblue-low": {
+   "id": "s14-wash-deepblue-low",
+   "name": "Deep Blue Floor",
+   "parts": [
+    {
+     "id": "s14-wash-deepblue-low-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.2,
+      "color": {
+       "h": 228,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s14-wash-deepblue-low-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.07,
+      "color": {
+       "h": 236,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s14-derby-cold-point": {
+   "id": "s14-derby-cold-point",
+   "name": "Cold Point",
+   "parts": [
+    {
+     "id": "s14-derby-cold-point-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0
+      },
+      "motorMode": "aim",
+      "motorValue": 0.5
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s14-derby-cold-drift": {
+   "id": "s14-derby-cold-drift",
+   "name": "Cold Drift",
+   "parts": [
+    {
+     "id": "s14-derby-cold-drift-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.05
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.35,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s14-derby-cold-drift-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s14-fx-breathe": {
+   "id": "s14-fx-breathe",
+   "name": "Breathe",
+   "parts": [
+    {
+     "id": "s14-fx-breathe-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.6,
+       "spread": 0.3,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s14-fx-breathe-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s14-fx-drift": {
+   "id": "s14-fx-drift",
+   "name": "Slow Drift",
+   "parts": [
+    {
+     "id": "s14-fx-drift-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.4,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s14-fx-drift-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s15-wash-abyss": {
+   "id": "s15-wash-abyss",
+   "name": "Abyss",
+   "parts": [
+    {
+     "id": "s15-wash-abyss-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.24,
+      "color": {
+       "h": 202,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s15-wash-deep-green": {
+   "id": "s15-wash-deep-green",
+   "name": "Deep Green",
+   "parts": [
+    {
+     "id": "s15-wash-deep-green-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.42,
+      "color": {
+       "h": 142,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s15-wash-green-rise": {
+   "id": "s15-wash-green-rise",
+   "name": "Green Rise",
+   "parts": [
+    {
+     "id": "s15-wash-green-rise-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.5,
+      "color": {
+       "h": 160,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.14,
+       "spread": 0.8,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s15-wash-green-rise-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s15-wash-teal-climb": {
+   "id": "s15-wash-teal-climb",
+   "name": "Teal Climb",
+   "parts": [
+    {
+     "id": "s15-wash-teal-climb-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.62,
+      "color": {
+       "h": 176,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s15-fx-slow-chase": {
+   "id": "s15-fx-slow-chase",
+   "name": "Slow Strip Chase",
+   "parts": [
+    {
+     "id": "s15-fx-slow-chase-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 8,
+       "size": 0.7,
+       "spread": 1,
+       "width": 0.3,
+       "phase": 0,
+       "id": "s15-fx-slow-chase-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s15-fx-rise": {
+   "id": "s15-fx-rise",
+   "name": "Rise",
+   "parts": [
+    {
+     "id": "s15-fx-rise-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sawUp",
+       "rate": 8,
+       "size": 0.6,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s15-fx-rise-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s15-fx-hue-drift": {
+   "id": "s15-fx-hue-drift",
+   "name": "Green/Blue Drift",
+   "parts": [
+    {
+     "id": "s15-fx-hue-drift-p0",
+     "groupId": "g-strips",
+     "params": {
+      "color": {
+       "h": 202,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.28,
+       "spread": 0.6,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s15-fx-hue-drift-e0"
+      },
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.25,
+       "spread": 0.6,
+       "width": 0.5,
+       "phase": 0.25,
+       "id": "s15-fx-hue-drift-e1"
+      }
+     ]
+    }
+   ]
+  },
+  "s16-wash-cyan-floor": {
+   "id": "s16-wash-cyan-floor",
+   "name": "Cyan Floor",
+   "parts": [
+    {
+     "id": "s16-wash-cyan-floor-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.28,
+      "color": {
+       "h": 188,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s16-wash-split-bars": {
+   "id": "s16-wash-split-bars",
+   "name": "Split Bars Mag/Cyan",
+   "parts": [
+    {
+     "id": "s16-wash-split-bars-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.42,
+      "color": {
+       "h": 310,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "square",
+       "rate": 32,
+       "size": 0.35,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s16-wash-split-bars-e0"
+      }
+     ]
+    },
+    {
+     "id": "s16-wash-split-bars-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.3,
+      "color": {
+       "h": 190,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s16-wash-magenta-bed": {
+   "id": "s16-wash-magenta-bed",
+   "name": "Magenta Bed",
+   "parts": [
+    {
+     "id": "s16-wash-magenta-bed-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.36,
+      "color": {
+       "h": 312,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s16-wash-magenta-bed-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.22,
+      "color": {
+       "h": 306,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s16-wash-split-lift": {
+   "id": "s16-wash-split-lift",
+   "name": "Split Lift",
+   "parts": [
+    {
+     "id": "s16-wash-split-lift-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.62,
+      "color": {
+       "h": 310,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "square",
+       "rate": 32,
+       "size": 0.35,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s16-wash-split-lift-e0"
+      },
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.18,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s16-wash-split-lift-e1"
+      }
+     ]
+    },
+    {
+     "id": "s16-wash-split-lift-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.5,
+      "color": {
+       "h": 186,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.2,
+       "spread": 0.5,
+       "width": 0.5,
+       "phase": 0.5,
+       "id": "s16-wash-split-lift-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s16-wash-blackout-glow": {
+   "id": "s16-wash-blackout-glow",
+   "name": "Blackout Glow",
+   "parts": [
+    {
+     "id": "s16-wash-blackout-glow-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.08,
+      "color": {
+       "h": 192,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s16-derby-magenta-slow": {
+   "id": "s16-derby-magenta-slow",
+   "name": "Derby Magenta Crawl",
+   "parts": [
+    {
+     "id": "s16-derby-magenta-slow-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 310,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.15,
+      "ringFx": 0.15
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s16-derby-cyan-aim": {
+   "id": "s16-derby-cyan-aim",
+   "name": "Derby Cyan Aim",
+   "parts": [
+    {
+     "id": "s16-derby-cyan-aim-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 188,
+       "s": 1
+      },
+      "motorMode": "aim",
+      "motorValue": 0.5
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s16-fx-cross-fade": {
+   "id": "s16-fx-cross-fade",
+   "name": "Soft Wide Chase",
+   "parts": [
+    {
+     "id": "s16-fx-cross-fade-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 8,
+       "size": 0.8,
+       "spread": 1,
+       "width": 0.4,
+       "phase": 0,
+       "id": "s16-fx-cross-fade-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s16-fx-hue-drift": {
+   "id": "s16-fx-hue-drift",
+   "name": "Hue Drift Mag\u2194Cyan",
+   "parts": [
+    {
+     "id": "s16-fx-hue-drift-p0",
+     "groupId": "g-pars",
+     "params": {
+      "color": {
+       "h": 188,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.3,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s16-fx-hue-drift-e0"
+      }
+     ]
+    },
+    {
+     "id": "s16-fx-hue-drift-p1",
+     "groupId": "g-strips",
+     "params": {
+      "color": {
+       "h": 188,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.25,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0.5,
+       "id": "s16-fx-hue-drift-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s16-strobe-soft-bloom": {
+   "id": "s16-strobe-soft-bloom",
+   "name": "Magenta Bloom (soft hit)",
+   "parts": [
+    {
+     "id": "s16-strobe-soft-bloom-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 312,
+       "s": 1
+      },
+      "strobe": 0
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s17-wash-acid-bed": {
+   "id": "s17-wash-acid-bed",
+   "name": "Acid Bed",
+   "parts": [
+    {
+     "id": "s17-wash-acid-bed-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.8,
+      "color": {
+       "h": 72,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s17-wash-acid-bed-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.75,
+      "color": {
+       "h": 90,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s17-wash-nettle-split": {
+   "id": "s17-wash-nettle-split",
+   "name": "Nettle Split Gradient",
+   "parts": [
+    {
+     "id": "s17-wash-nettle-split-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.72,
+      "color": {
+       "h": 90,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "triangle",
+       "rate": 16,
+       "size": 0.12,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s17-wash-nettle-split-e0"
+      }
+     ]
+    },
+    {
+     "id": "s17-wash-nettle-split-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.8,
+      "color": {
+       "h": 68,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "sine",
+       "rate": 8,
+       "size": 0.1,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0.25,
+       "id": "s17-wash-nettle-split-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s17-wash-low-green": {
+   "id": "s17-wash-low-green",
+   "name": "Low Green Strips",
+   "parts": [
+    {
+     "id": "s17-wash-low-green-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.38,
+      "color": {
+       "h": 95,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s17-wash-yellow-hard": {
+   "id": "s17-wash-yellow-hard",
+   "name": "Hard Yellow",
+   "parts": [
+    {
+     "id": "s17-wash-yellow-hard-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.95,
+      "color": {
+       "h": 52,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s17-wash-yellow-hard-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.88,
+      "color": {
+       "h": 60,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s17-wash-ash": {
+   "id": "s17-wash-ash",
+   "name": "Ash",
+   "parts": [
+    {
+     "id": "s17-wash-ash-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.1,
+      "color": {
+       "h": 90,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s17-derby-acid-spin": {
+   "id": "s17-derby-acid-spin",
+   "name": "Derby Acid Spin",
+   "parts": [
+    {
+     "id": "s17-derby-acid-spin-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 82,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.6,
+      "ringFx": 0.4
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s17-derby-yellow-stab": {
+   "id": "s17-derby-yellow-stab",
+   "name": "Derby Yellow Stab",
+   "parts": [
+    {
+     "id": "s17-derby-yellow-stab-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 55,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.9,
+      "ringFx": 0.55
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 2,
+       "size": 0.5,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s17-derby-yellow-stab-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s17-fx-counter-sweep": {
+   "id": "s17-fx-counter-sweep",
+   "name": "Counter Sweep",
+   "parts": [
+    {
+     "id": "s17-fx-counter-sweep-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 2,
+       "size": 1,
+       "spread": 1,
+       "width": 0.12,
+       "phase": 0,
+       "id": "s17-fx-counter-sweep-e0"
+      }
+     ]
+    },
+    {
+     "id": "s17-fx-counter-sweep-p1",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 2,
+       "size": 0.9,
+       "spread": 1,
+       "width": 0.3,
+       "phase": 0.5,
+       "id": "s17-fx-counter-sweep-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s17-fx-interference": {
+   "id": "s17-fx-interference",
+   "name": "Interference 3:2",
+   "parts": [
+    {
+     "id": "s17-fx-interference-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 3,
+       "size": 1,
+       "spread": 1,
+       "width": 0.2,
+       "phase": 0,
+       "id": "s17-fx-interference-e0"
+      },
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 2,
+       "size": 0.85,
+       "spread": 1,
+       "width": 0.2,
+       "phase": 0.33,
+       "id": "s17-fx-interference-e1"
+      }
+     ]
+    }
+   ]
+  },
+  "s17-fx-gate": {
+   "id": "s17-fx-gate",
+   "name": "Bar Gate",
+   "parts": [
+    {
+     "id": "s17-fx-gate-p0",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 1,
+       "size": 1,
+       "spread": 0.5,
+       "width": 0.4,
+       "phase": 0,
+       "id": "s17-fx-gate-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s17-fx-hue-lash": {
+   "id": "s17-fx-hue-lash",
+   "name": "Hue Lash",
+   "parts": [
+    {
+     "id": "s17-fx-hue-lash-p0",
+     "groupId": "g-strips",
+     "params": {
+      "color": {
+       "h": 72,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "hue",
+       "wave": "sawDown",
+       "rate": 1,
+       "size": 0.08,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s17-fx-hue-lash-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s18-wash-red-full": {
+   "id": "s18-wash-red-full",
+   "name": "Full Red",
+   "parts": [
+    {
+     "id": "s18-wash-red-full-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s18-wash-red-full-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 2,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s18-wash-red-pump": {
+   "id": "s18-wash-red-pump",
+   "name": "Red Pump",
+   "parts": [
+    {
+     "id": "s18-wash-red-pump-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 1,
+       "size": 0.35,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s18-wash-red-pump-e0"
+      }
+     ]
+    },
+    {
+     "id": "s18-wash-red-pump-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 354,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 1,
+       "size": 0.3,
+       "spread": 0.25,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s18-wash-red-pump-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s18-wash-blood-low": {
+   "id": "s18-wash-blood-low",
+   "name": "Blood Low",
+   "parts": [
+    {
+     "id": "s18-wash-blood-low-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.4,
+      "color": {
+       "h": 355,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s18-wash-blood-low-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.5,
+      "color": {
+       "h": 352,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s18-wash-white-edge": {
+   "id": "s18-wash-white-edge",
+   "name": "Red / White Edge",
+   "parts": [
+    {
+     "id": "s18-wash-white-edge-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s18-wash-white-edge-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0.82
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s18-wash-ember": {
+   "id": "s18-wash-ember",
+   "name": "Ember",
+   "parts": [
+    {
+     "id": "s18-wash-ember-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.12,
+      "color": {
+       "h": 0,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s18-derby-red-spin": {
+   "id": "s18-derby-red-spin",
+   "name": "Derby Red Spin Fast",
+   "parts": [
+    {
+     "id": "s18-derby-red-spin-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.95,
+      "ringFx": 0.6
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s18-derby-white-ring": {
+   "id": "s18-derby-white-ring",
+   "name": "Derby White Ring Spin",
+   "parts": [
+    {
+     "id": "s18-derby-white-ring-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 1
+      },
+      "white": 0.6,
+      "motorMode": "rotate",
+      "motorValue": 0.75
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s18-fx-slam-chase": {
+   "id": "s18-fx-slam-chase",
+   "name": "Slam Chase",
+   "parts": [
+    {
+     "id": "s18-fx-slam-chase-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 1,
+       "size": 1,
+       "spread": 1,
+       "width": 0.1,
+       "phase": 0,
+       "id": "s18-fx-slam-chase-e0"
+      }
+     ]
+    },
+    {
+     "id": "s18-fx-slam-chase-p1",
+     "groupId": "g-pars",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 1,
+       "size": 1,
+       "spread": 1,
+       "width": 0.25,
+       "phase": 0,
+       "id": "s18-fx-slam-chase-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s18-fx-riser": {
+   "id": "s18-fx-riser",
+   "name": "Room Riser",
+   "parts": [
+    {
+     "id": "s18-fx-riser-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sawUp",
+       "rate": 8,
+       "size": 1,
+       "spread": 1,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s18-fx-riser-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s18-fx-stutter": {
+   "id": "s18-fx-stutter",
+   "name": "Stutter Gate",
+   "parts": [
+    {
+     "id": "s18-fx-stutter-p0",
+     "groupId": "g-all",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 0.5,
+       "size": 1,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s18-fx-stutter-e0"
+      }
+     ]
+    },
+    {
+     "id": "s18-fx-stutter-p1",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "square",
+       "rate": 0.5,
+       "size": 1,
+       "spread": 0,
+       "width": 0.5,
+       "phase": 0.5,
+       "id": "s18-fx-stutter-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s18-strobe-blinder-hit": {
+   "id": "s18-strobe-blinder-hit",
+   "name": "Blinder Hit",
+   "parts": [
+    {
+     "id": "s18-strobe-blinder-hit-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "white": 1,
+      "dimmer": 1
+     },
+     "effects": []
+    },
+    {
+     "id": "s18-strobe-blinder-hit-p1",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0
+      },
+      "strobe": 0
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s18-strobe-strip-slam": {
+   "id": "s18-strobe-strip-slam",
+   "name": "Strip Slam",
+   "parts": [
+    {
+     "id": "s18-strobe-strip-slam-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0.15
+      },
+      "strobe": 0
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s18-strobe-hard-gate": {
+   "id": "s18-strobe-hard-gate",
+   "name": "Hard Strobe",
+   "parts": [
+    {
+     "id": "s18-strobe-hard-gate-p0",
+     "groupId": "g-all",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0
+      },
+      "strobe": 0.85
+     },
+     "effects": []
+    },
+    {
+     "id": "s18-strobe-hard-gate-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 0,
+       "s": 0
+      },
+      "strobe": 0.85
+     },
+     "effects": []
+    }
+   ],
+   "flash": true
+  },
+  "s19-wash-teal-open": {
+   "id": "s19-wash-teal-open",
+   "name": "Teal Open",
+   "parts": [
+    {
+     "id": "s19-wash-teal-open-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.7,
+      "color": {
+       "h": 172,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s19-wash-teal-open-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.65,
+      "color": {
+       "h": 185,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s19-wash-teal-settle": {
+   "id": "s19-wash-teal-settle",
+   "name": "Teal Settle",
+   "parts": [
+    {
+     "id": "s19-wash-teal-settle-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.5,
+      "color": {
+       "h": 178,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.15,
+       "spread": 0.25,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s19-wash-teal-settle-e0"
+      }
+     ]
+    },
+    {
+     "id": "s19-wash-teal-settle-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.45,
+      "color": {
+       "h": 190,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 16,
+       "size": 0.15,
+       "spread": 0.5,
+       "width": 0.5,
+       "phase": 0.5,
+       "id": "s19-wash-teal-settle-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s19-wash-blue-recede": {
+   "id": "s19-wash-blue-recede",
+   "name": "Blue Recede",
+   "parts": [
+    {
+     "id": "s19-wash-blue-recede-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.32,
+      "color": {
+       "h": 198,
+       "s": 1
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 24,
+       "size": 0.12,
+       "spread": 0.25,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s19-wash-blue-recede-e0"
+      }
+     ]
+    },
+    {
+     "id": "s19-wash-blue-recede-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.3,
+      "color": {
+       "h": 205,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s19-wash-deep-fade": {
+   "id": "s19-wash-deep-fade",
+   "name": "Deep Fade",
+   "parts": [
+    {
+     "id": "s19-wash-deep-fade-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.18,
+      "color": {
+       "h": 210,
+       "s": 1
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s19-wash-deep-fade-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.16,
+      "color": {
+       "h": 215,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s19-wash-last-glow": {
+   "id": "s19-wash-last-glow",
+   "name": "Last Glow",
+   "parts": [
+    {
+     "id": "s19-wash-last-glow-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.07,
+      "color": {
+       "h": 215,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s19-derby-green-drift": {
+   "id": "s19-derby-green-drift",
+   "name": "Derby Green Drift",
+   "parts": [
+    {
+     "id": "s19-derby-green-drift-p0",
+     "groupId": "g-derbies",
+     "params": {
+      "dimmer": 1,
+      "color": {
+       "h": 160,
+       "s": 1
+      },
+      "motorMode": "rotate",
+      "motorValue": 0.08
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s20-wash-cold-field": {
+   "id": "s20-wash-cold-field",
+   "name": "Cold Field",
+   "parts": [
+    {
+     "id": "s20-wash-cold-field-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.55,
+      "color": {
+       "h": 210,
+       "s": 0.08
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s20-wash-faint-blue": {
+   "id": "s20-wash-faint-blue",
+   "name": "Faint Blue Floor",
+   "parts": [
+    {
+     "id": "s20-wash-faint-blue-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.35,
+      "color": {
+       "h": 210,
+       "s": 0.08
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s20-wash-faint-blue-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.25,
+      "color": {
+       "h": 222,
+       "s": 0.9
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s20-wash-cold-breath": {
+   "id": "s20-wash-cold-breath",
+   "name": "Cold Breath",
+   "parts": [
+    {
+     "id": "s20-wash-cold-breath-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.4,
+      "color": {
+       "h": 205,
+       "s": 0.06
+      }
+     },
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "sine",
+       "rate": 32,
+       "size": 0.22,
+       "spread": 0.25,
+       "width": 0.5,
+       "phase": 0,
+       "id": "s20-wash-cold-breath-e0"
+      }
+     ]
+    }
+   ]
+  },
+  "s20-wash-blue-recede": {
+   "id": "s20-wash-blue-recede",
+   "name": "Blue Recede",
+   "parts": [
+    {
+     "id": "s20-wash-blue-recede-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.18,
+      "color": {
+       "h": 208,
+       "s": 0.05
+      }
+     },
+     "effects": []
+    },
+    {
+     "id": "s20-wash-blue-recede-p1",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.12,
+      "color": {
+       "h": 225,
+       "s": 1
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s20-wash-single-source": {
+   "id": "s20-wash-single-source",
+   "name": "Single Cold Source",
+   "parts": [
+    {
+     "id": "s20-wash-single-source-p0",
+     "groupId": "g-pars",
+     "params": {
+      "dimmer": 0.12,
+      "color": {
+       "h": 210,
+       "s": 0.05
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s20-wash-last-light": {
+   "id": "s20-wash-last-light",
+   "name": "Last Light",
+   "parts": [
+    {
+     "id": "s20-wash-last-light-p0",
+     "groupId": "g-strips",
+     "params": {
+      "dimmer": 0.05,
+      "color": {
+       "h": 215,
+       "s": 0.6
+      }
+     },
+     "effects": []
+    }
+   ]
+  },
+  "s20-fx-slow-drift": {
+   "id": "s20-fx-slow-drift",
+   "name": "Slow Drift (16 bar)",
+   "parts": [
+    {
+     "id": "s20-fx-slow-drift-p0",
+     "groupId": "g-strips",
+     "params": {},
+     "effects": [
+      {
+       "target": "dimmer",
+       "wave": "chase",
+       "rate": 64,
+       "size": 0.5,
+       "spread": 1,
+       "width": 0.6,
+       "phase": 0,
+       "id": "s20-fx-slow-drift-e0"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "layers": [
+  {
+   "id": "layer-wash",
+   "name": "WASH",
+   "blend": "normal",
+   "master": 1,
+   "cells": [
+    "s01-wash-still",
+    "s01-wash-rise",
+    "s01-wash-cold-seam",
+    "s01-wash-open",
+    "s01-wash-cold-seam",
+    "s01-wash-field",
+    "s01-wash-still",
+    "s01-wash-ember"
+   ],
+   "fade": 0.6
+  },
+  {
+   "id": "layer-derby",
+   "name": "DERBY",
+   "blend": "normal",
+   "master": 1,
+   "cells": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "fade": 0.4
+  },
+  {
+   "id": "layer-fx",
+   "name": "FX",
+   "blend": "multiply",
+   "master": 1,
+   "cells": [
+    null,
+    null,
+    "s01-fx-drift",
+    "s01-fx-tide",
+    "s01-fx-drift",
+    "s01-fx-tide",
+    null,
+    null
+   ],
+   "fade": 0.3
+  },
+  {
+   "id": "layer-strobe",
+   "name": "STROBE",
+   "blend": "htp",
+   "master": 1,
+   "cells": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "fade": 0.05
+  }
+ ],
+ "columns": [
+  "Intro",
+  "Build",
+  "Break",
+  "Drop",
+  "Bridge",
+  "Peak",
+  "Outro",
+  "Blackout"
+ ],
+ "midi": [
+  {
+   "id": "midi-msrupqbj5",
+   "type": "note",
+   "channel": 0,
+   "number": 32,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 0
+   }
+  },
+  {
+   "id": "midi-msrupqbj6",
+   "type": "note",
+   "channel": 0,
+   "number": 33,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 1
+   }
+  },
+  {
+   "id": "midi-msrupqbj7",
+   "type": "note",
+   "channel": 0,
+   "number": 34,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 2
+   }
+  },
+  {
+   "id": "midi-msrupqbj8",
+   "type": "note",
+   "channel": 0,
+   "number": 35,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 3
+   }
+  },
+  {
+   "id": "midi-msrupqbj9",
+   "type": "note",
+   "channel": 0,
+   "number": 36,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 4
+   }
+  },
+  {
+   "id": "midi-msrupqbja",
+   "type": "note",
+   "channel": 0,
+   "number": 37,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 5
+   }
+  },
+  {
+   "id": "midi-msrupqbjb",
+   "type": "note",
+   "channel": 0,
+   "number": 38,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 6
+   }
+  },
+  {
+   "id": "midi-msrupqbjc",
+   "type": "note",
+   "channel": 0,
+   "number": 39,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-strobe",
+    "col": 7
+   }
+  },
+  {
+   "id": "midi-msrupqbjd",
+   "type": "note",
+   "channel": 0,
+   "number": 82,
+   "action": {
+    "kind": "layerClear",
+    "layerId": "layer-strobe"
+   }
+  },
+  {
+   "id": "midi-msrupqbje",
+   "type": "note",
+   "channel": 0,
+   "number": 24,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 0
+   }
+  },
+  {
+   "id": "midi-msrupqbjf",
+   "type": "note",
+   "channel": 0,
+   "number": 25,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 1
+   }
+  },
+  {
+   "id": "midi-msrupqbjg",
+   "type": "note",
+   "channel": 0,
+   "number": 26,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 2
+   }
+  },
+  {
+   "id": "midi-msrupqbjh",
+   "type": "note",
+   "channel": 0,
+   "number": 27,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 3
+   }
+  },
+  {
+   "id": "midi-msrupqbji",
+   "type": "note",
+   "channel": 0,
+   "number": 28,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 4
+   }
+  },
+  {
+   "id": "midi-msrupqbjj",
+   "type": "note",
+   "channel": 0,
+   "number": 29,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 5
+   }
+  },
+  {
+   "id": "midi-msrupqbjk",
+   "type": "note",
+   "channel": 0,
+   "number": 30,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 6
+   }
+  },
+  {
+   "id": "midi-msrupqbjl",
+   "type": "note",
+   "channel": 0,
+   "number": 31,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-fx",
+    "col": 7
+   }
+  },
+  {
+   "id": "midi-msrupqbjm",
+   "type": "note",
+   "channel": 0,
+   "number": 83,
+   "action": {
+    "kind": "layerClear",
+    "layerId": "layer-fx"
+   }
+  },
+  {
+   "id": "midi-msrupqbjn",
+   "type": "note",
+   "channel": 0,
+   "number": 16,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 0
+   }
+  },
+  {
+   "id": "midi-msrupqbjo",
+   "type": "note",
+   "channel": 0,
+   "number": 17,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 1
+   }
+  },
+  {
+   "id": "midi-msrupqbjp",
+   "type": "note",
+   "channel": 0,
+   "number": 18,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 2
+   }
+  },
+  {
+   "id": "midi-msrupqbjq",
+   "type": "note",
+   "channel": 0,
+   "number": 19,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 3
+   }
+  },
+  {
+   "id": "midi-msrupqbjr",
+   "type": "note",
+   "channel": 0,
+   "number": 20,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 4
+   }
+  },
+  {
+   "id": "midi-msrupqbjs",
+   "type": "note",
+   "channel": 0,
+   "number": 21,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 5
+   }
+  },
+  {
+   "id": "midi-msrupqbjt",
+   "type": "note",
+   "channel": 0,
+   "number": 22,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 6
+   }
+  },
+  {
+   "id": "midi-msrupqbju",
+   "type": "note",
+   "channel": 0,
+   "number": 23,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-derby",
+    "col": 7
+   }
+  },
+  {
+   "id": "midi-msrupqbjv",
+   "type": "note",
+   "channel": 0,
+   "number": 84,
+   "action": {
+    "kind": "layerClear",
+    "layerId": "layer-derby"
+   }
+  },
+  {
+   "id": "midi-msrupqbjw",
+   "type": "note",
+   "channel": 0,
+   "number": 8,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 0
+   }
+  },
+  {
+   "id": "midi-msrupqbjx",
+   "type": "note",
+   "channel": 0,
+   "number": 9,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 1
+   }
+  },
+  {
+   "id": "midi-msrupqbjy",
+   "type": "note",
+   "channel": 0,
+   "number": 10,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 2
+   }
+  },
+  {
+   "id": "midi-msrupqbjz",
+   "type": "note",
+   "channel": 0,
+   "number": 11,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 3
+   }
+  },
+  {
+   "id": "midi-msrupqbj10",
+   "type": "note",
+   "channel": 0,
+   "number": 12,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 4
+   }
+  },
+  {
+   "id": "midi-msrupqbj11",
+   "type": "note",
+   "channel": 0,
+   "number": 13,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 5
+   }
+  },
+  {
+   "id": "midi-msrupqbj12",
+   "type": "note",
+   "channel": 0,
+   "number": 14,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 6
+   }
+  },
+  {
+   "id": "midi-msrupqbj13",
+   "type": "note",
+   "channel": 0,
+   "number": 15,
+   "action": {
+    "kind": "cell",
+    "layerId": "layer-wash",
+    "col": 7
+   }
+  },
+  {
+   "id": "midi-msrupqbj14",
+   "type": "note",
+   "channel": 0,
+   "number": 85,
+   "action": {
+    "kind": "layerClear",
+    "layerId": "layer-wash"
+   }
+  },
+  {
+   "id": "midi-msrupqbj15",
+   "type": "note",
+   "channel": 0,
+   "number": 0,
+   "action": {
+    "kind": "column",
+    "col": 0
+   }
+  },
+  {
+   "id": "midi-msrupqbj16",
+   "type": "note",
+   "channel": 0,
+   "number": 1,
+   "action": {
+    "kind": "column",
+    "col": 1
+   }
+  },
+  {
+   "id": "midi-msrupqbj17",
+   "type": "note",
+   "channel": 0,
+   "number": 2,
+   "action": {
+    "kind": "column",
+    "col": 2
+   }
+  },
+  {
+   "id": "midi-msrupqbj18",
+   "type": "note",
+   "channel": 0,
+   "number": 3,
+   "action": {
+    "kind": "column",
+    "col": 3
+   }
+  },
+  {
+   "id": "midi-msrupqbj19",
+   "type": "note",
+   "channel": 0,
+   "number": 4,
+   "action": {
+    "kind": "column",
+    "col": 4
+   }
+  },
+  {
+   "id": "midi-msrupqbj1a",
+   "type": "note",
+   "channel": 0,
+   "number": 5,
+   "action": {
+    "kind": "column",
+    "col": 5
+   }
+  },
+  {
+   "id": "midi-msrupqbj1b",
+   "type": "note",
+   "channel": 0,
+   "number": 6,
+   "action": {
+    "kind": "column",
+    "col": 6
+   }
+  },
+  {
+   "id": "midi-msrupqbj1c",
+   "type": "note",
+   "channel": 0,
+   "number": 7,
+   "action": {
+    "kind": "column",
+    "col": 7
+   }
+  },
+  {
+   "id": "midi-msrupqbj1d",
+   "type": "note",
+   "channel": 0,
+   "number": 86,
+   "action": {
+    "kind": "blackout"
+   }
+  },
+  {
+   "id": "midi-msrupqbj1e",
+   "type": "note",
+   "channel": 0,
+   "number": 99,
+   "action": {
+    "kind": "tap"
+   }
+  },
+  {
+   "id": "midi-msrupqbj1f",
+   "type": "cc",
+   "channel": 0,
+   "number": 7,
+   "action": {
+    "kind": "layerMaster",
+    "layerId": "layer-wash"
+   }
+  },
+  {
+   "id": "midi-msrupqbj1g",
+   "type": "cc",
+   "channel": 1,
+   "number": 7,
+   "action": {
+    "kind": "layerMaster",
+    "layerId": "layer-derby"
+   }
+  },
+  {
+   "id": "midi-msrupqbj1h",
+   "type": "cc",
+   "channel": 2,
+   "number": 7,
+   "action": {
+    "kind": "layerMaster",
+    "layerId": "layer-fx"
+   }
+  },
+  {
+   "id": "midi-msrupqbj1i",
+   "type": "cc",
+   "channel": 3,
+   "number": 7,
+   "action": {
+    "kind": "layerMaster",
+    "layerId": "layer-strobe"
+   }
+  },
+  {
+   "id": "midi-msrupqbj1j",
+   "type": "cc",
+   "channel": 4,
+   "number": 7,
+   "action": {
+    "kind": "haze"
+   }
+  },
+  {
+   "id": "midi-msrupqbj1k",
+   "type": "cc",
+   "channel": 5,
+   "number": 7,
+   "action": {
+    "kind": "speed"
+   }
+  },
+  {
+   "id": "midi-msrupqbj1l",
+   "type": "cc",
+   "channel": 0,
+   "number": 14,
+   "action": {
+    "kind": "grand"
+   }
+  }
+ ],
+ "sync": {
+  "oscEnabled": true,
+  "oscPort": 7700,
+  "followColumns": true,
+  "bpmFromOsc": true,
+  "linkEnabled": false
+ },
+ "settings": {
+  "haze": 0,
+  "hazeFan": 0.35
+ },
+ "profiles": {
+  "gdtf-showtec-octostrip-set-mkii-192-ch-mode--single-strip-": {
+   "id": "gdtf-showtec-octostrip-set-mkii-192-ch-mode--single-strip-",
+   "manufacturer": "Showtec",
+   "model": "Octostrip Set MKII",
+   "mode": "192 ch mode (single strip)",
+   "footprint": 24,
+   "heads": [
+    {
+     "kind": "rgb",
+     "offset": -0.5,
+     "label": "Px 1"
+    },
+    {
+     "kind": "rgb",
+     "offset": -0.35714285714285715,
+     "label": "Px 2"
+    },
+    {
+     "kind": "rgb",
+     "offset": -0.2142857142857143,
+     "label": "Px 3"
+    },
+    {
+     "kind": "rgb",
+     "offset": -0.07142857142857145,
+     "label": "Px 4"
+    },
+    {
+     "kind": "rgb",
+     "offset": 0.0714285714285714,
+     "label": "Px 5"
+    },
+    {
+     "kind": "rgb",
+     "offset": 0.2142857142857143,
+     "label": "Px 6"
+    },
+    {
+     "kind": "rgb",
+     "offset": 0.3571428571428571,
+     "label": "Px 7"
+    },
+    {
+     "kind": "rgb",
+     "offset": 0.5,
+     "label": "Px 8"
+    }
+   ],
+   "channels": [
+    {
+     "offsets": [
+      0
+     ],
+     "head": 0,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorR"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_R"
+    },
+    {
+     "offsets": [
+      1
+     ],
+     "head": 0,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorG"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_G"
+    },
+    {
+     "offsets": [
+      2
+     ],
+     "head": 0,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorB"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_B"
+    },
+    {
+     "offsets": [
+      3
+     ],
+     "head": 1,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorR"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_R"
+    },
+    {
+     "offsets": [
+      4
+     ],
+     "head": 1,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorG"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_G"
+    },
+    {
+     "offsets": [
+      5
+     ],
+     "head": 1,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorB"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_B"
+    },
+    {
+     "offsets": [
+      6
+     ],
+     "head": 2,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorR"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_R"
+    },
+    {
+     "offsets": [
+      7
+     ],
+     "head": 2,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorG"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_G"
+    },
+    {
+     "offsets": [
+      8
+     ],
+     "head": 2,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorB"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_B"
+    },
+    {
+     "offsets": [
+      9
+     ],
+     "head": 3,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorR"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_R"
+    },
+    {
+     "offsets": [
+      10
+     ],
+     "head": 3,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorG"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_G"
+    },
+    {
+     "offsets": [
+      11
+     ],
+     "head": 3,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorB"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_B"
+    },
+    {
+     "offsets": [
+      12
+     ],
+     "head": 4,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorR"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_R"
+    },
+    {
+     "offsets": [
+      13
+     ],
+     "head": 4,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorG"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_G"
+    },
+    {
+     "offsets": [
+      14
+     ],
+     "head": 4,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorB"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_B"
+    },
+    {
+     "offsets": [
+      15
+     ],
+     "head": 5,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorR"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_R"
+    },
+    {
+     "offsets": [
+      16
+     ],
+     "head": 5,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorG"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_G"
+    },
+    {
+     "offsets": [
+      17
+     ],
+     "head": 5,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorB"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_B"
+    },
+    {
+     "offsets": [
+      18
+     ],
+     "head": 6,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorR"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_R"
+    },
+    {
+     "offsets": [
+      19
+     ],
+     "head": 6,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorG"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_G"
+    },
+    {
+     "offsets": [
+      20
+     ],
+     "head": 6,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorB"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_B"
+    },
+    {
+     "offsets": [
+      21
+     ],
+     "head": 7,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorR"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_R"
+    },
+    {
+     "offsets": [
+      22
+     ],
+     "head": 7,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorG"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_G"
+    },
+    {
+     "offsets": [
+      23
+     ],
+     "head": 7,
+     "cases": [
+      {
+       "cond": {
+        "kind": "always"
+       },
+       "dmxFrom": 0,
+       "dmxTo": 255,
+       "func": {
+        "kind": "linear",
+        "source": "colorB"
+       }
+      }
+     ],
+     "default": 255,
+     "name": "ColorAdd_B"
+    }
+   ],
+   "beamDeg": 25,
+   "virtualDimmer": true
+  }
+ },
+ "decks": [
+  {
+   "id": "deck-1",
+   "name": "01 \u00b7 Still Air",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s01-wash-still",
+     "s01-wash-rise",
+     "s01-wash-cold-seam",
+     "s01-wash-open",
+     "s01-wash-cold-seam",
+     "s01-wash-field",
+     "s01-wash-still",
+     "s01-wash-ember"
+    ],
+    "layer-derby": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-fx": [
+     null,
+     null,
+     "s01-fx-drift",
+     "s01-fx-tide",
+     "s01-fx-drift",
+     "s01-fx-tide",
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-2",
+   "name": "02 \u00b7 Undertow",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s02-wash-teal-bed",
+     "s02-wash-teal-rise",
+     "s02-wash-undertow",
+     "s02-wash-teal-open",
+     "s02-wash-undertow",
+     "s02-wash-flood",
+     "s02-wash-teal-bed",
+     "s02-wash-ebb"
+    ],
+    "layer-derby": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s02-fx-bar-chase",
+     null,
+     "s02-fx-bar-chase",
+     "s02-fx-strip-swell",
+     "s02-fx-bar-chase-2",
+     "s02-fx-bar-chase",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-3",
+   "name": "03 \u00b7 Slow Furnace",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s03-wash-red-bed",
+     "s03-wash-red-build",
+     "s03-wash-amber-break",
+     "s03-wash-furnace",
+     "s03-wash-amber-break",
+     "s03-wash-forge",
+     "s03-wash-red-bed",
+     "s03-wash-coals"
+    ],
+    "layer-derby": [
+     null,
+     "s03-derby-warm",
+     null,
+     "s03-derby-red-spin",
+     "s03-derby-amber-aim",
+     "s03-derby-red-spin",
+     "s03-derby-warm",
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s03-fx-strip-chase",
+     null,
+     "s03-fx-amber-pulse",
+     "s03-fx-strip-chase",
+     "s03-fx-full-roll",
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-4",
+   "name": "04 \u00b7 Glass Atlas",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s04-wash-glass",
+     "s04-wash-atlas-build",
+     "s04-wash-cyan-break",
+     "s04-wash-wide-open",
+     "s04-wash-cyan-break",
+     "s04-wash-horizon",
+     "s04-wash-glass",
+     "s04-wash-deep-low"
+    ],
+    "layer-derby": [
+     null,
+     "s04-derby-cyan",
+     null,
+     "s04-derby-blue-fast",
+     "s04-derby-hold",
+     "s04-derby-blue-fast",
+     "s04-derby-cyan",
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s04-fx-bar-sweep",
+     null,
+     "s04-fx-strip-chase-wide",
+     "s04-fx-bar-sweep",
+     "s04-fx-double",
+     "s04-fx-strip-chase-wide",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-5",
+   "name": "05 \u00b7 Verdigris",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s05-wash-verdigris",
+     "s05-wash-acid-rise",
+     "s05-wash-patina",
+     "s05-wash-bloom",
+     "s05-wash-patina",
+     "s05-wash-oxide",
+     "s05-wash-verdigris",
+     "s05-wash-residue"
+    ],
+    "layer-derby": [
+     null,
+     null,
+     "s05-derby-acid",
+     "s05-derby-green-spin",
+     "s05-derby-acid",
+     "s05-derby-green-spin",
+     null,
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s05-fx-bar-alt",
+     null,
+     "s05-fx-strip-chase-back",
+     "s05-fx-flicker",
+     "s05-fx-bar-alt",
+     "s05-fx-strip-chase-back",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-6",
+   "name": "06 \u00b7 Static Bloom",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s06-wash-split-low",
+     "s06-wash-split-full",
+     "s06-wash-cyan-bed",
+     "s06-wash-split-full",
+     "s06-wash-mag-bloom",
+     "s06-wash-split-full",
+     "s06-wash-cyan-bed",
+     "s06-wash-ghost"
+    ],
+    "layer-derby": [
+     null,
+     "s06-derby-cyan-aim",
+     null,
+     "s06-derby-split-spin",
+     "s06-derby-cyan-aim",
+     "s06-derby-split-spin",
+     null,
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s06-fx-chase-strips",
+     "s06-fx-bloom-pulse",
+     "s06-fx-chase-strips",
+     "s06-fx-bloom-pulse",
+     "s06-fx-chase-fast",
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     "s06-strobe-cyan-accent",
+     null,
+     "s06-strobe-mag-accent",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-7",
+   "name": "07 \u00b7 Flare Path",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s07-wash-red-low",
+     "s07-wash-red-pump",
+     "s07-wash-red-low",
+     "s07-wash-red-full",
+     "s07-wash-red-pump",
+     "s07-wash-red-full",
+     "s07-wash-red-pump",
+     "s07-wash-ember"
+    ],
+    "layer-derby": [
+     null,
+     "s07-derby-red-aim",
+     "s07-derby-red-aim",
+     "s07-derby-red-spin-fast",
+     "s07-derby-red-ring-glow",
+     "s07-derby-red-spin-fast",
+     "s07-derby-red-aim",
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s07-fx-chase-hard",
+     "s07-fx-stab-bars",
+     "s07-fx-chase-hard",
+     "s07-fx-sweep-out",
+     "s07-fx-chase-hard",
+     "s07-fx-stab-bars",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     "s07-strobe-blinder",
+     "s07-strobe-red-machine",
+     "s07-strobe-ring-punch",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-8",
+   "name": "08 \u00b7 Deep Field",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s08-wash-deep-teal",
+     "s08-wash-green-drift",
+     "s08-wash-blue-floor",
+     "s08-wash-swell",
+     "s08-wash-green-drift",
+     "s08-wash-gradient-hold",
+     "s08-wash-blue-floor",
+     "s08-wash-ghost"
+    ],
+    "layer-derby": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-fx": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-9",
+   "name": "09 \u00b7 Low Ceiling",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s09-wash-cold-low",
+     "s09-wash-blue-breath",
+     "s09-wash-white-seam",
+     "s09-wash-cold-open",
+     "s09-wash-lid",
+     "s09-wash-cold-open",
+     "s09-wash-blue-breath",
+     "s09-wash-ghost"
+    ],
+    "layer-derby": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-fx": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-10",
+   "name": "10 \u00b7 Vapour Trail",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s10-wash-mag-over-cyan",
+     "s10-wash-mag-over-cyan",
+     "s10-wash-cyan-bed",
+     "s10-wash-trail-open",
+     "s10-wash-mag-lid",
+     "s10-wash-trail-open",
+     "s10-wash-mag-over-cyan",
+     "s10-wash-ghost"
+    ],
+    "layer-derby": [
+     null,
+     "s10-derby-cyan-drift",
+     null,
+     "s10-derby-mag-slow",
+     "s10-derby-cyan-drift",
+     "s10-derby-mag-slow",
+     null,
+     null
+    ],
+    "layer-fx": [
+     "s10-fx-vapour-hue",
+     "s10-fx-trail-strips",
+     "s10-fx-vapour-hue",
+     "s10-fx-trail-strips",
+     "s10-fx-slow-sweep-bars",
+     "s10-fx-double-trail",
+     "s10-fx-trail-strips",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-11",
+   "name": "11 \u00b7 Chlorophyll",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s11-wash-low",
+     "s11-wash-acid",
+     "s11-wash-low",
+     "s11-wash-lime-split",
+     "s11-wash-acid",
+     "s11-wash-lime-split",
+     "s11-wash-acid",
+     "s11-wash-low"
+    ],
+    "layer-derby": [
+     null,
+     "s11-derby-green-spin",
+     null,
+     "s11-derby-lime-fast",
+     "s11-derby-green-spin",
+     "s11-derby-lime-fast",
+     "s11-derby-green-spin",
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s11-fx-chase-half",
+     "s11-fx-chase-half",
+     "s11-fx-chase-double",
+     "s11-fx-chase-double",
+     "s11-fx-chase-quad",
+     "s11-fx-chase-half",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     "s11-strobe-acid",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-12",
+   "name": "12 \u00b7 Open Water",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s12-wash-blue-deep",
+     "s12-wash-cyan-wide",
+     "s12-wash-blue-deep",
+     "s12-wash-full-open",
+     "s12-wash-cyan-wide",
+     "s12-wash-full-open",
+     "s12-wash-cyan-wide",
+     null
+    ],
+    "layer-derby": [
+     null,
+     "s12-derby-cyan-spin",
+     null,
+     "s12-derby-blue-fast",
+     "s12-derby-cyan-spin",
+     "s12-derby-blue-fast",
+     "s12-derby-cyan-spin",
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s12-fx-tide",
+     "s12-fx-tide",
+     "s12-fx-surge",
+     "s12-fx-sweep",
+     "s12-fx-surge",
+     "s12-fx-sweep",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     "s12-strobe-ring",
+     null,
+     "s12-strobe-drop",
+     null,
+     "s12-strobe-drop",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-13",
+   "name": "13 \u00b7 Hot Mirror",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s13-wash-ember",
+     "s13-wash-blood",
+     "s13-wash-ember",
+     "s13-wash-full-red",
+     "s13-wash-blood",
+     "s13-wash-full-red",
+     "s13-wash-blood",
+     "s13-wash-ash"
+    ],
+    "layer-derby": [
+     null,
+     "s13-derby-red-slow",
+     null,
+     "s13-derby-red-heavy",
+     "s13-derby-red-slow",
+     "s13-derby-red-heavy",
+     "s13-derby-red-slow",
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s13-fx-heartbeat",
+     "s13-fx-slow-sweep",
+     "s13-fx-throb",
+     "s13-fx-heartbeat",
+     "s13-fx-throb",
+     "s13-fx-slow-sweep",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     "s13-strobe-red-hit",
+     "s13-strobe-derby-red",
+     "s13-strobe-red-hit",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-14",
+   "name": "14 \u00b7 Vanishing Point",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s14-wash-void",
+     "s14-wash-deepblue-low",
+     "s14-wash-void",
+     "s14-wash-deepblue-low",
+     "s14-wash-void",
+     "s14-wash-deepblue-low",
+     "s14-wash-void",
+     "s14-wash-void"
+    ],
+    "layer-derby": [
+     null,
+     "s14-derby-cold-point",
+     "s14-derby-cold-point",
+     "s14-derby-cold-drift",
+     null,
+     "s14-derby-cold-drift",
+     "s14-derby-cold-point",
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s14-fx-breathe",
+     null,
+     "s14-fx-drift",
+     "s14-fx-breathe",
+     "s14-fx-drift",
+     "s14-fx-breathe",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-15",
+   "name": "15 \u00b7 Fathom",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s15-wash-abyss",
+     "s15-wash-deep-green",
+     "s15-wash-abyss",
+     "s15-wash-teal-climb",
+     "s15-wash-green-rise",
+     "s15-wash-teal-climb",
+     "s15-wash-green-rise",
+     "s15-wash-abyss"
+    ],
+    "layer-derby": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s15-fx-hue-drift",
+     null,
+     "s15-fx-slow-chase",
+     "s15-fx-rise",
+     "s15-fx-slow-chase",
+     "s15-fx-hue-drift",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-16",
+   "name": "16 \u00b7 Second Skin",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s16-wash-cyan-floor",
+     "s16-wash-split-bars",
+     "s16-wash-magenta-bed",
+     "s16-wash-split-lift",
+     "s16-wash-split-bars",
+     "s16-wash-split-lift",
+     "s16-wash-magenta-bed",
+     "s16-wash-blackout-glow"
+    ],
+    "layer-derby": [
+     null,
+     null,
+     "s16-derby-cyan-aim",
+     "s16-derby-magenta-slow",
+     "s16-derby-cyan-aim",
+     "s16-derby-magenta-slow",
+     null,
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s16-fx-hue-drift",
+     "s16-fx-cross-fade",
+     "s16-fx-cross-fade",
+     "s16-fx-hue-drift",
+     "s16-fx-cross-fade",
+     "s16-fx-hue-drift",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     "s16-strobe-soft-bloom",
+     null,
+     "s16-strobe-soft-bloom",
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-17",
+   "name": "17 \u00b7 Nettle",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s17-wash-acid-bed",
+     "s17-wash-nettle-split",
+     "s17-wash-low-green",
+     "s17-wash-yellow-hard",
+     "s17-wash-nettle-split",
+     "s17-wash-yellow-hard",
+     "s17-wash-acid-bed",
+     "s17-wash-ash"
+    ],
+    "layer-derby": [
+     null,
+     "s17-derby-acid-spin",
+     null,
+     "s17-derby-yellow-stab",
+     "s17-derby-acid-spin",
+     "s17-derby-yellow-stab",
+     "s17-derby-acid-spin",
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s17-fx-hue-lash",
+     "s17-fx-gate",
+     "s17-fx-counter-sweep",
+     "s17-fx-interference",
+     "s17-fx-counter-sweep",
+     "s17-fx-hue-lash",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-18",
+   "name": "18 \u00b7 Sirens",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s18-wash-red-full",
+     "s18-wash-red-pump",
+     "s18-wash-blood-low",
+     "s18-wash-white-edge",
+     "s18-wash-red-pump",
+     "s18-wash-white-edge",
+     "s18-wash-red-full",
+     "s18-wash-ember"
+    ],
+    "layer-derby": [
+     "s18-derby-red-spin",
+     "s18-derby-red-spin",
+     null,
+     "s18-derby-white-ring",
+     "s18-derby-red-spin",
+     "s18-derby-white-ring",
+     "s18-derby-red-spin",
+     null
+    ],
+    "layer-fx": [
+     null,
+     "s18-fx-riser",
+     "s18-fx-stutter",
+     "s18-fx-slam-chase",
+     "s18-fx-slam-chase",
+     "s18-fx-slam-chase",
+     "s18-fx-riser",
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     "s18-strobe-blinder-hit",
+     "s18-strobe-strip-slam",
+     "s18-strobe-hard-gate",
+     "s18-strobe-blinder-hit",
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-19",
+   "name": "19 \u00b7 The Quiet Part",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s19-wash-teal-open",
+     "s19-wash-teal-open",
+     "s19-wash-teal-settle",
+     "s19-wash-teal-settle",
+     "s19-wash-blue-recede",
+     "s19-wash-blue-recede",
+     "s19-wash-deep-fade",
+     "s19-wash-last-glow"
+    ],
+    "layer-derby": [
+     "s19-derby-green-drift",
+     "s19-derby-green-drift",
+     "s19-derby-green-drift",
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-fx": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "id": "deck-20",
+   "name": "20 \u00b7 Dawn Chorus",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     "s20-wash-cold-field",
+     "s20-wash-faint-blue",
+     "s20-wash-cold-breath",
+     "s20-wash-faint-blue",
+     "s20-wash-cold-breath",
+     "s20-wash-blue-recede",
+     "s20-wash-single-source",
+     "s20-wash-last-light"
+    ],
+    "layer-derby": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-fx": [
+     null,
+     null,
+     "s20-fx-slow-drift",
+     null,
+     "s20-fx-slow-drift",
+     null,
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  }
+ ],
+ "activeDeckId": "deck-1"
+}

@@ -6,7 +6,16 @@
 import dgram from 'node:dgram';
 import { EngineState } from '../state.ts';
 import { Renderer } from '../renderer.ts';
-import { defaultProject } from '../defaultProject.ts';
+import fs from 'node:fs';
+import path from 'node:path';
+import type { Project } from '../../shared/types.ts';
+
+/** The demo show these tests were written against — five fixtures at known
+ *  addresses, looks with known ids. Deliberately NOT the shipped default: that
+ *  is a real 20-song set list now, and pinning byte assertions to its artistic
+ *  content means editing a song looks like an engine regression. */
+const demoProject = (): Project =>
+  JSON.parse(fs.readFileSync(path.join(process.cwd(), 'core/tests/data/demo_project.json'), 'utf8'));
 import { parseOsc } from '../osc.ts';
 import { ArtnetOut } from '../artnet.ts';
 import { BeatClock } from '../clock.ts';
@@ -48,7 +57,7 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
 
 // ---------- merge → DMX ----------
 {
-  const st = new EngineState(defaultProject());
+  const st = new EngineState(demoProject());
   const r = new Renderer(st);
   const t0 = 1000;
   r.tick(t0); // prime dt integration
@@ -173,7 +182,7 @@ await new Promise<void>((resolve) => {
     done(okId && okOp && okUni && okLen && okData, `id=${okId} op=${okOp} uni=${okUni} len=${okLen} data=${okData}`);
   });
   rx.bind(6454, '127.0.0.1', () => {
-    const st = new EngineState(defaultProject());
+    const st = new EngineState(demoProject());
     const r = new Renderer(st);
     r.tick(0);
     st.trigger('layer-wash', 1, 0);

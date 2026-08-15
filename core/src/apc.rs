@@ -301,9 +301,17 @@ mod tests {
             .unwrap()
             .cells
             .clone();
-        let Some(col) = cells.iter().position(|c| c.is_some()) else {
-            return; // default project always has content, but stay robust
-        };
+        // Seed the cell rather than hunting for one. The shipped show is a
+        // real set list: its opening song is ambient and has nothing on the
+        // strobe layer, so searching found nothing and this test quietly
+        // returned without asserting anything. What is under test is the pad
+        // mapping, not the artistic content of song one.
+        let look_id = state.project.looks.keys().next().unwrap().clone();
+        let col = 0usize;
+        if let Some(layer) = state.project.layers.last_mut() {
+            layer.cells[col] = Some(look_id);
+        }
+        let _ = cells;
         state.trigger(&top_layer, col, 0.0, crate::state::LOCAL_CLIENT);
         let leds = compute_leds(&state);
         let note = (32 + col) as u8;

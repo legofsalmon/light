@@ -111,8 +111,13 @@ function compareDmx(name: string, a: Snapshot | null, b: Snapshot | null): void 
 }
 
 async function main(): Promise<void> {
-  // Pristine identical projects with network output disabled.
-  const proj = defaultProject();
+  // A fixed demo show, NOT the shipped default. Parity asserts exact bytes at
+  // named addresses on named looks, so pinning it to whatever show currently
+  // ships would mean the suite breaks whenever the set list is edited — and a
+  // real edit would look like a parity regression.
+  const proj = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'core', 'tests', 'data', 'demo_project.json'), 'utf8'),
+  ) as Project;
   for (const u of proj.universes) {
     u.artnet = false;
     u.sacn = false;

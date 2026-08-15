@@ -3,6 +3,15 @@
 
 use light_core::clock::BeatClock;
 use light_core::defaults::default_project;
+
+/// The demo show these tests were written against — five fixtures at known
+/// addresses, looks with known ids. Deliberately NOT the shipped default: that
+/// is a real 20-song set list now, and pinning byte assertions to its artistic
+/// content means editing a song looks like an engine regression.
+fn demo_project() -> light_core::types::Project {
+    serde_json::from_str(include_str!("data/demo_project.json"))
+        .expect("demo fixture must parse")
+}
 use light_core::osc::parse_osc;
 use light_core::renderer::Renderer;
 use light_core::state::EngineState;
@@ -40,7 +49,7 @@ fn osc_parse() {
 #[test]
 fn merge_to_dmx() {
     let t0 = 1000.0;
-    let mut st = EngineState::new(default_project(), t0);
+    let mut st = EngineState::new(demo_project(), t0);
     let mut r = Renderer::new();
     r.tick(&mut st, t0);
 
@@ -134,7 +143,7 @@ fn gdtf_import_end_to_end() {
     }
 
     let t0 = 1000.0;
-    let mut st = EngineState::new(default_project(), t0);
+    let mut st = EngineState::new(demo_project(), t0);
     let out = st.handle_command(
         Command::ImportGdtf {
             name: "synthetic.gdtf".into(),
@@ -246,7 +255,7 @@ fn protocol_json_shapes() {
     assert!(matches!(cmd, Command::Learn { action: None }));
 
     // Project round-trips without losing fields the UI depends on.
-    let p = default_project();
+    let p = demo_project();
     let s = serde_json::to_string(&p).unwrap();
     let v: serde_json::Value = serde_json::from_str(&s).unwrap();
     assert!(v["looks"]["wash-red"]["parts"][0]["params"]["color"]["h"].is_number());
@@ -257,7 +266,7 @@ fn protocol_json_shapes() {
     assert_eq!(back.fixtures.len(), p.fixtures.len());
 
     // Snapshot field naming (camelCase where it matters).
-    let mut st = EngineState::new(default_project(), 0.0);
+    let mut st = EngineState::new(demo_project(), 0.0);
     let mut r = Renderer::new();
     let res = r.tick(&mut st, 0.0);
     let snap = serde_json::json!({
@@ -283,7 +292,7 @@ fn artnet_loopback() {
     };
     rx.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
 
-    let mut st = EngineState::new(default_project(), 0.0);
+    let mut st = EngineState::new(demo_project(), 0.0);
     let mut r = Renderer::new();
     r.tick(&mut st, 0.0);
     st.trigger("layer-wash", 1, 0.0, light_core::state::LOCAL_CLIENT);
