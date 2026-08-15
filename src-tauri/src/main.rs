@@ -113,20 +113,40 @@ fn main() {
             };
             if port != wanted {
                 eprintln!("[light] :{wanted} was taken — running on :{port}");
-                // The webview defaults to :9900. Tell it where the engine
-                // actually is, or the window loads over a socket nobody is
-                // listening on and looks hung.
-                if let Some(w) = app.get_webview_window("main") {
-                    let _ = w.eval(&format!("window.__LIGHT_PORT__ = {port};"));
-                }
             }
+
+            // The bundled UI has 9900 compiled in as its fallback, so on any
+            // other port the window would dial a socket nobody is listening on
+            // and sit there saying the engine is not responding.
+            //
+            // Injecting the port with eval() was the first attempt and was
+            // wrong twice over: it only ran when the port had been *taken*, so
+            // LIGHT_PORT never triggered it, and a variable set during setup is
+            // discarded when the page loads its own context.
+            //
+            // 9900 is the UI's compiled-in fallback (shared/types.ts WS_PORT).
+            //
+            // Loading the window from the engine's own HTTP server instead puts
+            // the port in the page origin, where wsUrl() already reads it — the
+            // exact path a tablet on the LAN uses, so it is the better-tested
+            // one. Only when the engine can actually serve: with no bundled UI
+            // the tauri:// asset is all there is.
+            let serve_url = if port != 9900 && ui_dist.is_some() {
+                Some(format!("http://127.0.0.1:{port}/"))
+            } else {
+                None
+            };
 
             // The engine core runs on its own thread; the window is just a
             // view speaking the same WebSocket protocol as any LAN browser.
             // Either a panic OR run() returning early is fatal: a window that
             // looks alive over a dead engine is the worst failure mode at a show.
+            let handle = app.handle().clone();
             std::thread::spawn(move || {
-                let result = std::panic::catch_unwind(|| {
+                // AssertUnwindSafe: the handle is only used to point the window
+                // at a URL. Nothing here observes state that a panic could
+                // leave torn — and the panic is fatal anyway, three lines down.
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     light_core::engine::run(light_core::engine::EngineConfig {
                         port,
                         ui_dist,
@@ -137,9 +157,17 @@ fn main() {
                             if let Ok(mut slot) = tx_for_setup.lock() {
                                 *slot = Some(tx);
                             }
+                            // now the server is up, point the window at it
+                            if let Some(url) = serve_url.clone() {
+                                if let Some(w) = handle.get_webview_window("main") {
+                                    if let Ok(parsed) = url.parse() {
+                                        let _ = w.navigate(parsed);
+                                    }
+                                }
+                            }
                         })),
                     });
-                });
+                }));
                 match result {
                     Err(_) => eprintln!("[light] engine thread crashed — exiting so the failure is visible"),
                     Ok(()) => eprintln!("[light] engine stopped (port already in use?) — exiting"),
