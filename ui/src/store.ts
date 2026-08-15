@@ -306,7 +306,10 @@ function wsUrl(): string {
   const host = !location.protocol.startsWith('http') || location.hostname.endsWith('tauri.localhost')
     ? 'localhost'
     : location.hostname;
-  return `ws://${host}:${WS_PORT}`;
+  // The desktop shell sets this when :9900 was taken and it moved the engine
+  // elsewhere; without it the window would connect to a port nothing is on.
+  const shellPort = (window as unknown as { __LIGHT_PORT__?: number }).__LIGHT_PORT__;
+  return `ws://${host}:${shellPort ?? WS_PORT}`;
 }
 
 function connect(): void {
