@@ -157,8 +157,8 @@
       <a class="btn" href="https://github.com/legofsalmon/light">View on GitHub</a>
     </div>
     <p style="font-size:12px;color:var(--dim);margin-top:10px">
-      Universal (Apple&nbsp;Silicon + Intel) · not notarised — first launch needs
-      <a href="#install" style="color:inherit">one extra step</a>.
+      Universal (Apple&nbsp;Silicon + Intel) · signed and notarised by Apple —
+      <a href="#install" style="color:inherit">opens on a double-click</a>.
     </p>
     <div class="mock" aria-hidden="true">
       <div class="mock-top">
@@ -272,18 +272,16 @@
 <section id="install">
   <div class="wrap">
     <h2>Installing.</h2>
-    <p class="lede">Open the .dmg and drag LIGHT to Applications. The build is ad-hoc signed rather than
-    notarised by Apple, so macOS asks once before it will run it — Control-click&nbsp;→&nbsp;Open no longer
-    works on macOS&nbsp;Sequoia and later.</p>
+    <p class="lede">Download, drag, open. The build is signed with an Apple Developer&nbsp;ID and notarised
+    by Apple, so there is no Gatekeeper detour and nothing to allow in System&nbsp;Settings.</p>
     <div class="steps">
-      <div class="step"><h3>Try it</h3><p>Double-click LIGHT. macOS refuses and says it cannot verify the developer. That is expected.</p></div>
-      <div class="step"><h3>Allow it</h3><p>Open <b>System&nbsp;Settings → Privacy&nbsp;&amp;&nbsp;Security</b>, scroll to <b>Security</b>, and click <b>Open&nbsp;Anyway</b> beside the LIGHT message.</p></div>
-      <div class="step"><h3>Confirm</h3><p>Click <b>Open</b>. Once only — every later launch is a normal double-click.</p></div>
+      <div class="step"><h3>Download</h3><p>One universal build for Apple&nbsp;Silicon and Intel — no wrong version to pick.</p></div>
+      <div class="step"><h3>Drag</h3><p>Open the .dmg and drag LIGHT into Applications, the way it opens expecting you to.</p></div>
+      <div class="step"><h3>Open</h3><p>Double-click it. macOS confirms once that it came from the internet — click <b>Open</b> and that is the last you will hear of it.</p></div>
     </div>
     <p style="font-size:12px;color:var(--dim);margin-top:14px">
-      The Open&nbsp;Anyway button only appears for about an hour after a blocked launch — if it has gone,
-      double-click the app again first. Prefer a terminal?
-      <code>xattr -dr com.apple.quarantine /Applications/LIGHT.app</code>
+      First launch also asks to use the local network. Say yes: Art-Net and sACN are how LIGHT reaches your
+      rig, and it cannot light anything without it.
     </p>
   </div>
 </section>
