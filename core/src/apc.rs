@@ -1,8 +1,8 @@
 //! APC40 mk2 LED feedback over native MIDI — the packaged app's mirror of
-//! `ui/src/apcFeedback.ts`. The pad grid shows the look grid (bright = the
-//! playing cell, dim = available, coloured by each look's swatch), the bottom
-//! row mirrors cue columns, scene LEDs light when their layer has something
-//! to clear, and scene 5 blinks while blackout is armed.
+//! `ui/src/apcFeedback.ts`. All five pad rows show the look grid (bright = the
+//! playing cell, dim = available, coloured by each look's swatch), the five
+//! scene LEDs light when their layer has something to clear, and stop-all-clips
+//! blinks while blackout is armed.
 //!
 //! Hardware notes (mk2, generic mode): only the 5×8 clip grid is RGB — pads
 //! take a 128-entry palette index as note-on velocity (channel 0 = solid).
@@ -116,8 +116,9 @@ fn compute_leds(state: &EngineState) -> HashMap<u8, u8> {
     let p = &state.project;
     let mut leds: HashMap<u8, u8> = HashMap::new();
 
-    // visual layer order is bottom-up on the controller: reversed, top 4 rows
-    for (row, layer) in p.layers.iter().rev().take(4).enumerate() {
+    // All five grid rows are layers. The bottom row used to mirror cue columns;
+    // a fifth layer is worth more than a second way to fire a cue.
+    for (row, layer) in p.layers.iter().rev().take(5).enumerate() {
         let live = state.live.get(&layer.id);
         let base = 32 - 8 * row as i16;
         for col in 0..p.columns.len().min(8) {
@@ -136,30 +137,9 @@ fn compute_leds(state: &EngineState) -> HashMap<u8, u8> {
         }
     }
 
-    // bottom row: cue columns — dim when the column holds any non-flash look,
-    // bright white when it's the most recent cue on any layer
-    for col in 0..p.columns.len().min(8) {
-        let has_content = p.layers.iter().any(|l| {
-            l.cells
-                .get(col)
-                .and_then(|c| c.as_ref())
-                .and_then(|id| p.looks.get(id))
-                .is_some_and(|lk| !lk.is_flash())
-        });
-        let is_live = state
-            .live
-            .values()
-            .any(|lv| lv.col == Some(col) && lv.look_id.is_some());
-        if is_live {
-            leds.insert(col as u8, 3);
-        } else if has_content {
-            leds.insert(col as u8, 1);
-        }
-    }
-
-    // scene 5 = blackout: blink while armed
+    // stop-all-clips = blackout: blink while armed
     if state.blackout {
-        leds.insert(86, 2);
+        leds.insert(81, 2);
     }
 
     leds
@@ -200,7 +180,7 @@ impl ApcOut {
         match out.connect(&port, "light-apc-leds") {
             Ok(mut conn) => {
                 // clear the whole surface once on attach
-                for n in (0u8..=39).chain(82..=86) {
+                for n in (0u8..=39).chain(81..=86) {
                     let _ = conn.send(&[0x90, n, 0]);
                 }
                 self.last_sent.clear();
@@ -272,19 +252,24 @@ mod tests {
         }
         // every lit pad must be a valid velocity (palette index or 1/2/3)
         for (&note, &vel) in &leds {
-            assert!(note <= 39 || (82..=86).contains(&note), "note {note} out of surface");
+            assert!(note <= 39 || (81..=86).contains(&note), "note {note} out of surface");
             assert!(vel > 0 && vel < 128, "velocity {vel} out of range");
         }
 
-        // fire the first column as a cue: its bottom-row LED goes bright
+        // The bottom row is a LAYER row now, not a cue mirror: firing a column
+        // must not paint the old bright-white cue marker over pad 0.
         state.trigger_column(0, 0.0);
         let leds = compute_leds(&state);
-        assert_eq!(leds.get(&0).copied(), Some(3), "live cue column should be bright white");
+        assert_ne!(
+            leds.get(&0).copied(),
+            Some(3),
+            "pad 0 belongs to the bottom layer now, not the cue row"
+        );
 
-        // blackout blinks scene 5
+        // blackout blinks stop-all-clips, freeing scene 5 for the fifth layer
         state.blackout = true;
         let leds = compute_leds(&state);
-        assert_eq!(leds.get(&86).copied(), Some(2));
+        assert_eq!(leds.get(&81).copied(), Some(2));
     }
 
     #[test]

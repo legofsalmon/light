@@ -19,6 +19,12 @@ mod tests {
         assert_eq!(p.version, 1);
         assert_eq!(p.fixtures.len(), 13); // 2 derby, 2 bars, hazer, 8 strips
         assert_eq!(p.decks.len(), 20);
-        assert_eq!(p.layers.len(), 4);
+        // five, so the APC40's bottom pad row is a layer rather than a second
+        // way to fire a cue
+        assert_eq!(p.layers.len(), 5);
+        // names must stay generic: what hangs on a layer depends on the rig
+        for (i, l) in p.layers.iter().enumerate() {
+            assert_eq!(l.name, format!("Layer {}", i + 1));
+        }
     }
 }

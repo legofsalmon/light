@@ -31,7 +31,7 @@
    "pos": {
     "x": -2.6,
     "y": 2.6,
-    "z": -1.0
+    "z": -1
    },
    "rotY": 0
   },
@@ -44,7 +44,7 @@
    "pos": {
     "x": 2.6,
     "y": 2.6,
-    "z": -1.0
+    "z": -1
    },
    "rotY": 0
   },
@@ -57,7 +57,7 @@
    "pos": {
     "x": -1.4,
     "y": 3.2,
-    "z": -1.0
+    "z": -1
    },
    "rotY": 0
   },
@@ -70,7 +70,7 @@
    "pos": {
     "x": 1.4,
     "y": 3.2,
-    "z": -1.0
+    "z": -1
    },
    "rotY": 0
   },
@@ -81,9 +81,9 @@
    "universeId": "u1",
    "address": 73,
    "pos": {
-    "x": 0.0,
+    "x": 0,
     "y": 3.2,
-    "z": -1.0
+    "z": -1
    },
    "rotY": 0
   },
@@ -255,7 +255,7 @@
   },
   {
    "id": "g-pars",
-   "name": "Bar Pars L\u2192R",
+   "name": "Bar Pars L→R",
    "heads": [
     {
      "fixtureId": "partybar1",
@@ -337,7 +337,7 @@
   },
   {
    "id": "g-strips",
-   "name": "Strips L\u2192R",
+   "name": "Strips L→R",
    "heads": [
     {
      "fixtureId": "strip1",
@@ -653,7 +653,7 @@
  "looks": {
   "s01-wash-still": {
    "id": "s01-wash-still",
-   "name": "Still Air \u2014 Strip Bed",
+   "name": "Still Air — Strip Bed",
    "parts": [
     {
      "id": "s01-wash-still-p0",
@@ -682,7 +682,7 @@
   },
   "s01-wash-rise": {
    "id": "s01-wash-rise",
-   "name": "Still Air \u2014 Slow Rise",
+   "name": "Still Air — Slow Rise",
    "parts": [
     {
      "id": "s01-wash-rise-p0",
@@ -5117,7 +5117,7 @@
   },
   "s16-fx-hue-drift": {
    "id": "s16-fx-hue-drift",
-   "name": "Hue Drift Mag\u2194Cyan",
+   "name": "Hue Drift Mag↔Cyan",
    "parts": [
     {
      "id": "s16-fx-hue-drift-p0",
@@ -6258,7 +6258,7 @@
  "layers": [
   {
    "id": "layer-wash",
-   "name": "WASH",
+   "name": "Layer 1",
    "blend": "normal",
    "master": 1,
    "cells": [
@@ -6275,7 +6275,7 @@
   },
   {
    "id": "layer-derby",
-   "name": "DERBY",
+   "name": "Layer 2",
    "blend": "normal",
    "master": 1,
    "cells": [
@@ -6292,7 +6292,7 @@
   },
   {
    "id": "layer-fx",
-   "name": "FX",
+   "name": "Layer 3",
    "blend": "multiply",
    "master": 1,
    "cells": [
@@ -6309,7 +6309,7 @@
   },
   {
    "id": "layer-strobe",
-   "name": "STROBE",
+   "name": "Layer 4",
    "blend": "htp",
    "master": 1,
    "cells": [
@@ -6323,6 +6323,23 @@
     null
    ],
    "fade": 0.05
+  },
+  {
+   "id": "layer-5",
+   "name": "Layer 5",
+   "blend": "normal",
+   "master": 1,
+   "fade": 0.5,
+   "cells": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
   }
  ],
  "columns": [
@@ -7467,7 +7484,7 @@
  "decks": [
   {
    "id": "deck-1",
-   "name": "01 \u00b7 Still Air",
+   "name": "01 · Still Air",
    "columns": [
     "Intro",
     "Build",
@@ -7523,7 +7540,7 @@
   },
   {
    "id": "deck-2",
-   "name": "02 \u00b7 Undertow",
+   "name": "02 · Undertow",
    "columns": [
     "Intro",
     "Build",
@@ -7579,7 +7596,7 @@
   },
   {
    "id": "deck-3",
-   "name": "03 \u00b7 Slow Furnace",
+   "name": "03 · Slow Furnace",
    "columns": [
     "Intro",
     "Build",
@@ -7635,7 +7652,7 @@
   },
   {
    "id": "deck-4",
-   "name": "04 \u00b7 Glass Atlas",
+   "name": "04 · Glass Atlas",
    "columns": [
     "Intro",
     "Build",
@@ -7691,7 +7708,7 @@
   },
   {
    "id": "deck-5",
-   "name": "05 \u00b7 Verdigris",
+   "name": "05 · Verdigris",
    "columns": [
     "Intro",
     "Build",
@@ -7747,7 +7764,7 @@
   },
   {
    "id": "deck-6",
-   "name": "06 \u00b7 Static Bloom",
+   "name": "06 · Static Bloom",
    "columns": [
     "Intro",
     "Build",
@@ -7803,7 +7820,7 @@
   },
   {
    "id": "deck-7",
-   "name": "07 \u00b7 Flare Path",
+   "name": "07 · Flare Path",
    "columns": [
     "Intro",
     "Build",
@@ -7859,7 +7876,7 @@
   },
   {
    "id": "deck-8",
-   "name": "08 \u00b7 Deep Field",
+   "name": "08 · Deep Field",
    "columns": [
     "Intro",
     "Build",
@@ -7915,7 +7932,7 @@
   },
   {
    "id": "deck-9",
-   "name": "09 \u00b7 Low Ceiling",
+   "name": "09 · Low Ceiling",
    "columns": [
     "Intro",
     "Build",
@@ -7971,7 +7988,7 @@
   },
   {
    "id": "deck-10",
-   "name": "10 \u00b7 Vapour Trail",
+   "name": "10 · Vapour Trail",
    "columns": [
     "Intro",
     "Build",
@@ -8027,7 +8044,7 @@
   },
   {
    "id": "deck-11",
-   "name": "11 \u00b7 Chlorophyll",
+   "name": "11 · Chlorophyll",
    "columns": [
     "Intro",
     "Build",
@@ -8083,7 +8100,7 @@
   },
   {
    "id": "deck-12",
-   "name": "12 \u00b7 Open Water",
+   "name": "12 · Open Water",
    "columns": [
     "Intro",
     "Build",
@@ -8139,7 +8156,7 @@
   },
   {
    "id": "deck-13",
-   "name": "13 \u00b7 Hot Mirror",
+   "name": "13 · Hot Mirror",
    "columns": [
     "Intro",
     "Build",
@@ -8195,7 +8212,7 @@
   },
   {
    "id": "deck-14",
-   "name": "14 \u00b7 Vanishing Point",
+   "name": "14 · Vanishing Point",
    "columns": [
     "Intro",
     "Build",
@@ -8251,7 +8268,7 @@
   },
   {
    "id": "deck-15",
-   "name": "15 \u00b7 Fathom",
+   "name": "15 · Fathom",
    "columns": [
     "Intro",
     "Build",
@@ -8307,7 +8324,7 @@
   },
   {
    "id": "deck-16",
-   "name": "16 \u00b7 Second Skin",
+   "name": "16 · Second Skin",
    "columns": [
     "Intro",
     "Build",
@@ -8363,7 +8380,7 @@
   },
   {
    "id": "deck-17",
-   "name": "17 \u00b7 Nettle",
+   "name": "17 · Nettle",
    "columns": [
     "Intro",
     "Build",
@@ -8419,7 +8436,7 @@
   },
   {
    "id": "deck-18",
-   "name": "18 \u00b7 Sirens",
+   "name": "18 · Sirens",
    "columns": [
     "Intro",
     "Build",
@@ -8475,7 +8492,7 @@
   },
   {
    "id": "deck-19",
-   "name": "19 \u00b7 The Quiet Part",
+   "name": "19 · The Quiet Part",
    "columns": [
     "Intro",
     "Build",
@@ -8531,7 +8548,7 @@
   },
   {
    "id": "deck-20",
-   "name": "20 \u00b7 Dawn Chorus",
+   "name": "20 · Dawn Chorus",
    "columns": [
     "Intro",
     "Build",

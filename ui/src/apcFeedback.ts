@@ -55,7 +55,7 @@ function computeLeds(project: Project, snap: Snapshot | null): Map<number, [numb
   const visual = [...project.layers].reverse();
   const liveOf = (id: string) => snap?.layers.find((l) => l.id === id);
 
-  visual.slice(0, 4).forEach((layer, row) => {
+  visual.slice(0, 5).forEach((layer, row) => {
     const base = 32 - row * 8;
     const live = liveOf(layer.id);
     for (let col = 0; col < Math.min(8, project.columns.length); col++) {
@@ -71,20 +71,8 @@ function computeLeds(project: Project, snap: Snapshot | null): Map<number, [numb
     if (live?.lookId) leds.set(82 + row, [0, 1]);
   });
 
-  // bottom row: cue columns — dim grey when the column holds any non-flash
-  // look, bright white when it's the most recent cue on any layer
-  for (let col = 0; col < Math.min(8, project.columns.length); col++) {
-    const hasContent = project.layers.some((l) => {
-      const id = l.cells[col];
-      return id && project.looks[id] && !project.looks[id].flash;
-    });
-    const isLive = snap?.layers.some((l) => l.col === col && l.lookId) ?? false;
-    if (isLive) leds.set(col, [0, 3]);
-    else if (hasContent) leds.set(col, [0, 1]);
-  }
-
-  // scene 5 = blackout: blink while armed
-  if (snap?.blackout) leds.set(86, [0, 2]);
+  // stop-all-clips = blackout: blink while armed
+  if (snap?.blackout) leds.set(81, [0, 2]);
 
   return leds;
 }

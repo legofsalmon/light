@@ -22,24 +22,27 @@ function apc40Mk2Mappings(p: Project): MidiMapping[] {
   const add = (type: 'note' | 'cc', channel: number, number: number, action: MidiAction) =>
     maps.push({ id: uid('midi'), type, channel, number, action });
 
+  // All five grid rows are layers. The bottom row used to mirror cue columns;
+  // a fifth layer is worth more than a second way to fire a cue you can already
+  // fire from the keyboard, the UI and OSC.
   const visual = [...p.layers].reverse(); // top grid row = top layer
-  visual.slice(0, 4).forEach((layer, row) => {
-    const base = 32 - row * 8; // top row = notes 32–39
+  visual.slice(0, 5).forEach((layer, row) => {
+    const base = 32 - row * 8; // top row = notes 32–39, bottom = 0–7
     for (let col = 0; col < Math.min(8, p.columns.length); col++) {
       add('note', 0, base + col, { kind: 'cell', layerId: layer.id, col });
     }
     add('note', 0, 82 + row, { kind: 'layerClear', layerId: layer.id });
   });
-  for (let col = 0; col < Math.min(8, p.columns.length); col++) {
-    add('note', 0, col, { kind: 'column', col }); // bottom grid row = cues
-  }
-  add('note', 0, 86, { kind: 'blackout' }); // scene 5, beside the cue row
+  // Blackout moves to STOP ALL CLIPS: the five scene buttons are now all layer
+  // clears, and stop-all is the closest thing the surface has to a panic key.
+  add('note', 0, 81, { kind: 'blackout' });
   add('note', 0, 99, { kind: 'tap' }); // dedicated TAP TEMPO button
   add('note', 0, 97, { kind: 'deckPrev' }); // bank ◀ = previous song page
   add('note', 0, 96, { kind: 'deckNext' }); // bank ▶ = next song page
-  p.layers.slice(0, 4).forEach((layer, i) => add('cc', i, 7, { kind: 'layerMaster', layerId: layer.id }));
-  add('cc', 4, 7, { kind: 'haze' }); // track 5 fader
-  add('cc', 5, 7, { kind: 'speed' }); // track 6 fader
+  // five layer masters take track faders 1–5, so haze and speed shift up one
+  p.layers.slice(0, 5).forEach((layer, i) => add('cc', i, 7, { kind: 'layerMaster', layerId: layer.id }));
+  add('cc', 5, 7, { kind: 'haze' }); // track 6 fader
+  add('cc', 6, 7, { kind: 'speed' }); // track 7 fader
   add('cc', 0, 14, { kind: 'grand' }); // master fader
   return maps;
 }

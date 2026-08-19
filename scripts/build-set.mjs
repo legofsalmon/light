@@ -106,7 +106,10 @@ for (const song of songs) {
 }
 
 // ---------------------------------------------------------------- decks ----
-const LAYERS = ['layer-wash', 'layer-derby', 'layer-fx', 'layer-strobe'];
+// Five rows: the APC's bottom row is a layer now, not a cue mirror. The ids are
+// historical — the names are generic, because what hangs on a layer depends on
+// the rig, not on this file.
+const LAYERS = ['layer-wash', 'layer-derby', 'layer-fx', 'layer-strobe', 'layer-5'];
 const COLUMNS = ['Intro', 'Build', 'Break', 'Drop', 'Bridge', 'Peak', 'Outro', 'Blackout'];
 
 const decks = songs.map((song, i) => {
