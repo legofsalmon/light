@@ -1,29 +1,35 @@
-// "Fetch the fixture I'm missing" — GDTF Share, framed as a repair rather than
-// a catalogue.
+// GDTF Share — fetching a fixture definition the show does not have.
 //
-// LIGHT already knows which fixtures are dark for want of a profile, and an MVR
-// import already records the GDTFSpec of anything it could not resolve. Those
-// two facts are the whole feature: put a shortlist beside the problem. The
-// alternative — a search UI over the whole catalogue — would mean pulling 12,436
-// entries and asking the operator to be a search engine, and Share has no
-// server-side search to lean on.
+// Two ways in. The repair path: LIGHT already knows which fixtures are dark for
+// want of a profile, so a shortlist goes beside the problem. And free-text
+// search, because a well-formed MVR resolves everything — a real festival scene
+// imported here with all 129 fixtures matched and nothing dark — so a
+// repair-only panel would be unreachable on a healthy show, which is most of
+// them.
 //
-// It hides itself entirely outside the packaged app, because the HTTP lives in
-// the shell (see ui/src/share.ts).
+// The catalogue is 6.4 MB and 12,437 entries and it only grows. It is never
+// shipped to this window: the shell does a coarse substring pass on the file it
+// already has, and only the survivors cross the IPC bridge. Ranking then happens
+// here, in one tested place (shared/gdtfShare.ts), because ranking is what makes
+// the shortlist good and it is far too easy to get subtly wrong twice.
+//
+// The whole panel hides itself outside the packaged app: the HTTP lives in the
+// shell, so a browser or the LAN tablet has no way to reach it.
 
 import React, { useEffect, useState } from 'react';
-import type { ShareEntry, ShareList } from '../../../shared/types.ts';
+import type { ShareEntry } from '../../../shared/types.ts';
 import { parseGdtfSpec, rankMatches } from '../../../shared/gdtfShare.ts';
 import { useStore } from '../store.ts';
 import {
   shareAvailable,
-  shareCatalogue,
+  shareCachedCount,
   shareDownload,
   shareForget,
   shareLogin,
   shareLoginSaved,
   shareRefresh,
   shareSavedUser,
+  shareSearch,
   shareStatus,
   type ShareStatus,
 } from '../share.ts';
@@ -35,42 +41,131 @@ const ago = (unixSeconds: number): string => {
   return hours < 48 ? `${hours} h ago` : `${Math.round(hours / 24)} days ago`;
 };
 
+/** One result row — the same shape whether it came from a search or a repair. */
+function Result({
+  entry,
+  busy,
+  onGet,
+}: {
+  entry: ShareEntry;
+  busy: boolean;
+  onGet: () => void;
+}): React.ReactElement {
+  return (
+    <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+      <button className="btn small" disabled={busy} onClick={onGet}>
+        get
+      </button>
+      <span>
+        {entry.manufacturer} · {entry.fixture}
+      </span>
+      <span className="label">
+        GDTF {entry.version} · {entry.modes.length} mode{entry.modes.length === 1 ? '' : 's'} ·{' '}
+        {Math.round(entry.filesize / 1024)} KB
+        {entry.creator ? ` · ${entry.creator}` : ''}
+        {entry.rating ? ` · ★ ${entry.rating}` : ''}
+      </span>
+    </div>
+  );
+}
+
 export function ShareFixtures(): React.ReactElement | null {
   const project = useStore((s) => s.project)!;
   const send = useStore((s) => s.send);
   const unknown = useStore((s) => s.snap?.unknownProfiles) ?? [];
 
   const [status, setStatus] = useState<ShareStatus | null>(null);
-  const [catalogue, setCatalogue] = useState<ShareList | null>(null);
+  const [cached, setCached] = useState(0);
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<ShareEntry[]>([]);
+  const [repairs, setRepairs] = useState<Record<string, ShareEntry[]>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
   const available = shareAvailable();
+  const signedIn = !!status?.user;
 
+  // Sign in from the Keychain without being asked. "Remember me" that still
+  // makes you press a button every launch is barely remembering anything — and
+  // a silent failure here is fine, because the sign-in form is right there.
   useEffect(() => {
     if (!available) return;
     void (async () => {
       try {
-        setStatus(await shareStatus());
-        setUser((await shareSavedUser()) ?? '');
-        setCatalogue(await shareCatalogue());
+        const [st, saved, n] = await Promise.all([
+          shareStatus(),
+          shareSavedUser(),
+          shareCachedCount(),
+        ]);
+        setUser(saved ?? '');
+        setCached(n);
+        if (!st.user && saved) {
+          try {
+            const who = await shareLoginSaved();
+            setStatus(await shareStatus());
+            setNote(`signed in as ${who}`);
+            return;
+          } catch {
+            // Keychain entry gone, password changed, or no network at the
+            // venue — fall through to the form rather than shouting on open
+          }
+        }
+        setStatus(st);
       } catch {
         /* the panel simply stays signed-out */
       }
     })();
   }, [available]);
 
-  // Not in a browser, not on the tablet — the shell is where the network is.
-  if (!available) return null;
-
-  // The fixtures that are dark for want of a profile. This is the whole reason
-  // the panel exists, so when there are none it says so rather than inviting a
-  // browse nobody asked for.
   const missing = project.fixtures.filter((f) => unknown.includes(f.id));
+  const missingKey = missing.map((f) => f.id).join(',');
+
+  // Candidates for whatever is dark. Keyed on which fixtures are missing, so it
+  // does not re-run on every snapshot.
+  useEffect(() => {
+    if (!signedIn || cached === 0 || missingKey === '') {
+      setRepairs({});
+      return;
+    }
+    void (async () => {
+      const next: Record<string, ShareEntry[]> = {};
+      for (const f of project.fixtures.filter((x) => unknown.includes(x.id))) {
+        const want = parseGdtfSpec(f.profileId.replace(/^gdtf-/, ''));
+        const q = want.model ?? f.name;
+        try {
+          // rankMatches returns {entry, score}; the repair list only needs the
+          // entries, and the score has already done its job by ordering them
+          next[f.id] = rankMatches(want.model ? want : { model: f.name }, await shareSearch(q), 5)
+            .map((m) => m.entry);
+        } catch {
+          next[f.id] = [];
+        }
+      }
+      setRepairs(next);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedIn, cached, missingKey]);
+
+  // Search, debounced — every keystroke otherwise re-reads a 6.4 MB file.
+  useEffect(() => {
+    const q = query.trim();
+    if (!signedIn || q.length < 2) {
+      setHits([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      void shareSearch(q)
+        .then(setHits)
+        .catch(() => setHits([]));
+    }, 220);
+    return () => clearTimeout(t);
+  }, [query, signedIn]);
+
+  if (!available) return null;
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(label);
@@ -88,7 +183,7 @@ export function ShareFixtures(): React.ReactElement | null {
   const signIn = () =>
     run('signing in', async () => {
       await shareLogin(user.trim(), password, remember);
-      setPassword(''); // never keep it in component state longer than the call
+      setPassword(''); // out of component state the moment it is not needed
       setStatus(await shareStatus());
       setNote('signed in');
     });
@@ -96,22 +191,21 @@ export function ShareFixtures(): React.ReactElement | null {
   const refresh = () =>
     run('fetching the catalogue', async () => {
       const n = await shareRefresh();
-      setCatalogue(await shareCatalogue());
+      setCached(n);
       setStatus(await shareStatus());
       setNote(`${n.toLocaleString()} fixtures available`);
     });
 
-  const download = (entry: ShareEntry, fixtureId: string) =>
+  const download = (entry: ShareEntry) =>
     run(`downloading ${entry.fixture}`, async () => {
       const data = await shareDownload(entry);
       // straight into the import path the app already has — no new engine
       // command, no new wire format, no parity risk
       send({ type: 'importGdtf', name: `${entry.fixture}.gdtf`, data });
-      setNote(`imported ${entry.manufacturer} ${entry.fixture} — now set it on the fixture`);
-      void fixtureId;
+      setNote(`imported ${entry.manufacturer} ${entry.fixture} — set it on the fixture in the patch`);
     });
 
-  const signedIn = !!status?.user;
+  const ranked = query.trim().length >= 2 ? rankMatches({ model: query.trim() }, hits, 8) : [];
 
   return (
     <div className="patchsec">
@@ -119,9 +213,7 @@ export function ShareFixtures(): React.ReactElement | null {
 
       {!signedIn ? (
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-          <span className="label">
-            your own gdtf-share.com account — LIGHT cannot supply one
-          </span>
+          <span className="label">your own gdtf-share.com account — LIGHT cannot supply one</span>
           <input
             className="text"
             style={{ width: 150 }}
@@ -157,21 +249,6 @@ export function ShareFixtures(): React.ReactElement | null {
           >
             sign in
           </button>
-          <button
-            className="btn small ghost"
-            disabled={!!busy}
-            title="sign in with the password saved in your Keychain"
-            onClick={() =>
-              void run('signing in', async () => {
-                const u = await shareLoginSaved();
-                setUser(u);
-                setStatus(await shareStatus());
-                setNote('signed in from the Keychain');
-              })
-            }
-          >
-            use saved
-          </button>
         </div>
       ) : (
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
@@ -180,16 +257,16 @@ export function ShareFixtures(): React.ReactElement | null {
             refresh catalogue
           </button>
           <span className="label">
-            {status && status.cached > 0
-              ? `${status.cached.toLocaleString()} fixtures cached${
-                  status.cachedAt ? `, ${ago(status.cachedAt)}` : ''
+            {cached > 0
+              ? `${cached.toLocaleString()} fixtures cached${
+                  status?.cachedAt ? `, ${ago(status.cachedAt)}` : ''
                 }`
-              : 'catalogue not fetched yet'}
+              : 'catalogue not fetched yet — press refresh'}
           </span>
           <button
             className="btn small ghost"
             disabled={!!busy}
-            title="forget the saved password"
+            title="forget the saved password and sign out"
             onClick={() =>
               void run('forgetting', async () => {
                 await shareForget();
@@ -204,62 +281,63 @@ export function ShareFixtures(): React.ReactElement | null {
       )}
 
       {busy && <div className="label">{busy}…</div>}
-      {error && <div className="label" style={{ color: 'var(--bad)' }}>{error}</div>}
+      {error && (
+        <div className="label" style={{ color: 'var(--bad)' }}>
+          {error}
+        </div>
+      )}
       {note && !error && <div className="label">{note}</div>}
 
-      {signedIn && catalogue && (
+      {signedIn && (
         <div style={{ marginTop: 8 }}>
-          {missing.length === 0 ? (
-            <div className="label">
-              Nothing is missing a profile. This panel fills itself in when a fixture
-              is dark for want of one — after an MVR import, usually.
+          <div className="row" style={{ gap: 6, marginBottom: 6 }}>
+            <input
+              className="text"
+              style={{ width: 240 }}
+              placeholder={
+                cached > 0 ? 'search fixtures — e.g. mac aura, sharpy' : 'refresh the catalogue first'
+              }
+              disabled={cached === 0}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {query.trim() && (
+              <button className="btn small ghost" onClick={() => setQuery('')}>
+                clear
+              </button>
+            )}
+          </div>
+
+          {query.trim().length >= 2 &&
+            (ranked.length === 0 ? (
+              <div className="label">nothing matches</div>
+            ) : (
+              <div style={{ marginBottom: 10 }}>
+                {ranked.map((m) => (
+                  <Result
+                    key={m.entry.rid}
+                    entry={m.entry}
+                    busy={!!busy}
+                    onGet={() => void download(m.entry)}
+                  />
+                ))}
+              </div>
+            ))}
+
+          {missing.map((f) => (
+            <div key={f.id} style={{ marginBottom: 10 }}>
+              <div className="label">
+                <b>{f.name}</b> — no profile for <code>{f.profileId}</code>
+              </div>
+              {(repairs[f.id] ?? []).length === 0 ? (
+                <div className="label">nothing on Share looks like this one</div>
+              ) : (
+                repairs[f.id].map((m) => (
+                  <Result key={m.rid} entry={m} busy={!!busy} onGet={() => void download(m)} />
+                ))
+              )}
             </div>
-          ) : (
-            missing.map((f) => {
-              const want = parseGdtfSpec(f.profileId.replace(/^gdtf-/, ''));
-              const matches = rankMatches(
-                want.model ? want : { model: f.name },
-                catalogue.list,
-                5,
-              );
-              return (
-                <div key={f.id} style={{ marginBottom: 10 }}>
-                  <div className="label">
-                    <b>{f.name}</b> — no profile for <code>{f.profileId}</code>
-                  </div>
-                  {matches.length === 0 ? (
-                    <div className="label">nothing on Share looks like this one</div>
-                  ) : (
-                    matches.map((m) => (
-                      <div
-                        key={m.entry.rid}
-                        className="row"
-                        style={{ gap: 6, alignItems: 'center' }}
-                      >
-                        <button
-                          className="btn small"
-                          disabled={!!busy}
-                          onClick={() => void download(m.entry, f.id)}
-                        >
-                          get
-                        </button>
-                        <span>
-                          {m.entry.manufacturer} · {m.entry.fixture}
-                        </span>
-                        <span className="label">
-                          GDTF {m.entry.version} · {m.entry.modes.length} mode
-                          {m.entry.modes.length === 1 ? '' : 's'} ·{' '}
-                          {Math.round(m.entry.filesize / 1024)} KB
-                          {m.entry.creator ? ` · ${m.entry.creator}` : ''}
-                          {m.entry.rating ? ` · ★ ${m.entry.rating}` : ''}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              );
-            })
-          )}
+          ))}
         </div>
       )}
     </div>

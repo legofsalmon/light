@@ -155,7 +155,8 @@ fn main() {
             share::share_forget,
             share::share_saved_user,
             share::share_refresh,
-            share::share_catalogue,
+            share::share_search,
+            share::share_cached_count,
             share::share_download,
         ])
         .setup(move |app| {

@@ -49,14 +49,22 @@ export const shareForget = (): Promise<void> => call<void>('share_forget');
 /** Pull the whole catalogue — 6.4 MB, no delta sync, so only ever on a click. */
 export const shareRefresh = (): Promise<number> => call<number>('share_refresh');
 
-/** The cached catalogue, or null if it has never been fetched. */
-export async function shareCatalogue(): Promise<ShareList | null> {
-  const raw = await call<string | null>('share_catalogue');
-  if (!raw) return null;
+/** How many fixtures the cache holds — without shipping any of them. */
+export const shareCachedCount = (): Promise<number> => call<number>('share_cached_count');
+
+/** Candidates for a query, coarsely narrowed in the shell.
+ *
+ *  The catalogue is 6.4 MB; pushing it through the IPC bridge so a text box can
+ *  filter it is a lot of work for a keystroke, and it grows every month. The
+ *  shell does the substring pass on the file it already has, and only the
+ *  survivors cross — ranking still happens here, in one place, where it is
+ *  tested. */
+export async function shareSearch(query: string, limit = 400): Promise<ShareEntry[]> {
+  const raw = await call<string>('share_search', { query, limit });
   try {
-    return JSON.parse(raw) as ShareList;
+    return JSON.parse(raw) as ShareEntry[];
   } catch {
-    return null;
+    return [];
   }
 }
 

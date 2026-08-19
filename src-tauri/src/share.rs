@@ -379,9 +379,60 @@ pub async fn share_refresh(session: State<'_, ShareSession>) -> Result<usize, St
     write_cache(&fixture_dir(), &body)
 }
 
+/// Candidate entries for a query, cheaply narrowed HERE.
+///
+/// The catalogue is 6.4 MB and 12,437 entries. Handing that to the webview on
+/// every panel mount — through an IPC bridge that JSON-encodes it — is a lot of
+/// work to do so a text box can filter it, and it scales with a catalogue that
+/// only grows. So the coarse filter runs in the shell where the file already
+/// is, and only the survivors cross the bridge; the ranking that decides what
+/// the operator sees stays in one place, in TypeScript, where it is tested.
+///
+/// Deliberately generous: substring on either field, capped. Ranking is what
+/// makes the shortlist good, and it cannot rank what it never receives.
 #[tauri::command]
-pub fn share_catalogue() -> Option<String> {
+pub fn share_search(query: String, limit: Option<usize>) -> Result<String, String> {
+    let raw = read_cache(&fixture_dir()).ok_or("the catalogue has not been fetched yet")?;
+    let v: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("cached catalogue is unreadable: {e}"))?;
+    let list = v.get("list").and_then(|l| l.as_array()).ok_or("cached catalogue has no list")?;
+
+    let needles: Vec<String> = query
+        .to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| t.len() >= 2)
+        .map(str::to_string)
+        .collect();
+    if needles.is_empty() {
+        return Ok("[]".into());
+    }
+
+    let cap = limit.unwrap_or(400).min(1000);
+    let mut out: Vec<&serde_json::Value> = Vec::new();
+    for e in list {
+        let hay = format!(
+            "{} {}",
+            e.get("manufacturer").and_then(|x| x.as_str()).unwrap_or(""),
+            e.get("fixture").and_then(|x| x.as_str()).unwrap_or("")
+        )
+        .to_lowercase();
+        if needles.iter().any(|n| hay.contains(n)) {
+            out.push(e);
+            if out.len() >= cap {
+                break;
+            }
+        }
+    }
+    serde_json::to_string(&out).map_err(|e| format!("cannot encode results: {e}"))
+}
+
+/// How many fixtures the cache holds, without shipping any of them.
+#[tauri::command]
+pub fn share_cached_count() -> usize {
     read_cache(&fixture_dir())
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v.get("list").and_then(|l| l.as_array()).map(|a| a.len()))
+        .unwrap_or(0)
 }
 
 /// Download one fixture and hand it back base64, ready for `importGdtf`.
