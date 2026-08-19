@@ -128,7 +128,15 @@ function spawnPreviz(): [boolean, string] {
   for (const c of candidates) {
     if (fs.existsSync(c)) {
       try {
-        const child = spawn(c, [], { detached: true, stdio: 'ignore' });
+        // Tell the child which port this engine is on. It reads LIGHT_PORT
+        // from its own environment and otherwise falls back to 9900 — which,
+        // when this engine has been moved, is a DIFFERENT copy of LIGHT.
+        // Mirrors spawn_previz in core/src/engine.rs.
+        const child = spawn(c, [], {
+          detached: true,
+          stdio: 'ignore',
+          env: { ...process.env, LIGHT_PORT: String(PORT) },
+        });
         // spawn errors (EACCES, ENOENT-at-exec) arrive async — an unhandled
         // 'error' event would take down the whole engine.
         child.on('error', (e) => {
@@ -263,7 +271,14 @@ function flushProject(): void {
   if (now - lastEcho < 100) return;
   projectDirty = false;
   lastEcho = now;
-  server.broadcastExcept(echoSkip, { type: 'project', project: state.project });
+  // Withhold from the sender only if the engine left its submission alone. The
+  // sanitiser can rewrite a great deal — it strips unknown prop kinds, repairs
+  // non-finite numbers, nulls dangling cell references — and the sender is the
+  // one client that would otherwise never learn.
+  server.broadcastExcept(state.repairedSubmission ? null : echoSkip, {
+    type: 'project',
+    project: state.project,
+  });
   echoSkip = null;
 }
 
@@ -293,6 +308,8 @@ function handleCommand(cmd: Command, _ws?: unknown, clientId: number = LOCAL_CLI
   // the sender did not compute (an import adding fixtures, sanitize repairing
   // one), and the sender needs that result like everyone else.
   currentCommandWs = cmd.type === 'updateProject' ? (_ws ?? null) : null;
+  // Reset per command; updateProject sets it if the sanitiser changed anything.
+  state.repairedSubmission = false;
   try {
     handleCommandInner(cmd, clientId);
   } finally {

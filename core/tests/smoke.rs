@@ -518,3 +518,29 @@ fn repair_defaults_match_the_node_sanitizer() {
     assert_eq!(l.master, 1.0, "a layer defaulting to 0 lights nothing");
     assert_eq!(l.fade, 0.5);
 }
+
+/// A repaired submission has to be echoed back to whoever sent it.
+///
+/// The echo is withheld from the sender on the grounds that it already holds
+/// that state — true only when the engine left it alone. `ensure_decks` can
+/// rewrite it, and then the sender is the one client that never learns, and
+/// re-sends the unrepaired copy on its next edit.
+#[test]
+fn the_engine_says_when_it_repaired_what_it_was_given() {
+    use light_core::state::EngineState;
+    use light_core::types::Command;
+    let t0 = 0.0;
+    let mut st = EngineState::new(demo_project(), t0);
+
+    // untouched: the project already has decks and a resolvable active deck
+    let clean = st.project.clone();
+    let out = st.handle_command(Command::UpdateProject { project: Box::new(clean) }, t0, None);
+    assert!(!out.repaired_submission, "a well-formed project must not report a repair");
+
+    // rewritten: an activeDeckId that resolves to nothing gets repointed
+    let mut bad = st.project.clone();
+    bad.active_deck_id = Some("deck-that-does-not-exist".into());
+    let out = st.handle_command(Command::UpdateProject { project: Box::new(bad) }, t0, None);
+    assert!(out.repaired_submission, "repointing activeDeckId is a repair the sender must hear about");
+    assert_ne!(st.project.active_deck_id.as_deref(), Some("deck-that-does-not-exist"));
+}

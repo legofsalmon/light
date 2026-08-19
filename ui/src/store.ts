@@ -253,7 +253,15 @@ export const useStore = create<Store>()((set, get) => ({
     // Local state updates every event so the UI stays live, but the wire send
     // is trailing-edge throttled: a scrub or fader drag emits dozens of edits
     // a second and each one is a whole project.
-    queueProjectWrite(() => get().send({ type: 'updateProject', project: get().project! }));
+    // Slug-guarded. The send is deferred, and a timer armed just before an
+    // openProject fires just after it — writing the previous show's project
+    // into the new slug. The undo stack tags every entry and the offline queue
+    // tags every message for exactly this reason; the live path had neither.
+    const slugAtEdit = currentSlug;
+    queueProjectWrite(() => {
+      if (currentSlug !== slugAtEdit) return; // a different show is open now
+      get().send({ type: 'updateProject', project: get().project! });
+    });
   },
 
   undo: () => {
@@ -423,6 +431,10 @@ function wsUrl(): string {
 function connect(): void {
   ws = new WebSocket(wsUrl());
   ws.onopen = () => {
+    // A reconnect must not inherit a stale timestamp: after the 1 s backoff it
+    // is always older than the trip point, so the banner flashed on every
+    // reconnect before the first snapshot could land.
+    lastSnapAt = Date.now();
     useStore.setState({ connected: true });
     // Do NOT flush queued edits yet: the engine may have switched projects
     // while we were offline, and a stale updateProject would overwrite a
@@ -508,12 +520,23 @@ connect();
 // travelling on the loop that had stopped, so it could report a slowdown but
 // never a full stop. Arrival time is the only signal that survives that.
 let lastSnapAt = 0;
-/** Snapshots run at 20/s. Three missed in a row is a stall, not jitter. */
-const SNAP_STALL_MS = 750;
+/** Snapshots run at 20/s, so 1.5 s is thirty missed frames — a stop, not jitter.
+ *  Deliberately not tight: the engine SKIPS snapshots for a client whose queue
+ *  is backed up (core/src/server.rs), so a slow tablet on venue WiFi is a normal
+ *  state, not a wedged engine, and shouting "the show engine has stopped
+ *  responding" at someone whose presses are still arriving is worse than saying
+ *  nothing. */
+const SNAP_STALL_MS = 1500;
+/** Clear well before the trip point, so a client hovering around the threshold
+ *  cannot flap a full-width banner on and off twice a second — the banner takes
+ *  its own grid row, so every toggle reflows the whole console. */
+const SNAP_OK_MS = 600;
 setInterval(() => {
   const s = useStore.getState();
   if (!s.connected || lastSnapAt === 0) return;
-  const stalled = Date.now() - lastSnapAt > SNAP_STALL_MS;
+  const age = Date.now() - lastSnapAt;
+  // hysteresis: one threshold to raise it, a lower one to drop it
+  const stalled = s.engineStalled ? age > SNAP_OK_MS : age > SNAP_STALL_MS;
   if (stalled !== s.engineStalled) useStore.setState({ engineStalled: stalled });
 }, 500);
 

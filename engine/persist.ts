@@ -10,6 +10,30 @@ const DIR = process.env.LIGHT_PROJECT_DIR ?? path.join(process.cwd(), 'projects'
 export const FIXTURE_DIR =
   process.env.LIGHT_FIXTURE_DIR ?? path.join(path.dirname(DIR), 'fixtures');
 const BACKUPS = 5;
+
+/** Every save gets its own scratch file.
+ *
+ *  All three save paths derived the identical `<file>.tmp`, so the debounced
+ *  async save and a synchronous save triggered from a command could interleave
+ *  writes into one file and then rename a torn document over the live show.
+ *  Mirrors TMP_SEQ in core/src/persist.rs. */
+let tmpSeq = 0;
+const tmpPath = (file: string): string => `${file}.tmp${tmpSeq++}`;
+
+/** Is what we are about to write already exactly what is on disk?
+ *
+ *  This is why it matters: the rotation below shifts the backup chain on EVERY
+ *  save, and BACKUPS is 5 — so five saves that change nothing evict the whole
+ *  backup history and leave five copies of the present, gutting the ladder the
+ *  loaders fall back through when the live file is torn. Mirrors
+ *  already_on_disk in core/src/persist.rs. */
+function alreadyOnDisk(file: string, body: string): boolean {
+  try {
+    return fs.readFileSync(file, 'utf8') === body;
+  } catch {
+    return false;
+  }
+}
 const CURRENT = path.join(DIR, '.current');
 
 /** Active project slug — read once at boot, updated by new/open/save-as. */
@@ -82,7 +106,29 @@ export function listProjects(): { slug: string; name: string }[] {
 
 /** Load a specific project file (no backup fallback — used by open). */
 export function loadSlug(sl: string): Project | null {
-  return tryLoad(fileFor(sl));
+  const hit = tryLoad(fileFor(sl));
+  if (hit) return hit;
+  // The same ladder loadProject has. Without it, opening a show whose file was
+  // torn by a crash mid-write failed flat — "cannot open" — while five good
+  // backups sat unused beside it. Mid-show that is the difference between a
+  // hiccup and rebuilding the night. Mirrors load_slug in core/src/persist.rs.
+  const file = fileFor(sl);
+  if (fs.existsSync(file)) {
+    console.error(`[persist] "${sl}" is corrupt — trying backups`);
+    try {
+      fs.renameSync(file, `${file}.corrupt-${Date.now()}`);
+    } catch {
+      /* best effort: the backups below are the point */
+    }
+  }
+  for (let i = 1; i <= BACKUPS; i++) {
+    const bak = tryLoad(`${file}.bak${i}`);
+    if (bak) {
+      console.error(`[persist] recovered ${sl} from .bak${i}`);
+      return bak;
+    }
+  }
+  return null;
 }
 
 /** Write a project under a specific slug immediately. Overwriting a slug
@@ -98,7 +144,7 @@ export function saveSlugNow(sl: string, p: Project): void {
       console.error('[persist] cannot preserve replaced project:', (err as Error).message);
     }
   }
-  const tmp = `${file}.tmp`;
+  const tmp = tmpPath(file);
   fs.writeFileSync(tmp, JSON.stringify(p, null, 1));
   fs.renameSync(tmp, file);
 }
@@ -187,9 +233,11 @@ function rotateBackups(): void {
 
 export function saveProjectNow(p: Project): string {
   fs.mkdirSync(DIR, { recursive: true });
+  const body = JSON.stringify(p, null, 1);
+  if (alreadyOnDisk(FILE(), body)) return FILE();
   rotateBackups();
-  const tmp = `${FILE()}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(p, null, 1));
+  const tmp = tmpPath(FILE());
+  fs.writeFileSync(tmp, body);
   fs.renameSync(tmp, FILE());
   return FILE();
 }
@@ -200,9 +248,11 @@ export function saveProjectNow(p: Project): string {
 async function saveProjectAsync(p: Project): Promise<void> {
   const file = FILE();
   await fs.promises.mkdir(DIR, { recursive: true });
+  const body = JSON.stringify(p, null, 1);
+  if (alreadyOnDisk(file, body)) return;
   rotateBackups(); // rename/copy of small files; sub-ms
-  const tmp = `${file}.tmp`;
-  await fs.promises.writeFile(tmp, JSON.stringify(p, null, 1));
+  const tmp = tmpPath(file);
+  await fs.promises.writeFile(tmp, body);
   await fs.promises.rename(tmp, file);
 }
 

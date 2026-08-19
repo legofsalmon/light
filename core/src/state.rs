@@ -139,6 +139,9 @@ pub struct Outcome {
     pub launch_previz: bool,
     /// tap/resync: land the effect phase on a downbeat
     pub align_phase: bool,
+    /// the engine rewrote an updateProject it was given, so the client that
+    /// sent it is now holding something different from what the engine has
+    pub repaired_submission: bool,
 }
 
 /// Minimal base64 decode (standard alphabet, padding optional) — the import
@@ -219,7 +222,15 @@ impl EngineState {
 
     /// Older projects have no pages — the current grid becomes deck 1, and
     /// the active deck id must always resolve. Mirrors the Node sanitiser.
-    fn ensure_decks(&mut self) {
+    /// Returns true if it CHANGED the project.
+    ///
+    /// That matters beyond bookkeeping: an updateProject echo is withheld from
+    /// the client that sent it, on the grounds that the client already holds
+    /// that state. It does not, if this rewrote it — and then every other client
+    /// learns about the repair while the one holding the wrong copy does not,
+    /// and re-sends the unrepaired version on its next edit.
+    fn ensure_decks(&mut self) -> bool {
+        let mut changed = false;
         if self.project.decks.is_empty() {
             let cells: HashMap<String, Vec<Option<String>>> = self
                 .project
@@ -234,6 +245,7 @@ impl EngineState {
                 cells,
             });
             self.project.active_deck_id = Some("deck-1".into());
+            changed = true;
         }
         let active_ok = self
             .project
@@ -243,7 +255,9 @@ impl EngineState {
             .unwrap_or(false);
         if !active_ok {
             self.project.active_deck_id = Some(self.project.decks[0].id.clone());
+            changed = true;
         }
+        changed
     }
 
     /// Switch the active grid page: store the current cells into the outgoing
@@ -628,10 +642,15 @@ impl EngineState {
         self.project.settings.haze_fan = 0.0;
     }
 
-    pub fn update_project(&mut self, p: Project) {
+    /// Returns true if the engine CHANGED what it was given — in which case the
+    /// sender needs the echo it would otherwise be spared. `reconcile` only
+    /// prunes live state and never touches the project, so `ensure_decks` is
+    /// the only thing here that can rewrite a submission.
+    pub fn update_project(&mut self, p: Project) -> bool {
         self.project = p;
-        self.ensure_decks();
+        let repaired = self.ensure_decks();
         self.reconcile();
+        repaired
     }
 
     fn reconcile(&mut self) {
@@ -863,7 +882,9 @@ impl EngineState {
                 out.project_changed = true;
             }
             Command::UpdateProject { project } => {
-                self.update_project(*project);
+                // If the engine repaired what arrived, the sender is the one
+                // client that must NOT be spared the echo.
+                out.repaired_submission = self.update_project(*project);
                 out.project_changed = true;
             }
             Command::SwitchDeck { deck_id } => {

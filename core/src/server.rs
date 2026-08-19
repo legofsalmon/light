@@ -233,11 +233,32 @@ fn handle_ws(stream: TcpStream, tx: Sender<EngineMsg>, bc: Broadcaster) -> std::
         }
         // poll inbound
         match ws.read() {
-            Ok(Message::Text(t)) => {
-                if let Ok(cmd) = serde_json::from_str::<Command>(&t) {
+            Ok(Message::Text(t)) => match serde_json::from_str::<Command>(&t) {
+                Ok(cmd) => {
                     let _ = tx.send(EngineMsg::Cmd(cmd, Some(id)));
                 }
-            }
+                // Never silently. A frame the engine cannot read used to vanish
+                // with no log, no reply and no toast — which is indistinguishable
+                // from the rig ignoring you, and is exactly the "controls
+                // silently not reaching the rig" failure this project treats as
+                // its worst. The type is enough to identify it without dumping
+                // an entire project into a log line.
+                Err(e) => {
+                    let kind = serde_json::from_str::<serde_json::Value>(&t)
+                        .ok()
+                        .and_then(|v| v.get("type").and_then(|x| x.as_str()).map(str::to_string))
+                        .unwrap_or_else(|| "unreadable".to_string());
+                    eprintln!("[server] rejected a \"{kind}\" command from client {id}: {e}");
+                    let _ = ws.send(Message::Text(
+                        serde_json::json!({
+                            "type": "toast",
+                            "ok": false,
+                            "message": format!("the engine could not read a \"{kind}\" command — it was not applied"),
+                        })
+                        .to_string(),
+                    ));
+                }
+            },
             Ok(Message::Close(_)) => break,
             Ok(_) => {}
             Err(tungstenite::Error::Io(ref e))

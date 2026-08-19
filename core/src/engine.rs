@@ -149,14 +149,20 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
     });
 
     let (tx, rx) = mpsc::channel::<EngineMsg>();
-    if let Some(ready) = cfg.on_ready.take() {
-        ready(tx.clone());
-    }
     ENGINE_PORT.store(cfg.port, std::sync::atomic::Ordering::Relaxed);
     let bc = Broadcaster::new();
     if let Err(e) = crate::server::start(cfg.port, cfg.ui_dist.clone(), tx.clone(), bc.clone()) {
         eprintln!("[light] cannot listen on :{} — is another engine running? {e}", cfg.port);
         return ExitReason::ListenFailed(format!("port {} — {e}", cfg.port));
+    }
+    // AFTER the listener is bound, not before. The shell's on_ready navigates
+    // its window to http://127.0.0.1:<port>/ under a comment saying "now the
+    // server is up" — and it used to run first, so the window raced a socket
+    // that did not exist yet and survived on event-loop timing alone. That is
+    // the same shape as the bug b04c538 was written to fix, and the result is
+    // discarded with `let _ =`, so nothing would have retried.
+    if let Some(ready) = cfg.on_ready.take() {
+        ready(tx.clone());
     }
     if cfg.with_midi {
         crate::midi::start(tx.clone());
@@ -646,12 +652,15 @@ fn handle_msg(
             // dangling cell — and the sender needs that result like everyone
             // else. The parity harness caught this: it imported a fixture and
             // then could not see the fixture it had just created.
-            let echo_owner = match &cmd {
-                Command::UpdateProject { .. } => owner,
-                _ => None,
-            };
+            let is_update = matches!(cmd, Command::UpdateProject { .. });
             let out = state.handle_command(cmd, t, owner);
             let align = out.align_phase;
+            // Withhold the echo from the sender only if the engine left its
+            // submission alone. ensure_decks can rewrite it — creating a deck,
+            // or repointing an activeDeckId that does not resolve — and then the
+            // sender is the ONE client that must be told, because everybody else
+            // gets the repair and it would keep re-sending the unrepaired copy.
+            let echo_owner = if is_update && !out.repaired_submission { owner } else { None };
             apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_echo, echo_owner);
             return align;
         }

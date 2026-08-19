@@ -293,12 +293,23 @@ export class EngineState {
     this.onChange?.();
   }
 
+  /** Sets `repairedSubmission` when the sanitiser changed what arrived — the
+   *  sender is then the one client that must NOT be spared the echo, because
+   *  everybody else gets the repair and it would keep re-sending the original.
+   *  Mirrors update_project in core/src/state.rs, where only ensure_decks can
+   *  rewrite a submission; here the whole sanitiser can. */
+  repairedSubmission = false;
+
   updateProject(p: Project): void {
+    const before = JSON.stringify(p);
     const clean = sanitizeProject(p);
     if (!clean) {
       console.error('[state] rejected malformed project update');
       return;
     }
+    // sanitizeProject mutates in place and returns the same object, so the
+    // comparison has to be against the string taken before the call
+    this.repairedSubmission = JSON.stringify(clean) !== before;
     this.project = clean;
     this.reconcile();
     this.notify();
