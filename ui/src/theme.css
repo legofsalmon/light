@@ -309,6 +309,9 @@ select.sel { cursor: pointer; }
 .layerhead .row { gap: 5px; }
 
 .cell {
+  /* the name strip's height, shared so the colour block below can stop exactly
+     where the strip begins — the two halves must not drift apart */
+  --padname-h: 14px;
   position: relative;
   width: 108px;
   height: 58px;
@@ -353,23 +356,29 @@ select.sel { cursor: pointer; }
 }
 /* the selected look reads as selected even when another one is playing */
 .cell.selected .cellname { background: rgba(255, 255, 255, 0.06); }
+/* The colour fills the whole trigger area rather than sitting as a stripe on
+   top of it. That is the visual difference between the two targets: the block
+   of colour fires, the dark strip under it selects — you can tell them apart at
+   a glance, and in the dark, without reading anything. */
 .cell .swatch {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 20px;
+  bottom: var(--padname-h);
   display: flex;
   opacity: 0.85;
 }
 .cell .swatch i { flex: 1; }
 .cell .flashmark {
   position: absolute;
-  top: 22px;
+  top: 3px;
   right: 4px;
   font-size: 8px;
   color: var(--flash);
   letter-spacing: 0.08em;
+  /* it now sits on the colour, which can be any brightness */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 .cell .fadebar {
   position: absolute;
@@ -377,6 +386,7 @@ select.sel { cursor: pointer; }
   left: 0;
   height: 2px;
   background: var(--accent);
+  z-index: 2; /* above the colour block */
 }
 .cell.learn-armed { outline: 2px solid var(--warn); outline-offset: -1px; }
 
