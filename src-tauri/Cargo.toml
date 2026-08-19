@@ -11,6 +11,18 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 light-core = { path = "../core" }
 
+# GDTF Share lives HERE, not in light-core. The crate that drives DMX has no
+# business carrying a TLS stack — reqwest was already in the tree via Tauri but
+# with no TLS backend at all, so this is where that arrives. rustls rather than
+# native-tls: no OpenSSL to find, nothing new to sign in the bundle.
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "cookies", "json", "form"] }
+# the Share session is a PHPSESSID cookie with a 2-hour idle timeout
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# "remember me" goes to the macOS Keychain. Never to the project file: the whole
+# project is broadcast to every connected client, including a LAN tablet.
+keyring = { version = "3", features = ["apple-native"] }
+
 [[bin]]
 name = "light-app"
 path = "src/main.rs"

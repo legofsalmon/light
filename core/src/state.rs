@@ -143,7 +143,12 @@ pub struct Outcome {
 
 /// Minimal base64 decode (standard alphabet, padding optional) — the import
 /// path only; not worth a dependency.
-fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
+///
+/// Public so the app shell's Share downloader can test that what it encodes is
+/// exactly what this decodes. The two halves of that trip are written by hand
+/// in two crates; a known-answer test on one side proves nothing about the
+/// other.
+pub fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
     const ALPHA: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut rev = [255u8; 256];
     for (i, &c) in ALPHA.iter().enumerate() {

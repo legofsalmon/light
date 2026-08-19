@@ -2,6 +2,8 @@
 
 use tauri::Manager;
 
+mod share;
+
 use std::sync::{Arc, Mutex};
 
 /// The last panic's message and backtrace, stashed by the hook below so the
