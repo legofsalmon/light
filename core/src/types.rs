@@ -331,7 +331,14 @@ pub struct Settings {
     pub haze_fan: f64,
 }
 
+// camelCase like every other struct in this file. Without it `active_deck_id`
+// went out on the wire and to disk in snake_case while the UI, shared/types.ts
+// and the Node engine all read `activeDeckId` — so the active song never
+// crossed the boundary, no deck chip ever lit, and [ ] / prev / next all
+// navigated from index 0. It is the only multi-word field on this struct, so
+// the rename touches nothing else.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Project {
     pub version: u32,
     pub name: String,
@@ -352,7 +359,11 @@ pub struct Project {
     /// grid pages (one per song); layer.cells mirrors the active deck
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub decks: Vec<Deck>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// `alias` is the migration: shows written by an earlier build carry the
+    /// snake_case spelling, and without it they would silently lose their
+    /// active deck on first load. Reads either, always writes camelCase, so a
+    /// project converts itself the next time it is saved.
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "active_deck_id")]
     pub active_deck_id: Option<String>,
 }
 

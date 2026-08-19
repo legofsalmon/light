@@ -9,6 +9,10 @@ export type Sel = { layerId: string; col: number } | null;
 
 type Store = {
   connected: boolean;
+  /** The socket is open but snapshots have stopped arriving — the engine's tick
+   *  loop is wedged. Distinct from `connected`, and the more dangerous state of
+   *  the two: everything looks normal while nothing reaches the rig. */
+  engineStalled: boolean;
   project: Project | null;
   snap: Snapshot | null;
   oscLog: OscLogEntry[];
@@ -128,15 +132,47 @@ function queueProjectWrite(send: () => void): void {
   const now = Date.now();
   if (projectWriteTimer) {
     if (now - projectWriteFirst < 250) return; // already scheduled, still fresh
+    // Past the deadline: send NOW. The old code cleared the timer and armed a
+    // fresh 50 ms one WITHOUT refreshing projectWriteFirst, so the next call
+    // took this branch again and cancelled the send that was about to happen.
+    // The documented 250 ms bound became "as long as the operator keeps
+    // moving" — the exact opposite of what it claims.
     clearTimeout(projectWriteTimer);
-  } else {
-    projectWriteFirst = now;
+    projectWriteTimer = null;
+    projectWriteFirst = 0;
+    send();
+    return;
   }
+  projectWriteFirst = now;
   projectWriteTimer = setTimeout(() => {
     projectWriteTimer = null;
     projectWriteFirst = 0;
     send();
   }, 50);
+}
+
+/** Live show state lives inside the project blob — which song is up, the column
+ *  labels, and every layer's cells. A snapshot taken during song 1 and applied
+ *  during song 3 therefore drags the operator back to song 1: the grid repaints,
+ *  the APC LED page repaints, and the next column trigger fires the wrong song's
+ *  looks. Deck switching never goes through mutate(), so the top-of-stack
+ *  snapshot stays stale across song changes and the slug check cannot see it.
+ *
+ *  So: revert the document, stay on the page actually being run. Within one song
+ *  the snapshot still applies whole, which is what makes cell edits undo
+ *  normally — only a cross-song apply is rewritten. */
+function keepCurrentPage(entry: Project, cur: Project): Project {
+  if (entry.activeDeckId === cur.activeDeckId) return entry;
+  return {
+    ...entry,
+    activeDeckId: cur.activeDeckId,
+    columns: [...cur.columns],
+    decks: cur.decks,
+    layers: entry.layers.map((l) => {
+      const now = cur.layers.find((x) => x.id === l.id);
+      return now ? { ...l, cells: [...now.cells] } : l;
+    }),
+  };
 }
 
 /** entry usable only if it provably belongs to the current project */
@@ -146,6 +182,7 @@ function entryUsable(e: HistoryEntry | undefined): e is HistoryEntry {
 
 export const useStore = create<Store>()((set, get) => ({
   connected: false,
+  engineStalled: false,
   project: null,
   snap: null,
   oscLog: [],
@@ -198,8 +235,9 @@ export const useStore = create<Store>()((set, get) => ({
     undoStack.pop();
     redoStack.push({ slug: currentSlug, project: structuredClone(cur) });
     lastPushAt = 0; // the next edit must not coalesce across a history apply
-    set({ project: prev.project, undoDepth: undoStack.length, redoDepth: redoStack.length });
-    get().send({ type: 'updateProject', project: prev.project });
+    const restored = keepCurrentPage(prev.project, cur);
+    set({ project: restored, undoDepth: undoStack.length, redoDepth: redoStack.length });
+    get().send({ type: 'updateProject', project: restored });
   },
 
   redo: () => {
@@ -215,8 +253,9 @@ export const useStore = create<Store>()((set, get) => ({
     undoStack.push({ slug: currentSlug, project: structuredClone(cur) });
     if (undoStack.length > UNDO_CAP) undoStack.shift();
     lastPushAt = 0;
-    set({ project: next.project, undoDepth: undoStack.length, redoDepth: redoStack.length });
-    get().send({ type: 'updateProject', project: next.project });
+    const restored = keepCurrentPage(next.project, cur);
+    set({ project: restored, undoDepth: undoStack.length, redoDepth: redoStack.length });
+    get().send({ type: 'updateProject', project: restored });
   },
 
   setSel: (sel) => set({ sel }),
@@ -277,7 +316,20 @@ function flushPending(engineSlug: string): void {
   }
   // the project write must land BEFORE a queued save, or ⌘S persists the
   // pre-edit project
-  if (lastProjectWrite) ws?.send(lastProjectWrite);
+  if (lastProjectWrite) {
+    ws?.send(lastProjectWrite);
+    // Adopt what we just sent. On reconnect the engine pushes ITS project
+    // first, so the store is now holding the pre-reconnect state — and the
+    // engine no longer echoes an updateProject back to its sender, so nothing
+    // else will correct it. Without this the console displays one show while
+    // the engine and the rig run another, with no indication which is which.
+    try {
+      const sent = (JSON.parse(lastProjectWrite) as { project?: Project }).project;
+      if (sent) useStore.setState({ project: sent });
+    } catch {
+      /* unparseable — the send still stands */
+    }
+  }
   for (const m of others) ws?.send(m);
   if (dropped > 0) {
     const at = Date.now();
@@ -343,7 +395,10 @@ function connect(): void {
         redoDepth: redoStack.length,
       });
     }
-    else if (ev.type === 'snap') useStore.setState({ snap: ev as Snapshot });
+    else if (ev.type === 'snap') {
+      lastSnapAt = Date.now();
+      useStore.setState((s) => (s.engineStalled ? { snap: ev as Snapshot, engineStalled: false } : { snap: ev as Snapshot }));
+    }
     else if (ev.type === 'osc') {
       useStore.setState((s) => ({ oscLog: [ev.entry, ...s.oscLog].slice(0, 40) }));
     } else if (ev.type === 'saved') useStore.setState({ savedFlash: Date.now() });
@@ -389,6 +444,24 @@ function connect(): void {
 }
 
 connect();
+
+// --- engine liveness -------------------------------------------------------
+// Liveness used to be inferred from `connected` plus an fps number carried
+// INSIDE the snapshot. Both lie in the same failure: if the tick loop wedges
+// while the socket stays open, snapshots stop arriving, the last one is
+// retained, and the dot reads a healthy 40fps for the rest of the night — while
+// every command queues into an engine that is not draining. The metric was
+// travelling on the loop that had stopped, so it could report a slowdown but
+// never a full stop. Arrival time is the only signal that survives that.
+let lastSnapAt = 0;
+/** Snapshots run at 20/s. Three missed in a row is a stall, not jitter. */
+const SNAP_STALL_MS = 750;
+setInterval(() => {
+  const s = useStore.getState();
+  if (!s.connected || lastSnapAt === 0) return;
+  const stalled = Date.now() - lastSnapAt > SNAP_STALL_MS;
+  if (stalled !== s.engineStalled) useStore.setState({ engineStalled: stalled });
+}, 500);
 
 // Convenience selectors
 export function lookOf(project: Project | null, layerId: string, col: number) {

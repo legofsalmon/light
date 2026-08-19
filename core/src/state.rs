@@ -238,7 +238,7 @@ impl EngineState {
 
     /// Switch the active grid page: store the current cells into the outgoing
     /// deck, load the target's. Playing looks keep playing.
-    pub fn switch_deck(&mut self, deck_id: &str) -> bool {
+    pub fn switch_deck(&mut self, deck_id: &str, t: f64) -> bool {
         if self.project.active_deck_id.as_deref() == Some(deck_id) {
             return false;
         }
@@ -269,6 +269,12 @@ impl EngineState {
             l.cells = cells;
         }
         self.project.active_deck_id = Some(deck_id.to_string());
+        // Inside the swap, not at the call sites: every route onto a new page
+        // has to release, and a caller that forgets is a blinder latched on for
+        // the rest of the show. Node puts it here too (engine/state.ts) — the
+        // two engines are now structurally the same rather than coincidentally
+        // equal, which is what let `deck_step` diverge unnoticed.
+        self.release_holds_for_deck_change(t);
         true
     }
 
@@ -279,7 +285,7 @@ impl EngineState {
         self.release_all_held(t, None);
     }
 
-    pub fn deck_step(&mut self, dir: i32) -> bool {
+    pub fn deck_step(&mut self, dir: i32, t: f64) -> bool {
         if self.project.decks.len() < 2 {
             return false;
         }
@@ -292,7 +298,7 @@ impl EngineState {
         let n = self.project.decks.len() as i32;
         let j = ((i + dir) % n + n) % n;
         let id = self.project.decks[j as usize].id.clone();
-        self.switch_deck(&id)
+        self.switch_deck(&id, t)
     }
 
     pub fn layer_live(&mut self, layer_id: &str) -> &mut LayerLive {
@@ -383,6 +389,15 @@ impl EngineState {
     /// Column = cue: fire non-flash cells, clear empty ones. Flash looks are
     /// skipped so a cue can never latch a blinder on.
     pub fn trigger_column(&mut self, col: usize, t: f64) {
+        // A column this show does not have is not "a column of empty cells" —
+        // it is not addressed to us at all. Resolume compositions routinely run
+        // wider than the light show, and treating the overshoot as empty would
+        // clear every layer and black the rig out for as long as the VJ worked
+        // above our last column. The empty-cell clear below stays exactly as it
+        // was: it is what makes a "Blackout" column work.
+        if col >= self.project.columns.len() {
+            return;
+        }
         let layer_ids: Vec<String> = self.project.layers.iter().map(|l| l.id.clone()).collect();
         for id in layer_ids {
             let layer = self.project.layers.iter().find(|l| l.id == id).unwrap();
@@ -515,17 +530,35 @@ impl EngineState {
                 }
                 false
             }
-            MidiAction::DeckNext => pressed && self.deck_step(1),
-            MidiAction::DeckPrev => pressed && self.deck_step(-1),
+            MidiAction::DeckNext => pressed && self.deck_step(1, t),
+            MidiAction::DeckPrev => pressed && self.deck_step(-1, t),
         }
     }
 
     /// Swap in a different project wholesale (open/new): live look state,
     /// fades, and held flashes all reset — a fresh show, not an edit.
+    /// Opening a show is a boot into that show: everything transient from the
+    /// last one has to go. Clearing `live` alone is not enough. `overrides`,
+    /// `identify` and `muted` are keyed by ids that every project derived from
+    /// the shipped default shares — `u1`, `u0`, `derby1`, `hazer` — so they do
+    /// not go stale on a switch, they silently re-bind to the incoming show and
+    /// keep forcing. `AllStop` already treats all three as panic state; the
+    /// switch path simply never did.
+    ///
+    /// Haze is zeroed for the same reason `run()` zeroes it at boot: the hazer
+    /// must never start pumping on its own, and the operator's reflex will not
+    /// stop it, because the renderer's blackout branch deliberately leaves haze
+    /// alone. The fan goes with it — it runs independently of the haze level
+    /// and it is the audible one.
     pub fn replace_project(&mut self, p: Project) {
         self.project = p;
         self.ensure_decks();
         self.live.clear();
+        self.overrides.clear();
+        self.identify = None;
+        self.muted.clear();
+        self.project.settings.haze = 0.0;
+        self.project.settings.haze_fan = 0.0;
     }
 
     pub fn update_project(&mut self, p: Project) {
@@ -761,8 +794,7 @@ impl EngineState {
                 out.project_changed = true;
             }
             Command::SwitchDeck { deck_id } => {
-                if self.switch_deck(&deck_id) {
-                    self.release_holds_for_deck_change(t);
+                if self.switch_deck(&deck_id, t) {
                     out.project_changed = true;
                 }
             }

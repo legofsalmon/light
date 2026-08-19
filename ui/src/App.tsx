@@ -44,6 +44,7 @@ class Region extends React.Component<
 export function App() {
   const hasProject = useStore((s) => !!s.project);
   const connected = useStore((s) => s.connected);
+  const engineStalled = useStore((s) => s.engineStalled);
   const [layout, setLayout] = useState(loadLayout);
   const [stalled, setStalled] = useState(false);
   useEffect(() => {
@@ -130,9 +131,11 @@ export function App() {
         ['--bottom-h' as string]: `${layout.bottomH}px`,
       }}
     >
-      {!connected && (
+      {(!connected || engineStalled) && (
         <div className="offlinebar">
-          ENGINE OFFLINE — reconnecting… nothing you press is reaching the rig
+          {connected
+            ? 'ENGINE STALLED — connected, but the show engine has stopped responding'
+            : 'ENGINE OFFLINE — reconnecting… nothing you press is reaching the rig'}
         </div>
       )}
       <Region name="top bar"><TopBar /></Region>

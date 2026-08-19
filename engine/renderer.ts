@@ -7,6 +7,10 @@ import { applyEffects } from '../shared/effects.ts';
 import { DERBY_MACROS, derbyMacroForValue, derbyQuantize, hsvToRgb, rgbToHsv } from '../shared/color.ts';
 import type { EngineState } from './state.ts';
 
+// Fixtures whose render already threw once. A bad fixture must not be able to
+// spam the log at 40 Hz, and it must not be able to take the tick down either.
+const brokenFixtures = new Set<string>();
+
 type NumField = 'dimmer' | 'white' | 'ringFx' | 'strobe' | 'pan' | 'tilt' | 'haze' | 'fan' | 'motorValue';
 const NUM_FIELDS: NumField[] = ['dimmer', 'white', 'ringFx', 'strobe', 'pan', 'tilt', 'haze', 'fan', 'motorValue'];
 
@@ -298,18 +302,37 @@ export class Renderer {
       const buf = buffers.get(f.universeId);
       if (!buf) continue;
       const base = f.address - 1;
-      const prof = PROFILES[f.profileId];
-      if (prof) {
-        if (base < 0 || base + prof.channels > 512) continue;
-        const hp = prof.heads.map((_, i) => heads.get(`${f.id}:${i}`)!);
-        prof.render(hp, buf, base);
-        continue;
+      // Object.hasOwn on BOTH lookups. These are plain objects built from JSON,
+      // so a profileId of "toString" or "constructor" otherwise resolves to an
+      // inherited function: truthy enough to pass the guard, then `channels` is
+      // undefined, `base + undefined > 512` is NaN > 512 which is false, and the
+      // render throws — taking the whole tick with it while project echoes kept
+      // flowing, so the UI confirmed edits the frozen rig never saw. The Rust
+      // core resolves through a HashMap and simply skips the fixture; skipping
+      // here is what keeps the two engines in step. Same reasoning as the cue
+      // step lookup in resolveCue().
+      const prof = Object.hasOwn(PROFILES, f.profileId) ? PROFILES[f.profileId] : undefined;
+      // One fixture must never be able to stop the show. Anything unexpected
+      // inside a profile's own render code costs that fixture, not the tick.
+      try {
+        if (prof) {
+          if (base < 0 || base + prof.channels > 512) continue;
+          const hp = prof.heads.map((_, i) => heads.get(`${f.id}:${i}`)!);
+          prof.render(hp, buf, base);
+          continue;
+        }
+        const cp =
+          p.profiles && Object.hasOwn(p.profiles, f.profileId) ? p.profiles[f.profileId] : undefined;
+        if (!cp) continue;
+        if (base < 0 || base + cp.footprint > 512) continue;
+        const hp = cp.heads.map((_, i) => heads.get(`${f.id}:${i}`)!);
+        renderImported(f.profileId, cp, hp, buf, base);
+      } catch (e) {
+        if (!brokenFixtures.has(f.id)) {
+          brokenFixtures.add(f.id);
+          console.error(`[renderer] fixture "${f.id}" (${f.profileId}) failed to render — skipping it`, e);
+        }
       }
-      const cp = p.profiles?.[f.profileId];
-      if (!cp) continue;
-      if (base < 0 || base + cp.footprint > 512) continue;
-      const hp = cp.heads.map((_, i) => heads.get(`${f.id}:${i}`)!);
-      renderImported(f.profileId, cp, hp, buf, base);
     }
 
     // --- muted fixtures: zero their whole channel span. Zeroing the

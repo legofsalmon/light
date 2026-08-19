@@ -1,9 +1,33 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::types::Project;
 
 const BACKUPS: u32 = 5;
+
+/// Every save gets its own scratch file. All three save paths derived the
+/// identical `<slug>.project.json.tmp`, so a detached autosave worker and a save
+/// on the tick thread could interleave writes into one file and then rename a
+/// torn document over the live show.
+static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
+
+fn tmp_path(file: &std::path::Path) -> PathBuf {
+    let n = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    file.with_extension(format!("json.tmp{n}"))
+}
+
+/// Is what we are about to write already exactly what is on disk?
+///
+/// This guard is why it matters: both rotating save paths shift the backup
+/// chain on every call, and BACKUPS is 5 — so five saves that change nothing
+/// (closing the previz window, a UI reload, a tablet dropping off the WiFi)
+/// evicted the whole backup history and left five copies of the present. That
+/// silently guts the ladder the loaders fall back through when the live file is
+/// torn, which is the one moment it is needed.
+fn already_on_disk(file: &std::path::Path, body: &str) -> bool {
+    fs::read_to_string(file).map(|cur| cur == body).unwrap_or(false)
+}
 
 /// Project directory: env override → repo-local ./projects (dev) →
 /// ~/Library/Application Support/LIGHT/projects (bundled app).
@@ -100,11 +124,36 @@ pub fn list_projects(dir: &PathBuf) -> Vec<(String, String)> {
 }
 
 pub fn load_slug(dir: &PathBuf, slug: &str) -> Option<Project> {
-    let raw = fs::read_to_string(file_for(dir, slug)).ok()?;
-    match serde_json::from_str::<Project>(&raw) {
-        Ok(p) if p.version == 1 => Some(p),
-        _ => None,
+    if let Some(p) = try_load(&file_for(dir, slug)) {
+        return Some(p);
     }
+    // The same ladder load_project() has. Without it, opening a show whose file
+    // was torn by a crash mid-write failed flat — "cannot open" — while five
+    // good backups sat unused beside it. Mid-show that is the difference between
+    // a hiccup and rebuilding the night from scratch. No re-save here: a loader
+    // should not have side effects, and the autosave writes it out once the show
+    // is actually open.
+    let file = file_for(dir, slug);
+    if file.exists() {
+        // Move the unreadable file aside, exactly as load_project does. Leaving
+        // it in place meant the next save copied THAT into .bak1 and pushed a
+        // good backup off the end of the chain — the recovery ladder eating
+        // itself one save at a time.
+        eprintln!("[persist] \"{slug}\" is corrupt — trying backups");
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let _ = fs::rename(&file, dir.join(format!("{slug}.project.json.corrupt-{ts}")));
+    }
+    for i in 1..=BACKUPS {
+        let bak = dir.join(format!("{slug}.project.json.bak{i}"));
+        if let Some(p) = try_load(&bak) {
+            eprintln!("[persist] recovered {slug} from .bak{i}");
+            return Some(p);
+        }
+    }
+    None
 }
 
 pub fn save_slug_now(dir: &PathBuf, slug: &str, p: &Project) -> std::io::Result<()> {
@@ -119,7 +168,7 @@ pub fn save_slug_now(dir: &PathBuf, slug: &str, p: &Project) -> std::io::Result<
             .unwrap_or(0);
         let _ = fs::copy(&file, dir.join(format!("{slug}.project.json.replaced-{ts}")));
     }
-    let tmp = file.with_extension("json.tmp");
+    let tmp = tmp_path(&file);
     fs::write(&tmp, serde_json::to_string_pretty(p)?)?;
     fs::rename(&tmp, &file)?;
     Ok(())
@@ -131,6 +180,10 @@ pub fn save_slug_now(dir: &PathBuf, slug: &str, p: &Project) -> std::io::Result<
 pub fn save_project_slug(dir: &PathBuf, slug: &str, p: &Project) -> std::io::Result<PathBuf> {
     fs::create_dir_all(dir)?;
     let file = file_for(dir, slug);
+    let body = serde_json::to_string_pretty(p)?;
+    if already_on_disk(&file, &body) {
+        return Ok(file);
+    }
     for i in (1..BACKUPS).rev() {
         let from = dir.join(format!("{slug}.project.json.bak{i}"));
         let to = dir.join(format!("{slug}.project.json.bak{}", i + 1));
@@ -141,8 +194,8 @@ pub fn save_project_slug(dir: &PathBuf, slug: &str, p: &Project) -> std::io::Res
     if file.exists() {
         let _ = fs::copy(&file, dir.join(format!("{slug}.project.json.bak1")));
     }
-    let tmp = file.with_extension("json.tmp");
-    fs::write(&tmp, serde_json::to_string_pretty(p)?)?;
+    let tmp = tmp_path(&file);
+    fs::write(&tmp, &body)?;
     fs::rename(&tmp, &file)?;
     Ok(file)
 }
@@ -210,10 +263,14 @@ fn rotate_backups(dir: &PathBuf) {
 
 pub fn save_project(dir: &PathBuf, p: &Project) -> std::io::Result<PathBuf> {
     fs::create_dir_all(dir)?;
-    rotate_backups(dir);
     let file = project_path(dir);
-    let tmp = file.with_extension("json.tmp");
-    fs::write(&tmp, serde_json::to_string_pretty(p)?)?;
+    let body = serde_json::to_string_pretty(p)?;
+    if already_on_disk(&file, &body) {
+        return Ok(file);
+    }
+    rotate_backups(dir);
+    let tmp = tmp_path(&file);
+    fs::write(&tmp, &body)?;
     fs::rename(&tmp, &file)?;
     Ok(file)
 }

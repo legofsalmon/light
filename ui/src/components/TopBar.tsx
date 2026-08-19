@@ -103,6 +103,7 @@ export function TopBar() {
   const snap = useStore((s) => s.snap);
   const project = useStore((s) => s.project)!;
   const connected = useStore((s) => s.connected);
+  const engineStalled = useStore((s) => s.engineStalled);
   const midiInputs = useStore((s) => s.midiInputs);
   const oscLog = useStore((s) => s.oscLog);
   const learnMode = useStore((s) => s.learnMode);
@@ -119,7 +120,10 @@ export function TopBar() {
   const dragRef = useRef<{ y: number; bpm: number } | null>(null);
 
   const oscAlive = oscLog.length > 0 && Date.now() - oscLog[0].t < 3000;
-  const engineOk = connected && (snap?.stats.fps ?? 0) >= 35;
+  // engineStalled comes from snapshot ARRIVAL time. The fps figure below only
+  // catches a slowdown: it travels inside the snapshot, so a tick loop that
+  // stops entirely freezes it at its last healthy value and the dot stays green.
+  const engineOk = connected && !engineStalled && (snap?.stats.fps ?? 0) >= 35;
   const justSaved = Date.now() - savedFlash < 1500;
 
   return (

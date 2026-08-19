@@ -54,6 +54,13 @@ class Client {
   }
 
   send(cmd: Command): void {
+    // Hold our own writes locally, exactly as the real UI does. The engines no
+    // longer echo an updateProject back to the client that sent it — that echo
+    // was landing on top of edits the operator had made in the intervening
+    // milliseconds and silently discarding them. A thin client that learned
+    // about its own writes from the echo would now never see them, so it has to
+    // model the optimistic local state the UI has always kept.
+    if (cmd.type === 'updateProject') this.project = cmd.project;
     this.ws.send(JSON.stringify(cmd));
   }
 }
@@ -80,7 +87,11 @@ async function currentProject(c: Client): Promise<Project> {
  *  behind a longer sleep: if the engines genuinely disagree, they still
  *  disagree once both are still. */
 async function settle(a: Client, b: Client, maxMs = 4000): Promise<void> {
-  const snapshot = (c: Client) => (c.snap?.dmx['u1'] ?? []).join(',');
+  const snapshot = (c: Client) =>
+    Object.keys(c.snap?.dmx ?? {})
+      .sort()
+      .map((u) => (c.snap?.dmx[u] ?? []).join(','))
+      .join('|');
   let prevA = snapshot(a);
   let prevB = snapshot(b);
   let stable = 0;
@@ -97,15 +108,25 @@ async function settle(a: Client, b: Client, maxMs = 4000): Promise<void> {
 }
 
 function compareDmx(name: string, a: Snapshot | null, b: Snapshot | null): void {
-  const da = a?.dmx['u1'];
-  const db = b?.dmx['u1'];
-  if (!da || !db) {
+  if (!a?.dmx || !b?.dmx) {
     check(name, false, 'missing snapshot');
     return;
   }
+  // EVERY universe, not just u1. Indexing dmx['u1'] literally meant a second
+  // universe was never byte-compared at all — and a second universe is where
+  // the 8-head imported GDTF profiles live on the real rig.
+  const ids = [...new Set([...Object.keys(a.dmx), ...Object.keys(b.dmx)])].sort();
   const diffs: string[] = [];
-  for (let i = 0; i < 512; i++) {
-    if (da[i] !== db[i]) diffs.push(`ch${i + 1}: node=${da[i]} rust=${db[i]}`);
+  for (const u of ids) {
+    const da = a.dmx[u];
+    const db = b.dmx[u];
+    if (!da || !db) {
+      diffs.push(`${u}: present on only one engine`);
+      continue;
+    }
+    for (let i = 0; i < 512; i++) {
+      if (da[i] !== db[i]) diffs.push(`${u} ch${i + 1}: node=${da[i]} rust=${db[i]}`);
+    }
   }
   check(name, diffs.length === 0, diffs.slice(0, 8).join(', '));
 }
@@ -152,6 +173,16 @@ async function main(): Promise<void> {
   const rust = new Client();
   await node.connect(9902);
   await rust.connect(9901);
+  // Read-only observers. Client.send() now stores the project it just wrote, so
+  // that a client models the UI's optimistic local state — which means the
+  // sending client is no longer a witness to what the ENGINE holds. Anything
+  // asserting engine truth has to ask a socket that never writes. The Art-Net
+  // safety check at the end of this file is exactly such an assertion, and
+  // without this it silently became a tautology about our own variable.
+  const nodeObs = new Client();
+  const rustObs = new Client();
+  await nodeObs.connect(9902);
+  await rustObs.connect(9901);
   console.log('both engines up');
 
   const both = (cmd: Command) => {
@@ -202,6 +233,75 @@ async function main(): Promise<void> {
   const colsN = node.snap?.layers.map((l) => `${l.id}:${l.col}`).join(' ');
   const colsR = rust.snap?.layers.map((l) => `${l.id}:${l.col}`).join(' ');
   check('live column state parity', colsN === colsR, `node=[${colsN}] rust=[${colsR}]`);
+
+  // --- a column this show does not have must not black the rig out ----------
+  // Resolume compositions routinely run wider than the light show. An
+  // out-of-range column used to read as "every cell empty", which is the
+  // clear-the-layer path — so working above the last column killed the rig and
+  // kept it dead. Both engines did it identically, so parity alone never saw it.
+  {
+    both({ type: 'column', col: 0 }); // Intro: something is lit
+    await settle(node, rust);
+    const lit = (c: Client) => (c.snap?.dmx['u1'] ?? []).some((v) => v > 0);
+    check('out-of-range column: rig lit to begin with', lit(node) && lit(rust));
+
+    both({ type: 'column', col: 99 }); // far past the last column
+    await settle(node, rust);
+    check(
+      'out-of-range column does not black out the rig',
+      lit(node) && lit(rust),
+      `node lit=${lit(node)} rust lit=${lit(rust)}`,
+    );
+    compareDmx('out-of-range column parity', node.snap, rust.snap);
+  }
+
+  // --- a MIDI deck step must release whatever is held ------------------------
+  // Holding a flash and pressing the APC bank arrow swapped the cells out from
+  // under the hold, so the note-off resolved a different look and returned
+  // early — the blinder stayed lit for the rest of the show. Rust released only
+  // on the switchDeck command, Node released inside switchDeck itself. The
+  // harness had never sent a `midi` command at all, which is why it went unseen.
+  {
+    const before = structuredClone(await currentProject(node));
+    const withDeckStep = structuredClone(before);
+    withDeckStep.midi = [
+      ...(withDeckStep.midi ?? []),
+      { id: 'm-decknext', type: 'note', channel: 0, number: 94, action: { kind: 'deckNext' } },
+    ];
+    both({ type: 'updateProject', project: withDeckStep });
+    await sleep(300);
+
+    both({ type: 'trigger', layerId: 'layer-strobe', col: 1 }); // hold the blinder
+    await sleep(300);
+    const heldN = (node.snap?.dmx['u1'] ?? []).some((v) => v > 0);
+    check('deck step: blinder is held first', heldN);
+
+    both({ type: 'midi', status: 0x90, d1: 94, d2: 127 }); // bank arrow, still held
+    await settle(node, rust);
+    compareDmx('deck step while holding a flash: parity', node.snap, rust.snap);
+
+    // Assert here, with the pad still DOWN and no release sent. The deck step
+    // itself must have dropped the hold. Checking after a release instead would
+    // pass either way, because the same look sits at that cell on both decks —
+    // the assertion has to be about the hold, not about the bytes.
+    const held = (c: Client) =>
+      (c.snap?.layers ?? []).some(
+        (l) => l.id === 'layer-strobe' && l.col !== null && l.col !== undefined,
+      );
+    check(
+      'deck step released the held flash (no latched blinder)',
+      !held(node) && !held(rust),
+      `still held — node=${JSON.stringify(node.snap?.layers)} rust=${JSON.stringify(rust.snap?.layers)}`,
+    );
+    compareDmx('deck step: released parity', node.snap, rust.snap);
+    both({ type: 'release', layerId: 'layer-strobe', col: 1 }); // the late note-off
+    await settle(node, rust);
+
+    // Put the show back: this block moved to another deck, and everything after
+    // it assumes the original page.
+    both({ type: 'updateProject', project: before });
+    await settle(node, rust);
+  }
 
   // --- GDTF import parity: Node renders via WASM, Rust natively — same file,
   // --- same bytes required.
@@ -470,7 +570,8 @@ async function main(): Promise<void> {
   await sleep(300);
   check(
     'no output universes remain enabled after import',
-    (await currentProject(node)).universes.every((u) => !u.artnet && !u.sacn),
+    (await currentProject(nodeObs)).universes.every((u) => !u.artnet && !u.sacn) &&
+      (await currentProject(rustObs)).universes.every((u) => !u.artnet && !u.sacn),
     'artnet leaked on'
   );
 

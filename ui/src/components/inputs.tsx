@@ -193,3 +193,50 @@ export function ScrubNumInput({ value, scrubStep, decimals, width, title, onSet,
     />
   );
 }
+
+/** A text field whose contents will not be replaced underneath you mid-word.
+ *
+ *  The store holds the WHOLE project, and a project echo replaces it wholesale,
+ *  so an input bound straight to store state loses characters while you type.
+ *  The engines no longer echo an updateProject back to its own sender, which
+ *  removes the common case, but a second window, a mapped MIDI control or OSC
+ *  can still dirty the project mid-edit. Same guard ScrubNumInput uses: hold a
+ *  local draft while focused, re-sync on blur. */
+export function TextField({ value, onCommit, className, style, title, entityId }: {
+  value: string;
+  onCommit: (v: string) => void;
+  className?: string;
+  style?: React.CSSProperties;
+  title?: string;
+  /** identity of the thing being edited. The focus guard below deliberately
+   *  ignores incoming values while you type — which is right for an echo, and
+   *  wrong when the field now points at a DIFFERENT look or universe (a deck
+   *  switch under a focused name field). Changing this forces a resync, so the
+   *  next keystroke cannot rename the new entity to the old one's half-typed
+   *  name. */
+  entityId?: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  const ref = React.useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (document.activeElement !== ref.current) setDraft(value);
+  }, [value]);
+  useEffect(() => {
+    setDraft(value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entityId]);
+  return (
+    <input
+      ref={ref}
+      className={className}
+      style={style}
+      title={title}
+      value={draft}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        onCommit(e.target.value);
+      }}
+      onBlur={() => setDraft(value)}
+    />
+  );
+}

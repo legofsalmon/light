@@ -312,3 +312,35 @@ fn artnet_loopback() {
     assert_eq!(u16::from_be_bytes([pkt[16], pkt[17]]), 512);
     assert_eq!(pkt[18 + 20], 255, "channel 21 par1 red");
 }
+
+/// The active song has to survive the round trip in the spelling the UI reads.
+/// It did not: `Project` was the one struct without `rename_all`, so the
+/// shipping engine wrote `active_deck_id` while the UI, shared/types.ts and the
+/// Node engine all looked for `activeDeckId` — no deck chip ever lit and the
+/// prev/next song controls navigated from index 0 whatever was playing.
+#[test]
+fn active_deck_id_crosses_the_wire_as_camel_case() {
+    let mut p = demo_project();
+    p.active_deck_id = Some("deck-14".into());
+    let json = serde_json::to_string(&p).unwrap();
+    assert!(json.contains("\"activeDeckId\":\"deck-14\""), "must write camelCase");
+    assert!(!json.contains("active_deck_id"), "must not write snake_case");
+
+    // and it reads back
+    let back: light_core::types::Project = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.active_deck_id.as_deref(), Some("deck-14"));
+}
+
+/// Shows saved by an earlier build carry the snake_case spelling. Loading one
+/// must keep its active deck rather than silently resetting to the first song.
+#[test]
+fn legacy_snake_case_active_deck_still_loads() {
+    let mut p = demo_project();
+    p.active_deck_id = Some("deck-7".into());
+    let json = serde_json::to_string(&p).unwrap();
+    let legacy = json.replace("\"activeDeckId\"", "\"active_deck_id\"");
+    assert!(legacy.contains("active_deck_id"));
+
+    let back: light_core::types::Project = serde_json::from_str(&legacy).unwrap();
+    assert_eq!(back.active_deck_id.as_deref(), Some("deck-7"), "legacy spelling must migrate");
+}

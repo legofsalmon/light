@@ -14,7 +14,7 @@
     "app:build": "bash scripts/build-app.sh",
     "previz": "cargo run --release -p light-previz",
     "test": "node engine/test/smoke.ts",
-    "test:parity": "node engine/test/diff.ts",
+    "test:parity": "cargo build -p light-core --bins && node engine/test/diff.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p ui/tsconfig.json --noEmit",
     "app:build:native": "LIGHT_TARGET=aarch64-apple-darwin bash scripts/build-app.sh"
   },

@@ -193,8 +193,16 @@ osc.listen(state.project.sync.oscPort, state.project.sync.oscEnabled);
  *  broadcast is the WHOLE project, so a fader ride used to flood every client
  *  with hundreds of full-project frames. Coalesce to at most one per tick. */
 let projectDirty = false;
+/** The sole client whose edits made the project dirty, or null when more than
+ *  one source contributed (a controller, OSC, a second window) and so nobody
+ *  can be skipped. Mirrors EchoTo in core/src/engine.rs. */
+let echoSkip: unknown = null;
+/** The socket whose command we are inside, if any. */
+let currentCommandWs: unknown = null;
 
 state.onChange = () => {
+  if (!projectDirty) echoSkip = currentCommandWs;
+  else if (echoSkip !== currentCommandWs) echoSkip = null;
   projectDirty = true;
   persist.saveProjectDebounced(() => state.project);
   osc.listen(state.project.sync.oscPort, state.project.sync.oscEnabled);
@@ -211,7 +219,8 @@ function flushProject(): void {
   if (now - lastEcho < 100) return;
   projectDirty = false;
   lastEcho = now;
-  server.broadcast({ type: 'project', project: state.project });
+  server.broadcastExcept(echoSkip, { type: 'project', project: state.project });
+  echoSkip = null;
 }
 
 server.onConnect = (ws) => {
@@ -235,6 +244,19 @@ state.onLearned = (mapping) => {
 };
 
 function handleCommand(cmd: Command, _ws?: unknown, clientId: number = LOCAL_CLIENT): void {
+  // Only an updateProject echo may be withheld from its sender: that client
+  // composed the exact state. Any other command can change the project in ways
+  // the sender did not compute (an import adding fixtures, sanitize repairing
+  // one), and the sender needs that result like everyone else.
+  currentCommandWs = cmd.type === 'updateProject' ? (_ws ?? null) : null;
+  try {
+    handleCommandInner(cmd, clientId);
+  } finally {
+    currentCommandWs = null;
+  }
+}
+
+function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void {
   switch (cmd.type) {
     case 'hello':
       break; // project already sent on connect
