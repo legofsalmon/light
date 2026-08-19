@@ -252,6 +252,9 @@ export type CompiledProfile = {
   channels: { offsets: number[]; head: number; name: string; default: number; cases: unknown[] }[];
   beamDeg: number;
   virtualDimmer: boolean;
+  /** who authored the fixture definition — carried so the credit travels with
+   *  the project, which is what GDTF Share's terms ask for. */
+  credit?: string;
 };
 
 export type Project = {

@@ -345,3 +345,24 @@ fn legacy_snake_case_active_deck_still_loads() {
     let back: light_core::types::Project = serde_json::from_str(&legacy).unwrap();
     assert_eq!(back.active_deck_id.as_deref(), Some("deck-7"), "legacy spelling must migrate");
 }
+
+/// The fixture library has a home now. ROADMAP has promised this path since
+/// v0.4 and nothing ever created it, so a downloaded .gdtf had nowhere to go.
+#[test]
+fn fixture_library_sits_beside_the_projects() {
+    // env override wins, like the project dir
+    std::env::set_var("LIGHT_FIXTURE_DIR", "/tmp/light-fixtures-test");
+    assert_eq!(
+        light_core::persist::fixture_dir(),
+        std::path::PathBuf::from("/tmp/light-fixtures-test")
+    );
+    std::env::remove_var("LIGHT_FIXTURE_DIR");
+
+    // otherwise it is a sibling of the projects directory, never inside it —
+    // a library belongs to the machine, not to one show
+    std::env::set_var("LIGHT_PROJECT_DIR", "/tmp/light-x/projects");
+    let d = light_core::persist::fixture_dir();
+    assert_eq!(d, std::path::PathBuf::from("/tmp/light-x/fixtures"));
+    assert!(!d.starts_with("/tmp/light-x/projects"));
+    std::env::remove_var("LIGHT_PROJECT_DIR");
+}

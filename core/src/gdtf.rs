@@ -66,6 +66,10 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
         .ok_or("no FixtureType element")?;
     let manufacturer = ft.attribute("Manufacturer").unwrap_or("Unknown").to_string();
     let model = ft.attribute("Name").unwrap_or("Imported fixture").to_string();
+    // A GDTF FixtureType carries no author attribute, so a hand-imported file
+    // has no credit to record. The Share download path knows the uploader and
+    // sets it there — see CompiledProfile::credit.
+    let credit: Option<String> = None;
 
     // wheels (for Color1 etc.)
     let wheels: Vec<WheelDef> = ft
@@ -283,6 +287,7 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             channels,
             beam_deg,
             virtual_dimmer: !has_dimmer,
+            credit: credit.clone(),
         });
     }
     if out.is_empty() {

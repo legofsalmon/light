@@ -116,6 +116,16 @@ pub struct CompiledProfile {
     pub beam_deg: f64,
     /// no dimmer channel exists: fold intensity into colour/white sources
     pub virtual_dimmer: bool,
+    /// Who authored the fixture definition this was compiled from.
+    ///
+    /// GDTF Share's terms require that "our status (and that of any identified
+    /// contributors) as the authors of material on our Website must always be
+    /// acknowledged", and a compiled profile travels inside the project file to
+    /// wherever the show goes. Carrying the credit with it is the one licence
+    /// condition we can satisfy unilaterally. Absent on the built-in profiles,
+    /// which nobody else wrote.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credit: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -301,6 +311,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         heads: vec![CHead { kind: HeadKind::Derby, offset: 0.0, label: "Derby".into() }],
         beam_deg: 5.0,
         virtual_dimmer: false,
+        credit: None,
         channels: vec![
             CChannel {
                 offsets: vec![0],
@@ -398,6 +409,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         channels: kam_channels,
         beam_deg: 15.0,
         virtual_dimmer: false,
+        credit: None,
     });
 
     // Generic hazer — 2CH
@@ -414,6 +426,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         ],
         beam_deg: 0.0,
         virtual_dimmer: false,
+        credit: None,
     });
 
     // Generic dimmer — 1CH
@@ -427,6 +440,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         channels: vec![lin(0, 0, "Dimmer", Source::Dimmer, 0, 255)],
         beam_deg: 25.0,
         virtual_dimmer: false,
+        credit: None,
     });
 
     // Generic RGB par — 3CH (virtual dimmer)
@@ -444,6 +458,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         ],
         beam_deg: 20.0,
         virtual_dimmer: true,
+        credit: None,
     });
 
     // Generic RGBW par — 4CH (virtual dimmer)
@@ -462,6 +477,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         ],
         beam_deg: 20.0,
         virtual_dimmer: true,
+        credit: None,
     });
 
     // Generic moving head RGBW — 10CH, 16-bit position
@@ -484,6 +500,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         ],
         beam_deg: 12.0,
         virtual_dimmer: false,
+        credit: None,
     });
 
     out

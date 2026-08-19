@@ -4,6 +4,11 @@ import type { Project } from '../shared/types.ts';
 import { sanitizeProject } from '../shared/types.ts';
 
 const DIR = process.env.LIGHT_PROJECT_DIR ?? path.join(process.cwd(), 'projects');
+/** Where downloaded and hand-imported .gdtf files live — beside the projects,
+ *  because a fixture library belongs to the machine rather than to one show.
+ *  Mirrors persist::fixture_dir() in core/src/persist.rs. */
+export const FIXTURE_DIR =
+  process.env.LIGHT_FIXTURE_DIR ?? path.join(path.dirname(DIR), 'fixtures');
 const BACKUPS = 5;
 const CURRENT = path.join(DIR, '.current');
 

@@ -45,6 +45,22 @@ pub fn project_dir() -> PathBuf {
         .join("projects")
 }
 
+/// Where downloaded and hand-imported `.gdtf` files live.
+///
+/// Beside the projects rather than inside one: a fixture library is a property
+/// of the machine, not of a show, and the same Robin Spiider serves every
+/// project on it. ROADMAP.md has promised this path since v0.4 and nothing ever
+/// created it.
+pub fn fixture_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("LIGHT_FIXTURE_DIR") {
+        return PathBuf::from(dir);
+    }
+    let projects = project_dir();
+    // dev checkout keeps it repo-local next to ./projects; the app puts it
+    // beside the projects directory in Application Support
+    projects.parent().map_or_else(|| PathBuf::from("fixtures"), |p| p.join("fixtures"))
+}
+
 pub fn project_path(dir: &PathBuf) -> PathBuf {
     file_for(dir, &current_slug(dir))
 }
