@@ -27,6 +27,7 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
   return (
     <div
       className={`cell ${look ? '' : 'empty'} ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${armed ? 'learn-armed' : ''}`}
+      title={look ? `${look.name} — click to fire` : undefined}
       onPointerDown={(e) => {
         setSel({ layerId: layer.id, col });
         if (e.button !== 0) return; // right/middle-click must never latch a flash look
@@ -55,7 +56,22 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
             ))}
           </div>
           {look.flash && <div className="flashmark">FLASH</div>}
-          <div className="cellname">{look.steps?.length ? '⛓ ' : ''}{look.name}</div>
+          {/* Two targets in one pad, like a Resolume clip: the body fires the
+              look, the name selects it for editing without firing. Selecting
+              has to be possible mid-show without putting the look on stage —
+              previously the only way to open a look in the editor was to run
+              it, which is not a thing you can do during someone else's song. */}
+          <div
+            className="cellname"
+            title={`${look.name} — click to select (does not fire)`}
+            onPointerDown={(e) => {
+              e.stopPropagation(); // the cell body below must not fire it
+              setSel({ layerId: layer.id, col });
+            }}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
+            {look.steps?.length ? '⛓ ' : ''}{look.name}
+          </div>
           {fading && <div className="fadebar" style={{ width: `${(live?.t ?? 0) * 100}%` }} />}
         </>
       )}

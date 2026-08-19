@@ -327,6 +327,11 @@ select.sel { cursor: pointer; }
 .cell.selected { border-color: var(--text-dim); }
 .cell.active { border-color: var(--accent); background: var(--accent-soft); }
 .cell.active .cellname { color: #fff; }
+/* The name is its own control, the way a Resolume clip name is: clicking it
+   selects the look for editing and previewing WITHOUT firing it. Everything
+   above it fires. Stretched to the cell edges (negative margins cancel the
+   cell's padding) so the whole bottom strip is the target rather than just the
+   glyphs — a 10px line of text is not a hit area you can find in the dark. */
 .cell .cellname {
   font-size: 10px;
   color: var(--text);
@@ -334,7 +339,20 @@ select.sel { cursor: pointer; }
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: 0.03em;
+  /* Kept deliberately shallow: every pixel here is a pixel the trigger area
+     does not have, and firing a cue is the thing you do in a hurry. */
+  font-size: 9.5px;
+  line-height: 1.15;
+  margin: 0 -6px -4px;
+  padding: 1px 6px 2px;
+  border-radius: 0 0 2px 2px;
 }
+.cell .cellname:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+}
+/* the selected look reads as selected even when another one is playing */
+.cell.selected .cellname { background: rgba(255, 255, 255, 0.06); }
 .cell .swatch {
   position: absolute;
   top: 0;
