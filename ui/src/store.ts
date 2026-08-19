@@ -36,6 +36,9 @@ type Store = {
   hazeViz: number;
   /** dummy band figures in the 3D previz views */
   showBand: boolean;
+  /** Metre grid and dimension labels in the previz — off by default so the
+   *  view stays clean during a show, on while you are building a stage. */
+  showMeasure: boolean;
   learnMode: boolean;
   learnTarget: MidiAction | null;
   /** derived display list: the engine's ports when it owns MIDI, else the browser's */
@@ -70,6 +73,7 @@ type Store = {
   setFxSel: (ids: string[]) => void;
   setHazeViz: (v: number) => void;
   setShowBand: (v: boolean) => void;
+  setShowMeasure: (v: boolean) => void;
   toggleLearnMode: () => void;
   /** In learn mode, a click on a mappable control arms it as the learn target. */
   armLearn: (a: MidiAction) => boolean;
@@ -214,6 +218,7 @@ export const useStore = create<Store>()((set, get) => ({
   fxSel: [],
   hazeViz: 0.7,
   showBand: true,
+  showMeasure: false,
   learnMode: false,
   learnTarget: null,
   midiInputs: [],
@@ -302,6 +307,7 @@ export const useStore = create<Store>()((set, get) => ({
   setFxSel: (fxSel) => set({ fxSel }),
   setHazeViz: (hazeViz) => set({ hazeViz }),
   setShowBand: (showBand) => set({ showBand }),
+  setShowMeasure: (showMeasure) => set({ showMeasure }),
   toggleLearnMode: () =>
     set((s) => {
       if (s.learnMode) get().send({ type: 'learn', action: null });

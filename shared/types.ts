@@ -41,7 +41,27 @@ export type Fixture = {
 
 export type HeadRef = { fixtureId: string; head: number };
 
-export type StagePropKind = 'vocalist' | 'guitarist' | 'bassist' | 'drummer' | 'keyboardist';
+export type StagePropKind =
+  | 'vocalist' | 'guitarist' | 'bassist' | 'drummer' | 'keyboardist'
+  // structure: the stage itself, drawn by hand. A real MVR carries this as
+  // thousands of binary 3DS meshes, which is a different project; these
+  // primitives cover the shapes that actually matter for judging a beam.
+  | 'trussBar' | 'trussLeg' | 'riser' | 'screen';
+
+/** Structural kinds carry dimensions; performers do not. */
+export const STRUCTURE_KINDS: StagePropKind[] = ['trussBar', 'trussLeg', 'riser', 'screen'];
+export const isStructure = (k: string): boolean =>
+  (STRUCTURE_KINDS as string[]).includes(k);
+
+/** Default size and hang height per structural kind, in metres. The truss bar
+ *  matches the fixed goalpost it replaces, so drawing one changes nothing until
+ *  you move it. */
+export const STRUCTURE_DEFAULTS: Record<string, { w: number; h: number; d: number; y: number }> = {
+  trussBar: { w: 7, h: 0.3, d: 0.3, y: 3.05 },
+  trussLeg: { w: 0.3, h: 3.05, d: 0.3, y: 0 },
+  riser: { w: 2, h: 0.4, d: 1.5, y: 0 },
+  screen: { w: 4, h: 2.25, d: 0.12, y: 0.5 },
+};
 /** A dummy performer on the stage — previz-only scenery, placed like a
  *  fixture in the 2D plan, rendered as a figure in both 3D views. */
 export type StageProp = {
@@ -49,6 +69,10 @@ export type StageProp = {
   kind: StagePropKind;
   pos: { x: number; z: number };
   rotY?: number;
+  /** structural kinds only, metres — w across, h tall, d deep (before rotY) */
+  size?: { w: number; h: number; d: number };
+  /** structural kinds only — height of the base off the floor; a truss bar hangs */
+  y?: number;
 };
 export type Group = { id: string; name: string; heads: HeadRef[] };
 

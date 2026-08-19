@@ -84,6 +84,20 @@ pub struct StageProp {
     pub pos: PropPos,
     #[serde(rename = "rotY", default, skip_serializing_if = "Option::is_none")]
     pub rot_y: Option<f64>,
+    /// Structural kinds only (truss, riser, screen), metres. Absent on performers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<PropSize>,
+    /// Structural kinds only — height of the base off the floor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y: Option<f64>,
+}
+
+/// w across, h tall, d deep — before `rot_y` is applied.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PropSize {
+    pub w: f64,
+    pub h: f64,
+    pub d: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

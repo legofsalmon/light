@@ -2,7 +2,12 @@ import React, { useEffect, useRef } from 'react';
 import type { HeadSnap } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
+import { STRUCTURE_DEFAULTS, isStructure } from '../../../shared/types.ts';
 import { askConfirm } from '../dialog.tsx';
+
+const STRUCTURE_LABEL: Record<string, string> = {
+  trussBar: 'truss', trussLeg: 'leg', riser: 'riser', screen: 'screen',
+};
 
 const WORLD_W = 11; // metres shown horizontally (both views)
 // plan: depth axis (z), audience at the bottom
@@ -101,8 +106,9 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       const m = mapping(view);
       const t = performance.now();
 
+      const { showMeasure } = useStore.getState();
       // 1 m grid
-      ctx.strokeStyle = 'rgba(255,255,255,0.045)';
+      ctx.strokeStyle = showMeasure ? 'rgba(255,255,255,0.11)' : 'rgba(255,255,255,0.045)';
       ctx.lineWidth = 1;
       const vTop = view === 'plan' ? PLAN_Z0 : FRONT_Y_TOP - FRONT_H;
       const vBot = view === 'plan' ? PLAN_Z0 + PLAN_D : FRONT_Y_TOP;
@@ -111,6 +117,21 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
         ctx.moveTo(m.toX(gx), m.toY(vTop));
         ctx.lineTo(m.toX(gx), m.toY(vBot));
         ctx.stroke();
+      }
+      if (showMeasure) {
+        // metre numbers down the left and along the bottom: enough to place a
+        // riser by eye without reaching for a tape measure
+        ctx.fillStyle = 'rgba(190,196,210,0.75)';
+        ctx.font = '9px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        for (let gx = -Math.floor(WORLD_W / 2); gx <= WORLD_W / 2; gx++) {
+          if (gx !== 0) ctx.fillText(`${gx}`, m.toX(gx), h - 3);
+        }
+        ctx.textAlign = 'left';
+        for (let gv = Math.ceil(Math.min(vTop, vBot)); gv <= Math.max(vTop, vBot); gv++) {
+          ctx.fillText(`${gv}m`, 3, m.toY(gv) - 2);
+        }
+        ctx.textAlign = 'center';
       }
       for (let gv = Math.ceil(Math.min(vTop, vBot)); gv <= Math.max(vTop, vBot); gv++) {
         ctx.beginPath();
@@ -256,6 +277,33 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
         for (const pr of project.props ?? []) {
           const px = m.toX(pr.pos.x);
           const py = m.toY(pr.pos.z);
+
+          // Structure draws its real footprint — the whole reason to draw a
+          // stage is to see what fits, and a blob tells you nothing about
+          // whether a 7 m truss clears the room.
+          if (isStructure(pr.kind)) {
+            const s = pr.size ?? STRUCTURE_DEFAULTS[pr.kind] ?? { w: 1, h: 1, d: 1 };
+            const w = s.w * m.scale;
+            const d = s.d * m.scale;
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.rotate(pr.rotY ?? 0);
+            ctx.fillStyle = pr.kind === 'screen' ? 'rgba(80,140,200,0.20)' : 'rgba(150,155,170,0.18)';
+            ctx.strokeStyle = pr.kind === 'screen' ? 'rgba(110,170,225,0.85)' : 'rgba(165,170,185,0.85)';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.rect(-w / 2, -d / 2, w, d);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            // dimensions, so you can size it without opening a panel
+            ctx.fillStyle = 'rgba(200,205,220,0.8)';
+            ctx.font = `${Math.max(7, m.scale * 0.1)}px -apple-system, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(`${STRUCTURE_LABEL[pr.kind] ?? pr.kind} ${s.w}×${s.d}m`, px, py - d / 2 - 3);
+            continue;
+          }
+
           const rad = 0.24 * m.scale;
           // shoulders + head silhouette
           ctx.beginPath();
@@ -351,7 +399,14 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
         let bestProp: { id: string; d: number } | null = null;
         for (const pr of project.props ?? []) {
           const d = Math.hypot(pr.pos.x - pos.x, pr.pos.z - pos.v);
-          if (d < 0.35 && (!bestProp || d < bestProp.d)) bestProp = { id: pr.id, d };
+          // structure is grabbed anywhere inside its footprint; a performer
+          // keeps the old fixed radius
+          let reach = 0.35;
+          if (isStructure(pr.kind)) {
+            const s = pr.size ?? STRUCTURE_DEFAULTS[pr.kind] ?? { w: 1, h: 1, d: 1 };
+            reach = Math.max(s.w, s.d) / 2;
+          }
+          if (d < reach && (!bestProp || d < bestProp.d)) bestProp = { id: pr.id, d };
         }
         if (bestProp) {
           const hit = bestProp;
