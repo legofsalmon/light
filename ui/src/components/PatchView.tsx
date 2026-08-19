@@ -16,6 +16,36 @@ import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
  *  for editing, and a table that reorders under a scrub is unusable. */
 type SortKey = 'name' | 'profile' | 'universe' | 'address' | 'channels' | 'rigged';
 
+/** A clickable column header.
+ *
+ *  Module scope, deliberately. Declared inside the component body this is a new
+ *  component TYPE on every render, so React unmounts and replaces the <th> — and
+ *  the table's pointerup (which clears the selection) re-renders between mouse
+ *  down and mouse up, destroying the element the click was going to land on.
+ *  Header clicks then do nothing at all, while a programmatic .click() works
+ *  fine, because that never triggers the re-render. */
+function SortTh({
+  k,
+  sortKey,
+  sortDir,
+  onSort,
+  children,
+  ...rest
+}: {
+  k: SortKey;
+  sortKey: SortKey;
+  sortDir: 'asc' | 'desc';
+  onSort: (k: SortKey) => void;
+  children: React.ReactNode;
+} & React.ThHTMLAttributes<HTMLTableCellElement>) {
+  return (
+    <th {...rest} className="sortable" onClick={() => onSort(k)}>
+      {children}
+      <span className="sortmark">{sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : ''}</span>
+    </th>
+  );
+}
+
 /** true when the pointer event originated inside an editing control */
 function onControl(target: EventTarget | null): boolean {
   return target instanceof Element && !!target.closest('input,select,button,label,option');
@@ -109,6 +139,13 @@ export function PatchView() {
    *  that is the order the rig is addressed in and the order you walk it. */
   const [sortKey, setSortKey] = useState<SortKey>('address');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const onSort = (k: SortKey) => {
+    if (sortKey === k) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else {
+      setSortKey(k);
+      setSortDir('asc');
+    }
+  };
   // Patch order — universe, then address — is the default because it is the
   // order the rig is addressed in and the order a DIP-switch check goes in.
   // Sorting by anything else is for finding things, not for working through
@@ -148,24 +185,6 @@ export function PatchView() {
     return (sortDir === 'asc' ? cmp : -cmp) || patchOrder();
   });
   const sortedFixtures = sorted;
-
-  /** A clickable column header. Clicking the active one flips direction. */
-  const SortTh = ({ k, children, ...rest }: { k: SortKey; children: React.ReactNode } & React.ThHTMLAttributes<HTMLTableCellElement>) => (
-    <th
-      {...rest}
-      className="sortable"
-      onClick={() => {
-        if (sortKey === k) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-        else {
-          setSortKey(k);
-          setSortDir('asc');
-        }
-      }}
-    >
-      {children}
-      <span className="sortmark">{sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : ''}</span>
-    </th>
-  );
 
   // -- fixture selection: click / ⇧-range / ⌘-toggle / drag-marquee, shared
   //    with the 2D previz through the store's fxSel --
@@ -375,13 +394,13 @@ export function PatchView() {
         <table className="tbl">
           <thead>
             <tr>
-              <SortTh k="name">Fixture</SortTh>
-              <SortTh k="profile">Profile</SortTh>
-              <SortTh k="universe">Universe</SortTh>
-              <SortTh k="address">Address</SortTh>
-              <SortTh k="channels">Ch</SortTh>
+              <SortTh k="name" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Fixture</SortTh>
+              <SortTh k="profile" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Profile</SortTh>
+              <SortTh k="universe" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Universe</SortTh>
+              <SortTh k="address" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Address</SortTh>
+              <SortTh k="channels" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Ch</SortTh>
               <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th>Tilt°</th><th>Roll°</th>
-              <SortTh k="rigged" title="rigged on a stage structure — X/Y/Z above stay in room coordinates">
+              <SortTh k="rigged" sortKey={sortKey} sortDir={sortDir} onSort={onSort} title="rigged on a stage structure — X/Y/Z above stay in room coordinates">
                 Rigged on
               </SortTh>
               {anyPan && <th title="base pan aim — a look's pan moves relative to this">Pan %</th>}
