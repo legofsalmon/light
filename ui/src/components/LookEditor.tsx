@@ -42,20 +42,40 @@ function groupKinds(project: Project, groupId: string): Set<HeadKind> {
   return kinds;
 }
 
+/** Can anything in this group actually move?
+ *
+ *  NOT the same question as "is a head kind 'mover'". A head kind describes what
+ *  one emitter is, and a fixture can be a moving head whose emitters are pixels:
+ *  a Robin Spiider is exactly that, and its compiled profile is two `rgb` heads
+ *  with a Pan channel wired to `source: "pan"`. Gating the pan/tilt controls on
+ *  the head kind hid them on a fixture that plainly has them, while the patch
+ *  table — which asks this question of the CHANNELS — showed the aim fields
+ *  perfectly. This is that same test. */
+function groupCanAim(project: Project, groupId: string): boolean {
+  const group = project.groups.find((g) => g.id === groupId);
+  if (!group) return false;
+  return group.heads.some((ref) => {
+    const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
+    const meta = fixture ? profileMeta(project, fixture.profileId) : null;
+    return !!meta?.hasPan || !!meta?.hasTilt;
+  });
+}
+
 function Enable({ on, toggle }: { on: boolean; toggle: () => void }) {
   return <div className={`enable ${on ? 'on' : ''}`} onClick={toggle} />;
 }
 
-function EffectRow({ fx, kinds, onEdit, onRemove }: {
+function EffectRow({ fx, kinds, canAim, onEdit, onRemove }: {
   fx: Effect;
   kinds: Set<HeadKind>;
+  canAim: boolean;
   onEdit: (fn: (e: Effect) => void) => void;
   onRemove: () => void;
 }) {
   const targets: EffectTarget[] = ['dimmer'];
   if (kinds.has('rgb') || kinds.has('derby') || kinds.has('mover')) targets.push('hue', 'strobe');
   if (kinds.has('derby')) targets.push('white');
-  if (kinds.has('mover')) targets.push('pan', 'tilt');
+  if (canAim) targets.push('pan', 'tilt');
 
   return (
     <div className="fxrow">
@@ -93,6 +113,7 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
   const project = useStore((s) => s.project)!;
   const mutate = useStore((s) => s.mutate);
   const kinds = groupKinds(project, part.groupId);
+  const canAim = groupCanAim(project, part.groupId);
 
   const edit = (fn: (pt: LookPart) => void) =>
     mutate((p) => {
@@ -253,7 +274,7 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
           </div>
         )}
 
-        {kinds.has('mover') && (
+        {canAim && (
           <div className="paramrow">
             <Enable on={prm.pan !== undefined || prm.tilt !== undefined} toggle={() => edit((pt) => {
               if (pt.params.pan === undefined) {
@@ -296,6 +317,7 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
             key={fx.id}
             fx={fx}
             kinds={kinds}
+            canAim={canAim}
             onEdit={(fn) => edit((pt) => {
               const e = pt.effects.find((x) => x.id === fx.id);
               if (e) fn(e);
