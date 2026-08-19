@@ -5,6 +5,7 @@ import { PROFILES } from '../../../shared/profiles.ts';
 import { allProfileMetas, profileMeta } from '../profileInfo.ts';
 import { createGroupFromSelection } from '../selection.ts';
 import { ScrubNumInput } from './inputs.tsx';
+import { ShareFixtures } from './ShareFixtures.tsx';
 import { useStore } from '../store.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
 import type { StageProp } from '../../../shared/types.ts';
@@ -883,6 +884,7 @@ export function PatchView() {
       </div>
 
       <StageTable />
+      <ShareFixtures />
     </div>
   );
 }

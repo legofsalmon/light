@@ -137,6 +137,27 @@ fn main() {
     let tx_for_exit = Arc::clone(&engine_tx);
 
     let app = tauri::Builder::default()
+        // GDTF Share. Everything here is prep-room work that talks to the
+        // internet, so it lives in the shell and never touches the engine.
+        .manage(match share::ShareSession::new() {
+            Ok(s) => s,
+            Err(e) => {
+                log_line(&format!("GDTF Share unavailable: {e}"));
+                // A broken HTTP client must not stop the console opening — the
+                // show does not depend on it.
+                share::ShareSession::disabled()
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            share::share_status,
+            share::share_login,
+            share::share_login_saved,
+            share::share_forget,
+            share::share_saved_user,
+            share::share_refresh,
+            share::share_catalogue,
+            share::share_download,
+        ])
         .setup(move |app| {
             // The bundled UI is served over HTTP by the engine as well as
             // loaded in the window, so a phone or tablet on the same network

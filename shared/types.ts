@@ -242,6 +242,10 @@ export type Settings = {
 /** Imported (GDTF-compiled) fixture profile — pure data, interpreted by the
  *  Rust core natively and by the Node engine via the shared WASM build.
  *  The UI only reads metadata (heads/footprint/channel names). */
+// GDTF Share catalogue types live in gdtfShare.ts with the matching logic;
+// re-exported here so UI code has one import for "the shapes on the wire".
+export type { ShareEntry, ShareList, ShareMatch, MissingFixture } from './gdtfShare.ts';
+
 export type CompiledProfile = {
   id: string;
   manufacturer: string;

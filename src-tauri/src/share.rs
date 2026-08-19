@@ -27,7 +27,7 @@ const KEYCHAIN_SERVICE: &str = "ie.letissier.light.gdtf-share";
 /// token and no locally-checkable expiry, so the only way to discover that the
 /// two hours elapsed is to get a 401 back and log in again.
 pub struct ShareSession {
-    client: reqwest::Client,
+    client: Option<reqwest::Client>,
     user: Mutex<Option<String>>,
 }
 
@@ -40,7 +40,18 @@ impl ShareSession {
             .timeout(std::time::Duration::from_secs(120))
             .build()
             .map_err(|e| format!("cannot start an HTTP client: {e}"))?;
-        Ok(ShareSession { client, user: Mutex::new(None) })
+        Ok(ShareSession { client: Some(client), user: Mutex::new(None) })
+    }
+
+    /// A session that cannot reach the network. Used when the HTTP client
+    /// fails to build: the console must still open, because none of this is
+    /// load-bearing for running a show.
+    pub fn disabled() -> Self {
+        ShareSession { client: None, user: Mutex::new(None) }
+    }
+
+    fn client(&self) -> Result<&reqwest::Client, String> {
+        self.client.as_ref().ok_or_else(|| "GDTF Share is unavailable in this build".to_string())
     }
 
     pub fn user(&self) -> Option<String> {
@@ -50,7 +61,7 @@ impl ShareSession {
     /// POST login.php. On success the cookie jar carries the session.
     pub async fn login(&self, user: &str, password: &str) -> Result<(), String> {
         let resp = self
-            .client
+            .client()?
             .post(format!("{BASE}/login.php"))
             .form(&[("user", user), ("password", password)])
             .send()
@@ -77,7 +88,7 @@ impl ShareSession {
     /// and no incremental fetch, so this is expensive and must stay manual.
     pub async fn list(&self) -> Result<String, String> {
         let resp = self
-            .client
+            .client()?
             .get(format!("{BASE}/getList.php"))
             .send()
             .await
@@ -100,7 +111,7 @@ impl ShareSession {
     /// better integrity check than a header we are not given.
     pub async fn download(&self, rid: u64) -> Result<Vec<u8>, String> {
         let resp = self
-            .client
+            .client()?
             // rid is a u64, so there is nothing here to escape and no need to
             // pull reqwest's query feature for it
             .get(format!("{BASE}/downloadFile.php?rid={rid}"))
@@ -145,7 +156,7 @@ fn share_error(body: &str) -> Option<String> {
 // broadcasts the whole Project to every connected client, so a password stored
 // there would be handed to a tablet on the venue WiFi.
 
-pub fn remember(user: &str, password: &str) -> Result<(), String> {
+pub fn remember_password(user: &str, password: &str) -> Result<(), String> {
     keyring::Entry::new(KEYCHAIN_SERVICE, user)
         .and_then(|e| e.set_password(password))
         .map_err(|e| format!("cannot save to the Keychain: {e}"))
@@ -281,4 +292,135 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Tauri commands — the only surface the UI sees.
+//
+// Everything above is deliberately free of Tauri types so it can be unit tested
+// without an app. These are the thin wrappers that give the webview access.
+
+use tauri::State;
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareStatus {
+    /// signed-in user for this run, if any
+    pub user: Option<String>,
+    /// how many fixtures the cached catalogue holds (0 = never fetched)
+    pub cached: usize,
+    /// unix seconds the cache was written, if it exists
+    pub cached_at: Option<u64>,
+}
+
+fn fixture_dir() -> PathBuf {
+    light_core::persist::fixture_dir()
+}
+
+#[tauri::command]
+pub fn share_status(session: State<'_, ShareSession>) -> ShareStatus {
+    let dir = fixture_dir();
+    let cached = read_cache(&dir)
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v.get("list").and_then(|l| l.as_array()).map(|a| a.len()))
+        .unwrap_or(0);
+    let cached_at = std::fs::metadata(cache_path(&dir))
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs());
+    ShareStatus { user: session.user(), cached, cached_at }
+}
+
+#[tauri::command]
+pub async fn share_login(
+    session: State<'_, ShareSession>,
+    user: String,
+    password: String,
+    remember: bool,
+) -> Result<(), String> {
+    session.login(&user, &password).await?;
+    // only after the credentials are known to work — storing a wrong password
+    // that then fails silently every launch is worse than not storing one
+    if remember {
+        remember_user(&user)?;
+        remember_password(&user, &password)?;
+    }
+    Ok(())
+}
+
+/// Sign in with what the Keychain holds, so "remember me" survives a restart.
+#[tauri::command]
+pub async fn share_login_saved(session: State<'_, ShareSession>) -> Result<String, String> {
+    let user = saved_user().ok_or("no saved GDTF Share sign-in")?;
+    let password = recall(&user).ok_or("the saved sign-in is no longer in the Keychain")?;
+    session.login(&user, &password).await?;
+    Ok(user)
+}
+
+#[tauri::command]
+pub fn share_forget() -> Result<(), String> {
+    if let Some(user) = saved_user() {
+        forget(&user)?;
+    }
+    let _ = std::fs::remove_file(fixture_dir().join("share-user"));
+    Ok(())
+}
+
+#[tauri::command]
+pub fn share_saved_user() -> Option<String> {
+    saved_user()
+}
+
+/// Pull the whole catalogue. Explicit action only — 6.4 MB, no delta sync.
+#[tauri::command]
+pub async fn share_refresh(session: State<'_, ShareSession>) -> Result<usize, String> {
+    let body = session.list().await?;
+    write_cache(&fixture_dir(), &body)
+}
+
+#[tauri::command]
+pub fn share_catalogue() -> Option<String> {
+    read_cache(&fixture_dir())
+}
+
+/// Download one fixture and hand it back base64, ready for `importGdtf`.
+///
+/// It is also written into the fixture library, so the same fixture is not
+/// pulled twice and so the library is browsable outside the app.
+#[tauri::command]
+pub async fn share_download(
+    session: State<'_, ShareSession>,
+    rid: u64,
+    name: String,
+) -> Result<String, String> {
+    let bytes = session.download(rid).await?;
+    let dir = fixture_dir();
+    if std::fs::create_dir_all(&dir).is_ok() {
+        let safe: String = name
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .collect();
+        let _ = std::fs::write(dir.join(format!("{safe}-{rid}.gdtf")), &bytes);
+    }
+    Ok(base64_encode(&bytes))
+}
+
+/// The username sits beside the fixture library; only the PASSWORD is a secret.
+/// Keeping it out of the Keychain means "which account is this?" can be
+/// answered without prompting for Keychain access on every launch.
+fn user_path() -> PathBuf {
+    fixture_dir().join("share-user")
+}
+
+fn saved_user() -> Option<String> {
+    let s = std::fs::read_to_string(user_path()).ok()?;
+    let s = s.trim();
+    if s.is_empty() { None } else { Some(s.to_string()) }
+}
+
+fn remember_user(user: &str) -> Result<(), String> {
+    let dir = fixture_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {dir:?}: {e}"))?;
+    std::fs::write(user_path(), user).map_err(|e| format!("cannot save the username: {e}"))
 }
