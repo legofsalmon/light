@@ -419,3 +419,34 @@ fn an_imported_profile_keeps_the_credit_it_was_given() {
         assert_eq!(st.project.profiles.get(id).unwrap().credit, None);
     }
 }
+
+/// The tick thread must never parse an import.
+///
+/// A real 9.4 MB festival MVR takes 32 ms to parse — two frames of DMX not
+/// sent, with fixtures holding their last value — and ROADMAP forbids exactly
+/// that. This asserts the split is real: applying an already-parsed result is
+/// cheap, and it is the only half the engine loop runs.
+#[test]
+fn applying_a_parsed_import_is_cheap() {
+    use light_core::state::EngineState;
+    let t0 = 0.0;
+    let mut st = EngineState::new(demo_project(), t0);
+
+    // parse OFF the clock, exactly as the worker does
+    let bytes = include_bytes!("data/synthetic.gdtf");
+    let parsed = light_core::gdtf::parse_gdtf(bytes).expect("fixture parses");
+    let modes = parsed.len();
+
+    let t = std::time::Instant::now();
+    let out = st.apply_gdtf("synthetic.gdtf", Ok(parsed), Some("someone".into()));
+    let ms = t.elapsed().as_secs_f64() * 1000.0;
+
+    let (ok, _msg, ids) = out.import_result.expect("import result");
+    assert!(ok);
+    assert_eq!(ids.len(), modes);
+    // the tick budget is 25 ms; applying should not be close to it
+    assert!(ms < 5.0, "applying a parsed import took {ms:.1} ms — that belongs off the tick");
+    for id in &ids {
+        assert_eq!(st.project.profiles.get(id).unwrap().credit.as_deref(), Some("someone"));
+    }
+}

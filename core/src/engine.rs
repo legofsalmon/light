@@ -25,6 +25,24 @@ pub enum EngineMsg {
     MidiPorts(Vec<String>),
     ClientConnected(ClientId),
     ClientDisconnected(ClientId),
+    /// A fixture archive, already decoded and parsed on a worker.
+    ///
+    /// Parsing an import on the tick thread costs measurably more than a tick:
+    /// a real 9.4 MB festival MVR takes 32 ms to parse, which is two frames of
+    /// DMX not sent while fixtures hold their last value. ROADMAP forbids
+    /// exactly this ("nothing heavy on the tick path… no filesystem,
+    /// network-blocking, or unbounded work. Ever"), so the work happens off the
+    /// thread and only the result — cheap to apply — comes back.
+    GdtfParsed {
+        name: String,
+        credit: Option<String>,
+        result: Result<Vec<crate::cprofile::CompiledProfile>, String>,
+    },
+    MvrParsed {
+        name: String,
+        replace: bool,
+        result: Result<crate::mvr::MvrBundle, String>,
+    },
 }
 
 pub struct EngineConfig {
@@ -522,6 +540,34 @@ fn handle_msg(
     match msg {
         // handled by the drain loop before it reaches here
         EngineMsg::Shutdown => {}
+        // Imports are parsed on a worker and come back as GdtfParsed/MvrParsed.
+        // Intercepted here rather than in state.rs so the tick thread never sees
+        // the archive at all; state.rs keeps its own parse-and-apply arms for
+        // direct callers and tests.
+        EngineMsg::Cmd(Command::ImportGdtf { name, data, credit }, _owner) => {
+            let tx2 = tx.clone();
+            std::thread::spawn(move || {
+                let result = crate::state::base64_decode(&data)
+                    .and_then(|bytes| crate::gdtf::parse_gdtf(&bytes));
+                let _ = tx2.send(EngineMsg::GdtfParsed { name, credit, result });
+            });
+        }
+        EngineMsg::Cmd(Command::ImportMvr { name, data, replace }, _owner) => {
+            let tx2 = tx.clone();
+            std::thread::spawn(move || {
+                let result = crate::state::base64_decode(&data)
+                    .and_then(|bytes| crate::mvr::parse_mvr(&bytes));
+                let _ = tx2.send(EngineMsg::MvrParsed { name, replace, result });
+            });
+        }
+        EngineMsg::GdtfParsed { name, credit, result } => {
+            let out = state.apply_gdtf(&name, result, credit);
+            apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_echo, None);
+        }
+        EngineMsg::MvrParsed { name, replace, result } => {
+            let out = state.apply_mvr_parsed(&name, result, replace, t);
+            apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_echo, None);
+        }
         EngineMsg::Cmd(cmd, owner) => {
             // project FILE commands live here — the state machine has no
             // filesystem access, mirroring the Node reference's split

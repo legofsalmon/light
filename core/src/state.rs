@@ -560,6 +560,62 @@ impl EngineState {
     /// stop it, because the renderer's blackout branch deliberately leaves haze
     /// alone. The fan goes with it — it runs independently of the haze level
     /// and it is the audible one.
+    /// Store profiles a worker has already compiled from a .gdtf.
+    ///
+    /// Cheap: a HashMap insert per DMX mode. The expensive half — base64 decode
+    /// and XML parse — happens off the tick thread.
+    pub fn apply_gdtf(
+        &mut self,
+        name: &str,
+        parsed: Result<Vec<crate::cprofile::CompiledProfile>, String>,
+        credit: Option<String>,
+    ) -> Outcome {
+        let mut out = Outcome::default();
+        match parsed {
+            Ok(profiles) => {
+                let ids: Vec<String> = profiles.iter().map(|p| p.id.clone()).collect();
+                let mut replaced: Vec<String> = Vec::new();
+                for mut p in profiles {
+                    // Attribution travels with the profile into the project
+                    // file — see CompiledProfile::credit.
+                    p.credit = credit.clone();
+                    if let Some(note) = describe_profile_replacement(&self.project, &p) {
+                        replaced.push(note);
+                    }
+                    self.project.profiles.insert(p.id.clone(), p);
+                }
+                out.project_changed = true;
+                let mut msg = format!("{name}: imported {} mode(s)", ids.len());
+                for note in &replaced {
+                    msg.push_str(&format!(" · {note}"));
+                }
+                out.import_result = Some((true, msg, ids));
+            }
+            Err(e) => out.import_result = Some((false, format!("{name}: {e}"), vec![])),
+        }
+        out
+    }
+
+    /// Apply an MVR scene a worker has already parsed.
+    pub fn apply_mvr_parsed(
+        &mut self,
+        name: &str,
+        parsed: Result<crate::mvr::MvrBundle, String>,
+        replace: bool,
+        t: f64,
+    ) -> Outcome {
+        let mut out = Outcome::default();
+        match parsed {
+            Ok(bundle) => {
+                let n = self.apply_mvr(bundle, replace, t);
+                out.project_changed = true;
+                out.import_result = Some((true, format!("{name}: {n}"), vec![]));
+            }
+            Err(e) => out.import_result = Some((false, format!("{name}: {e}"), vec![])),
+        }
+        out
+    }
+
     pub fn replace_project(&mut self, p: Project) {
         self.project = p;
         self.ensure_decks();
@@ -821,44 +877,19 @@ impl EngineState {
                 out.learned = midi_out.learned;
             }
             Command::Learn { action } => self.learn_target = action,
+            // Parse-and-apply, for direct callers and tests. The engine loop
+            // never reaches this: it intercepts the command, parses on a worker
+            // and calls apply_gdtf with the result, because parsing a real MVR
+            // costs two ticks of DMX.
             Command::ImportGdtf { name, data, credit } => {
-                let result = base64_decode(&data).and_then(|bytes| crate::gdtf::parse_gdtf(&bytes));
-                match result {
-                    Ok(profiles) => {
-                        let ids: Vec<String> = profiles.iter().map(|p| p.id.clone()).collect();
-                        let mut replaced: Vec<String> = Vec::new();
-                        for mut p in profiles {
-                            // Attribution travels with the profile into the
-                            // project file, which is the only reason it is
-                            // recorded at all — see CompiledProfile::credit.
-                            p.credit = credit.clone();
-                            if let Some(note) = describe_profile_replacement(&self.project, &p) {
-                                replaced.push(note);
-                            }
-                            self.project.profiles.insert(p.id.clone(), p);
-                        }
-                        out.project_changed = true;
-                        let mut msg = format!("{name}: imported {} mode(s)", ids.len());
-                        for note in &replaced {
-                            msg.push_str(&format!(" · {note}"));
-                        }
-                        out.import_result = Some((true, msg, ids));
-                    }
-                    Err(e) => {
-                        out.import_result = Some((false, format!("{name}: {e}"), vec![]));
-                    }
-                }
+                let parsed =
+                    base64_decode(&data).and_then(|bytes| crate::gdtf::parse_gdtf(&bytes));
+                return self.apply_gdtf(&name, parsed, credit);
             }
             Command::ImportMvr { name, data, replace } => {
-                let result = base64_decode(&data).and_then(|bytes| crate::mvr::parse_mvr(&bytes));
-                match result {
-                    Ok(bundle) => {
-                        let n = self.apply_mvr(bundle, replace, t);
-                        out.project_changed = true;
-                        out.import_result = Some((true, format!("{name}: {n}"), vec![]));
-                    }
-                    Err(e) => out.import_result = Some((false, format!("{name}: {e}"), vec![])),
-                }
+                let parsed =
+                    base64_decode(&data).and_then(|bytes| crate::mvr::parse_mvr(&bytes));
+                return self.apply_mvr_parsed(&name, parsed, replace, t);
             }
             Command::LaunchPreviz => out.launch_previz = true,
             Command::Save => out.save_requested = true,

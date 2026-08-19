@@ -139,3 +139,31 @@ double the required refresh rate.
 2. Run on the reference machine, release profile, mains power.
 3. Add a dated section at the top with the numbers, the load description, and
    a one-line verdict against the budget table.
+
+## MVR import — why it moved off the tick thread
+
+Measured on an M-series Mac, release profile, against a real festival scene
+(`ATN 26 - Mainstage.mvr`, 9.4 MB, 129 fixtures, 12,810 scene objects):
+
+| | |
+|---|---|
+| `parse_mvr` | **32.3 ms** |
+| tick budget | 25 ms |
+| cost if run on the tick thread | **2 frames of DMX not sent** |
+
+That is fixtures holding their last value for ~50 ms, mid-show, because someone
+imported a scene. `ROADMAP.md` forbids it in as many words — "nothing heavy on
+the tick path… no filesystem, network-blocking, or unbounded work. Ever" — and
+`REVIEW-v1.2.2.md` had it recorded as accepted-but-unfixed with no number
+against it. This is the number.
+
+The engine now intercepts `importGdtf`/`importMvr`, parses on a worker, and
+sends the result back as `GdtfParsed`/`MvrParsed`. Only the apply half runs on
+the tick thread, and `applying_a_parsed_import_is_cheap` in `core/tests/smoke.rs`
+holds it under 5 ms.
+
+Reproduce with:
+
+```
+LIGHT_BENCH_MVR=/path/to/scene.mvr cargo run --release -p light-core --bin light-bench
+```
