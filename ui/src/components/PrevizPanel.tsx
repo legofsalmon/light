@@ -19,6 +19,8 @@ export function PrevizPanel() {
   const setShowBand = useStore((s) => s.setShowBand);
   const showMeasure = useStore((s) => s.showMeasure);
   const setShowMeasure = useStore((s) => s.setShowMeasure);
+  const snapToTruss = useStore((s) => s.snapToTruss);
+  const setSnapToTruss = useStore((s) => s.setSnapToTruss);
   const fxSel = useStore((s) => s.fxSel);
   const sel = useStore((s) => s.sel);
   const selName = useStore((s) => {
@@ -73,6 +75,13 @@ export function PrevizPanel() {
         <div className="grow" />
         {mode === '3d' && (
           <>
+            <button
+              className={`btn small ${snapToTruss ? 'on' : 'ghost'}`}
+              title="drag a fixture near a truss bar and it clamps on and rigs there — turn off to place freely"
+              onClick={() => setSnapToTruss(!snapToTruss)}
+            >
+              snap
+            </button>
             <button
               className={`btn small ${showMeasure ? 'on' : 'ghost'}`}
               title="metre grid and dimensions — for placing structure and judging scale"

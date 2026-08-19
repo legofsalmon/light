@@ -42,6 +42,8 @@ type Store = {
   /** Metre grid and dimension labels in the previz — off by default so the
    *  view stays clean during a show, on while you are building a stage. */
   showMeasure: boolean;
+  /** dragging a fixture near a truss bar clamps it on and rigs it there */
+  snapToTruss: boolean;
   learnMode: boolean;
   learnTarget: MidiAction | null;
   /** derived display list: the engine's ports when it owns MIDI, else the browser's */
@@ -78,6 +80,7 @@ type Store = {
   setHazeViz: (v: number) => void;
   setShowBand: (v: boolean) => void;
   setShowMeasure: (v: boolean) => void;
+  setSnapToTruss: (v: boolean) => void;
   toggleLearnMode: () => void;
   /** In learn mode, a click on a mappable control arms it as the learn target. */
   armLearn: (a: MidiAction) => boolean;
@@ -224,6 +227,7 @@ export const useStore = create<Store>()((set, get) => ({
   hazeViz: 0.7,
   showBand: true,
   showMeasure: false,
+  snapToTruss: true,
   learnMode: false,
   learnTarget: null,
   midiInputs: [],
@@ -314,6 +318,7 @@ export const useStore = create<Store>()((set, get) => ({
   setHazeViz: (hazeViz) => set({ hazeViz }),
   setShowBand: (showBand) => set({ showBand }),
   setShowMeasure: (showMeasure) => set({ showMeasure }),
+  setSnapToTruss: (snapToTruss) => set({ snapToTruss }),
   toggleLearnMode: () =>
     set((s) => {
       if (s.learnMode) get().send({ type: 'learn', action: null });

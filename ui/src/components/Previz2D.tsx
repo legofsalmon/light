@@ -2,8 +2,29 @@ import React, { useEffect, useRef } from 'react';
 import type { HeadSnap } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
-import { STRUCTURE_DEFAULTS, isStructure } from '../../../shared/types.ts';
+import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
 import { askConfirm } from '../dialog.tsx';
+
+/** How close a dragged fixture has to come to a bar before it clamps on. */
+const SNAP_M = 0.35;
+
+/** The structure a fixture is close enough to hang from, if any: within SNAP_M
+ *  of the bar's centre line and inside its length. */
+function nearestStructure(
+  f: { pos: { x: number; y: number; z: number } },
+  structs: { id: string; kind: string; pos: { x: number; z: number }; rotY?: number; y?: number; size?: { w: number; h: number; d: number } }[],
+): { st: (typeof structs)[number]; d: number } | null {
+  let best: { st: (typeof structs)[number]; d: number } | null = null;
+  for (const st of structs) {
+    if (st.kind !== 'trussBar') continue; // you hang things off bars, not risers
+    const size = st.size ?? STRUCTURE_DEFAULTS[st.kind] ?? { w: 1, h: 1, d: 1 };
+    const o = offsetOnParent(f, st);
+    if (Math.abs(o.along) > size.w / 2) continue; // past the end of the bar
+    const d = Math.abs(o.across);
+    if (d <= SNAP_M && (!best || d < best.d)) best = { st, d };
+  }
+  return best;
+}
 
 const STRUCTURE_LABEL: Record<string, string> = {
   trussBar: 'truss', trussLeg: 'leg', riser: 'riser', screen: 'screen',
@@ -357,14 +378,37 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       v: number,
       others: { id: string; dx: number; dv: number }[],
     ) => {
-      const view = useStore.getState().previz2dView;
+      const { previz2dView: view, snapToTruss: snapOn } = useStore.getState();
       useStore.getState().mutate((p) => {
+        const structs = snapOn && view === 'plan' ? (p.props ?? []).filter((pr) => isStructure(pr.kind)) : [];
         const place = (fid: string, px: number, pv: number) => {
           const f = p.fixtures.find((fx) => fx.id === fid);
           if (!f) return;
           f.pos.x = Math.round(px * 20) / 20;
           if (view === 'plan') {
             f.pos.z = Math.round(pv * 20) / 20;
+            // Snap: drop a fixture near a bar and it clamps onto it and adopts
+            // it as parent. Only in plan, only within SNAP_M of the bar's line
+            // and inside its length — otherwise you could never place a fixture
+            // in free air near a truss, which is a real thing people do.
+            const hit = nearestStructure(f, structs);
+            if (hit) {
+              const o = offsetOnParent(f, hit.st);
+              const np = posFromOffset({ along: o.along, across: 0, drop: 0 }, hit.st);
+              f.pos.x = Math.round(np.x * 100) / 100;
+              f.pos.z = Math.round(np.z * 100) / 100;
+              f.pos.y = Math.round(np.y * 100) / 100;
+              f.parentId = hit.st.id;
+            } else if (f.parentId && !structs.some((st) => st.id === f.parentId)) {
+              f.parentId = undefined;
+            } else if (f.parentId) {
+              // dragged clear of its bar: let it go
+              const parent = structs.find((st) => st.id === f.parentId);
+              if (parent) {
+                const o = offsetOnParent(f, parent);
+                if (Math.abs(o.across) > SNAP_M) f.parentId = undefined;
+              }
+            }
           } else {
             f.pos.y = Math.round(Math.min(6, Math.max(0, pv)) * 20) / 20;
           }

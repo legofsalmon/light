@@ -630,6 +630,54 @@ export function PatchView() {
           >
             auto-pack addresses
           </button>
+          {structures.length > 0 && (
+            <button
+              className="btn small ghost"
+              title="re-address in rigging order: truss by truss, then left to right along each bar"
+              onClick={() => {
+                void (async () => {
+                  if (
+                    !(await askConfirm('Re-address by truss?', {
+                      body:
+                        'Fixtures are packed per universe in rigging order: truss by truss (upstage first, then left to right), and along each bar left to right. Anything not rigged on a structure keeps its current order and goes last. Your hardware DIP switches must match afterwards.',
+                      confirmLabel: 'Re-address by truss',
+                    }))
+                  )
+                    return;
+                  mutate((p) => {
+                    const structs = (p.props ?? []).filter((pr) => isStructure(pr.kind));
+                    // Trusses read the way you walk the rig: upstage bars first,
+                    // then left to right. Unparented fixtures keep their existing
+                    // order and land after everything that has a home.
+                    const order = [...structs].sort((a, b) => a.pos.z - b.pos.z || a.pos.x - b.pos.x);
+                    const rank = new Map(order.map((st, i) => [st.id, i]));
+                    const alongOf = (f: Project['fixtures'][number]) => {
+                      const parent = structs.find((st) => st.id === f.parentId);
+                      return parent ? offsetOnParent(f, parent).along : 0;
+                    };
+                    for (const u of p.universes) {
+                      let addr = 1;
+                      const inU = p.fixtures
+                        .filter((f) => f.universeId === u.id)
+                        .sort((a, b) => {
+                          const ra = a.parentId ? rank.get(a.parentId) ?? 1e6 : 1e6;
+                          const rb = b.parentId ? rank.get(b.parentId) ?? 1e6 : 1e6;
+                          if (ra !== rb) return ra - rb;
+                          if (ra === 1e6) return a.address - b.address; // unrigged: leave be
+                          return alongOf(a) - alongOf(b);
+                        });
+                      for (const f of inU) {
+                        f.address = addr;
+                        addr += profileMeta(p, f.profileId)?.channels ?? 1;
+                      }
+                    }
+                  });
+                })();
+              }}
+            >
+              auto-address by truss
+            </button>
+          )}
           {fxSel.length > 0 && (
             <>
               <button
