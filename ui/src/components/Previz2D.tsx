@@ -106,7 +106,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       const m = mapping(view);
       const t = performance.now();
 
-      const { showMeasure } = useStore.getState();
+      const { showMeasure, propSel } = useStore.getState();
       // 1 m grid
       ctx.strokeStyle = showMeasure ? 'rgba(255,255,255,0.11)' : 'rgba(255,255,255,0.045)';
       ctx.lineWidth = 1;
@@ -288,9 +288,14 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             ctx.save();
             ctx.translate(px, py);
             ctx.rotate(pr.rotY ?? 0);
-            ctx.fillStyle = pr.kind === 'screen' ? 'rgba(80,140,200,0.20)' : 'rgba(150,155,170,0.18)';
-            ctx.strokeStyle = pr.kind === 'screen' ? 'rgba(110,170,225,0.85)' : 'rgba(165,170,185,0.85)';
-            ctx.lineWidth = 1.2;
+            const selected = propSel.includes(pr.id);
+            ctx.fillStyle = selected
+              ? 'rgba(89,194,232,0.26)'
+              : pr.kind === 'screen' ? 'rgba(80,140,200,0.20)' : 'rgba(150,155,170,0.18)';
+            ctx.strokeStyle = selected
+              ? 'rgba(120,205,245,1)'
+              : pr.kind === 'screen' ? 'rgba(110,170,225,0.85)' : 'rgba(165,170,185,0.85)';
+            ctx.lineWidth = selected ? 2 : 1.2;
             ctx.beginPath();
             ctx.rect(-w / 2, -d / 2, w, d);
             ctx.fill();
@@ -423,6 +428,18 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
               });
             }
             return;
+          }
+          const hitProp = project.props?.find((x) => x.id === hit.id);
+          if (hitProp && isStructure(hitProp.kind)) {
+            const st = useStore.getState();
+            const add = e.shiftKey || e.metaKey || e.ctrlKey;
+            st.setPropSel(
+              add
+                ? st.propSel.includes(hit.id)
+                  ? st.propSel.filter((x) => x !== hit.id)
+                  : [...st.propSel, hit.id]
+                : [hit.id],
+            );
           }
           dragRef.current = { id: hit.id, kind: 'prop', lastSend: 0, x: pos.x, v: pos.v, rot: 0, others: [] };
           try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointers */ }

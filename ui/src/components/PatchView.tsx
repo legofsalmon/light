@@ -6,6 +6,8 @@ import { allProfileMetas, profileMeta } from '../profileInfo.ts';
 import { createGroupFromSelection } from '../selection.ts';
 import { ScrubNumInput } from './inputs.tsx';
 import { useStore } from '../store.ts';
+import { STRUCTURE_DEFAULTS, isStructure } from '../../../shared/types.ts';
+import type { StageProp } from '../../../shared/types.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 
 /** true when the pointer event originated inside an editing control */
@@ -774,6 +776,146 @@ export function PatchView() {
         </button>
         <div className="label" style={{ marginTop: 6 }}>chip order = chase order (first chip runs first)</div>
       </div>
+
+      <StageTable />
     </div>
   );
 }
+
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+/** The hand-drawn stage: truss, legs, risers, screens.
+ *
+ *  Placing by dragging in the plan gets you close; a truss that has to be
+ *  exactly 6 m, or a riser at exactly 0.6 m, needs numbers. Selection is shared
+ *  with the plan through the store, so a row highlights what it refers to. */
+function StageTable() {
+  const project = useStore((s) => s.project)!;
+  const mutate = useStore((s) => s.mutate);
+  const propSel = useStore((s) => s.propSel);
+  const setPropSel = useStore((s) => s.setPropSel);
+  const items = (project.props ?? []).filter((p) => isStructure(p.kind));
+  if (items.length === 0) {
+    return (
+      <div className="patchsec">
+        <div className="sechead">STAGE</div>
+        <div className="label">
+          Nothing drawn yet — add truss, risers or screens from the previz “+ structure…” menu,
+          then drag them into place in the 2D plan.
+        </div>
+      </div>
+    );
+  }
+
+  const edit = (id: string, fn: (p: StageProp) => void) =>
+    mutate((p) => {
+      const target = (p.props ?? []).find((x) => x.id === id);
+      if (target) fn(target);
+    });
+  const sizeOf = (pr: StageProp) =>
+    pr.size ?? STRUCTURE_DEFAULTS[pr.kind] ?? { w: 1, h: 1, d: 1 };
+
+  return (
+    <div className="patchsec">
+      <div className="sechead">STAGE</div>
+      <table className="patchtable">
+        <thead>
+          <tr>
+            <th>PIECE</th><th>X</th><th>Z</th><th>BASE Y</th>
+            <th>WIDTH</th><th>HEIGHT</th><th>DEPTH</th><th>ROT°</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((pr) => {
+            const s = sizeOf(pr);
+            const selected = propSel.includes(pr.id);
+            const num = (
+              value: number, step: number, title: string, set: (v: number) => void,
+            ) => (
+              <ScrubNumInput
+                value={value}
+                scrubStep={step}
+                decimals={2}
+                title={title}
+                onSet={(v) => set(round2(v))}
+                onDelta={(d) => set(round2(value + d))}
+              />
+            );
+            return (
+              <tr
+                key={pr.id}
+                className={selected ? 'sel' : ''}
+                onPointerDown={(e) => {
+                  if (onControl(e.target)) return;
+                  const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+                  setPropSel(
+                    additive
+                      ? propSel.includes(pr.id) ? propSel.filter((x) => x !== pr.id) : [...propSel, pr.id]
+                      : [pr.id],
+                  );
+                }}
+              >
+                <td className="mono">{STRUCTURE_LABEL[pr.kind] ?? pr.kind}</td>
+                <td>{num(pr.pos.x, 0.02, 'across the stage', (v) => edit(pr.id, (x) => { x.pos.x = v; }))}</td>
+                <td>{num(pr.pos.z, 0.02, 'toward the audience', (v) => edit(pr.id, (x) => { x.pos.z = v; }))}</td>
+                <td>{num(pr.y ?? 0, 0.02, 'height of the base off the floor', (v) => edit(pr.id, (x) => { x.y = v; }))}</td>
+                <td>{num(s.w, 0.05, 'width', (v) => edit(pr.id, (x) => { x.size = { ...sizeOf(x), w: Math.max(0.05, v) }; }))}</td>
+                <td>{num(s.h, 0.05, 'height', (v) => edit(pr.id, (x) => { x.size = { ...sizeOf(x), h: Math.max(0.05, v) }; }))}</td>
+                <td>{num(s.d, 0.05, 'depth', (v) => edit(pr.id, (x) => { x.size = { ...sizeOf(x), d: Math.max(0.05, v) }; }))}</td>
+                <td>
+                  <ScrubNumInput
+                    value={Math.round(((pr.rotY ?? 0) * 180) / Math.PI)}
+                    scrubStep={1}
+                    decimals={0}
+                    title="rotation"
+                    onSet={(v) => edit(pr.id, (x) => { x.rotY = (v * Math.PI) / 180; })}
+                    onDelta={(d) => edit(pr.id, (x) => { x.rotY = ((x.rotY ?? 0) + (d * Math.PI) / 180); })}
+                  />
+                </td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <button
+                    className="btn small ghost"
+                    title="duplicate — lands 0.5 m across so it is not hidden underneath"
+                    onClick={() =>
+                      mutate((p) => {
+                        const src = (p.props ?? []).find((x) => x.id === pr.id);
+                        if (!src) return;
+                        p.props ??= [];
+                        p.props.push({
+                          ...structuredClone(src),
+                          id: uid('prop'),
+                          pos: { x: round2(src.pos.x + 0.5), z: src.pos.z },
+                        });
+                      })
+                    }
+                  >
+                    ⧉
+                  </button>
+                  <button
+                    className="btn small ghost"
+                    title="delete"
+                    onClick={() =>
+                      mutate((p) => {
+                        p.props = (p.props ?? []).filter((x) => x.id !== pr.id);
+                        if (p.props.length === 0) delete p.props;
+                      })
+                    }
+                  >
+                    ✕
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="label" style={{ marginTop: 6 }}>
+        drag a row's numbers to scrub · shift-click rows to multi-select · ⧉ duplicates, ✕ deletes
+      </div>
+    </div>
+  );
+}
+
+const STRUCTURE_LABEL: Record<string, string> = {
+  trussBar: 'truss bar', trussLeg: 'truss leg', riser: 'riser', screen: 'screen',
+};

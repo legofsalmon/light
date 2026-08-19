@@ -33,6 +33,9 @@ type Store = {
   previz2dView: 'plan' | 'front';
   /** fixtures selected in the 2D previz (shift-click / marquee) for group building */
   fxSel: string[];
+  /** selected stage structures (truss, risers, screens) — shared between the
+   *  2D plan and the Stage table, the same way fxSel is for fixtures */
+  propSel: string[];
   hazeViz: number;
   /** dummy band figures in the 3D previz views */
   showBand: boolean;
@@ -71,6 +74,7 @@ type Store = {
   setPrevizMode: (m: '3d' | '2d') => void;
   setPreviz2dView: (v: 'plan' | 'front') => void;
   setFxSel: (ids: string[]) => void;
+  setPropSel: (ids: string[]) => void;
   setHazeViz: (v: number) => void;
   setShowBand: (v: boolean) => void;
   setShowMeasure: (v: boolean) => void;
@@ -216,6 +220,7 @@ export const useStore = create<Store>()((set, get) => ({
   previzMode: '3d',
   previz2dView: 'plan',
   fxSel: [],
+  propSel: [],
   hazeViz: 0.7,
   showBand: true,
   showMeasure: false,
@@ -305,6 +310,7 @@ export const useStore = create<Store>()((set, get) => ({
   setPrevizMode: (previzMode) => set({ previzMode }),
   setPreviz2dView: (previz2dView) => set({ previz2dView }),
   setFxSel: (fxSel) => set({ fxSel }),
+  setPropSel: (propSel) => set({ propSel }),
   setHazeViz: (hazeViz) => set({ hazeViz }),
   setShowBand: (showBand) => set({ showBand }),
   setShowMeasure: (showMeasure) => set({ showMeasure }),
