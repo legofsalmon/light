@@ -112,6 +112,12 @@ export function App() {
     return (
       <div className="splash">
         L I G H T
+        {/* Which build is this? Unanswerable from the screen until now, which
+            made "have I actually got the version with the fix?" a question you
+            could only answer by digging in Finder. */}
+        <div className="label" style={{ letterSpacing: '0.18em', opacity: 0.55 }}>
+          v{__APP_VERSION__}
+        </div>
         <div className="dot">{connected ? 'loading project…' : 'connecting to engine…'}</div>
         {stalled && !connected && (
           <div className="label" style={{ maxWidth: 380, textAlign: 'center', lineHeight: 1.6 }}>

@@ -96,13 +96,21 @@ echo "==> dmg"
 # which fails headless (CI) and on a machine without Finder automation rights.
 # A plain hdiutil image with an /Applications symlink is the same install
 # gesture and always builds.
+# The version goes in the FILENAME. A folder of identical "LIGHT.dmg" downloads
+# tells you nothing about which build you are holding, which is exactly the
+# question you want answered when one of them has the fix and one does not.
+VERSION="$(plutil -extract CFBundleShortVersionString raw "$BUNDLE/Contents/Info.plist")"
 DMG_DIR="$(dirname "$BUNDLE")/dmg-stage"
-DMG_OUT="$(dirname "$BUNDLE")/LIGHT.dmg"
-rm -rf "$DMG_DIR" "$DMG_OUT"
+DMG_OUT="$(dirname "$BUNDLE")/LIGHT-${VERSION}.dmg"
+# Stable-name copy, kept only so the landing page's one-click link and any
+# bookmarked URL keep resolving: GitHub's /releases/latest/download/<name>
+# needs an exact filename, and that name cannot carry a version.
+DMG_ALIAS="$(dirname "$BUNDLE")/LIGHT.dmg"
+rm -rf "$DMG_DIR" "$DMG_OUT" "$DMG_ALIAS"
 mkdir -p "$DMG_DIR"
 cp -R "$BUNDLE" "$DMG_DIR/"
 ln -s /Applications "$DMG_DIR/Applications"
-hdiutil create -volname LIGHT -srcfolder "$DMG_DIR" -ov -format UDZO -quiet "$DMG_OUT"
+hdiutil create -volname "LIGHT ${VERSION}" -srcfolder "$DMG_DIR" -ov -format UDZO -quiet "$DMG_OUT"
 rm -rf "$DMG_DIR"
 if [ ${#NOTARY_AUTH[@]} -gt 0 ]; then
   # the .dmg is what people download, so it needs its own ticket — a stapled
@@ -113,7 +121,10 @@ if [ ${#NOTARY_AUTH[@]} -gt 0 ]; then
   xcrun stapler staple "$DMG_OUT"
   xcrun stapler validate "$DMG_OUT"
 fi
+# copy AFTER stapling, so the alias carries the ticket too
+cp "$DMG_OUT" "$DMG_ALIAS"
 echo "dmg: $DMG_OUT"
+echo "dmg (stable-name copy): $DMG_ALIAS"
 
 echo "==> result"
 codesign -dv --verbose=2 "$BUNDLE" 2>&1 | grep -E 'Authority|TeamIdentifier|Signature|flags' || true

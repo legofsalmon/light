@@ -128,7 +128,7 @@ export function TopBar() {
 
   return (
     <div className="topbar panel">
-      <div className="wordmark">
+      <div className="wordmark" title={`LIGHT v${__APP_VERSION__}`}>
         LIGHT<span>■</span>
       </div>
       <ProjectMenu name={project.name} />
