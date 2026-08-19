@@ -58,6 +58,11 @@ pub struct Fixture {
     pub pan: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tilt: Option<f64>,
+    /// Stage structure this fixture is rigged on. `pos` stays in ROOM
+    /// coordinates — the parent link is bookkeeping for the editor, and the
+    /// engine never needs it to render.
+    #[serde(rename = "parentId", default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

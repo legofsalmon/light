@@ -656,6 +656,9 @@ impl EngineState {
                 rot_z: None,
                 pan: None,
                 tilt: None,
+                // MVR carries its own rigging hierarchy; we do not map it onto
+                // hand-drawn structure, so an imported fixture starts unparented.
+                parent_id: None,
             });
         }
         for g in &bundle.groups {

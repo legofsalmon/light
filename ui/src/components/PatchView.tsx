@@ -6,7 +6,7 @@ import { allProfileMetas, profileMeta } from '../profileInfo.ts';
 import { createGroupFromSelection } from '../selection.ts';
 import { ScrubNumInput } from './inputs.tsx';
 import { useStore } from '../store.ts';
-import { STRUCTURE_DEFAULTS, isStructure } from '../../../shared/types.ts';
+import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
 import type { StageProp } from '../../../shared/types.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 
@@ -236,6 +236,22 @@ export function PatchView() {
     });
   const round2 = (v: number) => Math.round(v * 100) / 100;
   const DEG = Math.PI / 180;
+  /** structures available to rig on, in stage order so the list reads L→R */
+  const structures = (project.props ?? [])
+    .filter((pr) => isStructure(pr.kind))
+    .sort((a, b) => a.pos.x - b.pos.x);
+  /** Slide a fixture along its parent, keeping its across/height offsets. */
+  const moveAlongParent = (fid: string, along: number) =>
+    mutate((p) => {
+      const f = p.fixtures.find((y) => y.id === fid);
+      const parent = (p.props ?? []).find((pr) => pr.id === f?.parentId);
+      if (!f || !parent) return;
+      const o = offsetOnParent(f, parent);
+      const np = posFromOffset({ ...o, along }, parent);
+      f.pos.x = round2(np.x);
+      f.pos.y = round2(np.y);
+      f.pos.z = round2(np.z);
+    });
   const setRot = (fid: string, key: 'rotY' | 'rotX' | 'rotZ', deg: number) =>
     eachTarget(fid, (x) => {
       const rad = deg * DEG;
@@ -291,6 +307,7 @@ export function PatchView() {
             <tr>
               <th>Fixture</th><th>Profile</th><th>Universe</th><th>Address</th><th>Ch</th>
               <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th>Tilt°</th><th>Roll°</th>
+              <th title="rigged on a stage structure — X/Y/Z above stay in room coordinates">Rigged on</th>
               {anyPan && <th title="base pan aim — a look's pan moves relative to this">Pan %</th>}
               {anyTilt && <th title="base tilt aim — a look's tilt moves relative to this">Tilt %</th>}
               <th>Live</th><th></th>
@@ -409,6 +426,46 @@ export function PatchView() {
                       onSet={(v) => setRot(f.id, 'rotZ', v)}
                       onDelta={(d) => nudgeRot(f.id, 'rotZ', d)}
                     />
+                  </td>
+                  {/* Rigged on: the parent, and where the fixture sits along it.
+                      Both frames at once — X/Y/Z above stay room coordinates so
+                      nothing about the existing table changes meaning, and the
+                      offset here is derived, so the two can never disagree. */}
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <select
+                      className="sel"
+                      style={{ maxWidth: 110 }}
+                      value={f.parentId ?? ''}
+                      title="rig this fixture on a stage structure — it then travels with it"
+                      onChange={(e) => {
+                        const pid = e.target.value || undefined;
+                        eachTarget(f.id, (x) => { x.parentId = pid; });
+                      }}
+                    >
+                      <option value="">—</option>
+                      {structures.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {STRUCTURE_LABEL[st.kind] ?? st.kind} @ {st.pos.x}
+                        </option>
+                      ))}
+                    </select>
+                    {(() => {
+                      const parent = structures.find((st) => st.id === f.parentId);
+                      if (!parent) return null;
+                      const o = offsetOnParent(f, parent);
+                      return (
+                        <span style={{ marginLeft: 4, display: 'inline-block' }}>
+                          <ScrubNumInput
+                            value={round2(o.along)}
+                            scrubStep={0.02}
+                            decimals={2}
+                            title="metres along the bar from its centre — editing this moves the fixture"
+                            onSet={(v) => moveAlongParent(f.id, v)}
+                            onDelta={(d) => moveAlongParent(f.id, round2(o.along + d))}
+                          />
+                        </span>
+                      );
+                    })()}
                   </td>
                   {anyPan && (
                     <td>

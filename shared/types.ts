@@ -37,7 +37,45 @@ export type Fixture = {
    *  Absent = 0.5 = centre, which is exactly today's behaviour. */
   pan?: number;
   tilt?: number;
+  /** id of the stage structure this fixture is rigged on.
+   *
+   *  `pos` stays in ROOM coordinates — it is the one source of truth, so
+   *  nothing migrates and the patch table never starts lying about where a
+   *  fixture is. The offset along the bar is derived from the parent when it is
+   *  wanted, not stored. Moving or rotating the parent rewrites the children's
+   *  world positions, which is what "it moves with the truss" actually means. */
+  parentId?: string;
 };
+
+/** Where a fixture sits on its parent: along the bar, across it, and above or
+ *  below it — all in metres, in the parent's own rotated frame. Derived, never
+ *  stored. */
+export function offsetOnParent(
+  f: { pos: Vec3 },
+  parent: { pos: { x: number; z: number }; rotY?: number; y?: number },
+): { along: number; across: number; drop: number } {
+  const dx = f.pos.x - parent.pos.x;
+  const dz = f.pos.z - parent.pos.z;
+  const a = -(parent.rotY ?? 0);
+  return {
+    along: dx * Math.cos(a) - dz * Math.sin(a),
+    across: dx * Math.sin(a) + dz * Math.cos(a),
+    drop: f.pos.y - (parent.y ?? 0),
+  };
+}
+
+/** Inverse of offsetOnParent: put a fixture at an offset on its parent. */
+export function posFromOffset(
+  o: { along: number; across: number; drop: number },
+  parent: { pos: { x: number; z: number }; rotY?: number; y?: number },
+): Vec3 {
+  const a = parent.rotY ?? 0;
+  return {
+    x: parent.pos.x + o.along * Math.cos(a) - o.across * Math.sin(a),
+    z: parent.pos.z + o.along * Math.sin(a) + o.across * Math.cos(a),
+    y: (parent.y ?? 0) + o.drop,
+  };
+}
 
 export type HeadRef = { fixtureId: string; head: number };
 

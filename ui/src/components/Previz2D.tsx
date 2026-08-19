@@ -379,8 +379,23 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       useStore.getState().mutate((p) => {
         const pr = (p.props ?? []).find((y) => y.id === id);
         if (!pr) return;
-        pr.pos.x = Math.round(x * 20) / 20;
-        pr.pos.z = Math.round(v * 20) / 20;
+        const nx = Math.round(x * 20) / 20;
+        const nz = Math.round(v * 20) / 20;
+        // Anything rigged on this piece travels with it. Positions are stored in
+        // room coordinates, so "it moves with the truss" means literally moving
+        // the children — which is also why nothing has to migrate and the patch
+        // table never starts showing coordinates in a frame of its own.
+        const dx = nx - pr.pos.x;
+        const dz = nz - pr.pos.z;
+        if (dx || dz) {
+          for (const f of p.fixtures) {
+            if (f.parentId !== pr.id) continue;
+            f.pos.x = Math.round((f.pos.x + dx) * 100) / 100;
+            f.pos.z = Math.round((f.pos.z + dz) * 100) / 100;
+          }
+        }
+        pr.pos.x = nx;
+        pr.pos.z = nz;
       });
     };
 
@@ -433,13 +448,17 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
           if (hitProp && isStructure(hitProp.kind)) {
             const st = useStore.getState();
             const add = e.shiftKey || e.metaKey || e.ctrlKey;
-            st.setPropSel(
-              add
-                ? st.propSel.includes(hit.id)
-                  ? st.propSel.filter((x) => x !== hit.id)
-                  : [...st.propSel, hit.id]
-                : [hit.id],
-            );
+            const nextSel = add
+              ? st.propSel.includes(hit.id)
+                ? st.propSel.filter((x) => x !== hit.id)
+                : [...st.propSel, hit.id]
+              : [hit.id];
+            st.setPropSel(nextSel);
+            // Picking a truss picks what is rigged on it, so every bulk patch
+            // operation that already works on a fixture selection — address,
+            // universe, mute, group — starts working on "everything on that bar".
+            const kids = project.fixtures.filter((fx) => fx.parentId && nextSel.includes(fx.parentId));
+            st.setFxSel(kids.map((fx) => fx.id));
           }
           dragRef.current = { id: hit.id, kind: 'prop', lastSend: 0, x: pos.x, v: pos.v, rot: 0, others: [] };
           try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointers */ }
