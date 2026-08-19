@@ -469,6 +469,9 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
         state.project.profiles ??= {};
         const replacedGdtf: string[] = [];
         for (const p of profiles) {
+          // Attribution travels with the profile into the project file — a GDTF
+          // carries no author attribute, so this can only come from the source.
+          if (cmd.credit) p.credit = cmd.credit;
           const note = describeProfileReplacement(state.project, p);
           if (note) replacedGdtf.push(note);
           state.project.profiles[p.id] = p;

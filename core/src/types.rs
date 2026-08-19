@@ -515,7 +515,14 @@ pub enum Command {
     UpdateProject { project: Box<Project> },
     Midi { status: u8, d1: u8, d2: u8 },
     Learn { action: Option<MidiAction> },
-    ImportGdtf { name: String, data: String },
+    ImportGdtf {
+        name: String,
+        data: String,
+        /// Who authored the definition. A GDTF file carries no author
+        /// attribute, so it can only come from the source of the file.
+        #[serde(default)]
+        credit: Option<String>,
+    },
     ImportMvr { name: String, data: String, replace: bool },
     SwitchDeck { deck_id: String },
     LaunchPreviz,

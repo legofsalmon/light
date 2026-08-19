@@ -821,13 +821,17 @@ impl EngineState {
                 out.learned = midi_out.learned;
             }
             Command::Learn { action } => self.learn_target = action,
-            Command::ImportGdtf { name, data } => {
+            Command::ImportGdtf { name, data, credit } => {
                 let result = base64_decode(&data).and_then(|bytes| crate::gdtf::parse_gdtf(&bytes));
                 match result {
                     Ok(profiles) => {
                         let ids: Vec<String> = profiles.iter().map(|p| p.id.clone()).collect();
                         let mut replaced: Vec<String> = Vec::new();
-                        for p in profiles {
+                        for mut p in profiles {
+                            // Attribution travels with the profile into the
+                            // project file, which is the only reason it is
+                            // recorded at all — see CompiledProfile::credit.
+                            p.credit = credit.clone();
                             if let Some(note) = describe_profile_replacement(&self.project, &p) {
                                 replaced.push(note);
                             }

@@ -36,6 +36,22 @@ fn osc_buf(addr: &str, tags: &str, args: &[f64]) -> Vec<u8> {
     out
 }
 
+
+/// Minimal base64 for feeding fixture archives to the import command.
+fn b64(data: &[u8]) -> String {
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for chunk in data.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+        out.push(A[(n >> 18) as usize & 63] as char);
+        out.push(A[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 { A[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 2 { A[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
 #[test]
 fn osc_parse() {
     let m = parse_osc(&osc_buf("/composition/columns/3/connect", "i", &[1.0]));
@@ -128,19 +144,6 @@ fn merge_to_dmx() {
 fn gdtf_import_end_to_end() {
     use light_core::types::{Fixture, Group, HeadRef, Look, LookPart, PartParams, Vec3};
 
-    fn b64(data: &[u8]) -> String {
-        const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        let mut out = String::new();
-        for chunk in data.chunks(3) {
-            let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
-            let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
-            out.push(A[(n >> 18) as usize & 63] as char);
-            out.push(A[(n >> 12) as usize & 63] as char);
-            out.push(if chunk.len() > 1 { A[(n >> 6) as usize & 63] as char } else { '=' });
-            out.push(if chunk.len() > 2 { A[n as usize & 63] as char } else { '=' });
-        }
-        out
-    }
 
     let t0 = 1000.0;
     let mut st = EngineState::new(demo_project(), t0);
@@ -148,6 +151,7 @@ fn gdtf_import_end_to_end() {
         Command::ImportGdtf {
             name: "synthetic.gdtf".into(),
             data: b64(include_bytes!("data/synthetic.gdtf")),
+            credit: None
         },
         t0,
         None,
@@ -365,4 +369,53 @@ fn fixture_library_sits_beside_the_projects() {
     assert_eq!(d, std::path::PathBuf::from("/tmp/light-x/fixtures"));
     assert!(!d.starts_with("/tmp/light-x/projects"));
     std::env::remove_var("LIGHT_PROJECT_DIR");
+}
+
+
+/// The credit has to reach the compiled profile, because the profile is what
+/// ends up inside a project file that travels to the gig. A GDTF carries no
+/// author attribute, so if the importer drops what the caller supplied there is
+/// nowhere else for it to come from.
+#[test]
+fn an_imported_profile_keeps_the_credit_it_was_given() {
+    use light_core::state::EngineState;
+    use light_core::types::Command;
+    let t0 = 0.0;
+    let mut st = EngineState::new(demo_project(), t0);
+    let out = st.handle_command(
+        Command::ImportGdtf {
+            name: "synthetic.gdtf".into(),
+            data: b64(include_bytes!("data/synthetic.gdtf")),
+            credit: Some("dmueller · manufacturer".into()),
+        },
+        t0,
+        None,
+    );
+    let (ok, _msg, ids) = out.import_result.expect("import result");
+    assert!(ok, "import should succeed");
+    assert!(!ids.is_empty(), "should have produced a profile");
+    for id in &ids {
+        let p = st.project.profiles.get(id).expect("profile stored");
+        assert_eq!(
+            p.credit.as_deref(),
+            Some("dmueller · manufacturer"),
+            "profile {id} lost its credit"
+        );
+    }
+
+    // and a hand-picked file with no known author records nothing rather than
+    // inventing something
+    let out2 = st.handle_command(
+        Command::ImportGdtf {
+            name: "synthetic.gdtf".into(),
+            data: b64(include_bytes!("data/synthetic.gdtf")),
+            credit: None,
+        },
+        t0,
+        None,
+    );
+    let (_ok2, _m2, ids2) = out2.import_result.expect("import result");
+    for id in &ids2 {
+        assert_eq!(st.project.profiles.get(id).unwrap().credit, None);
+    }
 }

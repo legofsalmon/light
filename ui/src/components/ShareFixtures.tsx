@@ -201,7 +201,17 @@ export function ShareFixtures(): React.ReactElement | null {
       const data = await shareDownload(entry);
       // straight into the import path the app already has — no new engine
       // command, no new wire format, no parity risk
-      send({ type: 'importGdtf', name: `${entry.fixture}.gdtf`, data });
+      send({
+        type: 'importGdtf',
+        name: `${entry.fixture}.gdtf`,
+        data,
+        // GDTF Share asks that authors be acknowledged, and a compiled profile
+        // ends up inside a project file that travels to the gig — so the credit
+        // has to travel with it. The catalogue is the only place that knows it.
+        credit: [entry.creator, entry.uploader === 'Manuf.' ? 'manufacturer' : null]
+          .filter(Boolean)
+          .join(' · ') || undefined,
+      });
       setNote(`imported ${entry.manufacturer} ${entry.fixture} — set it on the fixture in the patch`);
     });
 

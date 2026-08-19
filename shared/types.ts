@@ -394,7 +394,15 @@ export type Command =
   /** arm (or cancel with null) engine-side MIDI learn — next note/cc maps to the action */
   | { type: 'learn'; action: MidiAction | null }
   /** import a .gdtf file (base64) — engine parses and adds its modes to project.profiles */
-  | { type: 'importGdtf'; name: string; data: string }
+  | {
+      type: 'importGdtf';
+      name: string;
+      data: string;
+      /** who authored the definition. A GDTF file carries no author attribute,
+       *  so this can only come from where the file came from — the Share
+       *  catalogue knows, a hand-picked file does not. */
+      credit?: string;
+    }
   /** import a .mvr scene (base64) — patch, positions, groups; replace clears the current patch */
   | { type: 'importMvr'; name: string; data: string; replace: boolean }
   /** spawn the native previz window next to the engine */
