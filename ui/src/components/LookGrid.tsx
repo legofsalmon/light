@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import type { Layer, LayerSnap } from '../../../shared/types.ts';
+import type { Layer, LayerBlend, LayerSnap } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
@@ -79,8 +79,18 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
   );
 }
 
+/** Blend only affects intensity — colour, pan/tilt, strobe and macros always
+ *  take the upper layer's value whatever the mode says. Worth saying on hover,
+ *  because "multiply" reads like it should multiply colours and it does not. */
+const BLEND_HELP: Record<LayerBlend, string> = {
+  normal: 'normal — this layer replaces what is under it (intensity only)',
+  multiply: 'multiply — scales what is under it; can only take light away',
+  htp: 'htp — highest takes precedence; can only add light, never remove it',
+};
+
 function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined }) {
   const send = useStore((s) => s.send);
+  const mutate = useStore((s) => s.mutate);
   const project = useStore((s) => s.project)!;
   // The grid scrolls and looks fire from MIDI/OSC too, so the active cell can
   // be off-screen. The layer head never scrolls — it is the one place that can
@@ -92,7 +102,25 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
     <div className="layerhead">
       <div className="row">
         <div className="name grow">{layer.name}</div>
-        <span className="chip">{layer.blend}</span>
+        {/* How this layer combines with the layers below. It was a read-only
+            chip, which meant the only way to change a blend was to hand-edit
+            the project file. */}
+        <select
+          className="chip chipsel"
+          value={layer.blend}
+          title={BLEND_HELP[layer.blend]}
+          onChange={(e) => {
+            const blend = e.target.value as LayerBlend;
+            mutate((p) => {
+              const l = p.layers.find((x) => x.id === layer.id);
+              if (l) l.blend = blend;
+            });
+          }}
+        >
+          <option value="normal">normal</option>
+          <option value="multiply">multiply</option>
+          <option value="htp">htp</option>
+        </select>
         <button
           className="btn small ghost clearbtn"
           title="clear layer"

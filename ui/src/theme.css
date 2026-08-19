@@ -145,6 +145,24 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 .btn.ghost { background: transparent; border-color: var(--line); color: var(--text-dim); }
 .btn.ghost:hover { color: var(--text); border-color: var(--line2); }
 
+/* a chip you can actually operate: same shape, but it opens a menu */
+.chipsel {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  padding-right: 14px;
+  /* the caret, drawn rather than imported so there is no asset to load */
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 6px top 52%, right 3px top 52%;
+  background-size: 3px 3px, 3px 3px;
+  background-repeat: no-repeat;
+}
+.chipsel:hover { color: var(--text); border-color: var(--text-dim); }
+.chipsel:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+
 .chip {
   display: inline-block;
   border: 1px solid var(--line2);
