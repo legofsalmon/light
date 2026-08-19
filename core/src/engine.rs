@@ -294,7 +294,13 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
                 // operator has dragged or typed since — their last edit of the
                 // gesture vanishing off the screen and off the rig.
                 EchoTo::Client(id) => bc.broadcast_except(id, &ev),
-                _ => bc.broadcast(&ev),
+                EchoTo::Everyone => bc.broadcast(&ev),
+                // Nothing changed — we are only here to make good a frame a
+                // backed-up client missed, which the loop above just did. The
+                // catch-all used to broadcast here, so ONE slow client meant the
+                // whole project went to EVERY client 10 times a second, and
+                // send_to re-marked that client each pass, so it never stopped.
+                EchoTo::Idle => {}
             }
             project_echo = EchoTo::Idle;
             last_echo = Instant::now();

@@ -509,7 +509,17 @@ export function sanitizeProject(p: Project): Project | null {
   if (p.props !== undefined) {
     if (!Array.isArray(p.props)) delete p.props;
     else {
-      const KINDS = new Set(['vocalist', 'guitarist', 'bassist', 'drummer', 'keyboardist']);
+      // Derived from the kind union, NOT hand-listed. A hand-written allow-list
+      // silently deleted every truss, leg, riser and screen the moment stage
+      // structure was added: stripped on load, on updateProject and on
+      // replaceProject, while the UI kept drawing them because the echo is
+      // withheld from the sender — so the autosave wrote a show with no stage
+      // and it was gone on reload. Adding a kind must never again mean
+      // remembering to edit a set literal somewhere else.
+      const KINDS = new Set<string>([
+        'vocalist', 'guitarist', 'bassist', 'drummer', 'keyboardist',
+        ...(STRUCTURE_KINDS as string[]),
+      ]);
       p.props = p.props.filter(
         (pr): pr is StageProp =>
           !!pr && typeof pr === 'object' && typeof pr.id === 'string' && KINDS.has(pr.kind as string),
@@ -519,6 +529,21 @@ export function sanitizeProject(p: Project): Project | null {
         if (!Number.isFinite(pr.pos.x)) pr.pos.x = 0;
         if (!Number.isFinite(pr.pos.z)) pr.pos.z = 1;
         if (pr.rotY !== undefined && !Number.isFinite(pr.rotY)) delete pr.rotY;
+        // structural pieces carry dimensions; repair rather than drop them
+        if (isStructure(pr.kind)) {
+          const d = STRUCTURE_DEFAULTS[pr.kind] ?? { w: 1, h: 1, d: 1, y: 0 };
+          const s = pr.size;
+          if (!s || typeof s !== 'object') pr.size = { w: d.w, h: d.h, d: d.d };
+          else {
+            if (!Number.isFinite(s.w) || s.w <= 0) s.w = d.w;
+            if (!Number.isFinite(s.h) || s.h <= 0) s.h = d.h;
+            if (!Number.isFinite(s.d) || s.d <= 0) s.d = d.d;
+          }
+          if (pr.y !== undefined && !Number.isFinite(pr.y)) pr.y = d.y;
+        } else {
+          delete pr.size;
+          delete pr.y;
+        }
       }
       if (p.props.length === 0) delete p.props;
     }

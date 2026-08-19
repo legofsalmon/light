@@ -9,6 +9,7 @@ import { Renderer } from '../renderer.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Project } from '../../shared/types.ts';
+import { sanitizeProject } from '../../shared/types.ts';
 
 /** The demo show these tests were written against — five fixtures at known
  *  addresses, looks with known ids. Deliberately NOT the shipped default: that
@@ -195,6 +196,34 @@ await new Promise<void>((resolve) => {
     }, 150);
   });
 });
+
+
+// A truss must survive the sanitiser. It did not: the allow-list was hand
+// written and never grew when stage structure was added, so every truss, leg,
+// riser and screen was stripped on load, on updateProject and on
+// replaceProject — silently, because the echo is withheld from the sender, so
+// the UI kept drawing a stage the autosave had already thrown away.
+{
+  const p = sanitizeProject({
+    ...demoProject(),
+    props: [
+      { id: 'p1', kind: 'trussBar', pos: { x: 0, z: 0 }, size: { w: 7, h: 0.3, d: 0.3 }, y: 3.05 },
+      { id: 'p2', kind: 'riser', pos: { x: 1, z: 1 } },
+      { id: 'p3', kind: 'vocalist', pos: { x: 0, z: 2 } },
+      { id: 'p4', kind: 'nonsense', pos: { x: 0, z: 0 } },
+    ],
+  } as unknown as Project);
+  const kinds = (p?.props ?? []).map((x) => x.kind).sort();
+  check(
+    'sanitize keeps stage structure',
+    JSON.stringify(kinds) === JSON.stringify(['riser', 'trussBar', 'vocalist']),
+    `got ${JSON.stringify(kinds)}`,
+  );
+  const bar = p?.props?.find((x) => x.id === 'p1');
+  check('sanitize keeps truss dimensions', bar?.size?.w === 7 && bar?.y === 3.05, JSON.stringify(bar));
+  const riser = p?.props?.find((x) => x.id === 'p2');
+  check('sanitize fills missing structure size', (riser?.size?.w ?? 0) > 0, JSON.stringify(riser));
+}
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);
