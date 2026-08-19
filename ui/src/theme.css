@@ -347,6 +347,10 @@ select.sel { cursor: pointer; }
 /* a fixture whose profile is a placeholder — imported with addresses but no
    personality. Not an error: the row works, it just cannot do what the fixture
    can, and nothing else on screen would say so. */
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: var(--text); }
+.sortmark { display: inline-block; width: 0.9em; font-size: 8px; opacity: 0.85; }
+
 tr.rowstub td { background: rgba(232, 163, 61, 0.07); }
 tr.rowstub td:first-child { box-shadow: inset 2px 0 0 var(--warn, #e8a33d); }
 

@@ -12,6 +12,10 @@ import { isPlaceholderProfile } from '../../../shared/gdtfShare.ts';
 import type { StageProp } from '../../../shared/types.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 
+/** Columns worth sorting by. Position columns are deliberately absent: they are
+ *  for editing, and a table that reorders under a scrub is unusable. */
+type SortKey = 'name' | 'profile' | 'universe' | 'address' | 'channels' | 'rigged';
+
 /** true when the pointer event originated inside an editing control */
 function onControl(target: EventTarget | null): boolean {
   return target instanceof Element && !!target.closest('input,select,button,label,option');
@@ -101,10 +105,66 @@ export function PatchView() {
   const identify = useStore((s) => s.snap?.identify) ?? null;
   const conflicts = findConflicts(project);
   const uniOrder = new Map(project.universes.map((u, i) => [u.id, i]));
-  const sortedFixtures = [...project.fixtures].sort(
-    (a, b) =>
+  /** Column sort. Defaults to patch order — universe then address — because
+   *  that is the order the rig is addressed in and the order you walk it. */
+  const [sortKey, setSortKey] = useState<SortKey>('address');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  // Patch order — universe, then address — is the default because it is the
+  // order the rig is addressed in and the order a DIP-switch check goes in.
+  // Sorting by anything else is for finding things, not for working through
+  // them, which is why it never becomes the default.
+  const sorted = [...project.fixtures].sort((a, b) => {
+    const patchOrder = () =>
       (uniOrder.get(a.universeId) ?? 99) - (uniOrder.get(b.universeId) ?? 99) ||
-      a.address - b.address
+      a.address - b.address;
+    const txt = (x: string, y: string) => x.localeCompare(y, undefined, { numeric: true });
+    let cmp = 0;
+    switch (sortKey) {
+      case 'name':
+        cmp = txt(a.name, b.name);
+        break;
+      case 'profile':
+        cmp = txt(
+          profileMeta(project, a.profileId)?.label ?? a.profileId,
+          profileMeta(project, b.profileId)?.label ?? b.profileId,
+        );
+        break;
+      case 'universe':
+        cmp = (uniOrder.get(a.universeId) ?? 99) - (uniOrder.get(b.universeId) ?? 99);
+        break;
+      case 'address':
+        cmp = 0; // patch order below already IS address order
+        break;
+      case 'channels':
+        cmp = (profileMeta(project, a.profileId)?.channels ?? 0) -
+          (profileMeta(project, b.profileId)?.channels ?? 0);
+        break;
+      case 'rigged':
+        cmp = txt(a.parentId ?? '~', b.parentId ?? '~'); // unrigged sorts last
+        break;
+    }
+    // patch order is the tiebreak for every column, so equal values stay in the
+    // order the rig is addressed rather than shuffling arbitrarily
+    return (sortDir === 'asc' ? cmp : -cmp) || patchOrder();
+  });
+  const sortedFixtures = sorted;
+
+  /** A clickable column header. Clicking the active one flips direction. */
+  const SortTh = ({ k, children, ...rest }: { k: SortKey; children: React.ReactNode } & React.ThHTMLAttributes<HTMLTableCellElement>) => (
+    <th
+      {...rest}
+      className="sortable"
+      onClick={() => {
+        if (sortKey === k) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+        else {
+          setSortKey(k);
+          setSortDir('asc');
+        }
+      }}
+    >
+      {children}
+      <span className="sortmark">{sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : ''}</span>
+    </th>
   );
 
   // -- fixture selection: click / ⇧-range / ⌘-toggle / drag-marquee, shared
@@ -315,9 +375,15 @@ export function PatchView() {
         <table className="tbl">
           <thead>
             <tr>
-              <th>Fixture</th><th>Profile</th><th>Universe</th><th>Address</th><th>Ch</th>
+              <SortTh k="name">Fixture</SortTh>
+              <SortTh k="profile">Profile</SortTh>
+              <SortTh k="universe">Universe</SortTh>
+              <SortTh k="address">Address</SortTh>
+              <SortTh k="channels">Ch</SortTh>
               <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th>Tilt°</th><th>Roll°</th>
-              <th title="rigged on a stage structure — X/Y/Z above stay in room coordinates">Rigged on</th>
+              <SortTh k="rigged" title="rigged on a stage structure — X/Y/Z above stay in room coordinates">
+                Rigged on
+              </SortTh>
               {anyPan && <th title="base pan aim — a look's pan moves relative to this">Pan %</th>}
               {anyTilt && <th title="base tilt aim — a look's tilt moves relative to this">Tilt %</th>}
               <th>Live</th><th></th>
