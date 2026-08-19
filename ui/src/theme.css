@@ -311,7 +311,7 @@ select.sel { cursor: pointer; }
 .cell {
   /* the name strip's height, shared so the colour block below can stop exactly
      where the strip begins — the two halves must not drift apart */
-  --padname-h: 14px;
+  --padname-h: 17px;
   position: relative;
   width: 108px;
   height: 58px;
@@ -342,12 +342,13 @@ select.sel { cursor: pointer; }
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: 0.03em;
-  /* Kept deliberately shallow: every pixel here is a pixel the trigger area
-     does not have, and firing a cue is the thing you do in a hurry. */
+  /* Breathing room above and below the text, which both reads better and makes
+     the select target easier to hit. Still the smaller half: firing a cue is
+     the thing you do in a hurry, so the colour block keeps the bulk of the pad. */
   font-size: 9.5px;
   line-height: 1.15;
   margin: 0 -6px -4px;
-  padding: 1px 6px 2px;
+  padding: 3px 6px 3px;
   border-radius: 0 0 2px 2px;
 }
 .cell .cellname:hover {
