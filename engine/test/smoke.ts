@@ -11,7 +11,7 @@ import path from 'node:path';
 import type { Project } from '../../shared/types.ts';
 import { sanitizeProject } from '../../shared/types.ts';
 import type { ShareList } from '../../shared/gdtfShare.ts';
-import { isAcceptableList, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
+import { isAcceptableList, isPlaceholderProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
 
 /** The demo show these tests were written against — five fixtures at known
  *  addresses, looks with known ids. Deliberately NOT the shipped default: that
@@ -268,6 +268,33 @@ await new Promise<void>((resolve) => {
   check('share list: empty rejected', !isAcceptableList({ result: true, list: [] }, 100));
   check('share list: collapse rejected', !isAcceptableList({ result: true, list: sample.list.slice(0, 5) }, 100));
   check('share list: healthy accepted', isAcceptableList(sample, 100));
+}
+
+
+// --- placeholder GDTF detection ---------------------------------------------
+// A real festival MVR carried five stub fixture definitions: correct addresses,
+// no personality. Telling them apart from a genuine dimmer is the whole job.
+{
+  const stub = {
+    channels: Array.from({ length: 65 }, (_, i) => ({ name: `Dimmer${i + 1}` })),
+    heads: [{ kind: 'dimmer' }],
+  };
+  check('placeholder: a 65-channel all-Dimmer profile is a stub', isPlaceholderProfile(stub));
+
+  const realDimmer = { channels: [{ name: 'Dimmer1' }], heads: [{ kind: 'dimmer' }] };
+  check('placeholder: a single-channel dimmer is NOT a stub', !isPlaceholderProfile(realDimmer));
+
+  const mover = {
+    channels: [{ name: 'Pan' }, { name: 'Tilt' }, { name: 'Dimmer1' }, { name: 'ColorSub_C' }],
+    heads: [{ kind: 'mover' }],
+  };
+  check('placeholder: a real mover is NOT a stub', !isPlaceholderProfile(mover));
+
+  const strip = {
+    channels: [{ name: 'ColorAdd_R' }, { name: 'ColorAdd_G' }, { name: 'ColorAdd_B' }],
+    heads: [{ kind: 'rgb' }, { kind: 'rgb' }],
+  };
+  check('placeholder: an rgb strip is NOT a stub', !isPlaceholderProfile(strip));
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

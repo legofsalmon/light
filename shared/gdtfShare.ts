@@ -148,3 +148,31 @@ export function isAcceptableList(next: ShareList | null, previousCount: number):
   if (previousCount > 0 && next.list.length < previousCount * 0.75) return false;
   return true;
 }
+
+/** Does this compiled profile actually describe a fixture, or is it a stub?
+ *
+ *  MVRs are routinely exported with placeholder GDTFs: the plot has the right
+ *  addresses and positions, but whatever wrote it did not have the real
+ *  personalities, so each fixture is declared as N generic channels. A real
+ *  festival MVR checked here carried five of them — an Ayrton Rivale Profile as
+ *  65 attributes all named `Dimmer1..Dimmer65`, a Robe Robin Spiider as 123.
+ *
+ *  LIGHT imports these faithfully, which is correct and also useless: you get a
+ *  dimmer and nothing else, and nothing says why. Detecting it is the difference
+ *  between "this app cannot control my movers" and "your plot did not include
+ *  the fixture definitions — here they are on Share".
+ *
+ *  Deliberately narrow: EVERY channel must be a bare `Dimmer<n>`. A real fixture
+ *  with a couple of spare dimmer channels is not a stub, and a false positive
+ *  here would nag about a perfectly good profile. */
+export function isPlaceholderProfile(p: {
+  channels?: { name?: string }[];
+  heads?: { kind?: string }[];
+}): boolean {
+  const ch = p.channels ?? [];
+  // one channel called "Dimmer" is a dimmer, not a placeholder
+  if (ch.length < 2) return false;
+  if (!ch.every((c) => /^Dimmer\d+$/.test(c.name ?? ''))) return false;
+  // a stub declares no structure either — a real multi-head fixture would
+  return (p.heads ?? []).every((h) => h.kind === 'dimmer');
+}

@@ -8,6 +8,7 @@ import { ScrubNumInput } from './inputs.tsx';
 import { ShareFixtures } from './ShareFixtures.tsx';
 import { useStore } from '../store.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
+import { isPlaceholderProfile } from '../../../shared/gdtfShare.ts';
 import type { StageProp } from '../../../shared/types.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 
@@ -89,6 +90,14 @@ export function PatchView() {
   const send = useStore((s) => s.send);
   const muted = useStore((s) => s.snap?.muted) ?? [];
   const unknownProfiles = useStore((s) => s.snap?.unknownProfiles) ?? [];
+  /** Fixtures whose profile is a placeholder — an MVR that travelled without
+   *  its real fixture definitions. They are not dark, they just have a dimmer
+   *  and nothing else, which looks like a bug in the app until you know. */
+  const stubProfiles = new Set(
+    Object.entries(project.profiles ?? {})
+      .filter(([, pr]) => isPlaceholderProfile(pr))
+      .map(([id]) => id),
+  );
   const identify = useStore((s) => s.snap?.identify) ?? null;
   const conflicts = findConflicts(project);
   const uniOrder = new Map(project.universes.map((u, i) => [u.id, i]));
@@ -322,11 +331,13 @@ export function PatchView() {
                 <tr
                   key={f.id}
                   data-fxid={f.id}
-                  className={`${selected ? 'rowsel' : ''} ${unknownProfiles.includes(f.id) ? 'rowdark' : ''}`}
+                  className={`${selected ? 'rowsel' : ''} ${unknownProfiles.includes(f.id) ? 'rowdark' : ''} ${stubProfiles.has(f.profileId) ? 'rowstub' : ''}`}
                   title={
                     unknownProfiles.includes(f.id)
                       ? 'this fixture\'s profile is missing — it renders as nothing at all. Re-import the profile or pick another one.'
-                      : undefined
+                      : stubProfiles.has(f.profileId)
+                        ? 'placeholder profile: the MVR that brought this fixture in did not carry a real fixture definition, so it has a dimmer and nothing else. Fetch the real one in GDTF Share below, then set it here.'
+                        : undefined
                   }
                 >
                   <td>

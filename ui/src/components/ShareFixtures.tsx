@@ -18,7 +18,7 @@
 
 import React, { useEffect, useState } from 'react';
 import type { ShareEntry } from '../../../shared/types.ts';
-import { parseGdtfSpec, rankMatches } from '../../../shared/gdtfShare.ts';
+import { isPlaceholderProfile, parseGdtfSpec, rankMatches } from '../../../shared/gdtfShare.ts';
 import { useStore } from '../store.ts';
 import {
   shareAvailable,
@@ -121,8 +121,24 @@ export function ShareFixtures(): React.ReactElement | null {
     })();
   }, [available]);
 
-  const missing = project.fixtures.filter((f) => unknown.includes(f.id));
-  const missingKey = missing.map((f) => f.id).join(',');
+  // Two kinds of broken. A fixture with NO profile renders as nothing; a fixture
+  // with a PLACEHOLDER profile renders as a dimmer and nothing else, which is
+  // what an MVR exported without its real fixture definitions leaves behind —
+  // and is far harder to notice, because it looks like the app cannot drive
+  // your movers. Both want the same answer: fetch the real definition.
+  const stubIds = new Set(
+    Object.entries(project.profiles ?? {})
+      .filter(([, pr]) => isPlaceholderProfile(pr))
+      .map(([id]) => id),
+  );
+  // one row per broken PROFILE, not per fixture: 24 Spiiders share one problem
+  const broken = [...new Map(
+    project.fixtures
+      .filter((f) => unknown.includes(f.id) || stubIds.has(f.profileId))
+      .map((f) => [f.profileId, f]),
+  ).values()];
+  const missing = broken;
+  const missingKey = broken.map((f) => f.profileId).join(',');
 
   // Candidates for whatever is dark. Keyed on which fixtures are missing, so it
   // does not re-run on every snapshot.
@@ -133,7 +149,7 @@ export function ShareFixtures(): React.ReactElement | null {
     }
     void (async () => {
       const next: Record<string, ShareEntry[]> = {};
-      for (const f of project.fixtures.filter((x) => unknown.includes(x.id))) {
+      for (const f of broken) {
         const want = parseGdtfSpec(f.profileId.replace(/^gdtf-/, ''));
         const q = want.model ?? f.name;
         try {
@@ -337,7 +353,17 @@ export function ShareFixtures(): React.ReactElement | null {
           {missing.map((f) => (
             <div key={f.id} style={{ marginBottom: 10 }}>
               <div className="label">
-                <b>{f.name}</b> — no profile for <code>{f.profileId}</code>
+                <b>{f.name}</b>
+                {stubIds.has(f.profileId) ? (
+                  <>
+                    {' '}— placeholder profile: this MVR travelled without a real
+                    fixture definition, so it has a dimmer and nothing else
+                  </>
+                ) : (
+                  <>
+                    {' '}— no profile for <code>{f.profileId}</code>
+                  </>
+                )}
               </div>
               {(repairs[f.id] ?? []).length === 0 ? (
                 <div className="label">nothing on Share looks like this one</div>
