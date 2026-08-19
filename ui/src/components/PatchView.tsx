@@ -440,10 +440,12 @@ export function PatchView() {
                     <select
                       className="sel"
                       value={f.profileId}
-                      onChange={(e) => mutate((p) => {
-                        const x = p.fixtures.find((y) => y.id === f.id);
-                        if (x) x.profileId = e.target.value;
-                      })}
+                      title={
+                        editTargets(f.id).length > 1
+                          ? `changes the profile on all ${editTargets(f.id).length} selected fixtures`
+                          : 'fixture profile'
+                      }
+                      onChange={(e) => eachTarget(f.id, (x) => { x.profileId = e.target.value; })}
                     >
                       {allProfileMetas(project).map((pr) => (
                         <option key={pr.id} value={pr.id}>
@@ -456,10 +458,12 @@ export function PatchView() {
                     <select
                       className="sel"
                       value={f.universeId}
-                      onChange={(e) => mutate((p) => {
-                        const x = p.fixtures.find((y) => y.id === f.id);
-                        if (x) x.universeId = e.target.value;
-                      })}
+                      title={
+                        editTargets(f.id).length > 1
+                          ? `moves all ${editTargets(f.id).length} selected fixtures to that universe`
+                          : 'output universe'
+                      }
+                      onChange={(e) => eachTarget(f.id, (x) => { x.universeId = e.target.value; })}
                     >
                       {project.universes.map((u) => (
                         <option key={u.id} value={u.id}>{u.label}</option>
