@@ -5,6 +5,14 @@ import type {
 import { WS_PORT } from '../../shared/types.ts';
 
 export type Tab = 'look' | 'patch' | 'output' | 'sync';
+
+/** Which panels are on screen.
+ *
+ *  A laptop at FOH has no room for three panels at once, and the three jobs are
+ *  rarely simultaneous: you run the show from the pads, you aim and check from
+ *  the previz, you patch before doors. `split` is all three at once — the
+ *  original layout, and still the default. */
+export type ViewMode = 'pads' | 'previz' | 'patch' | 'split';
 export type Sel = { layerId: string; col: number } | null;
 
 type Store = {
@@ -19,6 +27,7 @@ type Store = {
   savedFlash: number;
   sel: Sel;
   tab: Tab;
+  view: ViewMode;
   previzMode: '3d' | '2d';
   /** 2D sub-view: top-down plan or front elevation (drag sets height) */
   previz2dView: 'plan' | 'front';
@@ -55,6 +64,7 @@ type Store = {
   redo: () => void;
   setSel: (s: Sel) => void;
   setTab: (t: Tab) => void;
+  setView: (v: ViewMode) => void;
   setPrevizMode: (m: '3d' | '2d') => void;
   setPreviz2dView: (v: 'plan' | 'front') => void;
   setFxSel: (ids: string[]) => void;
@@ -66,6 +76,15 @@ type Store = {
   handleMidi: (status: number, d1: number, d2: number) => void;
   setMidiInputs: (names: string[]) => void;
 };
+
+/** Last chosen layout, or the three-panel split for a first run. */
+function loadView(): ViewMode {
+  try {
+    const v = localStorage.getItem('view');
+    if (v === 'pads' || v === 'previz' || v === 'patch' || v === 'split') return v;
+  } catch { /* fall through */ }
+  return 'split';
+}
 
 let ws: WebSocket | null = null;
 const pending: { slug: string | null; msg: string }[] = [];
@@ -189,6 +208,7 @@ export const useStore = create<Store>()((set, get) => ({
   savedFlash: 0,
   sel: null,
   tab: 'look',
+  view: loadView(),
   previzMode: '3d',
   previz2dView: 'plan',
   fxSel: [],
@@ -260,6 +280,14 @@ export const useStore = create<Store>()((set, get) => ({
 
   setSel: (sel) => set({ sel }),
   setTab: (tab) => set({ tab }),
+  setView: (view) => {
+    // Remembered across launches: an operator who works full-screen on the pads
+    // should not have to set that up again every time the app opens.
+    try { localStorage.setItem('view', view); } catch { /* non-essential */ }
+    // Choosing "patch" means the fixtures table, not whichever editor tab
+    // happened to be open behind it.
+    set(view === 'patch' ? { view, tab: 'patch' } : { view });
+  },
   setPrevizMode: (previzMode) => set({ previzMode }),
   setPreviz2dView: (previz2dView) => set({ previz2dView }),
   setFxSel: (fxSel) => set({ fxSel }),

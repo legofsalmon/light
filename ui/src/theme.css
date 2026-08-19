@@ -56,6 +56,24 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
   background: #000;
 }
 
+/* ---- layout modes -------------------------------------------------------
+   One panel full screen, or all three at once. Each mode is just a different
+   grid template, so nothing has to be repositioned; the panels that are not in
+   the template are not rendered at all (see App.tsx), which is what actually
+   frees the previz's WebGL context rather than merely hiding it. */
+.app.view-pads,
+.app.view-previz,
+.app.view-patch {
+  grid-template-rows: auto 46px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+}
+.app.view-pads   { grid-template-areas: 'offline' 'top' 'grid'; }
+.app.view-previz { grid-template-areas: 'offline' 'top' 'previz'; }
+.app.view-patch  { grid-template-areas: 'offline' 'top' 'bottom'; }
+
+/* the switcher sits next to the project menu; keep it from being squeezed */
+.viewseg { flex: 0 0 auto; margin-left: 2px; }
+
 .topbar { grid-area: top; }
 .gridwrap { grid-area: grid; min-height: 0; }
 .bottom { grid-area: bottom; min-height: 0; }

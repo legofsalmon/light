@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useStore } from '../store.ts';
+import { useStore, type ViewMode } from '../store.ts';
 import { askConfirm, askPrompt } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
 import { clamp } from '../../../shared/types.ts';
@@ -99,11 +99,22 @@ function ProjectMenu({ name }: { name: string }) {
   );
 }
 
+/** The four layouts, in the order they sit on the bar. Alt-1..4 matches the
+ *  position, so the shortcut is readable off the screen. */
+const VIEWS: { id: ViewMode; label: string; title: string; key: string }[] = [
+  { id: 'pads', label: 'Pads', title: 'Look grid, full screen', key: '1' },
+  { id: 'previz', label: 'Previz', title: 'Previz, full screen', key: '2' },
+  { id: 'patch', label: 'Patch', title: 'Fixtures and patch, full screen', key: '3' },
+  { id: 'split', label: 'All', title: 'All three panels at once', key: '4' },
+];
+
 export function TopBar() {
   const snap = useStore((s) => s.snap);
   const project = useStore((s) => s.project)!;
   const connected = useStore((s) => s.connected);
   const engineStalled = useStore((s) => s.engineStalled);
+  const view = useStore((s) => s.view);
+  const setView = useStore((s) => s.setView);
   const midiInputs = useStore((s) => s.midiInputs);
   const oscLog = useStore((s) => s.oscLog);
   const learnMode = useStore((s) => s.learnMode);
@@ -132,6 +143,22 @@ export function TopBar() {
         LIGHT<span>■</span>
       </div>
       <ProjectMenu name={project.name} />
+      {/* Left, next to the project menu: the right end of this bar is where
+          things get squeezed on a laptop, and a view switcher that scrolls out
+          of reach is worse than no view switcher. */}
+      <div className="seg viewseg" role="group" aria-label="layout">
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            className={view === v.id ? 'on' : ''}
+            title={`${v.title}  (⌥${v.key})`}
+            aria-pressed={view === v.id}
+            onClick={() => setView(v.id)}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
       <button className="btn small ghost" onClick={() => send({ type: 'save' })}>
         {justSaved ? 'saved ✓' : 'save'}
       </button>

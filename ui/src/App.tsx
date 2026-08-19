@@ -45,6 +45,7 @@ export function App() {
   const hasProject = useStore((s) => !!s.project);
   const connected = useStore((s) => s.connected);
   const engineStalled = useStore((s) => s.engineStalled);
+  const view = useStore((s) => s.view);
   const [layout, setLayout] = useState(loadLayout);
   const [stalled, setStalled] = useState(false);
   useEffect(() => {
@@ -77,6 +78,14 @@ export function App() {
         e.preventDefault();
         if (e.shiftKey) st.redo();
         else st.undo();
+        return;
+      }
+      // ⌥1..⌥4 switch layout. Alt rather than plain digits because 1-9 fire
+      // columns, and a mis-hit that changes the layout mid-song is cheap while
+      // a mis-hit that fires the wrong cue is not.
+      if (e.altKey && !e.metaKey && !e.ctrlKey && e.key >= '1' && e.key <= '4') {
+        e.preventDefault();
+        st.setView((['pads', 'previz', 'patch', 'split'] as const)[Number(e.key) - 1]);
         return;
       }
       // Held keys must not machine-gun cues/tap/blackout, and browser
@@ -131,7 +140,7 @@ export function App() {
 
   return (
     <div
-      className="app"
+      className={`app view-${view}`}
       style={{
         ['--previz-w' as string]: `${layout.previzW}px`,
         ['--bottom-h' as string]: `${layout.bottomH}px`,
@@ -145,17 +154,29 @@ export function App() {
         </div>
       )}
       <Region name="top bar"><TopBar /></Region>
-      <div className="gridwrap">
-        <Region name="look grid"><LookGrid /></Region>
-      </div>
-      <Splitter dir="h" onDrag={(d) => resize('bottomH', -d)} />
-      <div className="bottom panel">
-        <Region name="bottom panel"><BottomPanel /></Region>
-      </div>
-      <Splitter dir="v" onDrag={(d) => resize('previzW', -d)} />
-      <div className="previz">
-        <Region name="previz"><PrevizPanel /></Region>
-      </div>
+      {/* Unmounted, not hidden. A previz left mounted behind a full-screen grid
+          keeps its requestAnimationFrame loop and its WebGL context running for
+          a view nobody is looking at — on a laptop driving a show that is real
+          battery and real GPU. Its teardown disposes the scene, the rig and the
+          renderer, and the camera is persisted, so coming back restores the
+          same view. */}
+      {(view === 'split' || view === 'pads') && (
+        <div className="gridwrap">
+          <Region name="look grid"><LookGrid /></Region>
+        </div>
+      )}
+      {view === 'split' && <Splitter dir="h" onDrag={(d) => resize('bottomH', -d)} />}
+      {(view === 'split' || view === 'patch') && (
+        <div className="bottom panel">
+          <Region name="bottom panel"><BottomPanel /></Region>
+        </div>
+      )}
+      {view === 'split' && <Splitter dir="v" onDrag={(d) => resize('previzW', -d)} />}
+      {(view === 'split' || view === 'previz') && (
+        <div className="previz">
+          <Region name="previz"><PrevizPanel /></Region>
+        </div>
+      )}
       <DialogHost />
     </div>
   );
