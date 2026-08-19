@@ -35,7 +35,14 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
           useStore.getState().armLearn({ kind: 'cell', layerId: layer.id, col });
           return;
         }
-        if (!look) return;
+        // An empty pad stops the layer, the way an empty clip slot does in
+        // Resolume — the same thing the ✕ on the layer head does, but reachable
+        // in the grid where your hand already is. The cell is still selected, so
+        // the editor can offer to create a look here.
+        if (!look) {
+          send({ type: 'clearLayer', layerId: layer.id });
+          return;
+        }
         send({ type: 'trigger', layerId: layer.id, col });
         if (look.flash) {
           e.currentTarget.setPointerCapture(e.pointerId);
