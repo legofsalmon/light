@@ -10,6 +10,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Project } from '../../shared/types.ts';
 import { sanitizeProject } from '../../shared/types.ts';
+import type { ShareList } from '../../shared/gdtfShare.ts';
+import { isAcceptableList, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
 
 /** The demo show these tests were written against — five fixtures at known
  *  addresses, looks with known ids. Deliberately NOT the shipped default: that
@@ -223,6 +225,49 @@ await new Promise<void>((resolve) => {
   check('sanitize keeps truss dimensions', bar?.size?.w === 7 && bar?.y === 3.05, JSON.stringify(bar));
   const riser = p?.props?.find((x) => x.id === 'p2');
   check('sanitize fills missing structure size', (riser?.size?.w ?? 0) > 0, JSON.stringify(riser));
+}
+
+
+// --- GDTF Share matching ----------------------------------------------------
+// Against a slice of a REAL catalogue response, using the three fixtures from a
+// real festival MVR. Exact manufacturer+model lookup fails on two of the three,
+// which is why this is a ranked shortlist and not a key lookup.
+{
+  const sample: ShareList = JSON.parse(
+    fs.readFileSync(path.join(process.cwd(), 'core/tests/data/gdtf-share-list.sample.json'), 'utf8'),
+  );
+
+  const spec = parseGdtfSpec('Robe@Robin Spiider@r3045.gdtf');
+  check('gdtfSpec: manufacturer parsed', spec.manufacturer === 'Robe', JSON.stringify(spec));
+  check('gdtfSpec: revision marker dropped', spec.model === 'Robin Spiider', JSON.stringify(spec));
+
+  const cases: [string, string][] = [
+    ['Robe@Robin Spiider@r3045.gdtf', 'Robin Spiider'],
+    ['Acme@Lyra@r3006.gdtf', 'LYRA'],
+    ['Ayrton@Rivale Profile@r3014.gdtf', 'Rivale Profile'],
+  ];
+  for (const [gdtfSpec, expectFixture] of cases) {
+    const top = rankMatches(parseGdtfSpec(gdtfSpec), sample.list, 5);
+    const hit = top[0];
+    check(
+      `share match: ${gdtfSpec.split('@')[1]}`,
+      !!hit && new RegExp(expectFixture, 'i').test(hit.entry.fixture),
+      `top was ${hit ? `"${hit.entry.manufacturer}" / "${hit.entry.fixture}" (${hit.score.toFixed(2)})` : 'nothing'}`,
+    );
+  }
+
+  // the decoy that makes this hard: "LPL" also ships a "Rivale Profile"
+  const rivale = rankMatches(parseGdtfSpec('Ayrton@Rivale Profile@r3014.gdtf'), sample.list, 5);
+  check(
+    'share match: right manufacturer wins over a same-named decoy',
+    rivale[0]?.entry.manufacturer === 'Ayrton',
+    rivale.map((m) => `${m.entry.manufacturer}/${m.entry.fixture}=${m.score.toFixed(2)}`).join(' '),
+  );
+
+  // the guard that stops a bad day at the API wiping the fixture library
+  check('share list: empty rejected', !isAcceptableList({ result: true, list: [] }, 100));
+  check('share list: collapse rejected', !isAcceptableList({ result: true, list: sample.list.slice(0, 5) }, 100));
+  check('share list: healthy accepted', isAcceptableList(sample, 100));
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
