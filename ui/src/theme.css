@@ -56,6 +56,24 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
   background: #000;
 }
 
+/* ---- layout modes -------------------------------------------------------
+   One panel full screen, or all three at once. Each mode is just a different
+   grid template, so nothing has to be repositioned; the panels that are not in
+   the template are not rendered at all (see App.tsx), which is what actually
+   frees the previz's WebGL context rather than merely hiding it. */
+.app.view-pads,
+.app.view-previz,
+.app.view-patch {
+  grid-template-rows: auto 46px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+}
+.app.view-pads   { grid-template-areas: 'offline' 'top' 'grid'; }
+.app.view-previz { grid-template-areas: 'offline' 'top' 'previz'; }
+.app.view-patch  { grid-template-areas: 'offline' 'top' 'bottom'; }
+
+/* the switcher sits next to the project menu; keep it from being squeezed */
+.viewseg { flex: 0 0 auto; margin-left: 2px; }
+
 .topbar { grid-area: top; }
 .gridwrap { grid-area: grid; min-height: 0; }
 .bottom { grid-area: bottom; min-height: 0; }
@@ -126,6 +144,24 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 .btn.small { padding: 2px 7px; font-size: 9.5px; }
 .btn.ghost { background: transparent; border-color: var(--line); color: var(--text-dim); }
 .btn.ghost:hover { color: var(--text); border-color: var(--line2); }
+
+/* a chip you can actually operate: same shape, but it opens a menu */
+.chipsel {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  padding-right: 14px;
+  /* the caret, drawn rather than imported so there is no asset to load */
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 6px top 52%, right 3px top 52%;
+  background-size: 3px 3px, 3px 3px;
+  background-repeat: no-repeat;
+}
+.chipsel:hover { color: var(--text); border-color: var(--text-dim); }
+.chipsel:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 
 .chip {
   display: inline-block;
@@ -291,6 +327,9 @@ select.sel { cursor: pointer; }
 .layerhead .row { gap: 5px; }
 
 .cell {
+  /* the name strip's height, shared so the colour block below can stop exactly
+     where the strip begins — the two halves must not drift apart */
+  --padname-h: 17px;
   position: relative;
   width: 108px;
   height: 58px;
@@ -309,6 +348,11 @@ select.sel { cursor: pointer; }
 .cell.selected { border-color: var(--text-dim); }
 .cell.active { border-color: var(--accent); background: var(--accent-soft); }
 .cell.active .cellname { color: #fff; }
+/* The name is its own control, the way a Resolume clip name is: clicking it
+   selects the look for editing and previewing WITHOUT firing it. Everything
+   above it fires. Stretched to the cell edges (negative margins cancel the
+   cell's padding) so the whole bottom strip is the target rather than just the
+   glyphs — a 10px line of text is not a hit area you can find in the dark. */
 .cell .cellname {
   font-size: 10px;
   color: var(--text);
@@ -316,24 +360,44 @@ select.sel { cursor: pointer; }
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: 0.03em;
+  /* Breathing room above and below the text, which both reads better and makes
+     the select target easier to hit. Still the smaller half: firing a cue is
+     the thing you do in a hurry, so the colour block keeps the bulk of the pad. */
+  font-size: 9.5px;
+  line-height: 1.15;
+  margin: 0 -6px -4px;
+  padding: 3px 6px 3px;
+  border-radius: 0 0 2px 2px;
 }
+.cell .cellname:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+}
+/* the selected look reads as selected even when another one is playing */
+.cell.selected .cellname { background: rgba(255, 255, 255, 0.06); }
+/* The colour fills the whole trigger area rather than sitting as a stripe on
+   top of it. That is the visual difference between the two targets: the block
+   of colour fires, the dark strip under it selects — you can tell them apart at
+   a glance, and in the dark, without reading anything. */
 .cell .swatch {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 20px;
+  bottom: var(--padname-h);
   display: flex;
   opacity: 0.85;
 }
 .cell .swatch i { flex: 1; }
 .cell .flashmark {
   position: absolute;
-  top: 22px;
+  top: 3px;
   right: 4px;
   font-size: 8px;
   color: var(--flash);
   letter-spacing: 0.08em;
+  /* it now sits on the colour, which can be any brightness */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 .cell .fadebar {
   position: absolute;
@@ -341,6 +405,7 @@ select.sel { cursor: pointer; }
   left: 0;
   height: 2px;
   background: var(--accent);
+  z-index: 2; /* above the colour block */
 }
 .cell.learn-armed { outline: 2px solid var(--warn); outline-offset: -1px; }
 
@@ -495,6 +560,22 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 }
 .previzview { flex: 1; position: relative; min-height: 0; }
 .previzview canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---- audition pane -------------------------------------------------------
+   Bottom of the previz column: the selected look as it WOULD look, resolved by
+   the engine's own renderer and never sent to the rig. Smaller than the live
+   view on purpose — the live rig is the thing you must not lose sight of. */
+.previewview { flex: 0 0 38%; border-top: 1px solid var(--line2); }
+.previewbar { border-top: 1px solid var(--line); }
+.previewbar .previewname {
+  font-size: 10px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+}
+.previewbar .label.dim { color: var(--text-dim); opacity: 0.7; }
 
 /* ---------- osc monitor ---------- */
 

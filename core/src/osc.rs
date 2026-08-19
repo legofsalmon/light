@@ -185,7 +185,30 @@ impl OscIn {
         if let Some(s) = self.stop.take() {
             s.store(true, Ordering::Relaxed);
         }
-        self.alive = None;
+        // Wake the listener so it sees the flag and drops the socket NOW.
+        //
+        // Setting the flag alone left the port bound for up to one read timeout
+        // (400 ms), because the socket lives in that thread and is only dropped
+        // when recv_from returns. An enable-toggle landing inside that window
+        // hit EADDRINUSE on the rebind, and OSC input then stayed dead until the
+        // next project change — under a tooltip blaming another application for
+        // holding LIGHT's own expiring listener, which sends the operator
+        // hunting entirely the wrong problem mid-show.
+        if let Some(port) = self.current {
+            if let Ok(poke) = UdpSocket::bind(("127.0.0.1", 0)) {
+                let _ = poke.send_to(&[], ("127.0.0.1", port));
+            }
+        }
+        // Wait briefly for the thread to actually let go, so the rebind that
+        // usually follows finds the port free.
+        if let Some(alive) = self.alive.take() {
+            for _ in 0..50 {
+                if !alive.load(Ordering::Relaxed) {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        }
         self.current = None;
     }
 }

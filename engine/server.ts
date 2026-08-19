@@ -93,6 +93,20 @@ export class Server {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(ev));
   }
 
+  /** Broadcast to everyone except one client. Used for the project echo when
+   *  every change since the last one came from that client: it already holds
+   *  this state, and sending it back lands on top of whatever the operator has
+   *  dragged or typed since, silently discarding it. `skip` is compared by
+   *  identity, so passing null reaches everyone. Mirrors Broadcaster::
+   *  broadcast_except in core/src/server.rs. */
+  broadcastExcept(skip: unknown, ev: ServerEvent): void {
+    const s = JSON.stringify(ev);
+    for (const c of this.wss.clients) {
+      if (c === skip) continue;
+      if (c.readyState === WebSocket.OPEN && c.bufferedAmount < 1_000_000) c.send(s);
+    }
+  }
+
   broadcast(ev: ServerEvent): void {
     const s = JSON.stringify(ev);
     for (const c of this.wss.clients) {

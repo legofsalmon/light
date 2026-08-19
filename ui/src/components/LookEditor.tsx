@@ -3,6 +3,7 @@ import type { Effect, EffectTarget, Look, LookPart, Project, Wave } from '../../
 import { uid } from '../../../shared/types.ts';
 import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
 import { type HeadKind } from '../../../shared/profiles.ts';
+import { TextField } from './inputs.tsx';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 import { askConfirm } from '../dialog.tsx';
@@ -424,11 +425,12 @@ export function LookEditor() {
     <div className="lookeditor">
       <div className="row">
         <span className="chip">{layer.name} · {sel.col + 1}</span>
-        <input
+        <TextField
           className="text"
           style={{ width: 220, fontSize: 13 }}
+          entityId={look.id}
           value={look.name}
-          onChange={(e) => editLook((lk) => (lk.name = e.target.value))}
+          onCommit={(v) => editLook((lk) => (lk.name = v))}
         />
         <button
           className={`btn small ${look.flash ? 'on' : ''}`}

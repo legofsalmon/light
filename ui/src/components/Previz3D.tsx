@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { HeadSnap, Project } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
+import { isStructure } from '../../../shared/types.ts';
 
 type HeadHandle = {
   key: string;
@@ -158,13 +159,61 @@ function disposeDeep(obj: THREE.Object3D): void {
 
 /** Dummy musicians from the project's placed props — figures at real human
  *  scale for judging blocking and throw distances. */
-function buildProps(props: { kind: string; pos: { x: number; z: number }; rotY?: number }[]): THREE.Group {
+/** A length of box truss along X: four chords and a zig-zag of braces.
+ *
+ *  Drawn rather than boxed because a truss is mostly holes — a solid bar reads
+ *  as a wall in the previz and hides everything behind it, which is exactly
+ *  wrong for judging what the rig lights. */
+function buildTrussRun(len: number, section: number, mat: THREE.Material): THREE.Group {
+  const g = new THREE.Group();
+  const r = Math.max(0.012, section * 0.075);
+  const half = section / 2 - r;
+  const chordGeo = new THREE.CylinderGeometry(r, r, len, 6);
+  for (const [dy, dz] of [[half, half], [half, -half], [-half, half], [-half, -half]] as const) {
+    const c = new THREE.Mesh(chordGeo, mat);
+    c.rotation.z = Math.PI / 2; // lie along X
+    c.position.set(0, dy, dz);
+    g.add(c);
+  }
+  // braces: one zig per ~section length, on both vertical faces
+  const bay = Math.max(section, 0.35);
+  const n = Math.max(1, Math.round(len / bay));
+  const braceLen = Math.hypot(len / n, section - 2 * r);
+  const braceGeo = new THREE.CylinderGeometry(r * 0.7, r * 0.7, braceLen, 5);
+  for (let i = 0; i < n; i++) {
+    const cx = -len / 2 + (i + 0.5) * (len / n);
+    for (const dz of [half, -half]) {
+      const b = new THREE.Mesh(braceGeo, mat);
+      b.position.set(cx, 0, dz);
+      b.rotation.z = (i % 2 ? 1 : -1) * (Math.PI / 2 - Math.atan2(len / n, section));
+      g.add(b);
+    }
+  }
+  return g;
+}
+
+function buildProps(
+  props: {
+    kind: string;
+    pos: { x: number; z: number };
+    rotY?: number;
+    size?: { w: number; h: number; d: number };
+    y?: number;
+  }[],
+): THREE.Group {
   const g = new THREE.Group();
   const cloth = new THREE.MeshStandardMaterial({ color: 0x232328, roughness: 0.92 });
   const skin = new THREE.MeshStandardMaterial({ color: 0x9e7861, roughness: 0.75 });
   const wood = new THREE.MeshStandardMaterial({ color: 0x591f1a, roughness: 0.55 });
   const metal = new THREE.MeshStandardMaterial({ color: 0x8c8c99, roughness: 0.35, metalness: 0.85 });
   const brass = new THREE.MeshStandardMaterial({ color: 0xb5944a, roughness: 0.3, metalness: 0.9 });
+  // structure reads as aluminium: bright enough to catch a beam, dull enough
+  // not to compete with the fixtures for attention
+  const truss = new THREE.MeshStandardMaterial({ color: 0x8d8d97, roughness: 0.42, metalness: 0.75 });
+  const skirtMat = new THREE.MeshStandardMaterial({ color: 0x191920, roughness: 0.95 });
+  const deckTop = new THREE.MeshStandardMaterial({ color: 0x2b2b33, roughness: 0.88 });
+  // a dark panel that still shows the light falling on it
+  const screenFace = new THREE.MeshStandardMaterial({ color: 0x0d0d12, roughness: 0.6 });
 
   const legsGeo = new THREE.CapsuleGeometry(0.13, 0.55, 4, 10);
   const torsoGeo = new THREE.CapsuleGeometry(0.17, 0.4, 4, 10);
@@ -238,6 +287,45 @@ function buildProps(props: { kind: string; pos: { x: number; z: number }; rotY?:
         }
         break;
       }
+      // ---- structure -----------------------------------------------------
+      case 'trussBar': {
+        const s = pr.size ?? { w: 7, h: 0.3, d: 0.3 };
+        const run = buildTrussRun(s.w, Math.max(s.h, s.d), truss);
+        run.position.y = (pr.y ?? 3.05) + s.h / 2;
+        root.add(run);
+        break;
+      }
+      case 'trussLeg': {
+        const s = pr.size ?? { w: 0.3, h: 3.05, d: 0.3 };
+        const run = buildTrussRun(s.h, Math.max(s.w, s.d), truss);
+        run.rotation.z = Math.PI / 2; // stand it up
+        run.position.y = (pr.y ?? 0) + s.h / 2;
+        const foot = new THREE.Mesh(new THREE.BoxGeometry(s.w * 2.2, 0.04, s.d * 2.2), truss);
+        foot.position.y = (pr.y ?? 0) + 0.02;
+        root.add(run, foot);
+        break;
+      }
+      case 'riser': {
+        const s = pr.size ?? { w: 2, h: 0.4, d: 1.5 };
+        const y = pr.y ?? 0;
+        const deck = new THREE.Mesh(new THREE.BoxGeometry(s.w, 0.05, s.d), deckTop);
+        deck.position.y = y + s.h;
+        const skirt = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, s.d), skirtMat);
+        skirt.position.y = y + s.h / 2;
+        root.add(skirt, deck);
+        break;
+      }
+      case 'screen': {
+        const s = pr.size ?? { w: 4, h: 2.25, d: 0.12 };
+        const y = pr.y ?? 0.5;
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, s.d * 0.4), screenFace);
+        panel.position.y = y + s.h / 2;
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(s.w + 0.08, s.h + 0.08, s.d), truss);
+        frame.position.y = y + s.h / 2;
+        frame.position.z = -s.d * 0.35;
+        root.add(frame, panel);
+        break;
+      }
       default:
         addStanding();
     }
@@ -245,7 +333,11 @@ function buildProps(props: { kind: string; pos: { x: number; z: number }; rotY?:
   return g;
 }
 
-export function Previz3D() {
+/** `source` picks which head set to draw: the live rig, or the audition the
+ *  engine resolves for the selected look. Same renderer, same scene, same
+ *  everything — only the numbers differ, so the preview cannot drift away from
+ *  the live view in appearance. */
+export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = {}) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -304,16 +396,27 @@ export function Previz3D() {
     floor.position.y = -0.01;
     scene.add(floor);
 
-    // truss
+    // Stand-in truss: a scale reference for a rig nobody has drawn yet. The
+    // moment you place real structure it hides itself, so the previz never
+    // shows a goalpost that is not there.
+    const stubTruss = new THREE.Group();
     const trussMat = new THREE.MeshBasicMaterial({ color: 0x37373e });
     const trussBar = new THREE.Mesh(new THREE.BoxGeometry(7, 0.09, 0.09), trussMat);
     trussBar.position.set(0, 3.05, 0);
-    scene.add(trussBar);
+    stubTruss.add(trussBar);
     for (const lx of [-3.5, 3.5]) {
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.09, 3.05, 0.09), trussMat);
       leg.position.set(lx, 3.05 / 2, 0);
-      scene.add(leg);
+      stubTruss.add(leg);
     }
+    scene.add(stubTruss);
+
+    // Metre grid — the cheapest possible answer to "how big is that?", and the
+    // reason a 7 m truss and a 2 m riser can be placed by eye.
+    const measureGrid = new THREE.GridHelper(20, 20, 0x4a4a58, 0x2a2a33);
+    measureGrid.position.y = 0.002; // just off the floor, no z-fighting
+    measureGrid.visible = false;
+    scene.add(measureGrid);
 
     // dummy musicians from placed props — scale/blocking reference (true
     // illumination lives in the native previz window)
@@ -346,10 +449,12 @@ export function Previz3D() {
       const dt = Math.min(0.1, (now - lastT) / 1000);
       lastT = now;
 
-      const { project, snap, hazeViz, showBand } = useStore.getState();
+      const { project, snap, hazeViz, showBand, showMeasure } = useStore.getState();
+      measureGrid.visible = showMeasure;
       const sig = JSON.stringify(project?.props ?? []);
       if (sig !== propsSig) {
         propsSig = sig;
+        stubTruss.visible = !(project?.props ?? []).some((pr) => isStructure(pr.kind));
         scene.remove(band);
         // free the GPU buffers — rebuilding on every prop drag otherwise
         // leaks a geometry + material set per frame of the drag
@@ -381,7 +486,9 @@ export function Previz3D() {
 
       if (rig && snap) {
         const heads = new Map<string, HeadSnap>();
-        for (const hs of snap.heads) heads.set(`${hs.f}:${hs.h}`, hs);
+        for (const hs of source === 'preview' ? (snap.previewHeads ?? []) : snap.heads) {
+          heads.set(`${hs.f}:${hs.h}`, hs);
+        }
         const beamGain = 0.07 + hazeViz * 0.5;
 
         for (const h of rig.handles) {

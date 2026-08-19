@@ -457,7 +457,14 @@ impl Renderer {
             let Some(prof) = Prof::resolve(&st.project, &f.profile_id) else { continue };
             let Some(buf) = buffers.get_mut(&f.universe_id) else { continue };
             let n_heads = prof.head_kinds().len();
-            if f.address < 1 || f.address - 1 + prof.channels() > 512 {
+            // Checked: `f.address - 1 + channels` is usize arithmetic, so an
+            // address within `channels` of usize::MAX wrapped straight past
+            // this guard and the renderers below then indexed a 512-byte buffer
+            // out of bounds — a panic, which on the shipping engine means the
+            // whole app exits. Unreachable from any JSON JavaScript can emit,
+            // but a hand-edited file or a non-JS client can say it.
+            let end = f.address.checked_sub(1).and_then(|b| b.checked_add(prof.channels()));
+            if f.address < 1 || end.map_or(true, |e| e > 512) {
                 continue;
             }
             let hp: Vec<&ResolvedParams> = (0..n_heads)

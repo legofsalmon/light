@@ -29,6 +29,10 @@ export class EngineState {
   muted = new Set<string>();
   /** Fixture driven to full white so it can be found on the truss. */
   identify: string | null = null;
+  /** Look being auditioned in the previz. Transient, never persisted, and it
+   *  never reaches DMX — the renderer resolves it into a separate head set that
+   *  only the snapshot carries. */
+  previewLook: string | null = null;
   /** universeId -> channel(0-511) -> value. Raw override applied last. */
   overrides = new Map<string, Map<number, number>>();
   clock = new BeatClock();
@@ -163,6 +167,13 @@ export class EngineState {
   /** Column = cue: layers with a look in this column fire it, empty cells clear the layer.
    *  Flash (momentary) looks are skipped — a cue must never latch a blinder on. */
   triggerColumn(col: number, t = performance.now()): void {
+    // A column this show does not have is not "a column of empty cells" — it
+    // is not addressed to us at all. Resolume compositions routinely run wider
+    // than the light show, and treating the overshoot as empty would clear
+    // every layer and black the rig out for as long as the VJ worked above our
+    // last column. The empty-cell clear below is untouched: it is what makes a
+    // "Blackout" column work.
+    if (!(col >= 0) || col >= this.project.columns.length) return;
     for (const layer of this.project.layers) {
       const lookId = layer.cells[col];
       const look = lookId ? this.project.looks[lookId] : null;
@@ -257,11 +268,28 @@ export class EngineState {
   /** Replace the project (UI edit) and drop any live references that no longer exist. */
   /** Swap in a different project wholesale (open/new): live look state,
    *  fades, and held flashes all reset — a fresh show, not an edit. */
+  // Opening a show is a boot into that show: everything transient from the last
+  // one has to go. Clearing `live` alone is not enough. `overrides`, `identify`
+  // and `muted` are keyed by ids that every project derived from the shipped
+  // default shares — `u1`, `u0`, `derby1`, `hazer` — so they do not go stale on
+  // a switch, they silently re-bind to the incoming show and keep forcing.
+  // all-stop already treats all three as panic state; the switch path never did.
+  //
+  // Haze is zeroed for the same reason index.ts zeroes it at boot: the hazer
+  // must never start pumping on its own, and the operator's reflex will not
+  // stop it, because blackout deliberately leaves haze alone. The fan goes with
+  // it — it runs independently of the haze level and it is the audible one.
   replaceProject(p: Project): void {
     const clean = sanitizeProject(p);
     if (!clean) return;
     this.project = clean;
     this.live.clear();
+    this.overrides.clear();
+    this.identify = null;
+    this.muted.clear();
+    this.previewLook = null;
+    this.project.settings.haze = 0;
+    this.project.settings.hazeFan = 0;
     this.onChange?.();
   }
 

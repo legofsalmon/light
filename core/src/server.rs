@@ -22,26 +22,81 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone)]
 pub struct Broadcaster {
     clients: Arc<Mutex<HashMap<ClientId, std::sync::mpsc::SyncSender<String>>>>,
+    /// Clients that had a frame dropped because their queue was full.
+    missed: Arc<Mutex<std::collections::HashSet<ClientId>>>,
 }
 
 impl Broadcaster {
     pub fn new() -> Self {
-        Broadcaster { clients: Arc::new(Mutex::new(HashMap::new())) }
+        Broadcaster {
+            clients: Arc::new(Mutex::new(HashMap::new())),
+            missed: Arc::new(Mutex::new(std::collections::HashSet::new())),
+        }
+    }
+
+    /// Clients that were too backed up to take a frame, cleared as it is read.
+    ///
+    /// Skipping a frame for a stalled client is right for snapshots — they are
+    /// disposable — but the SAME path carries the authoritative whole-project
+    /// echo. Dropping that silently leaves the client holding a stale show, and
+    /// the next thing it sends is that stale project, applied wholesale to the
+    /// rig. Eviction used to be the resync (via reconnect); nothing replaced it,
+    /// so this does.
+    pub fn take_missed(&self) -> Vec<ClientId> {
+        let mut m = self.missed.lock().unwrap();
+        m.drain().collect()
+    }
+
+    pub fn has_missed(&self) -> bool {
+        !self.missed.lock().unwrap().is_empty()
     }
     pub fn broadcast(&self, msg: &str) {
         let mut m = self.clients.lock().unwrap();
+        let mut missed = self.missed.lock().unwrap();
         m.retain(|id, tx| match tx.try_send(msg.to_string()) {
             Ok(()) => true,
+            // A backed-up client is not a dead one. Snapshots are disposable, so
+            // skip this frame and let it catch up — the queue is bounded, which
+            // is all the backpressure this needs. Evicting instead dropped the
+            // connection, and dropping a connection releases every flash that
+            // client was holding: a blinder fading out mid-song because a
+            // tablet's wifi hiccuped, and a reconnect under a new id so the
+            // operator's eventual note-off could never match. Node has always
+            // skipped rather than evicted (engine/server.ts), so this closes a
+            // divergence as well as a stage failure.
             Err(std::sync::mpsc::TrySendError::Full(_)) => {
-                eprintln!("[server] evicting stalled client {id}");
-                false
+                missed.insert(*id);
+                true
             }
             Err(std::sync::mpsc::TrySendError::Disconnected(_)) => false,
         });
     }
+    /// Broadcast to everyone except one client — used for the project echo
+    /// when every change since the last one came from that client. It already
+    /// has this state; sending it back lands on top of whatever the operator
+    /// has dragged or typed in the meantime and silently discards it.
+    pub fn broadcast_except(&self, skip: ClientId, msg: &str) {
+        let mut m = self.clients.lock().unwrap();
+        m.retain(|id, tx| {
+            if *id == skip {
+                return true;
+            }
+            match tx.try_send(msg.to_string()) {
+                Ok(()) => true,
+                Err(std::sync::mpsc::TrySendError::Full(_)) => {
+                    self.missed.lock().unwrap().insert(*id);
+                    true
+                }
+                Err(std::sync::mpsc::TrySendError::Disconnected(_)) => false,
+            }
+        });
+    }
     pub fn send_to(&self, id: ClientId, msg: String) {
         if let Some(tx) = self.clients.lock().unwrap().get(&id) {
-            let _ = tx.try_send(msg);
+            // still backed up: keep it marked so the resend is retried
+            if let Err(std::sync::mpsc::TrySendError::Full(_)) = tx.try_send(msg) {
+                self.missed.lock().unwrap().insert(id);
+            }
         }
     }
     pub fn count(&self) -> usize {
@@ -63,26 +118,44 @@ pub fn start(
     bc: Broadcaster,
 ) -> std::io::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port))?;
-    // A second engine binding [::]:port could answer localhost requests too
-    // (macOS defaults IPV6_V6ONLY on, so the v6 wildcard is a separate
-    // socket), giving two engines driving one rig. Claim it as well — but
-    // best-effort only: on Linux `::` is dual-stack by default and therefore
-    // *always* collides with the 0.0.0.0 socket we just took. A second engine
-    // is still locked out either way, because it hits AddrInUse on the v4
-    // wildcard above before it ever gets here.
-    let v6_guard = TcpListener::bind(("::", port)).ok();
-    std::thread::spawn(move || {
-        let _v6_guard = v6_guard; // held for the process lifetime
-        for stream in listener.incoming() {
-            let Ok(stream) = stream else { continue };
-            let tx = tx.clone();
-            let bc = bc.clone();
-            let dist = dist.clone();
-            std::thread::spawn(move || {
-                let _ = handle_conn(stream, dist, tx, bc);
-            });
-        }
-    });
+    // Also take the v6 wildcard, and SERVE it — do not merely hold it.
+    //
+    // macOS defaults IPV6_V6ONLY on, so [::]:port is a separate socket from
+    // the v4 wildcard above, and `localhost` resolves to ::1 *first*. This
+    // socket was once bound and never accepted on, to stop a second engine
+    // claiming it and driving the same rig. That guard worked, and cost us
+    // the app: the window loads tauri://localhost, so wsUrl() dials
+    // ws://localhost:9900, which lands on ::1, completes the TCP handshake
+    // against a socket nobody accepts from, and waits forever. The engine is
+    // healthy the whole time and the UI reports it as not responding.
+    //
+    // A black hole is worse than a closed port: refusing the connection would
+    // have let the browser fall back to IPv4 in milliseconds. So answer on
+    // both families. The second-engine guard is preserved — strengthened,
+    // even, since the socket is now a real server rather than a decoy.
+    //
+    // Best-effort: on Linux `::` is dual-stack and therefore always collides
+    // with the v4 wildcard we just took, leaving None here. A second engine
+    // is still locked out, because it hits AddrInUse on v4 before reaching
+    // this line. Node's http.listen(port) binds dual-stack and has always
+    // served both — this brings the Rust core in line with it.
+    let v6 = TcpListener::bind(("::", port)).ok();
+    for l in std::iter::once(listener).chain(v6) {
+        let tx = tx.clone();
+        let bc = bc.clone();
+        let dist = dist.clone();
+        std::thread::spawn(move || {
+            for stream in l.incoming() {
+                let Ok(stream) = stream else { continue };
+                let tx = tx.clone();
+                let bc = bc.clone();
+                let dist = dist.clone();
+                std::thread::spawn(move || {
+                    let _ = handle_conn(stream, dist, tx, bc);
+                });
+            }
+        });
+    }
     Ok(())
 }
 
@@ -137,11 +210,23 @@ fn handle_ws(stream: TcpStream, tx: Sender<EngineMsg>, bc: Broadcaster) -> std::
         // drain outbound
         loop {
             match out_rx.try_recv() {
-                Ok(s) => {
-                    if ws.send(Message::Text(s)).is_err() {
-                        break 'conn;
+                Ok(s) => match ws.send(Message::Text(s)) {
+                    Ok(()) => {}
+                    // A full kernel send buffer is not a dead peer. The read
+                    // path below already tolerates exactly these two kinds; the
+                    // write path treated them as fatal, so a few seconds of
+                    // congestion cost the client its connection — and with it
+                    // every flash it was holding. Stop draining this round and
+                    // let the next pass resume: tungstenite keeps what it could
+                    // not write and picks up at the right byte.
+                    Err(tungstenite::Error::Io(ref e))
+                        if e.kind() == std::io::ErrorKind::WouldBlock
+                            || e.kind() == std::io::ErrorKind::TimedOut =>
+                    {
+                        break
                     }
-                }
+                    Err(_) => break 'conn,
+                },
                 Err(std::sync::mpsc::TryRecvError::Empty) => break,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => break 'conn,
             }

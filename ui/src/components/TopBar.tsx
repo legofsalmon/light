@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useStore } from '../store.ts';
+import { useStore, type ViewMode } from '../store.ts';
 import { askConfirm, askPrompt } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
 import { clamp } from '../../../shared/types.ts';
@@ -99,10 +99,22 @@ function ProjectMenu({ name }: { name: string }) {
   );
 }
 
+/** The four layouts, in the order they sit on the bar. Alt-1..4 matches the
+ *  position, so the shortcut is readable off the screen. */
+const VIEWS: { id: ViewMode; label: string; title: string; key: string }[] = [
+  { id: 'pads', label: 'Pads', title: 'Look grid, full screen', key: '1' },
+  { id: 'previz', label: 'Previz', title: 'Previz, full screen', key: '2' },
+  { id: 'patch', label: 'Patch', title: 'Fixtures and patch, full screen', key: '3' },
+  { id: 'split', label: 'All', title: 'All three panels at once', key: '4' },
+];
+
 export function TopBar() {
   const snap = useStore((s) => s.snap);
   const project = useStore((s) => s.project)!;
   const connected = useStore((s) => s.connected);
+  const engineStalled = useStore((s) => s.engineStalled);
+  const view = useStore((s) => s.view);
+  const setView = useStore((s) => s.setView);
   const midiInputs = useStore((s) => s.midiInputs);
   const oscLog = useStore((s) => s.oscLog);
   const learnMode = useStore((s) => s.learnMode);
@@ -119,15 +131,34 @@ export function TopBar() {
   const dragRef = useRef<{ y: number; bpm: number } | null>(null);
 
   const oscAlive = oscLog.length > 0 && Date.now() - oscLog[0].t < 3000;
-  const engineOk = connected && (snap?.stats.fps ?? 0) >= 35;
+  // engineStalled comes from snapshot ARRIVAL time. The fps figure below only
+  // catches a slowdown: it travels inside the snapshot, so a tick loop that
+  // stops entirely freezes it at its last healthy value and the dot stays green.
+  const engineOk = connected && !engineStalled && (snap?.stats.fps ?? 0) >= 35;
   const justSaved = Date.now() - savedFlash < 1500;
 
   return (
     <div className="topbar panel">
-      <div className="wordmark">
+      <div className="wordmark" title={`LIGHT v${__APP_VERSION__}`}>
         LIGHT<span>■</span>
       </div>
       <ProjectMenu name={project.name} />
+      {/* Left, next to the project menu: the right end of this bar is where
+          things get squeezed on a laptop, and a view switcher that scrolls out
+          of reach is worse than no view switcher. */}
+      <div className="seg viewseg" role="group" aria-label="layout">
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            className={view === v.id ? 'on' : ''}
+            title={`${v.title}  (⌥${v.key})`}
+            aria-pressed={view === v.id}
+            onClick={() => setView(v.id)}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
       <button className="btn small ghost" onClick={() => send({ type: 'save' })}>
         {justSaved ? 'saved ✓' : 'save'}
       </button>

@@ -96,7 +96,12 @@ fn parse_matrix(s: &str) -> Mat43 {
             let nums: Vec<f64> = part
                 .trim_start_matches(|c| c == '{' || c == ' ')
                 .split(',')
-                .filter_map(|n| n.trim().parse().ok())
+                // finite only: Rust's f64 parser accepts "NaN" and "inf", and a
+                // scene carrying either produced positions serde writes out as
+                // `null` — which f64 cannot read back. The engine would save a
+                // show it could not load, and the next boot renamed it
+                // `.corrupt-*` and started the demo default instead.
+                .filter_map(|n| n.trim().parse::<f64>().ok().filter(|v| v.is_finite()))
                 .collect();
             (nums.len() == 3).then(|| [nums[0], nums[1], nums[2]])
         })

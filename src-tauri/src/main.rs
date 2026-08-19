@@ -4,6 +4,51 @@ use tauri::Manager;
 
 use std::sync::{Arc, Mutex};
 
+/// The last panic's message and backtrace, stashed by the hook below so the
+/// thread that catches the unwind can report what actually happened.
+static PANIC_DETAIL: Mutex<Option<String>> = Mutex::new(None);
+
+/// Where a death gets recorded.
+///
+/// A Finder-launched .app has stderr on /dev/null, so `eprintln!` at the moment
+/// of failure reaches nobody. That is the whole reason an app which vanished
+/// mid-show left nothing behind to debug: the two lines that would have named
+/// the cause were written to a stream no one could read.
+fn log_file() -> Option<std::path::PathBuf> {
+    let dir = std::path::PathBuf::from(std::env::var("HOME").ok()?).join("Library/Logs/LIGHT");
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("engine.log"))
+}
+
+fn log_line(text: &str) {
+    eprintln!("[light] {text}");
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if let Some(p) = log_file() {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(p) {
+            let _ = writeln!(f, "[{secs}] {text}");
+        }
+    }
+}
+
+/// Capture panics with a backtrace before the unwind discards them. The payload
+/// alone carries no backtrace, so it has to be taken here, at the throw site.
+fn install_panic_logger() {
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let bt = std::backtrace::Backtrace::force_capture();
+        let text = format!("PANIC {info}\nbacktrace:\n{bt}");
+        if let Ok(mut slot) = PANIC_DETAIL.lock() {
+            *slot = Some(text.clone());
+        }
+        log_line(&text);
+        prev(info);
+    }));
+}
+
 /// Is this port ours to take?
 fn port_free(port: u16) -> bool {
     std::net::TcpListener::bind(("0.0.0.0", port)).is_ok()
@@ -53,10 +98,13 @@ fn resolve_port(wanted: u16) -> Option<u16> {
     if port_free(wanted) {
         return Some(wanted);
     }
-    let alt = (wanted + 1..wanted + 20).find(|p| port_free(*p));
+    // saturating: LIGHT_PORT=65530 overflowed u16 here — a debug panic, and in
+    // release a scan that claimed "every port up to 65549 is in use".
+    let last = wanted.saturating_add(20);
+    let alt = (wanted.saturating_add(1)..last).find(|p| port_free(*p));
     let Some(alt) = alt else {
         ask(
-            &format!("Port {wanted} is in use, and so is every port up to {}.\n\nQuit whatever is using them and open LIGHT again.", wanted + 19),
+            &format!("Port {wanted} is in use, and so is every port up to {}.\n\nQuit whatever is using them and open LIGHT again.", last.saturating_sub(1)),
             &["Quit"],
             "Quit",
         );
@@ -78,6 +126,7 @@ fn resolve_port(wanted: u16) -> Option<u16> {
 }
 
 fn main() {
+    install_panic_logger();
     // the engine's message sender, once the engine thread is live — used to
     // ask for a clean shutdown so ⌘Q cannot drop the last edits
     let engine_tx: Arc<Mutex<Option<std::sync::mpsc::Sender<light_core::engine::EngineMsg>>>> =
@@ -114,6 +163,13 @@ fn main() {
             if port != wanted {
                 eprintln!("[light] :{wanted} was taken — running on :{port}");
             }
+            // A start line, so the log is a timeline rather than only a death
+            // notice: whoever reads it after the next unexplained exit can see
+            // what this run was doing before it stopped.
+            log_line(&format!(
+                "starting — port {port}, bundled ui {}",
+                if ui_dist.is_some() { "found" } else { "MISSING" }
+            ));
 
             // The bundled UI has 9900 compiled in as its fallback, so on any
             // other port the window would dial a socket nobody is listening on
@@ -166,11 +222,48 @@ fn main() {
                                 }
                             }
                         })),
-                    });
+                    })
                 }));
+                // The dialogs below block on osascript until a human clicks, and
+                // a window alive over a dead engine is the exact failure the exit
+                // exists to prevent. Guarantee the exit regardless of the dialog.
+                std::thread::spawn(|| {
+                    std::thread::sleep(std::time::Duration::from_secs(10));
+                    std::process::exit(1);
+                });
                 match result {
-                    Err(_) => eprintln!("[light] engine thread crashed — exiting so the failure is visible"),
-                    Ok(()) => eprintln!("[light] engine stopped (port already in use?) — exiting"),
+                    // A quit we asked for. Tauri is already tearing the process
+                    // down, so exiting here would race its teardown and report a
+                    // crash for a clean quit — which is exactly what the old
+                    // code did, under a hardcoded "port already in use?" that
+                    // was wrong for this path and would send the next person
+                    // debugging it looking at the network.
+                    Ok(light_core::engine::ExitReason::Shutdown) => {
+                        log_line("engine stopped: shutdown requested");
+                        return;
+                    }
+                    Ok(reason) => {
+                        log_line(&format!("engine stopped unexpectedly: {reason}"));
+                        ask(
+                            &format!("LIGHT's engine stopped.\n\n{reason}\n\nThe details are in ~/Library/Logs/LIGHT/engine.log"),
+                            &["Quit"],
+                            "Quit",
+                        );
+                    }
+                    Err(_) => {
+                        let detail = PANIC_DETAIL
+                            .lock()
+                            .ok()
+                            .and_then(|d| d.clone())
+                            .unwrap_or_else(|| "no detail captured".to_string());
+                        let first = detail.lines().next().unwrap_or("engine panic").to_string();
+                        log_line("engine thread panicked — exiting so the failure is visible");
+                        ask(
+                            &format!("LIGHT's engine crashed and the show has stopped.\n\n{first}\n\nThe full backtrace is in ~/Library/Logs/LIGHT/engine.log"),
+                            &["Quit"],
+                            "Quit",
+                        );
+                    }
                 }
                 std::process::exit(1);
             });
@@ -181,6 +274,12 @@ fn main() {
 
     app.run(move |_handle, event| {
         if let tauri::RunEvent::ExitRequested { .. } = event {
+            // Logged because this is the one way run() can end that only exists
+            // in the app: Shutdown has exactly one sender, right here. Tauri
+            // emits ExitRequested for ⌘Q *and* when the last window is
+            // destroyed, so if the app ever dies "on its own" again, this line
+            // landing in the log says the window went first.
+            log_line("exit requested — asking the engine to flush and stop");
             // flush synchronously-ish: ask the engine to persist and give it a
             // moment. Losing the last edits on quit is worse than a short wait.
             if let Ok(slot) = tx_for_exit.lock() {

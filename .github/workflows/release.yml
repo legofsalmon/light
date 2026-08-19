@@ -144,6 +144,7 @@ jobs:
         with:
           files: |
             LIGHT.zip
+            target/universal-apple-darwin/release/bundle/macos/LIGHT-*.dmg
             target/universal-apple-darwin/release/bundle/macos/LIGHT.dmg
           generate_release_notes: true
           body: |

@@ -58,6 +58,11 @@ pub struct Fixture {
     pub pan: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tilt: Option<f64>,
+    /// Stage structure this fixture is rigged on. `pos` stays in ROOM
+    /// coordinates — the parent link is bookkeeping for the editor, and the
+    /// engine never needs it to render.
+    #[serde(rename = "parentId", default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -84,6 +89,20 @@ pub struct StageProp {
     pub pos: PropPos,
     #[serde(rename = "rotY", default, skip_serializing_if = "Option::is_none")]
     pub rot_y: Option<f64>,
+    /// Structural kinds only (truss, riser, screen), metres. Absent on performers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<PropSize>,
+    /// Structural kinds only — height of the base off the floor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y: Option<f64>,
+}
+
+/// w across, h tall, d deep — before `rot_y` is applied.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PropSize {
+    pub w: f64,
+    pub h: f64,
+    pub d: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -331,7 +350,14 @@ pub struct Settings {
     pub haze_fan: f64,
 }
 
+// camelCase like every other struct in this file. Without it `active_deck_id`
+// went out on the wire and to disk in snake_case while the UI, shared/types.ts
+// and the Node engine all read `activeDeckId` — so the active song never
+// crossed the boundary, no deck chip ever lit, and [ ] / prev / next all
+// navigated from index 0. It is the only multi-word field on this struct, so
+// the rename touches nothing else.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Project {
     pub version: u32,
     pub name: String,
@@ -352,7 +378,11 @@ pub struct Project {
     /// grid pages (one per song); layer.cells mirrors the active deck
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub decks: Vec<Deck>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// `alias` is the migration: shows written by an earlier build carry the
+    /// snake_case spelling, and without it they would silently lose their
+    /// active deck on first load. Reads either, always writes camelCase, so a
+    /// project converts itself the next time it is saved.
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "active_deck_id")]
     pub active_deck_id: Option<String>,
 }
 
@@ -438,6 +468,10 @@ pub struct Snapshot {
     pub unknown_profiles: Vec<String>,
     pub haze_fan: f64,
     pub heads: Vec<HeadSnap>,
+    /// Heads as they WOULD look if the previewed look were running on its own.
+    /// Present only while a client is auditioning; never reaches DMX.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_heads: Option<Vec<HeadSnap>>,
     pub layers: Vec<LayerSnap>,
     pub dmx: HashMap<String, Vec<u8>>,
     pub stats: EngineStats,
@@ -459,6 +493,9 @@ pub enum Command {
     SetFixtureMute { fixture_id: String, on: bool },
     #[serde(rename_all = "camelCase")]
     Identify { fixture_id: Option<String> },
+    /// Audition a look in the previz without sending it to the rig. None stops.
+    #[serde(rename_all = "camelCase")]
+    PreviewLook { look_id: Option<String> },
     AllStop,
     #[serde(rename_all = "camelCase")]
     SetChannel { universe_id: String, channel: usize, value: Option<u8> },

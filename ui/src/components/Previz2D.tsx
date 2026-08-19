@@ -2,7 +2,33 @@ import React, { useEffect, useRef } from 'react';
 import type { HeadSnap } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
+import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
 import { askConfirm } from '../dialog.tsx';
+
+/** How close a dragged fixture has to come to a bar before it clamps on. */
+const SNAP_M = 0.35;
+
+/** The structure a fixture is close enough to hang from, if any: within SNAP_M
+ *  of the bar's centre line and inside its length. */
+function nearestStructure(
+  f: { pos: { x: number; y: number; z: number } },
+  structs: { id: string; kind: string; pos: { x: number; z: number }; rotY?: number; y?: number; size?: { w: number; h: number; d: number } }[],
+): { st: (typeof structs)[number]; d: number } | null {
+  let best: { st: (typeof structs)[number]; d: number } | null = null;
+  for (const st of structs) {
+    if (st.kind !== 'trussBar') continue; // you hang things off bars, not risers
+    const size = st.size ?? STRUCTURE_DEFAULTS[st.kind] ?? { w: 1, h: 1, d: 1 };
+    const o = offsetOnParent(f, st);
+    if (Math.abs(o.along) > size.w / 2) continue; // past the end of the bar
+    const d = Math.abs(o.across);
+    if (d <= SNAP_M && (!best || d < best.d)) best = { st, d };
+  }
+  return best;
+}
+
+const STRUCTURE_LABEL: Record<string, string> = {
+  trussBar: 'truss', trussLeg: 'leg', riser: 'riser', screen: 'screen',
+};
 
 const WORLD_W = 11; // metres shown horizontally (both views)
 // plan: depth axis (z), audience at the bottom
@@ -16,7 +42,7 @@ const TRUSS_Y = 3.05; // matches the 3D scene truss
 type ViewKind = 'plan' | 'front';
 
 /** 2D previz: top-down plan (drag places x/z) or front elevation (drag sets x/height). */
-export function Previz2D() {
+export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = {}) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{
@@ -101,8 +127,9 @@ export function Previz2D() {
       const m = mapping(view);
       const t = performance.now();
 
+      const { showMeasure, propSel } = useStore.getState();
       // 1 m grid
-      ctx.strokeStyle = 'rgba(255,255,255,0.045)';
+      ctx.strokeStyle = showMeasure ? 'rgba(255,255,255,0.11)' : 'rgba(255,255,255,0.045)';
       ctx.lineWidth = 1;
       const vTop = view === 'plan' ? PLAN_Z0 : FRONT_Y_TOP - FRONT_H;
       const vBot = view === 'plan' ? PLAN_Z0 + PLAN_D : FRONT_Y_TOP;
@@ -111,6 +138,21 @@ export function Previz2D() {
         ctx.moveTo(m.toX(gx), m.toY(vTop));
         ctx.lineTo(m.toX(gx), m.toY(vBot));
         ctx.stroke();
+      }
+      if (showMeasure) {
+        // metre numbers down the left and along the bottom: enough to place a
+        // riser by eye without reaching for a tape measure
+        ctx.fillStyle = 'rgba(190,196,210,0.75)';
+        ctx.font = '9px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        for (let gx = -Math.floor(WORLD_W / 2); gx <= WORLD_W / 2; gx++) {
+          if (gx !== 0) ctx.fillText(`${gx}`, m.toX(gx), h - 3);
+        }
+        ctx.textAlign = 'left';
+        for (let gv = Math.ceil(Math.min(vTop, vBot)); gv <= Math.max(vTop, vBot); gv++) {
+          ctx.fillText(`${gv}m`, 3, m.toY(gv) - 2);
+        }
+        ctx.textAlign = 'center';
       }
       for (let gv = Math.ceil(Math.min(vTop, vBot)); gv <= Math.max(vTop, vBot); gv++) {
         ctx.beginPath();
@@ -146,7 +188,8 @@ export function Previz2D() {
       }
 
       const headMap = new Map<string, HeadSnap>();
-      for (const hs of snap?.heads ?? []) headMap.set(`${hs.f}:${hs.h}`, hs);
+      const headSrc = source === 'preview' ? (snap?.previewHeads ?? []) : (snap?.heads ?? []);
+      for (const hs of headSrc) headMap.set(`${hs.f}:${hs.h}`, hs);
 
       for (const f of project.fixtures) {
         const prof = profileMeta(project, f.profileId);
@@ -255,6 +298,38 @@ export function Previz2D() {
         for (const pr of project.props ?? []) {
           const px = m.toX(pr.pos.x);
           const py = m.toY(pr.pos.z);
+
+          // Structure draws its real footprint — the whole reason to draw a
+          // stage is to see what fits, and a blob tells you nothing about
+          // whether a 7 m truss clears the room.
+          if (isStructure(pr.kind)) {
+            const s = pr.size ?? STRUCTURE_DEFAULTS[pr.kind] ?? { w: 1, h: 1, d: 1 };
+            const w = s.w * m.scale;
+            const d = s.d * m.scale;
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.rotate(pr.rotY ?? 0);
+            const selected = propSel.includes(pr.id);
+            ctx.fillStyle = selected
+              ? 'rgba(89,194,232,0.26)'
+              : pr.kind === 'screen' ? 'rgba(80,140,200,0.20)' : 'rgba(150,155,170,0.18)';
+            ctx.strokeStyle = selected
+              ? 'rgba(120,205,245,1)'
+              : pr.kind === 'screen' ? 'rgba(110,170,225,0.85)' : 'rgba(165,170,185,0.85)';
+            ctx.lineWidth = selected ? 2 : 1.2;
+            ctx.beginPath();
+            ctx.rect(-w / 2, -d / 2, w, d);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            // dimensions, so you can size it without opening a panel
+            ctx.fillStyle = 'rgba(200,205,220,0.8)';
+            ctx.font = `${Math.max(7, m.scale * 0.1)}px -apple-system, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(`${STRUCTURE_LABEL[pr.kind] ?? pr.kind} ${s.w}×${s.d}m`, px, py - d / 2 - 3);
+            continue;
+          }
+
           const rad = 0.24 * m.scale;
           // shoulders + head silhouette
           ctx.beginPath();
@@ -303,14 +378,37 @@ export function Previz2D() {
       v: number,
       others: { id: string; dx: number; dv: number }[],
     ) => {
-      const view = useStore.getState().previz2dView;
+      const { previz2dView: view, snapToTruss: snapOn } = useStore.getState();
       useStore.getState().mutate((p) => {
+        const structs = snapOn && view === 'plan' ? (p.props ?? []).filter((pr) => isStructure(pr.kind)) : [];
         const place = (fid: string, px: number, pv: number) => {
           const f = p.fixtures.find((fx) => fx.id === fid);
           if (!f) return;
           f.pos.x = Math.round(px * 20) / 20;
           if (view === 'plan') {
             f.pos.z = Math.round(pv * 20) / 20;
+            // Snap: drop a fixture near a bar and it clamps onto it and adopts
+            // it as parent. Only in plan, only within SNAP_M of the bar's line
+            // and inside its length — otherwise you could never place a fixture
+            // in free air near a truss, which is a real thing people do.
+            const hit = nearestStructure(f, structs);
+            if (hit) {
+              const o = offsetOnParent(f, hit.st);
+              const np = posFromOffset({ along: o.along, across: 0, drop: 0 }, hit.st);
+              f.pos.x = Math.round(np.x * 100) / 100;
+              f.pos.z = Math.round(np.z * 100) / 100;
+              f.pos.y = Math.round(np.y * 100) / 100;
+              f.parentId = hit.st.id;
+            } else if (f.parentId && !structs.some((st) => st.id === f.parentId)) {
+              f.parentId = undefined;
+            } else if (f.parentId) {
+              // dragged clear of its bar: let it go
+              const parent = structs.find((st) => st.id === f.parentId);
+              if (parent) {
+                const o = offsetOnParent(f, parent);
+                if (Math.abs(o.across) > SNAP_M) f.parentId = undefined;
+              }
+            }
           } else {
             f.pos.y = Math.round(Math.min(6, Math.max(0, pv)) * 20) / 20;
           }
@@ -325,8 +423,23 @@ export function Previz2D() {
       useStore.getState().mutate((p) => {
         const pr = (p.props ?? []).find((y) => y.id === id);
         if (!pr) return;
-        pr.pos.x = Math.round(x * 20) / 20;
-        pr.pos.z = Math.round(v * 20) / 20;
+        const nx = Math.round(x * 20) / 20;
+        const nz = Math.round(v * 20) / 20;
+        // Anything rigged on this piece travels with it. Positions are stored in
+        // room coordinates, so "it moves with the truss" means literally moving
+        // the children — which is also why nothing has to migrate and the patch
+        // table never starts showing coordinates in a frame of its own.
+        const dx = nx - pr.pos.x;
+        const dz = nz - pr.pos.z;
+        if (dx || dz) {
+          for (const f of p.fixtures) {
+            if (f.parentId !== pr.id) continue;
+            f.pos.x = Math.round((f.pos.x + dx) * 100) / 100;
+            f.pos.z = Math.round((f.pos.z + dz) * 100) / 100;
+          }
+        }
+        pr.pos.x = nx;
+        pr.pos.z = nz;
       });
     };
 
@@ -350,7 +463,14 @@ export function Previz2D() {
         let bestProp: { id: string; d: number } | null = null;
         for (const pr of project.props ?? []) {
           const d = Math.hypot(pr.pos.x - pos.x, pr.pos.z - pos.v);
-          if (d < 0.35 && (!bestProp || d < bestProp.d)) bestProp = { id: pr.id, d };
+          // structure is grabbed anywhere inside its footprint; a performer
+          // keeps the old fixed radius
+          let reach = 0.35;
+          if (isStructure(pr.kind)) {
+            const s = pr.size ?? STRUCTURE_DEFAULTS[pr.kind] ?? { w: 1, h: 1, d: 1 };
+            reach = Math.max(s.w, s.d) / 2;
+          }
+          if (d < reach && (!bestProp || d < bestProp.d)) bestProp = { id: pr.id, d };
         }
         if (bestProp) {
           const hit = bestProp;
@@ -367,6 +487,22 @@ export function Previz2D() {
               });
             }
             return;
+          }
+          const hitProp = project.props?.find((x) => x.id === hit.id);
+          if (hitProp && isStructure(hitProp.kind)) {
+            const st = useStore.getState();
+            const add = e.shiftKey || e.metaKey || e.ctrlKey;
+            const nextSel = add
+              ? st.propSel.includes(hit.id)
+                ? st.propSel.filter((x) => x !== hit.id)
+                : [...st.propSel, hit.id]
+              : [hit.id];
+            st.setPropSel(nextSel);
+            // Picking a truss picks what is rigged on it, so every bulk patch
+            // operation that already works on a fixture selection — address,
+            // universe, mute, group — starts working on "everything on that bar".
+            const kids = project.fixtures.filter((fx) => fx.parentId && nextSel.includes(fx.parentId));
+            st.setFxSel(kids.map((fx) => fx.id));
           }
           dragRef.current = { id: hit.id, kind: 'prop', lastSend: 0, x: pos.x, v: pos.v, rot: 0, others: [] };
           try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointers */ }

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import type { Layer, LayerSnap } from '../../../shared/types.ts';
+import type { Layer, LayerBlend, LayerSnap } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
@@ -27,6 +27,7 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
   return (
     <div
       className={`cell ${look ? '' : 'empty'} ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${armed ? 'learn-armed' : ''}`}
+      title={look ? `${look.name} — click to fire` : undefined}
       onPointerDown={(e) => {
         setSel({ layerId: layer.id, col });
         if (e.button !== 0) return; // right/middle-click must never latch a flash look
@@ -34,7 +35,14 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
           useStore.getState().armLearn({ kind: 'cell', layerId: layer.id, col });
           return;
         }
-        if (!look) return;
+        // An empty pad stops the layer, the way an empty clip slot does in
+        // Resolume — the same thing the ✕ on the layer head does, but reachable
+        // in the grid where your hand already is. The cell is still selected, so
+        // the editor can offer to create a look here.
+        if (!look) {
+          send({ type: 'clearLayer', layerId: layer.id });
+          return;
+        }
         send({ type: 'trigger', layerId: layer.id, col });
         if (look.flash) {
           e.currentTarget.setPointerCapture(e.pointerId);
@@ -55,7 +63,22 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
             ))}
           </div>
           {look.flash && <div className="flashmark">FLASH</div>}
-          <div className="cellname">{look.steps?.length ? '⛓ ' : ''}{look.name}</div>
+          {/* Two targets in one pad, like a Resolume clip: the body fires the
+              look, the name selects it for editing without firing. Selecting
+              has to be possible mid-show without putting the look on stage —
+              previously the only way to open a look in the editor was to run
+              it, which is not a thing you can do during someone else's song. */}
+          <div
+            className="cellname"
+            title={`${look.name} — click to select (does not fire)`}
+            onPointerDown={(e) => {
+              e.stopPropagation(); // the cell body below must not fire it
+              setSel({ layerId: layer.id, col });
+            }}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
+            {look.steps?.length ? '⛓ ' : ''}{look.name}
+          </div>
           {fading && <div className="fadebar" style={{ width: `${(live?.t ?? 0) * 100}%` }} />}
         </>
       )}
@@ -63,8 +86,18 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
   );
 }
 
+/** Blend only affects intensity — colour, pan/tilt, strobe and macros always
+ *  take the upper layer's value whatever the mode says. Worth saying on hover,
+ *  because "multiply" reads like it should multiply colours and it does not. */
+const BLEND_HELP: Record<LayerBlend, string> = {
+  normal: 'normal — this layer replaces what is under it (intensity only)',
+  multiply: 'multiply — scales what is under it; can only take light away',
+  htp: 'htp — highest takes precedence; can only add light, never remove it',
+};
+
 function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined }) {
   const send = useStore((s) => s.send);
+  const mutate = useStore((s) => s.mutate);
   const project = useStore((s) => s.project)!;
   // The grid scrolls and looks fire from MIDI/OSC too, so the active cell can
   // be off-screen. The layer head never scrolls — it is the one place that can
@@ -76,7 +109,25 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
     <div className="layerhead">
       <div className="row">
         <div className="name grow">{layer.name}</div>
-        <span className="chip">{layer.blend}</span>
+        {/* How this layer combines with the layers below. It was a read-only
+            chip, which meant the only way to change a blend was to hand-edit
+            the project file. */}
+        <select
+          className="chip chipsel"
+          value={layer.blend}
+          title={BLEND_HELP[layer.blend]}
+          onChange={(e) => {
+            const blend = e.target.value as LayerBlend;
+            mutate((p) => {
+              const l = p.layers.find((x) => x.id === layer.id);
+              if (l) l.blend = blend;
+            });
+          }}
+        >
+          <option value="normal">normal</option>
+          <option value="multiply">multiply</option>
+          <option value="htp">htp</option>
+        </select>
         <button
           className="btn small ghost clearbtn"
           title="clear layer"

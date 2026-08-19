@@ -37,11 +37,69 @@ export type Fixture = {
    *  Absent = 0.5 = centre, which is exactly today's behaviour. */
   pan?: number;
   tilt?: number;
+  /** id of the stage structure this fixture is rigged on.
+   *
+   *  `pos` stays in ROOM coordinates — it is the one source of truth, so
+   *  nothing migrates and the patch table never starts lying about where a
+   *  fixture is. The offset along the bar is derived from the parent when it is
+   *  wanted, not stored. Moving or rotating the parent rewrites the children's
+   *  world positions, which is what "it moves with the truss" actually means. */
+  parentId?: string;
 };
+
+/** Where a fixture sits on its parent: along the bar, across it, and above or
+ *  below it — all in metres, in the parent's own rotated frame. Derived, never
+ *  stored. */
+export function offsetOnParent(
+  f: { pos: Vec3 },
+  parent: { pos: { x: number; z: number }; rotY?: number; y?: number },
+): { along: number; across: number; drop: number } {
+  const dx = f.pos.x - parent.pos.x;
+  const dz = f.pos.z - parent.pos.z;
+  const a = -(parent.rotY ?? 0);
+  return {
+    along: dx * Math.cos(a) - dz * Math.sin(a),
+    across: dx * Math.sin(a) + dz * Math.cos(a),
+    drop: f.pos.y - (parent.y ?? 0),
+  };
+}
+
+/** Inverse of offsetOnParent: put a fixture at an offset on its parent. */
+export function posFromOffset(
+  o: { along: number; across: number; drop: number },
+  parent: { pos: { x: number; z: number }; rotY?: number; y?: number },
+): Vec3 {
+  const a = parent.rotY ?? 0;
+  return {
+    x: parent.pos.x + o.along * Math.cos(a) - o.across * Math.sin(a),
+    z: parent.pos.z + o.along * Math.sin(a) + o.across * Math.cos(a),
+    y: (parent.y ?? 0) + o.drop,
+  };
+}
 
 export type HeadRef = { fixtureId: string; head: number };
 
-export type StagePropKind = 'vocalist' | 'guitarist' | 'bassist' | 'drummer' | 'keyboardist';
+export type StagePropKind =
+  | 'vocalist' | 'guitarist' | 'bassist' | 'drummer' | 'keyboardist'
+  // structure: the stage itself, drawn by hand. A real MVR carries this as
+  // thousands of binary 3DS meshes, which is a different project; these
+  // primitives cover the shapes that actually matter for judging a beam.
+  | 'trussBar' | 'trussLeg' | 'riser' | 'screen';
+
+/** Structural kinds carry dimensions; performers do not. */
+export const STRUCTURE_KINDS: StagePropKind[] = ['trussBar', 'trussLeg', 'riser', 'screen'];
+export const isStructure = (k: string): boolean =>
+  (STRUCTURE_KINDS as string[]).includes(k);
+
+/** Default size and hang height per structural kind, in metres. The truss bar
+ *  matches the fixed goalpost it replaces, so drawing one changes nothing until
+ *  you move it. */
+export const STRUCTURE_DEFAULTS: Record<string, { w: number; h: number; d: number; y: number }> = {
+  trussBar: { w: 7, h: 0.3, d: 0.3, y: 3.05 },
+  trussLeg: { w: 0.3, h: 3.05, d: 0.3, y: 0 },
+  riser: { w: 2, h: 0.4, d: 1.5, y: 0 },
+  screen: { w: 4, h: 2.25, d: 0.12, y: 0.5 },
+};
 /** A dummy performer on the stage — previz-only scenery, placed like a
  *  fixture in the 2D plan, rendered as a figure in both 3D views. */
 export type StageProp = {
@@ -49,6 +107,10 @@ export type StageProp = {
   kind: StagePropKind;
   pos: { x: number; z: number };
   rotY?: number;
+  /** structural kinds only, metres — w across, h tall, d deep (before rotY) */
+  size?: { w: number; h: number; d: number };
+  /** structural kinds only — height of the base off the floor; a truss bar hangs */
+  y?: number;
 };
 export type Group = { id: string; name: string; heads: HeadRef[] };
 
@@ -261,6 +323,10 @@ export type Snapshot = {
   /** OSC input socket: 'failed' = the port is held by another app (a second
    *  engine? QLC+?) so nothing from Resolume will ever arrive. Absent = off. */
   oscIn?: 'on' | 'failed';
+  /** Heads as they WOULD look if the previewed look were running on its own:
+   *  full master, no blackout, nothing else live. Present only while a client
+   *  has asked for a preview. Never touches DMX. */
+  previewHeads?: HeadSnap[];
   /** fixtures currently silenced */
   muted?: string[];
   /** fixture being identified (driven to full white), if any */
@@ -292,6 +358,10 @@ export type Command =
   | { type: 'setFixtureMute'; fixtureId: string; on: boolean }
   /** drive one fixture to full white to find it on the truss */
   | { type: 'identify'; fixtureId: string | null }
+  /** Audition a look in the previz without sending it to the rig. null stops.
+   *  The engine resolves it with the SAME renderer that drives the show, so the
+   *  preview cannot quietly disagree with what actually fires. */
+  | { type: 'previewLook'; lookId: string | null }
   /** panic: blackout, clear every layer, release holds, haze + motors off */
   | { type: 'allStop' }
   /** raw channel override, applied last into the DMX buffer (channel is 1-512;

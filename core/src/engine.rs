@@ -62,7 +62,61 @@ fn ensure_osc(osc: &mut OscIn, state: &EngineState, tx: &Sender<EngineMsg>) {
 
 /// Blocking engine loop — spawn on a dedicated thread from the Tauri shell,
 /// or call directly from the standalone binary.
-pub fn run(mut cfg: EngineConfig) {
+/// Who caused the project echo that is waiting to go out.
+///
+/// `Client(id)` means every change since the last echo came from that one
+/// client, so it already holds this state. `Everyone` means at least one change
+/// came from somewhere else — a controller, OSC, a second window, the engine
+/// itself — and every client needs it. The distinction matters because the echo
+/// is the WHOLE project and it is applied wholesale on arrival.
+#[derive(Clone, Copy, PartialEq)]
+enum EchoTo {
+    Idle,
+    Client(ClientId),
+    Everyone,
+}
+
+impl EchoTo {
+    fn mark(&mut self, owner: Option<ClientId>) {
+        *self = match (*self, owner) {
+            (EchoTo::Idle, Some(id)) => EchoTo::Client(id),
+            // still the same single client
+            (EchoTo::Client(a), Some(b)) if a == b => EchoTo::Client(a),
+            // a second source in the same window: nobody can be skipped
+            _ => EchoTo::Everyone,
+        };
+    }
+}
+
+/// Why the engine loop ended.
+///
+/// It used to return `()`, so a clean quit and a failed bind were the same
+/// value to the caller — which is how the shell came to report "port already in
+/// use?" for a shutdown it had itself requested, and why an app that vanished
+/// left nothing behind to say which had happened.
+#[derive(Debug)]
+pub enum ExitReason {
+    /// A `Shutdown` message: someone asked for this. Not a failure.
+    Shutdown,
+    /// The port could not be bound — nothing ever started.
+    ListenFailed(String),
+    /// Every sender was dropped. `tx` lives in `run`'s own frame, so this
+    /// should be unreachable; it is named rather than silent so that if it ever
+    /// does happen the log says so instead of guessing.
+    ChannelClosed,
+}
+
+impl std::fmt::Display for ExitReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExitReason::Shutdown => write!(f, "shutdown requested"),
+            ExitReason::ListenFailed(e) => write!(f, "cannot bind the engine port: {e}"),
+            ExitReason::ChannelClosed => write!(f, "engine message channel closed unexpectedly"),
+        }
+    }
+}
+
+pub fn run(mut cfg: EngineConfig) -> ExitReason {
     let epoch = Instant::now();
     let now_ms = move || epoch.elapsed().as_secs_f64() * 1000.0;
 
@@ -80,10 +134,11 @@ pub fn run(mut cfg: EngineConfig) {
     if let Some(ready) = cfg.on_ready.take() {
         ready(tx.clone());
     }
+    ENGINE_PORT.store(cfg.port, std::sync::atomic::Ordering::Relaxed);
     let bc = Broadcaster::new();
     if let Err(e) = crate::server::start(cfg.port, cfg.ui_dist.clone(), tx.clone(), bc.clone()) {
         eprintln!("[light] cannot listen on :{} — is another engine running? {e}", cfg.port);
-        return;
+        return ExitReason::ListenFailed(format!("port {} — {e}", cfg.port));
     }
     if cfg.with_midi {
         crate::midi::start(tx.clone());
@@ -95,6 +150,8 @@ pub fn run(mut cfg: EngineConfig) {
     project.settings.haze = 0.0;
     let mut state = EngineState::new(project, now_ms());
     let mut renderer = Renderer::new();
+    // Its own instance: the audition must not advance the show's effect phase.
+    let mut preview_renderer = Renderer::new();
     let mut artnet = ArtnetOut::new();
     let mut sacn = SacnOut::new();
     let mut osc = OscIn::new();
@@ -108,7 +165,7 @@ pub fn run(mut cfg: EngineConfig) {
     let mut midi_names: Vec<String> = Vec::new();
     let mut dirty_at: Option<Instant> = None;
     let mut dirty_first: Option<Instant> = None;
-    let mut project_dirty = false;
+    let mut project_echo = EchoTo::Idle;
     let mut last_echo = Instant::now();
     let mut osc_log: (f64, u32) = (0.0, 0); // monitor rate-limit window
 
@@ -182,13 +239,13 @@ pub fn run(mut cfg: EngineConfig) {
                         Ok(_) => println!("[light] project flushed on shutdown"),
                         Err(e) => eprintln!("[persist] shutdown flush failed: {e}"),
                     }
-                    return;
+                    return ExitReason::Shutdown;
                 }
                 Ok(msg) => {
                     let bpm_before = state.clock.bpm;
                     let align = handle_msg(
                         msg, &mut state, &bc, &mut osc, &tx, &dir, &mut dirty_at, &mut midi_names,
-                        &mut osc_log, now_ms(), &mut project_dirty,
+                        &mut osc_log, now_ms(), &mut project_echo,
                     );
                     if align {
                         renderer.align_phase();
@@ -208,7 +265,7 @@ pub fn run(mut cfg: EngineConfig) {
                     }
                 }
                 Err(RecvTimeoutError::Timeout) => break,
-                Err(RecvTimeoutError::Disconnected) => return,
+                Err(RecvTimeoutError::Disconnected) => return ExitReason::ChannelClosed,
             }
         }
 
@@ -220,10 +277,27 @@ pub fn run(mut cfg: EngineConfig) {
         // Coalesced project echo, rate-limited: continuous controls (faders,
         // MIDI CC) dirty the project on every input event, and each echo is
         // the WHOLE project.
-        if project_dirty && last_echo.elapsed() >= Duration::from_millis(100) {
-            project_dirty = false;
+        if (project_echo != EchoTo::Idle || bc.has_missed())
+            && last_echo.elapsed() >= Duration::from_millis(100)
+        {
+            let ev = project_event(&state);
+            // Make good any project frame dropped while a client was backed up.
+            // Skipping the frame is right for snapshots and wrong for the
+            // project: the client would hold a stale show and then send it back.
+            // Still full? send_to re-marks it and we try again next window.
+            for id in bc.take_missed() {
+                bc.send_to(id, ev.clone());
+            }
+            match project_echo {
+                // Everything in this window came from one client. It already has
+                // this state, and echoing it back lands on top of whatever the
+                // operator has dragged or typed since — their last edit of the
+                // gesture vanishing off the screen and off the rig.
+                EchoTo::Client(id) => bc.broadcast_except(id, &ev),
+                _ => bc.broadcast(&ev),
+            }
+            project_echo = EchoTo::Idle;
             last_echo = Instant::now();
-            bc.broadcast(&project_event(&state));
         }
 
         let t = now_ms();
@@ -273,7 +347,12 @@ pub fn run(mut cfg: EngineConfig) {
         // Snapshots to the UI at 20 fps.
         snap_flip = !snap_flip;
         if snap_flip && bc.count() > 0 {
-            let snap = build_snapshot(&state, &res, t, &stats, &link, &artnet, osc.status());
+            // Only when someone is actually auditioning, and only on the frames
+            // that carry a snapshot — so the show pays nothing for this the rest
+            // of the time.
+            let preview = preview_heads(&mut state, &mut preview_renderer, t);
+            let snap =
+                build_snapshot(&state, &res, t, &stats, &link, &artnet, osc.status(), preview);
             if let Ok(s) = serde_json::to_string(&snap) {
                 bc.broadcast(&s);
             }
@@ -317,7 +396,15 @@ pub fn run(mut cfg: EngineConfig) {
 
 /// Launch the native previz window as a detached process. Candidate paths:
 /// env override, next to the current executable, repo target dirs.
+/// The port this engine is actually listening on.
+///
+/// A static because the previz child is spawned from deep inside the command
+/// path, and threading a port through every handler signature for one
+/// environment variable would be worse than this.
+static ENGINE_PORT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(9900);
+
 fn spawn_previz() -> (bool, String) {
+    let port = ENGINE_PORT.load(std::sync::atomic::Ordering::Relaxed);
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
     if let Ok(p) = std::env::var("LIGHT_PREVIZ_BIN") {
         candidates.push(p.into());
@@ -332,7 +419,11 @@ fn spawn_previz() -> (bool, String) {
 
     for c in &candidates {
         if c.is_file() {
-            return match std::process::Command::new(c).spawn() {
+            // The child reads LIGHT_PORT from its own environment and otherwise
+            // falls back to 9900 — which, when the port dialog has moved this
+            // engine, is the OTHER copy of LIGHT. Silent when it happens: previz
+            // shows no connection state.
+            return match std::process::Command::new(c).env("LIGHT_PORT", port.to_string()).spawn() {
                 Ok(_) => (true, "previz launched".into()),
                 Err(e) => (false, format!("previz failed to start: {e}")),
             };
@@ -369,13 +460,14 @@ fn apply_outcome(
     tx: &Sender<EngineMsg>,
     dir: &PathBuf,
     dirty_at: &mut Option<Instant>,
-    project_dirty: &mut bool,
+    project_echo: &mut EchoTo,
+    owner: Option<ClientId>,
 ) {
     if out.project_changed {
         // Continuous controls (faders, MIDI CC) land here per input event and
         // each echo is the WHOLE project — coalesce to one per tick instead of
         // flooding every client mid fader-ride.
-        *project_dirty = true;
+        project_echo.mark(owner);
         *dirty_at = Some(Instant::now());
         ensure_osc(osc, state, tx);
     }
@@ -419,7 +511,7 @@ fn handle_msg(
     midi_names: &mut Vec<String>,
     osc_log: &mut (f64, u32),
     t: f64,
-    project_dirty: &mut bool,
+    project_echo: &mut EchoTo,
 ) -> bool {
     match msg {
         // handled by the drain loop before it reaches here
@@ -495,9 +587,20 @@ fn handle_msg(
                 }
                 _ => {}
             }
+            // Only an updateProject echo may be withheld from its sender: that
+            // client composed the exact state, so it already holds it. Every
+            // other command can change the project in ways the sender did not
+            // compute — a GDTF import adding fixtures, reconcile pruning a
+            // dangling cell — and the sender needs that result like everyone
+            // else. The parity harness caught this: it imported a fixture and
+            // then could not see the fixture it had just created.
+            let echo_owner = match &cmd {
+                Command::UpdateProject { .. } => owner,
+                _ => None,
+            };
             let out = state.handle_command(cmd, t, owner);
             let align = out.align_phase;
-            apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_dirty);
+            apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_echo, echo_owner);
             return align;
         }
         EngineMsg::Osc(m) => {
@@ -520,7 +623,8 @@ fn handle_msg(
         }
         EngineMsg::Midi(status, d1, d2) => {
             let out = state.apply_midi(status, d1, d2, t);
-            apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_dirty);
+            // No owner: a controller change belongs to everyone.
+            apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_echo, None);
         }
         EngineMsg::MidiPorts(names) => {
             *midi_names = names;
@@ -539,6 +643,23 @@ fn handle_msg(
             // Closing the window drops its socket — flush now rather than
             // gambling that the process lives long enough for the autosave
             // debounce (or that the host delivers a quit event at all).
+            //
+            // Only when there is something to flush. This used to run on every
+            // disconnect: closing the previz window, ⌘R on the UI, a tablet
+            // dropping off the WiFi — each one a full serialize, backup rotation
+            // and write, on the tick thread, for a project that had not changed.
+            //
+            // Deliberately still synchronous. It exists precisely because the
+            // host does not reliably deliver a quit event, and ~1-3 ms against a
+            // 25 ms budget is a better trade than gambling the operator's last
+            // edits on a detached thread outliving the process.
+            // Unconditional on purpose. Gating this on `dirty_at` looked like
+            // free savings, but `dirty_at` is cleared the instant the autosave
+            // worker is SPAWNED, before it is known to have succeeded — so a
+            // failed autosave left nothing dirty and this became the retry that
+            // never ran. `already_on_disk` in save_project_slug now makes an
+            // unchanged save a read-and-compare with no rotation and no write,
+            // which is where the savings actually come from.
             let slug = persist::current_slug(dir);
             if let Err(e) = persist::save_project_slug(dir, &slug, &state.project) {
                 eprintln!("[persist] disconnect flush failed: {e}");
@@ -601,6 +722,60 @@ fn handle_osc_sync(m: &OscMessage, state: &mut EngineState, t: f64) {
     }
 }
 
+/// Resolve one look as if it were the only thing running: full master, no
+/// blackout, nothing else live.
+///
+/// It goes through the SAME renderer that drives the rig, which is the whole
+/// point — an audition computed by a second implementation could quietly
+/// disagree with what actually fires, and you would only find out on stage.
+///
+/// The live map is swapped out and put back rather than cloning the project:
+/// `live` holds one entry per layer, the project holds the whole show. Mutes,
+/// channel overrides and identify are deliberately left in force, because they
+/// are things the operator has switched on and the audition should show the rig
+/// as it would really respond.
+fn preview_heads(
+    st: &mut EngineState,
+    r: &mut Renderer,
+    t: f64,
+) -> Option<Vec<crate::types::HeadSnap>> {
+    let look_id = st.preview_look.clone()?;
+    if !st.project.looks.contains_key(&look_id) {
+        return None; // deleted since it was selected
+    }
+    // Audition it on the layer it actually sits on, so that layer's blend and
+    // master apply the way they will on stage.
+    let layer_id = st
+        .project
+        .layers
+        .iter()
+        .find(|l| l.cells.iter().any(|c| c.as_deref() == Some(look_id.as_str())))
+        .or_else(|| st.project.layers.first())
+        .map(|l| l.id.clone())?;
+
+    let saved_live = std::mem::take(&mut st.live);
+    let saved_master = st.master;
+    let saved_blackout = st.blackout;
+    st.master = 1.0;
+    st.blackout = false;
+    st.live.insert(
+        layer_id,
+        crate::state::LayerLive {
+            look_id: Some(look_id),
+            prev_id: None,
+            col: None,
+            fade_start: t - 60_000.0, // long since faded in
+            fade_dur: 0.0,
+            held_by: None,
+        },
+    );
+    let res = r.tick(st, t);
+    st.live = saved_live;
+    st.master = saved_master;
+    st.blackout = saved_blackout;
+    Some(res.heads)
+}
+
 fn build_snapshot(
     state: &EngineState,
     res: &TickResult,
@@ -609,6 +784,7 @@ fn build_snapshot(
     link: &crate::link::LinkSync,
     artnet: &crate::artnet::ArtnetOut,
     osc_status: Option<&'static str>,
+    preview_heads: Option<Vec<crate::types::HeadSnap>>,
 ) -> Snapshot {
     let mut dmx = std::collections::HashMap::new();
     for (id, buf) in &res.buffers {
@@ -661,6 +837,7 @@ fn build_snapshot(
         haze: state.project.settings.haze,
         haze_fan: state.project.settings.haze_fan,
         heads: res.heads.clone(),
+        preview_heads,
         layers: res.layers.clone(),
         dmx,
         stats: stats.clone(),

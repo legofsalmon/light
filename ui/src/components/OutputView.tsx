@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Project } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
-import { NumInput, ScrubNumInput, UnicastInput } from './inputs.tsx';
+import { NumInput, ScrubNumInput, TextField, UnicastInput } from './inputs.tsx';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 
@@ -350,7 +350,7 @@ export function OutputView() {
               return (
                 <tr key={u.id}>
                   <td>
-                    <input className="text" style={{ width: 140 }} value={u.label} onChange={(e) => editU((x) => (x.label = e.target.value))} />
+                    <TextField className="text" style={{ width: 140 }} entityId={u.id} value={u.label} onCommit={(v) => editU((x) => (x.label = v))} />
                   </td>
                   <td>
                     <button className={`btn small ${u.artnet ? 'on' : ''}`} onClick={() => editU((x) => (x.artnet = !x.artnet))}>

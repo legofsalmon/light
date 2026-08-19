@@ -6,6 +6,8 @@ import { allProfileMetas, profileMeta } from '../profileInfo.ts';
 import { createGroupFromSelection } from '../selection.ts';
 import { ScrubNumInput } from './inputs.tsx';
 import { useStore } from '../store.ts';
+import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
+import type { StageProp } from '../../../shared/types.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 
 /** true when the pointer event originated inside an editing control */
@@ -234,6 +236,22 @@ export function PatchView() {
     });
   const round2 = (v: number) => Math.round(v * 100) / 100;
   const DEG = Math.PI / 180;
+  /** structures available to rig on, in stage order so the list reads L→R */
+  const structures = (project.props ?? [])
+    .filter((pr) => isStructure(pr.kind))
+    .sort((a, b) => a.pos.x - b.pos.x);
+  /** Slide a fixture along its parent, keeping its across/height offsets. */
+  const moveAlongParent = (fid: string, along: number) =>
+    mutate((p) => {
+      const f = p.fixtures.find((y) => y.id === fid);
+      const parent = (p.props ?? []).find((pr) => pr.id === f?.parentId);
+      if (!f || !parent) return;
+      const o = offsetOnParent(f, parent);
+      const np = posFromOffset({ ...o, along }, parent);
+      f.pos.x = round2(np.x);
+      f.pos.y = round2(np.y);
+      f.pos.z = round2(np.z);
+    });
   const setRot = (fid: string, key: 'rotY' | 'rotX' | 'rotZ', deg: number) =>
     eachTarget(fid, (x) => {
       const rad = deg * DEG;
@@ -289,6 +307,7 @@ export function PatchView() {
             <tr>
               <th>Fixture</th><th>Profile</th><th>Universe</th><th>Address</th><th>Ch</th>
               <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th>Tilt°</th><th>Roll°</th>
+              <th title="rigged on a stage structure — X/Y/Z above stay in room coordinates">Rigged on</th>
               {anyPan && <th title="base pan aim — a look's pan moves relative to this">Pan %</th>}
               {anyTilt && <th title="base tilt aim — a look's tilt moves relative to this">Tilt %</th>}
               <th>Live</th><th></th>
@@ -407,6 +426,46 @@ export function PatchView() {
                       onSet={(v) => setRot(f.id, 'rotZ', v)}
                       onDelta={(d) => nudgeRot(f.id, 'rotZ', d)}
                     />
+                  </td>
+                  {/* Rigged on: the parent, and where the fixture sits along it.
+                      Both frames at once — X/Y/Z above stay room coordinates so
+                      nothing about the existing table changes meaning, and the
+                      offset here is derived, so the two can never disagree. */}
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <select
+                      className="sel"
+                      style={{ maxWidth: 110 }}
+                      value={f.parentId ?? ''}
+                      title="rig this fixture on a stage structure — it then travels with it"
+                      onChange={(e) => {
+                        const pid = e.target.value || undefined;
+                        eachTarget(f.id, (x) => { x.parentId = pid; });
+                      }}
+                    >
+                      <option value="">—</option>
+                      {structures.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {STRUCTURE_LABEL[st.kind] ?? st.kind} @ {st.pos.x}
+                        </option>
+                      ))}
+                    </select>
+                    {(() => {
+                      const parent = structures.find((st) => st.id === f.parentId);
+                      if (!parent) return null;
+                      const o = offsetOnParent(f, parent);
+                      return (
+                        <span style={{ marginLeft: 4, display: 'inline-block' }}>
+                          <ScrubNumInput
+                            value={round2(o.along)}
+                            scrubStep={0.02}
+                            decimals={2}
+                            title="metres along the bar from its centre — editing this moves the fixture"
+                            onSet={(v) => moveAlongParent(f.id, v)}
+                            onDelta={(d) => moveAlongParent(f.id, round2(o.along + d))}
+                          />
+                        </span>
+                      );
+                    })()}
                   </td>
                   {anyPan && (
                     <td>
@@ -571,6 +630,54 @@ export function PatchView() {
           >
             auto-pack addresses
           </button>
+          {structures.length > 0 && (
+            <button
+              className="btn small ghost"
+              title="re-address in rigging order: truss by truss, then left to right along each bar"
+              onClick={() => {
+                void (async () => {
+                  if (
+                    !(await askConfirm('Re-address by truss?', {
+                      body:
+                        'Fixtures are packed per universe in rigging order: truss by truss (upstage first, then left to right), and along each bar left to right. Anything not rigged on a structure keeps its current order and goes last. Your hardware DIP switches must match afterwards.',
+                      confirmLabel: 'Re-address by truss',
+                    }))
+                  )
+                    return;
+                  mutate((p) => {
+                    const structs = (p.props ?? []).filter((pr) => isStructure(pr.kind));
+                    // Trusses read the way you walk the rig: upstage bars first,
+                    // then left to right. Unparented fixtures keep their existing
+                    // order and land after everything that has a home.
+                    const order = [...structs].sort((a, b) => a.pos.z - b.pos.z || a.pos.x - b.pos.x);
+                    const rank = new Map(order.map((st, i) => [st.id, i]));
+                    const alongOf = (f: Project['fixtures'][number]) => {
+                      const parent = structs.find((st) => st.id === f.parentId);
+                      return parent ? offsetOnParent(f, parent).along : 0;
+                    };
+                    for (const u of p.universes) {
+                      let addr = 1;
+                      const inU = p.fixtures
+                        .filter((f) => f.universeId === u.id)
+                        .sort((a, b) => {
+                          const ra = a.parentId ? rank.get(a.parentId) ?? 1e6 : 1e6;
+                          const rb = b.parentId ? rank.get(b.parentId) ?? 1e6 : 1e6;
+                          if (ra !== rb) return ra - rb;
+                          if (ra === 1e6) return a.address - b.address; // unrigged: leave be
+                          return alongOf(a) - alongOf(b);
+                        });
+                      for (const f of inU) {
+                        f.address = addr;
+                        addr += profileMeta(p, f.profileId)?.channels ?? 1;
+                      }
+                    }
+                  });
+                })();
+              }}
+            >
+              auto-address by truss
+            </button>
+          )}
           {fxSel.length > 0 && (
             <>
               <button
@@ -774,6 +881,146 @@ export function PatchView() {
         </button>
         <div className="label" style={{ marginTop: 6 }}>chip order = chase order (first chip runs first)</div>
       </div>
+
+      <StageTable />
     </div>
   );
 }
+
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+/** The hand-drawn stage: truss, legs, risers, screens.
+ *
+ *  Placing by dragging in the plan gets you close; a truss that has to be
+ *  exactly 6 m, or a riser at exactly 0.6 m, needs numbers. Selection is shared
+ *  with the plan through the store, so a row highlights what it refers to. */
+function StageTable() {
+  const project = useStore((s) => s.project)!;
+  const mutate = useStore((s) => s.mutate);
+  const propSel = useStore((s) => s.propSel);
+  const setPropSel = useStore((s) => s.setPropSel);
+  const items = (project.props ?? []).filter((p) => isStructure(p.kind));
+  if (items.length === 0) {
+    return (
+      <div className="patchsec">
+        <div className="sechead">STAGE</div>
+        <div className="label">
+          Nothing drawn yet — add truss, risers or screens from the previz “+ structure…” menu,
+          then drag them into place in the 2D plan.
+        </div>
+      </div>
+    );
+  }
+
+  const edit = (id: string, fn: (p: StageProp) => void) =>
+    mutate((p) => {
+      const target = (p.props ?? []).find((x) => x.id === id);
+      if (target) fn(target);
+    });
+  const sizeOf = (pr: StageProp) =>
+    pr.size ?? STRUCTURE_DEFAULTS[pr.kind] ?? { w: 1, h: 1, d: 1 };
+
+  return (
+    <div className="patchsec">
+      <div className="sechead">STAGE</div>
+      <table className="patchtable">
+        <thead>
+          <tr>
+            <th>PIECE</th><th>X</th><th>Z</th><th>BASE Y</th>
+            <th>WIDTH</th><th>HEIGHT</th><th>DEPTH</th><th>ROT°</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((pr) => {
+            const s = sizeOf(pr);
+            const selected = propSel.includes(pr.id);
+            const num = (
+              value: number, step: number, title: string, set: (v: number) => void,
+            ) => (
+              <ScrubNumInput
+                value={value}
+                scrubStep={step}
+                decimals={2}
+                title={title}
+                onSet={(v) => set(round2(v))}
+                onDelta={(d) => set(round2(value + d))}
+              />
+            );
+            return (
+              <tr
+                key={pr.id}
+                className={selected ? 'sel' : ''}
+                onPointerDown={(e) => {
+                  if (onControl(e.target)) return;
+                  const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+                  setPropSel(
+                    additive
+                      ? propSel.includes(pr.id) ? propSel.filter((x) => x !== pr.id) : [...propSel, pr.id]
+                      : [pr.id],
+                  );
+                }}
+              >
+                <td className="mono">{STRUCTURE_LABEL[pr.kind] ?? pr.kind}</td>
+                <td>{num(pr.pos.x, 0.02, 'across the stage', (v) => edit(pr.id, (x) => { x.pos.x = v; }))}</td>
+                <td>{num(pr.pos.z, 0.02, 'toward the audience', (v) => edit(pr.id, (x) => { x.pos.z = v; }))}</td>
+                <td>{num(pr.y ?? 0, 0.02, 'height of the base off the floor', (v) => edit(pr.id, (x) => { x.y = v; }))}</td>
+                <td>{num(s.w, 0.05, 'width', (v) => edit(pr.id, (x) => { x.size = { ...sizeOf(x), w: Math.max(0.05, v) }; }))}</td>
+                <td>{num(s.h, 0.05, 'height', (v) => edit(pr.id, (x) => { x.size = { ...sizeOf(x), h: Math.max(0.05, v) }; }))}</td>
+                <td>{num(s.d, 0.05, 'depth', (v) => edit(pr.id, (x) => { x.size = { ...sizeOf(x), d: Math.max(0.05, v) }; }))}</td>
+                <td>
+                  <ScrubNumInput
+                    value={Math.round(((pr.rotY ?? 0) * 180) / Math.PI)}
+                    scrubStep={1}
+                    decimals={0}
+                    title="rotation"
+                    onSet={(v) => edit(pr.id, (x) => { x.rotY = (v * Math.PI) / 180; })}
+                    onDelta={(d) => edit(pr.id, (x) => { x.rotY = ((x.rotY ?? 0) + (d * Math.PI) / 180); })}
+                  />
+                </td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <button
+                    className="btn small ghost"
+                    title="duplicate — lands 0.5 m across so it is not hidden underneath"
+                    onClick={() =>
+                      mutate((p) => {
+                        const src = (p.props ?? []).find((x) => x.id === pr.id);
+                        if (!src) return;
+                        p.props ??= [];
+                        p.props.push({
+                          ...structuredClone(src),
+                          id: uid('prop'),
+                          pos: { x: round2(src.pos.x + 0.5), z: src.pos.z },
+                        });
+                      })
+                    }
+                  >
+                    ⧉
+                  </button>
+                  <button
+                    className="btn small ghost"
+                    title="delete"
+                    onClick={() =>
+                      mutate((p) => {
+                        p.props = (p.props ?? []).filter((x) => x.id !== pr.id);
+                        if (p.props.length === 0) delete p.props;
+                      })
+                    }
+                  >
+                    ✕
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="label" style={{ marginTop: 6 }}>
+        drag a row's numbers to scrub · shift-click rows to multi-select · ⧉ duplicates, ✕ deletes
+      </div>
+    </div>
+  );
+}
+
+const STRUCTURE_LABEL: Record<string, string> = {
+  trussBar: 'truss bar', trussLeg: 'truss leg', riser: 'riser', screen: 'screen',
+};
