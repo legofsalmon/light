@@ -18,6 +18,7 @@ pub fn lerp(a: f64, b: f64, t: f64) -> f64 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Vec3 {
     pub x: f64,
     pub y: f64,
@@ -44,7 +45,9 @@ pub struct Fixture {
     pub profile_id: String,
     pub universe_id: String,
     pub address: usize,
+    #[serde(default)]
     pub pos: Vec3,
+    #[serde(default)]
     pub rot_y: f64,
     /// mounting tilt (pitch, radians) — composes on the kind's default aim
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -76,6 +79,7 @@ pub struct HeadRef {
 pub struct Group {
     pub id: String,
     pub name: String,
+    #[serde(default)]
     pub heads: Vec<HeadRef>,
 }
 
@@ -293,8 +297,13 @@ pub struct Layer {
     pub id: String,
     pub name: String,
     pub blend: LayerBlend,
+    #[serde(default = "one")]
     pub master: f64,
+    #[serde(default = "half")]
     pub fade: f64,
+    /// Node rebuilds a missing cells array from `columns`; an empty one behaves
+    /// identically because every lookup misses, and ensure_decks resizes it.
+    #[serde(default)]
     pub cells: Vec<Option<String>>,
 }
 
@@ -333,6 +342,7 @@ pub struct MidiMapping {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(default)]
 pub struct SyncCfg {
     pub osc_enabled: bool,
     pub osc_port: u16,
@@ -345,6 +355,7 @@ pub struct SyncCfg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(default)]
 pub struct Settings {
     pub haze: f64,
     pub haze_fan: f64,
@@ -360,17 +371,22 @@ pub struct Settings {
 #[serde(rename_all = "camelCase")]
 pub struct Project {
     pub version: u32,
+    #[serde(default = "untitled")]
     pub name: String,
     pub universes: Vec<UniverseCfg>,
     pub fixtures: Vec<Fixture>,
     pub groups: Vec<Group>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "de_props")]
     pub props: Option<Vec<StageProp>>,
+    #[serde(default)]
     pub looks: HashMap<String, Look>,
     pub layers: Vec<Layer>,
     pub columns: Vec<String>,
+    #[serde(default)]
     pub midi: Vec<MidiMapping>,
+    #[serde(default)]
     pub sync: SyncCfg,
+    #[serde(default)]
     pub settings: Settings,
     /// imported (GDTF-compiled) fixture profiles — travel with the project
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -475,6 +491,56 @@ pub struct Snapshot {
     pub layers: Vec<LayerSnap>,
     pub dmx: HashMap<String, Vec<u8>>,
     pub stats: EngineStats,
+}
+
+// ---------------------------------------------------------------------------
+// Repair defaults.
+//
+// These exist so the shipping engine accepts every project shape the Node
+// reference repairs. It did not: a project written to this repo's own
+// documented schema loaded in Node and was renamed `.corrupt-*` by Rust, and a
+// malformed frame from a client was dropped in total silence.
+//
+// The values mirror shared/types.ts `sanitizeProject` field for field. Zero is
+// the wrong default for most of them — a layer at master 0 is blacked out, OSC
+// on port 0 reaches nothing — which is why these are written out rather than
+// derived.
+
+fn one() -> f64 {
+    1.0
+}
+
+fn half() -> f64 {
+    0.5
+}
+
+fn untitled() -> String {
+    "Untitled".to_string()
+}
+
+impl Default for Vec3 {
+    /// Node repairs a missing fixture position to 2 m up, centre stage.
+    fn default() -> Self {
+        Vec3 { x: 0.0, y: 2.0, z: 0.0 }
+    }
+}
+
+impl Default for SyncCfg {
+    fn default() -> Self {
+        SyncCfg {
+            osc_enabled: true,
+            link_enabled: false,
+            osc_port: 7700,
+            follow_columns: true,
+            bpm_from_osc: true,
+        }
+    }
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings { haze: 0.0, haze_fan: 0.35 }
+    }
 }
 
 // ---------- commands (ui → engine) ----------
