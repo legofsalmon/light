@@ -183,6 +183,10 @@ pub struct EngineState {
     pub muted: std::collections::HashSet<String>,
     /// Fixture driven to full white so it can be found on the truss.
     pub identify: Option<String>,
+    /// Look being auditioned in the previz. Transient, never persisted, and it
+    /// never reaches DMX — the renderer resolves it into a separate head set
+    /// that only the snapshot carries.
+    pub preview_look: Option<String>,
     /// universe id -> channel(0-511) -> value. Raw override, applied last.
     pub overrides: HashMap<String, HashMap<usize, u8>>,
     pub learn_target: Option<MidiAction>,
@@ -199,6 +203,7 @@ impl EngineState {
             blackout: false,
             muted: std::collections::HashSet::new(),
             identify: None,
+            preview_look: None,
             overrides: HashMap::new(),
             learn_target: None,
         };
@@ -557,6 +562,7 @@ impl EngineState {
         self.overrides.clear();
         self.identify = None;
         self.muted.clear();
+        self.preview_look = None;
         self.project.settings.haze = 0.0;
         self.project.settings.haze_fan = 0.0;
     }
@@ -740,6 +746,9 @@ impl EngineState {
                 }
             }
             Command::Identify { fixture_id } => self.identify = fixture_id,
+            // No project_changed: auditioning a look is not an edit, and a
+            // project echo per selection click would be absurd.
+            Command::PreviewLook { look_id } => self.preview_look = look_id,
             Command::AllStop => {
                 // panic: everything dark and quiet, right now
                 self.blackout = true;

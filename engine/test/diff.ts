@@ -303,6 +303,43 @@ async function main(): Promise<void> {
     await settle(node, rust);
   }
 
+  // --- the audition must resolve identically in both engines ----------------
+  // A preview that disagrees with what fires is worse than no preview: you would
+  // only find out on stage. Pick a look with no effects so the comparison is of
+  // a settled frame rather than two samples of a moving one.
+  {
+    const p = await currentProject(node);
+    const staticLook = Object.entries(p.looks).find(
+      ([, l]) => (l.parts ?? []).every((pt) => (pt.effects ?? []).length === 0),
+    )?.[0];
+    if (!staticLook) {
+      console.log('  --   no effect-free look in the fixture; preview parity skipped');
+    } else {
+      const dmxBefore = JSON.stringify(node.snap?.dmx ?? {});
+      both({ type: 'previewLook', lookId: staticLook });
+      await sleep(500);
+      const pn = JSON.stringify(node.snap?.previewHeads ?? null);
+      const pr = JSON.stringify(rust.snap?.previewHeads ?? null);
+      check('preview: engine resolved the look', pn !== 'null' && pn !== '[]', `node=${pn.slice(0, 90)}`);
+      check('preview: parity', pn === pr, `node=${pn.slice(0, 140)}\nrust=${pr.slice(0, 140)}`);
+      // the whole point: auditioning must not reach the rig
+      check(
+        'preview does not change live DMX',
+        JSON.stringify(node.snap?.dmx ?? {}) === dmxBefore,
+        'auditioning a look altered live output',
+      );
+      compareDmx('preview: live output parity while auditioning', node.snap, rust.snap);
+
+      both({ type: 'previewLook', lookId: null });
+      await sleep(400);
+      check(
+        'preview: cleared on deselect',
+        !node.snap?.previewHeads && !rust.snap?.previewHeads,
+        `node=${JSON.stringify(node.snap?.previewHeads)?.slice(0, 60)}`,
+      );
+    }
+  }
+
   // --- GDTF import parity: Node renders via WASM, Rust natively — same file,
   // --- same bytes required.
   const gdtf = fs.readFileSync(path.join(ROOT, 'core', 'tests', 'data', 'synthetic.gdtf'));

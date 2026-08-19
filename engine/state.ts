@@ -29,6 +29,10 @@ export class EngineState {
   muted = new Set<string>();
   /** Fixture driven to full white so it can be found on the truss. */
   identify: string | null = null;
+  /** Look being auditioned in the previz. Transient, never persisted, and it
+   *  never reaches DMX — the renderer resolves it into a separate head set that
+   *  only the snapshot carries. */
+  previewLook: string | null = null;
   /** universeId -> channel(0-511) -> value. Raw override applied last. */
   overrides = new Map<string, Map<number, number>>();
   clock = new BeatClock();
@@ -283,6 +287,7 @@ export class EngineState {
     this.overrides.clear();
     this.identify = null;
     this.muted.clear();
+    this.previewLook = null;
     this.project.settings.haze = 0;
     this.project.settings.hazeFan = 0;
     this.onChange?.();

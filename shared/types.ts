@@ -261,6 +261,10 @@ export type Snapshot = {
   /** OSC input socket: 'failed' = the port is held by another app (a second
    *  engine? QLC+?) so nothing from Resolume will ever arrive. Absent = off. */
   oscIn?: 'on' | 'failed';
+  /** Heads as they WOULD look if the previewed look were running on its own:
+   *  full master, no blackout, nothing else live. Present only while a client
+   *  has asked for a preview. Never touches DMX. */
+  previewHeads?: HeadSnap[];
   /** fixtures currently silenced */
   muted?: string[];
   /** fixture being identified (driven to full white), if any */
@@ -292,6 +296,10 @@ export type Command =
   | { type: 'setFixtureMute'; fixtureId: string; on: boolean }
   /** drive one fixture to full white to find it on the truss */
   | { type: 'identify'; fixtureId: string | null }
+  /** Audition a look in the previz without sending it to the rig. null stops.
+   *  The engine resolves it with the SAME renderer that drives the show, so the
+   *  preview cannot quietly disagree with what actually fires. */
+  | { type: 'previewLook'; lookId: string | null }
   /** panic: blackout, clear every layer, release holds, haze + motors off */
   | { type: 'allStop' }
   /** raw channel override, applied last into the DMX buffer (channel is 1-512;

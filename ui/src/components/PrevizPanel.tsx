@@ -17,6 +17,13 @@ export function PrevizPanel() {
   const showBand = useStore((s) => s.showBand);
   const setShowBand = useStore((s) => s.setShowBand);
   const fxSel = useStore((s) => s.fxSel);
+  const sel = useStore((s) => s.sel);
+  const selName = useStore((s) => {
+    if (!s.sel || !s.project) return null;
+    const layer = s.project.layers.find((l) => l.id === s.sel!.layerId);
+    const id = layer?.cells[s.sel!.col];
+    return id && Object.hasOwn(s.project.looks, id) ? s.project.looks[id].name : null;
+  });
   const mutate = useStore((s) => s.mutate);
 
   const addMusician = (kind: string) => {
@@ -93,6 +100,21 @@ export function PrevizPanel() {
         )}
       </div>
       <div className="previzview">{mode === '3d' ? <Previz3D /> : <Previz2D />}</div>
+      {/* The audition. Only present when something is selected, so the live view
+          keeps the whole column the rest of the time — and the second render
+          costs nothing when nobody is looking at a look. */}
+      {sel && (
+        <>
+          <div className="previzbar previewbar">
+            <span className="label">preview</span>
+            <span className="previewname">{selName ?? 'empty cell'}</span>
+            <span className="label dim">not on the rig</span>
+          </div>
+          <div className="previzview previewview">
+            {mode === '3d' ? <Previz3D source="preview" /> : <Previz2D source="preview" />}
+          </div>
+        </>
+      )}
     </>
   );
 }

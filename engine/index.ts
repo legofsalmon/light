@@ -165,6 +165,50 @@ if (!project) {
 if (project.settings) project.settings.haze = 0;
 const state = new EngineState(project);
 const renderer = new Renderer(state);
+// Its own instance: the audition must not advance the show's effect phase.
+const previewRenderer = new Renderer(state);
+
+/** Resolve one look as if it were the only thing running: full master, no
+ *  blackout, nothing else live.
+ *
+ *  It goes through the SAME renderer that drives the rig, which is the point —
+ *  an audition computed by a second implementation could quietly disagree with
+ *  what actually fires, and you would only find out on stage.
+ *
+ *  The live map is swapped out and put back rather than cloning the project:
+ *  `live` holds one entry per layer, the project holds the whole show. Mutes,
+ *  channel overrides and identify are deliberately left in force, because they
+ *  are things the operator switched on and the audition should show the rig as
+ *  it would really respond. Mirrors preview_heads() in core/src/engine.rs. */
+function previewHeads(t: number): { previewHeads: Snapshot['previewHeads'] } | null {
+  const lookId = state.previewLook;
+  if (!lookId || !Object.hasOwn(state.project.looks, lookId)) return null;
+  const layer =
+    state.project.layers.find((l) => l.cells.some((c) => c === lookId)) ?? state.project.layers[0];
+  if (!layer) return null;
+
+  const savedLive = state.live;
+  const savedMaster = state.master;
+  const savedBlackout = state.blackout;
+  state.live = new Map();
+  state.master = 1;
+  state.blackout = false;
+  state.live.set(layer.id, {
+    lookId,
+    prevId: null,
+    col: null,
+    fadeStart: t - 60_000, // long since faded in
+    fadeDur: 0,
+    heldBy: null,
+  });
+  try {
+    return { previewHeads: previewRenderer.tick(t).heads };
+  } finally {
+    state.live = savedLive;
+    state.master = savedMaster;
+    state.blackout = savedBlackout;
+  }
+}
 const artnet = new ArtnetOut();
 
 // a failed write is the one error the operator MUST see: their show is not
@@ -315,6 +359,11 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
     }
     case 'identify':
       state.identify = cmd.fixtureId;
+      break;
+    // Not an edit, so no project echo: a selection click must not broadcast the
+    // whole show to every client.
+    case 'previewLook':
+      state.previewLook = cmd.lookId;
       break;
     case 'allStop': {
       // panic: everything dark and quiet, right now
@@ -591,6 +640,7 @@ function loopBody(): void {
       haze: state.project.settings.haze,
       hazeFan: state.project.settings.hazeFan,
       heads: res.heads,
+      ...(previewHeads(now) ?? {}),
       layers: res.layers,
       dmx,
       ...(state.muted.size > 0 ? { muted: [...state.muted] } : {}),

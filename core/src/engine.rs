@@ -150,6 +150,8 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
     project.settings.haze = 0.0;
     let mut state = EngineState::new(project, now_ms());
     let mut renderer = Renderer::new();
+    // Its own instance: the audition must not advance the show's effect phase.
+    let mut preview_renderer = Renderer::new();
     let mut artnet = ArtnetOut::new();
     let mut sacn = SacnOut::new();
     let mut osc = OscIn::new();
@@ -345,7 +347,12 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
         // Snapshots to the UI at 20 fps.
         snap_flip = !snap_flip;
         if snap_flip && bc.count() > 0 {
-            let snap = build_snapshot(&state, &res, t, &stats, &link, &artnet, osc.status());
+            // Only when someone is actually auditioning, and only on the frames
+            // that carry a snapshot — so the show pays nothing for this the rest
+            // of the time.
+            let preview = preview_heads(&mut state, &mut preview_renderer, t);
+            let snap =
+                build_snapshot(&state, &res, t, &stats, &link, &artnet, osc.status(), preview);
             if let Ok(s) = serde_json::to_string(&snap) {
                 bc.broadcast(&s);
             }
@@ -715,6 +722,60 @@ fn handle_osc_sync(m: &OscMessage, state: &mut EngineState, t: f64) {
     }
 }
 
+/// Resolve one look as if it were the only thing running: full master, no
+/// blackout, nothing else live.
+///
+/// It goes through the SAME renderer that drives the rig, which is the whole
+/// point — an audition computed by a second implementation could quietly
+/// disagree with what actually fires, and you would only find out on stage.
+///
+/// The live map is swapped out and put back rather than cloning the project:
+/// `live` holds one entry per layer, the project holds the whole show. Mutes,
+/// channel overrides and identify are deliberately left in force, because they
+/// are things the operator has switched on and the audition should show the rig
+/// as it would really respond.
+fn preview_heads(
+    st: &mut EngineState,
+    r: &mut Renderer,
+    t: f64,
+) -> Option<Vec<crate::types::HeadSnap>> {
+    let look_id = st.preview_look.clone()?;
+    if !st.project.looks.contains_key(&look_id) {
+        return None; // deleted since it was selected
+    }
+    // Audition it on the layer it actually sits on, so that layer's blend and
+    // master apply the way they will on stage.
+    let layer_id = st
+        .project
+        .layers
+        .iter()
+        .find(|l| l.cells.iter().any(|c| c.as_deref() == Some(look_id.as_str())))
+        .or_else(|| st.project.layers.first())
+        .map(|l| l.id.clone())?;
+
+    let saved_live = std::mem::take(&mut st.live);
+    let saved_master = st.master;
+    let saved_blackout = st.blackout;
+    st.master = 1.0;
+    st.blackout = false;
+    st.live.insert(
+        layer_id,
+        crate::state::LayerLive {
+            look_id: Some(look_id),
+            prev_id: None,
+            col: None,
+            fade_start: t - 60_000.0, // long since faded in
+            fade_dur: 0.0,
+            held_by: None,
+        },
+    );
+    let res = r.tick(st, t);
+    st.live = saved_live;
+    st.master = saved_master;
+    st.blackout = saved_blackout;
+    Some(res.heads)
+}
+
 fn build_snapshot(
     state: &EngineState,
     res: &TickResult,
@@ -723,6 +784,7 @@ fn build_snapshot(
     link: &crate::link::LinkSync,
     artnet: &crate::artnet::ArtnetOut,
     osc_status: Option<&'static str>,
+    preview_heads: Option<Vec<crate::types::HeadSnap>>,
 ) -> Snapshot {
     let mut dmx = std::collections::HashMap::new();
     for (id, buf) in &res.buffers {
@@ -775,6 +837,7 @@ fn build_snapshot(
         haze: state.project.settings.haze,
         haze_fan: state.project.settings.haze_fan,
         heads: res.heads.clone(),
+        preview_heads,
         layers: res.layers.clone(),
         dmx,
         stats: stats.clone(),

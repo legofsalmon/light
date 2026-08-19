@@ -449,6 +449,10 @@ pub struct Snapshot {
     pub unknown_profiles: Vec<String>,
     pub haze_fan: f64,
     pub heads: Vec<HeadSnap>,
+    /// Heads as they WOULD look if the previewed look were running on its own.
+    /// Present only while a client is auditioning; never reaches DMX.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_heads: Option<Vec<HeadSnap>>,
     pub layers: Vec<LayerSnap>,
     pub dmx: HashMap<String, Vec<u8>>,
     pub stats: EngineStats,
@@ -470,6 +474,9 @@ pub enum Command {
     SetFixtureMute { fixture_id: String, on: bool },
     #[serde(rename_all = "camelCase")]
     Identify { fixture_id: Option<String> },
+    /// Audition a look in the previz without sending it to the rig. None stops.
+    #[serde(rename_all = "camelCase")]
+    PreviewLook { look_id: Option<String> },
     AllStop,
     #[serde(rename_all = "camelCase")]
     SetChannel { universe_id: String, channel: usize, value: Option<u8> },

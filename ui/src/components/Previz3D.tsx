@@ -245,7 +245,11 @@ function buildProps(props: { kind: string; pos: { x: number; z: number }; rotY?:
   return g;
 }
 
-export function Previz3D() {
+/** `source` picks which head set to draw: the live rig, or the audition the
+ *  engine resolves for the selected look. Same renderer, same scene, same
+ *  everything — only the numbers differ, so the preview cannot drift away from
+ *  the live view in appearance. */
+export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = {}) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -381,7 +385,9 @@ export function Previz3D() {
 
       if (rig && snap) {
         const heads = new Map<string, HeadSnap>();
-        for (const hs of snap.heads) heads.set(`${hs.f}:${hs.h}`, hs);
+        for (const hs of source === 'preview' ? (snap.previewHeads ?? []) : snap.heads) {
+          heads.set(`${hs.f}:${hs.h}`, hs);
+        }
         const beamGain = 0.07 + hazeViz * 0.5;
 
         for (const h of rig.handles) {

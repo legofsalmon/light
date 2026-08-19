@@ -278,7 +278,16 @@ export const useStore = create<Store>()((set, get) => ({
     get().send({ type: 'updateProject', project: restored });
   },
 
-  setSel: (sel) => set({ sel }),
+  setSel: (sel) => {
+    set({ sel });
+    // Ask the engine to resolve whatever is now selected so the preview pane can
+    // show it. Nothing reaches DMX — the engine renders it into a separate head
+    // set that only the snapshot carries.
+    const p = get().project;
+    const layer = sel && p ? p.layers.find((l) => l.id === sel.layerId) : null;
+    const lookId = layer?.cells[sel!.col] ?? null;
+    wsSend(JSON.stringify({ type: 'previewLook', lookId: lookId ?? null }));
+  },
   setTab: (tab) => set({ tab }),
   setView: (view) => {
     // Remembered across launches: an operator who works full-screen on the pads

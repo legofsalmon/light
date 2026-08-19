@@ -16,7 +16,7 @@ const TRUSS_Y = 3.05; // matches the 3D scene truss
 type ViewKind = 'plan' | 'front';
 
 /** 2D previz: top-down plan (drag places x/z) or front elevation (drag sets x/height). */
-export function Previz2D() {
+export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = {}) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{
@@ -146,7 +146,8 @@ export function Previz2D() {
       }
 
       const headMap = new Map<string, HeadSnap>();
-      for (const hs of snap?.heads ?? []) headMap.set(`${hs.f}:${hs.h}`, hs);
+      const headSrc = source === 'preview' ? (snap?.previewHeads ?? []) : (snap?.heads ?? []);
+      for (const hs of headSrc) headMap.set(`${hs.f}:${hs.h}`, hs);
 
       for (const f of project.fixtures) {
         const prof = profileMeta(project, f.profileId);
