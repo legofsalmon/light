@@ -159,7 +159,15 @@ Agreed build order (each step shippable, parity-green):
    `phaseCorr[]` param (both twins). Proven by 6 new parity assertions incl. two
    before/after continuity checks (frame does NOT move when only rate changes)
    and correction accumulation across successive edits.
-4. A2 FX pool (copy-on-apply presets, retargeting, inform-not-forbid targets)
+4. A2 FX pool (copy-on-apply presets, retargeting, inform-not-forbid targets) —
+   DONE. Three commits: (a) engine slice — per-effect `bypass` + wet/dry `mix`
+   fields, byte-identical at defaults, apply_mix/applyMix twins, tolerant
+   deserialize defaults (`5537a3e`); (b) `project.fxPool` typed passthrough,
+   tolerant `de_fx_pool`/sanitize, factored `repair_effect`/`repairEffect`,
+   round-trip parity (`4965201`); (c) UI — park toggle + mix fader +
+   inform-not-forbid target optgroups on the effect row (`9f5468e`), and the
+   copy-on-apply pool: ☆ save, "apply from pool" copy-in, rename/delete manager
+   (`c81ca81`). Browser-verified against a scratch outputs-off engine.
 5. B2 geometry builder (HeadCtx at the seam, zero behaviour change)
 6. A1 spatial fan (distribute x/y/z/radial/shuffle, fold mirror/centre, parts,
    segments, seed; value-sign mirror for pan)
