@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { Distribute, Effect, EffectTarget, Look, LookPart, Project, Wave } from '../../../shared/types.ts';
+import type { Distribute, Effect, EffectTarget, Look, LookPart, Project, SoftField, Wave } from '../../../shared/types.ts';
 import { EFFECT_TARGETS, uid } from '../../../shared/types.ts';
 import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
 import { type HeadKind } from '../../../shared/profiles.ts';
@@ -138,7 +138,7 @@ function IntInput({ value, min, max, width = 44, title, onCommit }: {
   );
 }
 
-function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool }: {
+function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool, onField, soft }: {
   fx: Effect;
   kinds: Set<HeadKind>;
   canAim: boolean;
@@ -146,6 +146,10 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
   onEdit: (fn: (e: Effect) => void) => void;
   onRemove: () => void;
   onSaveToPool: () => void;
+  /** P1 router: numeric knobs go through here (ride mode sends soft) */
+  onField: (field: SoftField, v: number, fallback: (e: Effect) => void) => void;
+  /** live soft value for one of this effect's fields, if ridden */
+  soft: (field: SoftField) => number | undefined;
 }) {
   // Which targets the rig in this group can actually take.
   const capable: EffectTarget[] = ['dimmer'];
@@ -197,21 +201,21 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
       </select>
       <select
         className="sel"
-        value={String(fx.rate)}
-        onChange={(e) => onEdit((x) => (x.rate = Number(e.target.value)))}
+        value={String(soft('rate') ?? fx.rate)}
+        onChange={(e) => onField('rate', Number(e.target.value), (x) => (x.rate = Number(e.target.value)))}
       >
         {RATES.map((r) => (
           <option key={r.v} value={String(r.v)}>{r.label}</option>
         ))}
       </select>
-      <Fader label="size" width={90} value={fx.size} def={1} onChange={(v) => onEdit((x) => (x.size = v))} fmt={pct} variant="dim" />
-      <Fader label="spread" width={90} value={fx.spread} def={0} onChange={(v) => onEdit((x) => (x.spread = v))} fmt={pct} variant="dim" />
+      <Fader label="size" width={90} value={soft('size') ?? fx.size} def={1} onChange={(v) => onField('size', v, (x) => (x.size = v))} fmt={pct} variant="dim" />
+      <Fader label="spread" width={90} value={soft('spread') ?? fx.spread} def={0} onChange={(v) => onField('spread', v, (x) => (x.spread = v))} fmt={pct} variant="dim" />
       {(fx.wave === 'square' || fx.wave === 'chase') && (
-        <Fader label="width" width={90} value={fx.width} def={0.5} onChange={(v) => onEdit((x) => (x.width = v))} fmt={pct} variant="dim" />
+        <Fader label="width" width={90} value={soft('width') ?? fx.width} def={0.5} onChange={(v) => onField('width', v, (x) => (x.width = v))} fmt={pct} variant="dim" />
       )}
-      <Fader label="phase" width={80} value={fx.phase} def={0} onChange={(v) => onEdit((x) => (x.phase = v))} fmt={pct} variant="dim" />
+      <Fader label="phase" width={80} value={soft('phase') ?? fx.phase} def={0} onChange={(v) => onField('phase', v, (x) => (x.phase = v))} fmt={pct} variant="dim" />
       {/* wet/dry: how much of the effect lands. 100% is full effect. */}
-      <Fader label="mix" width={80} value={fx.mix} def={1} onChange={(v) => onEdit((x) => (x.mix = v))} fmt={pct} variant="dim" />
+      <Fader label="mix" width={80} value={soft('mix') ?? fx.mix} def={1} onChange={(v) => onField('mix', v, (x) => (x.mix = v))} fmt={pct} variant="dim" />
       <button className="btn small ghost" title="save this effect to the FX pool as a reusable preset" onClick={onSaveToPool}>☆</button>
       <button className="btn small ghost" onClick={onRemove}>✕</button>
     </div>
@@ -280,9 +284,11 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
   );
 }
 
-function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
+function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ride: boolean }) {
   const project = useStore((s) => s.project)!;
   const mutate = useStore((s) => s.mutate);
+  const send = useStore((s) => s.send);
+  const softLive = useStore((s) => s.snap?.soft);
   const kinds = groupKinds(project, part.groupId);
   const canAim = groupCanAim(project, part.groupId);
   const beamCaps = groupBeamCaps(project, part.groupId);
@@ -292,6 +298,28 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
       const pt = p.looks[lookId]?.parts.find((x) => x.id === part.id);
       if (pt) fn(pt);
     });
+
+  /** P1: the live soft value for one address, if the operator is riding it. */
+  const softFor = (field: SoftField, effectId?: string): number | undefined =>
+    softLive?.find(
+      (e) => e.lookId === lookId && e.partId === part.id && e.effectId === effectId && e.field === field,
+    )?.value;
+
+  /** Route a numeric edit: in RIDE mode it becomes a ~40-byte soft command
+   *  (no project write, no undo entry, Store/Discard later); otherwise the
+   *  usual project mutation. */
+  const setP = (field: SoftField, v: number, fallback: (pt: LookPart) => void): void => {
+    if (ride) send({ type: 'soft', lookId, partId: part.id, field, value: v });
+    else edit(fallback);
+  };
+  const setE = (effectId: string, field: SoftField, v: number, fallback: (e: Effect) => void): void => {
+    if (ride) send({ type: 'soft', lookId, partId: part.id, effectId, field, value: v });
+    else
+      edit((pt) => {
+        const e = pt.effects.find((x) => x.id === effectId);
+        if (e) fallback(e);
+      });
+  };
 
   const prm = part.params;
   const hasColorTargets = kinds.has('rgb') || kinds.has('derby') || kinds.has('mover');
@@ -326,7 +354,7 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
             <Enable on={prm.dimmer !== undefined} toggle={() => edit((pt) => (pt.params.dimmer = pt.params.dimmer === undefined ? 1 : undefined))} />
             <span className="label">dimmer</span>
             <div className={`grow paramrow ${prm.dimmer === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
-              <Fader value={prm.dimmer ?? 1} def={1} onChange={(v) => edit((pt) => (pt.params.dimmer = v))} fmt={pct} width="100%" />
+              <Fader value={softFor('dimmer') ?? prm.dimmer ?? 1} def={1} onChange={(v) => setP('dimmer', v, (pt) => (pt.params.dimmer = v))} fmt={pct} width="100%" />
             </div>
           </div>
         )}
@@ -341,17 +369,17 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
                 width="38%"
                 min={0}
                 max={360}
-                value={prm.color?.h ?? 0}
-                onChange={(v) => edit((pt) => (pt.params.color = { h: v, s: pt.params.color?.s ?? 1 }))}
+                value={softFor('hue') ?? prm.color?.h ?? 0}
+                onChange={(v) => setP('hue', v, (pt) => (pt.params.color = { h: v, s: pt.params.color?.s ?? 1 }))}
                 fmt={(v) => `${Math.round(v)}°`}
                 label=""
               />
               <Fader
                 label="sat"
                 width={90}
-                value={prm.color?.s ?? 1}
+                value={softFor('sat') ?? prm.color?.s ?? 1}
                 def={1}
-                onChange={(v) => edit((pt) => (pt.params.color = { h: pt.params.color?.h ?? 0, s: v }))}
+                onChange={(v) => setP('sat', v, (pt) => (pt.params.color = { h: pt.params.color?.h ?? 0, s: v }))}
                 fmt={pct}
                 variant="dim"
               />
@@ -401,7 +429,7 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
               <Enable on={prm.ringFx !== undefined} toggle={() => edit((pt) => (pt.params.ringFx = pt.params.ringFx === undefined ? 0.5 : undefined))} />
               <span className="label">ring fx</span>
               <div className={`grow paramrow ${prm.ringFx === undefined ? 'off' : ''}`}>
-                <Fader value={prm.ringFx ?? 0.5} onChange={(v) => edit((pt) => (pt.params.ringFx = v))} fmt={pct} width={180} variant="dim" />
+                <Fader value={softFor('ringFx') ?? prm.ringFx ?? 0.5} onChange={(v) => setP('ringFx', v, (pt) => (pt.params.ringFx = v))} fmt={pct} width={180} variant="dim" />
               </div>
             </div>
             <div className="paramrow">
@@ -426,8 +454,8 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
                 <Fader
                   label={prm.motorMode === 'aim' ? 'position' : 'speed'}
                   width={160}
-                  value={prm.motorValue ?? 0.3}
-                  onChange={(v) => edit((pt) => (pt.params.motorValue = v))}
+                  value={softFor('motorValue') ?? prm.motorValue ?? 0.3}
+                  onChange={(v) => setP('motorValue', v, (pt) => (pt.params.motorValue = v))}
                   fmt={pct}
                   variant="dim"
                 />
@@ -441,7 +469,7 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
             <Enable on={prm.strobe !== undefined} toggle={() => edit((pt) => (pt.params.strobe = pt.params.strobe === undefined ? 0.6 : undefined))} />
             <span className="label">strobe</span>
             <div className={`grow paramrow ${prm.strobe === undefined ? 'off' : ''}`}>
-              <Fader value={prm.strobe ?? 0.6} onChange={(v) => edit((pt) => (pt.params.strobe = v))} fmt={pct} width={180} variant="dim" />
+              <Fader value={softFor('strobe') ?? prm.strobe ?? 0.6} onChange={(v) => setP('strobe', v, (pt) => (pt.params.strobe = v))} fmt={pct} width={180} variant="dim" />
             </div>
           </div>
         )}
@@ -459,8 +487,8 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
             })} />
             <span className="label">position</span>
             <div className={`grow paramrow ${prm.pan === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
-              <Fader label="pan" width={140} value={prm.pan ?? 0.5} def={0.5} onChange={(v) => edit((pt) => (pt.params.pan = v))} fmt={pct} variant="dim" />
-              <Fader label="tilt" width={140} value={prm.tilt ?? 0.5} def={0.5} onChange={(v) => edit((pt) => (pt.params.tilt = v))} fmt={pct} variant="dim" />
+              <Fader label="pan" width={140} value={softFor('pan') ?? prm.pan ?? 0.5} def={0.5} onChange={(v) => setP('pan', v, (pt) => (pt.params.pan = v))} fmt={pct} variant="dim" />
+              <Fader label="tilt" width={140} value={softFor('tilt') ?? prm.tilt ?? 0.5} def={0.5} onChange={(v) => setP('tilt', v, (pt) => (pt.params.tilt = v))} fmt={pct} variant="dim" />
             </div>
           </div>
         )}
@@ -474,9 +502,9 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
             <span className="label">{BEAM_LABELS[k]}</span>
             <div className={`grow paramrow ${prm[k] === undefined ? 'off' : ''}`}>
               <Fader
-                value={prm[k] ?? 0.5}
+                value={softFor(k) ?? prm[k] ?? 0.5}
                 def={0.5}
-                onChange={(v) => edit((pt) => (pt.params[k] = v))}
+                onChange={(v) => setP(k, v, (pt) => (pt.params[k] = v))}
                 fmt={pct}
                 width={180}
                 variant="dim"
@@ -498,8 +526,8 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
             })} />
             <span className="label">haze</span>
             <div className={`grow paramrow ${prm.haze === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
-              <Fader label="output" width={140} value={prm.haze ?? 0.5} onChange={(v) => edit((pt) => (pt.params.haze = v))} fmt={pct} variant="dim" />
-              <Fader label="fan" width={140} value={prm.fan ?? 0.35} onChange={(v) => edit((pt) => (pt.params.fan = v))} fmt={pct} variant="dim" />
+              <Fader label="output" width={140} value={softFor('haze') ?? prm.haze ?? 0.5} onChange={(v) => setP('haze', v, (pt) => (pt.params.haze = v))} fmt={pct} variant="dim" />
+              <Fader label="fan" width={140} value={softFor('fan') ?? prm.fan ?? 0.35} onChange={(v) => setP('fan', v, (pt) => (pt.params.fan = v))} fmt={pct} variant="dim" />
             </div>
           </div>
         )}
@@ -516,6 +544,8 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
               if (e) fn(e);
             })}
             onRemove={() => edit((pt) => (pt.effects = pt.effects.filter((x) => x.id !== fx.id)))}
+            onField={(field, v, fallback) => setE(fx.id, field, v, fallback)}
+            soft={(field) => softFor(field, fx.id)}
             onSaveToPool={() => mutate((p) => {
               // copy-on-apply's mirror: snapshot the effect into the pool, so a
               // later edit to this look never rewrites the stored preset.
@@ -596,6 +626,8 @@ export function LookEditor() {
   const sel = useStore((s) => s.sel);
   const mutate = useStore((s) => s.mutate);
   const send = useStore((s) => s.send);
+  const softCount = useStore((s) => s.snap?.soft?.length ?? 0);
+  const [ride, setRide] = useState(false);
 
   if (!sel) return <div className="hint">Select a cell in the grid to edit its look — click an empty cell to start a new one (it won't fire the layer).</div>;
 
@@ -703,6 +735,14 @@ export function LookEditor() {
         <span className="label">s</span>
         <button className="btn small ghost" onClick={() => send({ type: 'trigger', layerId: layer.id, col: sel.col })}>
           ▶ fire
+        </button>
+        <button
+          className={`btn small ${ride ? 'on' : 'ghost'}`}
+          title="RIDE: fader moves become live soft overrides (~40 bytes, no project write, no undo spam) — Store writes them into the look, Discard drops them. Cleared by ALL STOP and project switch."
+          onClick={() => setRide(!ride)}
+          style={ride ? { background: 'var(--amber, #f0a63e)', color: '#000' } : undefined}
+        >
+          ride
         </button>
         <select
           className="sel"
@@ -891,8 +931,25 @@ export function LookEditor() {
         </div>
       ) : (
         <>
+          {softCount > 0 && (
+            <div
+              className="row"
+              style={{ background: 'rgba(240,166,62,0.14)', border: '1px solid var(--amber, #f0a63e)', borderRadius: 4, padding: '4px 8px', margin: '8px 0' }}
+            >
+              <span style={{ color: 'var(--amber, #f0a63e)', fontWeight: 600 }}>
+                RIDING · {softCount} value{softCount === 1 ? '' : 's'}
+              </span>
+              <div className="grow" />
+              <button className="btn small" title="write every ridden value into the show (one undoable change)" onClick={() => send({ type: 'softCommit' })}>
+                Store
+              </button>
+              <button className="btn small ghost" title="drop every ride — the stored show is untouched" onClick={() => send({ type: 'softClear' })}>
+                Discard
+              </button>
+            </div>
+          )}
           {look.parts.map((part) => (
-            <PartEditor key={part.id} lookId={lookId} part={part} />
+            <PartEditor key={part.id} lookId={lookId} part={part} ride={ride} />
           ))}
 
           <div className="row">
