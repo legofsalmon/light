@@ -160,9 +160,33 @@ Each was verified; none is show-critical.
 
 ---
 
-## 4. Stage 3+ (in progress / upcoming)
+## 4. Stage 3 — done
 
-Stage 3 (previz correctness) is being worked now. Stages 4 (previz quality:
-bloom/tonemapping, camera bookmarks, beam shader, quality tiers, Bevy 0.19,
-DLSS on PC / MetalFX on macOS) and 5 (features: audio-reactivity, Art-Net HTP
-merge, MVR geometry, Link-clock timelines) are described in the review artifact.
+Every confirmed previz-correctness defect is fixed (commits `d915a50`,
+`67c967f`, `a70641f`):
+
+- web: stale occluders on structure moves, WebGL context churn + no
+  context-lost handler, circle-instead-of-rectangle 2D hit-test, snap/measure
+  toggles absent in the mode they act on, fitBeam cutting against the previous
+  frame's pan;
+- native: club-scale beam reach and camera clamps on an arena plot, mover cones
+  frozen at rest-pose length while aiming, rebuild signature ignoring prop
+  size/base-Y/beam angle, one bad profile blanking the whole scene, invisible
+  disconnect;
+- and zoom now reaches the previz (`HeadSnap.zm`), so the parameter whose point
+  is beam geometry is finally visible in the beam view.
+
+Low-severity previz items deliberately left (they are polish, not correctness):
+no selection/hover in the 3D view, mover bodies that do not articulate (only the
+beam moves), an invented 2–14 Hz strobe band rather than the profile's, frame-
+rate-dependent intensity smoothing, a camera key shared between the live and
+audition panes, the native previz's per-frame snapshot clone, its shadow budget
+spent in patch order rather than by relevance, its sRGB/linear inconsistency
+between pools and shafts, and no fixture labels or selection sync.
+
+## 5. Stages 4–5 (upcoming)
+
+Stage 4 (previz quality: bloom/tonemapping, camera bookmarks, soft-falloff beam
+shader, quality tiers, Bevy 0.19, DLSS on PC / MetalFX on macOS) and Stage 5
+(features: audio-reactivity, Art-Net HTP merge, MVR geometry, Link-clock
+timelines) are described in the review artifact.
