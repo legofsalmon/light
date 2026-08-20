@@ -83,6 +83,14 @@ export function uniqueSlug(name: string): string {
   return `${base}-${Date.now()}`;
 }
 
+/** slug -> {mtime, name}: a project file is read only when it has changed.
+ *
+ *  Extracting one `name` field cost a full read + JSON.parse of every project in
+ *  the directory — 1.3 MB each on a real show — and it ran on every `projects`
+ *  command, which every client sends on every (re)connect, on the tick thread.
+ *  This engine is the only writer, so an mtime key is exact. */
+const nameCache = new Map<string, { mtime: number; name: string }>();
+
 export function listProjects(): { slug: string; name: string }[] {
   try {
     return fs
@@ -90,12 +98,22 @@ export function listProjects(): { slug: string; name: string }[] {
       .filter((f) => f.endsWith('.project.json'))
       .map((f) => {
         const sl = f.slice(0, -'.project.json'.length);
+        const full = path.join(DIR, f);
+        let mtime = 0;
+        try {
+          mtime = fs.statSync(full).mtimeMs;
+        } catch {
+          /* vanished between readdir and stat — fall through to a fresh read */
+        }
+        const hit = nameCache.get(sl);
+        if (hit && hit.mtime === mtime) return { slug: sl, name: hit.name };
         let name = sl;
         try {
-          name = String(JSON.parse(fs.readFileSync(path.join(DIR, f), 'utf8')).name ?? sl);
+          name = String(JSON.parse(fs.readFileSync(full, 'utf8')).name ?? sl);
         } catch {
           name = `${sl} (unreadable)`;
         }
+        nameCache.set(sl, { mtime, name });
         return { slug: sl, name };
       })
       .sort((a, b) => a.slug.localeCompare(b.slug));

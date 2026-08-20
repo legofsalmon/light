@@ -209,7 +209,15 @@ pub fn write_cache(fixture_dir: &PathBuf, body: &str) -> Result<usize, String> {
         ));
     }
     std::fs::create_dir_all(fixture_dir).map_err(|e| format!("cannot create {fixture_dir:?}: {e}"))?;
-    std::fs::write(cache_path(fixture_dir), body).map_err(|e| format!("cannot write cache: {e}"))?;
+    // tmp + rename, like the project persist path. A bare write of a 6.4 MB
+    // file is not atomic: a crash or a second concurrent refresh mid-write
+    // leaves a truncated catalogue, which parses as fewer entries — and the
+    // collapse guard above then reads that torn file as the "previous good"
+    // count on the next refresh, so the damage sticks.
+    let tmp = cache_path(fixture_dir).with_extension("json.tmp");
+    std::fs::write(&tmp, body).map_err(|e| format!("cannot write cache: {e}"))?;
+    std::fs::rename(&tmp, cache_path(fixture_dir))
+        .map_err(|e| format!("cannot replace cache: {e}"))?;
     Ok(n)
 }
 
@@ -320,10 +328,7 @@ fn fixture_dir() -> PathBuf {
 #[tauri::command]
 pub fn share_status(session: State<'_, ShareSession>) -> ShareStatus {
     let dir = fixture_dir();
-    let cached = read_cache(&dir)
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-        .and_then(|v| v.get("list").and_then(|l| l.as_array()).map(|a| a.len()))
-        .unwrap_or(0);
+    let cached = catalogue_len();
     let cached_at = std::fs::metadata(cache_path(&dir))
         .ok()
         .and_then(|m| m.modified().ok())
@@ -343,8 +348,16 @@ pub async fn share_login(
     // only after the credentials are known to work — storing a wrong password
     // that then fails silently every launch is worse than not storing one
     if remember {
-        remember_user(&user)?;
-        remember_password(&user, &password)?;
+        // Password FIRST. The username file is what makes the app try a saved
+        // sign-in at launch; writing it before the password meant a Keychain
+        // failure (locked, denied, iCloud sync error) left a username with no
+        // password behind it, so every launch attempted a sign-in that could
+        // only fail. Failing to remember is also not a failure to sign IN — the
+        // session is live either way — so this reports and carries on rather
+        // than returning Err and looking like a rejected login.
+        if let Err(e) = remember_password(&user, &password).and_then(|()| remember_user(&user)) {
+            eprintln!("[share] signed in, but could not save the sign-in: {e}");
+        }
     }
     Ok(())
 }
@@ -391,10 +404,11 @@ pub async fn share_refresh(session: State<'_, ShareSession>) -> Result<usize, St
 /// Deliberately generous: substring on either field, capped. Ranking is what
 /// makes the shortlist good, and it cannot rank what it never receives.
 #[tauri::command]
-pub fn share_search(query: String, limit: Option<usize>) -> Result<String, String> {
-    let raw = read_cache(&fixture_dir()).ok_or("the catalogue has not been fetched yet")?;
-    let v: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|e| format!("cached catalogue is unreadable: {e}"))?;
+pub async fn share_search(query: String, limit: Option<usize>) -> Result<String, String> {
+    // async so Tauri runs it on the runtime pool: a non-async command body runs
+    // inline on the macOS main thread, so this froze the window's event loop
+    // for the duration of every keystroke.
+    let v = catalogue().ok_or("the catalogue has not been fetched yet")?;
     let list = v.get("list").and_then(|l| l.as_array()).ok_or("cached catalogue has no list")?;
 
     let needles: Vec<String> = query
@@ -426,13 +440,43 @@ pub fn share_search(query: String, limit: Option<usize>) -> Result<String, Strin
     serde_json::to_string(&out).map_err(|e| format!("cannot encode results: {e}"))
 }
 
-/// How many fixtures the cache holds, without shipping any of them.
-#[tauri::command]
-pub fn share_cached_count() -> usize {
-    read_cache(&fixture_dir())
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+/// The parsed catalogue, kept in memory so a search does not re-read and
+/// re-parse 6.4 MB per keystroke.
+///
+/// Keyed on the cache file's mtime, so a refresh invalidates it without any
+/// explicit plumbing. Every reader below goes through this — `share_search`
+/// (per keystroke), `share_status` and `share_cached_count` (per panel mount)
+/// each used to do the full read + serde parse + 12,400 allocations on their
+/// own, on the MAIN THREAD, which is what made typing in the fixture search
+/// stutter the window.
+static CATALOGUE: std::sync::Mutex<Option<(std::time::SystemTime, std::sync::Arc<serde_json::Value>)>> =
+    std::sync::Mutex::new(None);
+
+fn catalogue() -> Option<std::sync::Arc<serde_json::Value>> {
+    let dir = fixture_dir();
+    let mtime = std::fs::metadata(cache_path(&dir)).ok()?.modified().ok()?;
+    let mut guard = CATALOGUE.lock().ok()?;
+    if let Some((at, v)) = guard.as_ref() {
+        if *at == mtime {
+            return Some(v.clone());
+        }
+    }
+    let raw = read_cache(&dir)?;
+    let v = std::sync::Arc::new(serde_json::from_str::<serde_json::Value>(&raw).ok()?);
+    *guard = Some((mtime, v.clone()));
+    Some(v)
+}
+
+fn catalogue_len() -> usize {
+    catalogue()
         .and_then(|v| v.get("list").and_then(|l| l.as_array()).map(|a| a.len()))
         .unwrap_or(0)
+}
+
+/// How many fixtures the cache holds, without shipping any of them.
+#[tauri::command]
+pub async fn share_cached_count() -> usize {
+    catalogue_len()
 }
 
 /// Download one fixture and hand it back base64, ready for `importGdtf`.
@@ -493,7 +537,7 @@ fn remember_user(user: &str) -> Result<(), String> {
 
 /// The `.gdtf` files in the local library, newest first.
 #[tauri::command]
-pub fn library_list() -> Result<Vec<String>, String> {
+pub async fn library_list() -> Result<Vec<String>, String> {
     let dir = fixture_dir();
     let Ok(entries) = std::fs::read_dir(&dir) else { return Ok(Vec::new()) };
     let mut files: Vec<(std::time::SystemTime, String)> = entries
@@ -513,7 +557,7 @@ pub fn library_list() -> Result<Vec<String>, String> {
 
 /// One library file as base64, ready for the engine's importGdtf.
 #[tauri::command]
-pub fn library_read(name: String) -> Result<String, String> {
+pub async fn library_read(name: String) -> Result<String, String> {
     // The name comes back from library_list, but it arrives over an IPC bridge
     // and is a filesystem path either way: refuse anything with a separator or
     // a parent segment rather than trusting the round trip.

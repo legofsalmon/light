@@ -145,13 +145,30 @@ pub fn start(
         let bc = bc.clone();
         let dist = dist.clone();
         std::thread::spawn(move || {
+            // One OS thread per connection with no ceiling: a port scan or a
+            // misbehaving client can spawn threads until the process dies, and
+            // a half-open socket holds one through the peek loop. A real show
+            // is the app, the previz and a tablet or two — this is far above
+            // that and far below anything that hurts.
+            const MAX_CLIENTS: usize = 32;
+            let live = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
             for stream in l.incoming() {
                 let Ok(stream) = stream else { continue };
+                if live.load(std::sync::atomic::Ordering::Relaxed) >= MAX_CLIENTS {
+                    // Drop it rather than queueing: an accepted-but-unserved
+                    // socket looks alive to the client and never answers.
+                    eprintln!("[server] refusing connection — {MAX_CLIENTS} already open");
+                    drop(stream);
+                    continue;
+                }
+                live.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let tx = tx.clone();
                 let bc = bc.clone();
                 let dist = dist.clone();
+                let live2 = live.clone();
                 std::thread::spawn(move || {
                     let _ = handle_conn(stream, dist, tx, bc);
+                    live2.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                 });
             }
         });

@@ -90,7 +90,12 @@ export function attachApcOutput(access: MIDIAccess): void {
   if (!output) return;
   // clear the whole surface once on attach
   for (let n = 0; n <= 39; n++) output.send([0x90, n, 0]);
-  for (let n = 82; n <= 86; n++) output.send([0x90, n, 0]);
+  // 81, not 82: STOP ALL CLIPS is the blackout LED, and computeLeds only ever
+  // INSERTS it (when blackout is armed), so the diff loop can never turn it off
+  // either. Quitting with blackout armed left it blinking "armed" on the
+  // hardware while blackout was actually off — a false safety indicator on the
+  // physical surface. The Rust mirror already clears 81-86 (core/src/apc.rs).
+  for (let n = 81; n <= 86; n++) output.send([0x90, n, 0]);
 }
 
 let pending = false;

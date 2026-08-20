@@ -129,6 +129,72 @@ struct PreviewEvent {
     heads: Option<Vec<crate::types::HeadSnap>>,
 }
 
+/// One import parses at a time, with a short queue behind it.
+///
+/// Imports run off the tick thread (they must — a 9.4 MB MVR takes 32 ms to
+/// parse) but nothing bounded how many could be in flight, and each worker
+/// holds a full copy of the archive: a client looping imports piled up threads
+/// until the process was OOM-killed.
+///
+/// A queue rather than a hard reject, because a legitimate burst is a normal
+/// flow — "rebuild from library" sends one import per file — and rejecting five
+/// of six would silently do the wrong thing. Only a flood past the queue depth
+/// is refused, and it is refused OUT LOUD.
+enum ImportJob {
+    Gdtf { name: String, data: String, credit: Option<String> },
+    Mvr { name: String, data: String, replace: bool },
+}
+
+const IMPORT_QUEUE_MAX: usize = 8;
+static IMPORTS: std::sync::Mutex<Option<(bool, std::collections::VecDeque<ImportJob>)>> =
+    std::sync::Mutex::new(None);
+
+/// Queue an import, starting it immediately if nothing else is parsing.
+/// Returns false only when the queue is full.
+fn queue_import(job: ImportJob, tx: &Sender<EngineMsg>) -> bool {
+    let Ok(mut guard) = IMPORTS.lock() else { return false };
+    let (busy, q) = guard.get_or_insert_with(|| (false, std::collections::VecDeque::new()));
+    if *busy {
+        if q.len() >= IMPORT_QUEUE_MAX {
+            return false;
+        }
+        q.push_back(job);
+        return true;
+    }
+    *busy = true;
+    spawn_import(job, tx);
+    true
+}
+
+/// A parse finished (or failed): start whatever is waiting.
+fn import_finished(tx: &Sender<EngineMsg>) {
+    let Ok(mut guard) = IMPORTS.lock() else { return };
+    let (busy, q) = guard.get_or_insert_with(|| (false, std::collections::VecDeque::new()));
+    match q.pop_front() {
+        Some(next) => spawn_import(next, tx),
+        None => *busy = false,
+    }
+}
+
+fn spawn_import(job: ImportJob, tx: &Sender<EngineMsg>) {
+    let tx = tx.clone();
+    std::thread::spawn(move || {
+        let msg = match job {
+            ImportJob::Gdtf { name, data, credit } => {
+                let result = crate::state::base64_decode(&data)
+                    .and_then(|bytes| crate::gdtf::parse_gdtf(&bytes));
+                EngineMsg::GdtfParsed { name, credit, result }
+            }
+            ImportJob::Mvr { name, data, replace } => {
+                let result = crate::state::base64_decode(&data)
+                    .and_then(|bytes| crate::mvr::parse_mvr(&bytes));
+                EngineMsg::MvrParsed { name, replace, result }
+            }
+        };
+        let _ = tx.send(msg);
+    });
+}
+
 /// Per-client transport subscriptions.
 ///
 /// Deliberately NOT in EngineState: these are facts about sockets, not about
@@ -626,26 +692,32 @@ fn handle_msg(
         // the archive at all; state.rs keeps its own parse-and-apply arms for
         // direct callers and tests.
         EngineMsg::Cmd(Command::ImportGdtf { name, data, credit }, _owner) => {
-            let tx2 = tx.clone();
-            std::thread::spawn(move || {
-                let result = crate::state::base64_decode(&data)
-                    .and_then(|bytes| crate::gdtf::parse_gdtf(&bytes));
-                let _ = tx2.send(EngineMsg::GdtfParsed { name, credit, result });
-            });
+            // One import at a time. Each spawns a thread holding a full copy of
+            // the archive, and nothing capped how many: a client looping
+            // imports piled up parse threads until the process was OOM-killed.
+            // Rejecting is better than queueing — the operator gets told, and a
+            // rebuild-from-library run (which sends one import per file) simply
+            // paces itself behind the toast.
+            if !queue_import(ImportJob::Gdtf { name: name.clone(), data, credit }, tx) {
+                bc.broadcast(&json!({"type":"importResult","ok":false,
+                    "message":format!("{name}: too many imports queued — try again in a moment"),
+                    "profileIds":[]}).to_string());
+            }
         }
         EngineMsg::Cmd(Command::ImportMvr { name, data, replace }, _owner) => {
-            let tx2 = tx.clone();
-            std::thread::spawn(move || {
-                let result = crate::state::base64_decode(&data)
-                    .and_then(|bytes| crate::mvr::parse_mvr(&bytes));
-                let _ = tx2.send(EngineMsg::MvrParsed { name, replace, result });
-            });
+            if !queue_import(ImportJob::Mvr { name: name.clone(), data, replace }, tx) {
+                bc.broadcast(&json!({"type":"importResult","ok":false,
+                    "message":format!("{name}: too many imports queued — try again in a moment"),
+                    "profileIds":[]}).to_string());
+            }
         }
         EngineMsg::GdtfParsed { name, credit, result } => {
+            import_finished(tx);
             let out = state.apply_gdtf(&name, result, credit);
             apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_echo, None);
         }
         EngineMsg::MvrParsed { name, replace, result } => {
+            import_finished(tx);
             let out = state.apply_mvr_parsed(&name, result, replace, t);
             apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_echo, None);
         }

@@ -410,6 +410,12 @@ export const useStore = create<Store>()((set, get) => ({
  *  made against; consecutive project writes coalesce to the last one. */
 function flushPending(engineSlug: string): void {
   if (pending.length === 0) return;
+  // Do not empty the queue into a socket that cannot carry it. `send` on a
+  // CLOSING/CLOSED WebSocket drops silently, so if the connection died between
+  // the open event and this call, splicing first discarded the operator's whole
+  // offline session. Every queued message is slug-tagged, so leaving them for
+  // the next reconnect is safe.
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
   const queued = pending.splice(0);
   const usable = queued.filter((q) => q.slug === null || q.slug === engineSlug);
   const dropped = queued.length - usable.length;
