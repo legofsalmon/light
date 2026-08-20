@@ -17,6 +17,20 @@ not speed).
 | Previz frame | ≤ 8.3 ms | ProMotion 120 Hz; ≥ 60 fps mandatory |
 | GDTF import | interactive (< 100 ms/file) | import-time only, never on the tick path |
 
+## 2026-08-20 — motion engine complete (P4→P2)
+
+The full per-tick resolution stack — stored → soft → modulation, spatial fan,
+per-part rate-corr — measured on the Node REFERENCE engine (the ship Rust
+engine benches faster on every prior comparison):
+
+| Bench | Result | Notes |
+|---|---|---|
+| Node tick: demo rig + 2-binding LFO + soft ride + x-distribute fan + fx layer | **18.1 µs** | 0.07 % of the 25 ms budget; soft/mod resolution copies only parts actually ridden/bound |
+
+Verdict: the whole motion engine costs well under one percent of a tick at
+rig scale; no hot-path work needed before the per-head scaling items already
+noted in parked-work §4.
+
 ## 2026-08-20 — B2 geometry builder (motion engine)
 
 Per-head world positions (`shared/geometry.ts` / `core/src/geometry.rs`),
