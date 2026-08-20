@@ -19,7 +19,7 @@ import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, parseG
  *  content means editing a song looks like an engine regression. */
 const demoProject = (): Project =>
   JSON.parse(fs.readFileSync(path.join(process.cwd(), 'core/tests/data/demo_project.json'), 'utf8'));
-import { MAX_THROW, buildOccluders, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
+import { MAX_THROW, buildOccluders, hitsPropFootprint, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
 import { parseOsc } from '../osc.ts';
 import { ArtnetOut } from '../artnet.ts';
 import { BeatClock } from '../clock.ts';
@@ -397,6 +397,42 @@ await new Promise<void>((resolve) => {
     !hasUndrivenBeamChannels({ channels: [{ name: 'Effects2Rate', cases: [] }] }),
   );
   check('stale: a profile with no channels is not stale', !hasUndrivenBeamChannels({}));
+}
+
+// --- 2D plan hit-test --------------------------------------------------------
+// A truss bar is long and thin. Testing a circle of radius max(w,d)/2 made it
+// swallow every click within 3.5 m of stage centre, so these assert the
+// rectangle — including the rotated case, which the circle ignored entirely.
+{
+  const truss = { pos: { x: 0, z: 0 }, size: { w: 7, d: 0.3 } };
+  check(
+    'hit-test: a click on the bar hits it',
+    hitsPropFootprint({ x: 3, z: 0 }, truss),
+  );
+  check(
+    'hit-test: a click 2 m downstage of a 0.3 m-deep bar MISSES it',
+    !hitsPropFootprint({ x: 0, z: 2 }, truss),
+    'the old circle grabbed everything within 3.5 m',
+  );
+  check(
+    'hit-test: a click past the end of the bar misses it',
+    !hitsPropFootprint({ x: 4, z: 0 }, truss),
+  );
+  check(
+    'hit-test: the thin axis keeps a grabbable margin',
+    hitsPropFootprint({ x: 0, z: 0.2 }, truss),
+  );
+  // rotated 90 degrees: the long axis now runs across z, not x
+  const turned = { pos: { x: 0, z: 0 }, rotY: Math.PI / 2, size: { w: 7, d: 0.3 } };
+  check(
+    'hit-test: a bar turned 90° is hit along z',
+    hitsPropFootprint({ x: 0, z: 3 }, turned),
+  );
+  check(
+    'hit-test: a bar turned 90° is NOT hit along x',
+    !hitsPropFootprint({ x: 3, z: 0 }, turned),
+    'rotation ignored — the old circle could not tell these apart',
+  );
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

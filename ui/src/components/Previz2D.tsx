@@ -3,6 +3,7 @@ import type { HeadSnap } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
+import { hitsPropFootprint } from '../../../shared/beamThrow.ts';
 import { askConfirm } from '../dialog.tsx';
 
 /** How close a dragged fixture has to come to a bar before it clamps on. */
@@ -462,15 +463,39 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       if (view === 'plan' && !additive) {
         let bestProp: { id: string; d: number } | null = null;
         for (const pr of project.props ?? []) {
-          const d = Math.hypot(pr.pos.x - pos.x, pr.pos.z - pos.v);
-          // structure is grabbed anywhere inside its footprint; a performer
-          // keeps the old fixed radius
-          let reach = 0.35;
+          const dx = pos.x - pr.pos.x;
+          const dz = pos.v - pr.pos.z;
+          const d = Math.hypot(dx, dz);
           if (isStructure(pr.kind)) {
+            // Structure is grabbed inside its actual FOOTPRINT (tested in
+            // shared/beamThrow.ts). This used to be a circle of radius
+            // max(w,d)/2 — for the default 7 x 0.3 m truss bar that is a 3.5 m
+            // grab radius, ~38 m² instead of ~2 m². Every plain click near
+            // centre stage selected the truss, the fixtures rigged on it could
+            // not be picked at all, and a hurried double-click popped
+            // "Remove this trussBar?".
             const s = pr.size ?? STRUCTURE_DEFAULTS[pr.kind] ?? { w: 1, h: 1, d: 1 };
-            reach = Math.max(s.w, s.d) / 2;
+            if (
+              hitsPropFootprint({ x: pos.x, z: pos.v }, { pos: pr.pos, rotY: pr.rotY, size: s }) &&
+              (!bestProp || d < bestProp.d)
+            ) {
+              bestProp = { id: pr.id, d };
+            }
+          } else if (d < 0.35 && (!bestProp || d < bestProp.d)) {
+            // a performer keeps the old fixed radius
+            bestProp = { id: pr.id, d };
           }
-          if (d < reach && (!bestProp || d < bestProp.d)) bestProp = { id: pr.id, d };
+        }
+        // A fixture rigged on a bar sits INSIDE the bar's footprint, so the
+        // rectangle above still swallows it. Let a fixture win when the click
+        // is closer to it than to the structure's centre line — picking the
+        // bar itself still works everywhere along its length between heads.
+        if (bestProp) {
+          const nearestFixture = project.fixtures.reduce<{ id: string; d: number } | null>((acc, f) => {
+            const d = Math.hypot(f.pos.x - pos.x, vertOf(f.pos, view) - pos.v);
+            return d < 0.4 && (!acc || d < acc.d) ? { id: f.id, d } : acc;
+          }, null);
+          if (nearestFixture && nearestFixture.d < bestProp.d) bestProp = null;
         }
         if (bestProp) {
           const hit = bestProp;

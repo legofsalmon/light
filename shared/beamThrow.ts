@@ -98,3 +98,29 @@ export function throwDistance(o: Vec3, dir: Vec3, occ: Occluder[]): number {
   }
   return Math.max(MIN_THROW, best);
 }
+
+/** Is a plan-view click inside a structural prop's footprint?
+ *
+ *  Shared with the 2D plan's hit-test. It used to be a circle of radius
+ *  max(w,d)/2, which for the default 7 x 0.3 m truss bar is a 3.5 m grab radius
+ *  — ~38 m² instead of ~2 m². Every plain click near centre stage selected the
+ *  truss, fixtures rigged on it could not be picked, and a hurried double-click
+ *  popped a removal dialog. Rotating the click into the prop's own frame and
+ *  testing the rectangle is both correct and cheap.
+ *
+ *  `margin` keeps a thin bar grabbable — a 0.3 m-deep truss is under two pixels
+ *  of tolerance at typical zoom without it. */
+export function hitsPropFootprint(
+  click: { x: number; z: number },
+  prop: { pos: { x: number; z: number }; rotY?: number; size: { w: number; d: number } },
+  margin = 0.15,
+): boolean {
+  const dx = click.x - prop.pos.x;
+  const dz = click.z - prop.pos.z;
+  const ry = prop.rotY ?? 0;
+  const c = Math.cos(-ry);
+  const s = Math.sin(-ry);
+  const lx = dx * c - dz * s;
+  const lz = dx * s + dz * c;
+  return Math.abs(lx) <= prop.size.w / 2 + margin && Math.abs(lz) <= prop.size.d / 2 + margin;
+}

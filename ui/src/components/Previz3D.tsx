@@ -173,12 +173,27 @@ function buildRig(project: Project): {
     group.add(fg);
   }
   // Static heads are cut once, here; movers and derbies are re-cut as they turn.
-  const occ = buildOccluders(project);
-  group.updateMatrixWorld(true);
-  for (const h of handles) {
-    for (const b of h.beams) fitBeam(b, occ);
+  const rig = { group, handles, occ: buildOccluders(project) };
+  refitBeams(rig, project);
+  return rig;
+}
+
+/** Recompute the occluder set and re-cut every beam against it.
+ *
+ *  Called on rig build and again whenever the STRUCTURE moves. Static heads are
+ *  cut exactly once, so without this a riser dragged in the 2D plan left their
+ *  beams terminating on geometry that is no longer there — while beams crossing
+ *  its new position punched straight through. Movers and derbies re-cut every
+ *  frame anyway, but they still need the fresh occluder list. */
+function refitBeams(
+  rig: { group: THREE.Group; handles: HeadHandle[]; occ: Occluder[] },
+  project: Project,
+): void {
+  rig.occ = buildOccluders(project);
+  rig.group.updateMatrixWorld(true);
+  for (const h of rig.handles) {
+    for (const b of h.beams) fitBeam(b, rig.occ);
   }
-  return { group, handles, occ };
 }
 
 function disposeDeep(obj: THREE.Object3D): void {
@@ -382,6 +397,19 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     host.appendChild(renderer.domElement);
 
+    // A lost context is recoverable, but only if the default is prevented —
+    // otherwise the canvas stays black for the rest of the session with no way
+    // back short of reloading the UI, mid-show. Causes are real and not
+    // hypothetical: too many live contexts, a GPU driver reset, the OS
+    // reclaiming memory, or the tab being backgrounded on iPadOS. The listeners
+    // are attached further down, once the rig-cache variables they reset exist.
+    let contextLost = false;
+    const onContextLost = (e: Event) => {
+      e.preventDefault(); // ask the browser to give it back
+      contextLost = true;
+      console.warn('[previz] WebGL context lost — waiting for restore');
+    };
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0d0d10);
     scene.fog = new THREE.FogExp2(0x0d0d10, 0.028);
@@ -464,6 +492,20 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
     let lastProject: Project | null = null;
     let lastSig = '';
 
+    // Now that the rig-cache variables exist, wire the recovery path: every
+    // GPU-side resource died with the context, so the caches that would
+    // short-circuit a rebuild have to be invalidated before the next frame.
+    const onContextRestored = () => {
+      contextLost = false;
+      rig = null;
+      lastProject = null;
+      lastSig = '';
+      propsSig = '';
+      console.warn('[previz] WebGL context restored — rebuilding');
+    };
+    renderer.domElement.addEventListener('webglcontextlost', onContextLost);
+    renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
+
     const ro = new ResizeObserver(() => {
       const r = host.getBoundingClientRect();
       const w = Math.max(1, r.width);
@@ -479,6 +521,9 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
 
     const tick = () => {
       raf = requestAnimationFrame(tick);
+      // Keep the loop alive but do no GL work while the context is gone —
+      // every draw would throw until it comes back.
+      if (contextLost) return;
       const now = performance.now();
       const dt = Math.min(0.1, (now - lastT) / 1000);
       lastT = now;
@@ -501,6 +546,10 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
         });
         band = buildProps(project?.props ?? []);
         scene.add(band);
+        // The structure just moved, so the beam-cutting geometry is stale:
+        // rebuild the occluders and re-cut every beam, including the static
+        // heads that are otherwise only ever cut at rig-build time.
+        if (rig && project) refitBeams(rig, project);
       }
       band.visible = showBand;
 
@@ -584,9 +633,13 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
           if (h.pan && h.tilt && hs) {
             h.pan.rotation.y = (0.5 - hs.pan) * Math.PI * 3; // 540°
             h.tilt.rotation.x = (hs.tilt - 0.5) * Math.PI * 1.5; // 270°
-            // the cone has to follow the aim, or a head pointed at the floor
-            // draws the same length as one pointed at the back wall
-            h.tilt.updateMatrixWorld(true);
+            // The cone has to follow the aim, or a head pointed at the floor
+            // draws the same length as one pointed at the back wall. Update
+            // from PAN, not tilt: updateMatrixWorld composes with the parent's
+            // matrixWorld as it stands and never refreshes it, so refreshing
+            // tilt alone cut every beam against the previous frame's pan.
+            // force=true propagates down through tilt to the beam.
+            h.pan.updateMatrixWorld(true);
             for (const b of h.beams) fitBeam(b, rig.occ);
           }
         }
@@ -603,7 +656,16 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       controls.dispose();
       if (rig) disposeDeep(rig.group);
       disposeDeep(scene);
+      renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
+      renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
       renderer.dispose();
+      // dispose() frees three's own objects but leaves the GL context alive
+      // until the detached canvas is garbage collected, which browsers do
+      // lazily. The audition pane mounts and unmounts a SECOND renderer on
+      // every cell selection, so a night of programming can churn past the
+      // ~16-context cap — at which point the browser evicts the OLDEST, which
+      // is the always-mounted live previz. Release it explicitly.
+      renderer.forceContextLoss();
       host.removeChild(renderer.domElement);
     };
   }, []);

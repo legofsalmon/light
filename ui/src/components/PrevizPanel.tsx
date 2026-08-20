@@ -73,22 +73,27 @@ export function PrevizPanel() {
           <button className={mode === '2d' ? 'on' : ''} onClick={() => setMode('2d')}>2D plan</button>
         </div>
         <div className="grow" />
+        {/* Snap acts on 2D PLAN drags and measure drives the 2D grid, but both
+            lived in the 3D-only branch — the snap button's own tooltip
+            described an action impossible in the mode the button appeared in,
+            and in 2D, where they apply, there was no control and no hint one
+            existed. Shown in both modes now. */}
+        <button
+          className={`btn small ${snapToTruss ? 'on' : 'ghost'}`}
+          title="2D plan: drag a fixture near a truss bar and it clamps on and rigs there — turn off to place freely"
+          onClick={() => setSnapToTruss(!snapToTruss)}
+        >
+          snap
+        </button>
+        <button
+          className={`btn small ${showMeasure ? 'on' : 'ghost'}`}
+          title="metre grid and dimensions — for placing structure and judging scale"
+          onClick={() => setShowMeasure(!showMeasure)}
+        >
+          measure
+        </button>
         {mode === '3d' && (
           <>
-            <button
-              className={`btn small ${snapToTruss ? 'on' : 'ghost'}`}
-              title="drag a fixture near a truss bar and it clamps on and rigs there — turn off to place freely"
-              onClick={() => setSnapToTruss(!snapToTruss)}
-            >
-              snap
-            </button>
-            <button
-              className={`btn small ${showMeasure ? 'on' : 'ghost'}`}
-              title="metre grid and dimensions — for placing structure and judging scale"
-              onClick={() => setShowMeasure(!showMeasure)}
-            >
-              measure
-            </button>
             <button
               className={`btn small ${showBand ? 'on' : 'ghost'}`}
               title="dummy band figures for scale (native previz window: press M)"
