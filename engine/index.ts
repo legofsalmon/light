@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { Command, CompiledProfile, Snapshot } from '../shared/types.ts';
+import type { Command, CompiledProfile, ServerEvent, Snapshot } from '../shared/types.ts';
 import { WS_PORT, clamp, sanitizeProject } from '../shared/types.ts';
 import { PROFILES } from '../shared/profiles.ts';
 import { EngineState, LOCAL_CLIENT } from './state.ts';
@@ -278,19 +278,26 @@ let lastEcho = 0;
  *  ~10/s: continuous controls dirty the project per input event and each echo
  *  is the whole project (12x the snapshot stream during a fader ride). */
 function flushProject(): void {
-  if (!projectDirty) return;
+  // Also run when a client is owed a project make-good, even if nothing changed
+  // this window — otherwise a client that missed the echo while backed up never
+  // gets it. Mirrors `project_echo != Idle || bc.has_missed()` in the Rust loop.
+  if (!projectDirty && !server.hasMissed()) return;
   const now = performance.now();
   if (now - lastEcho < 100) return;
-  projectDirty = false;
   lastEcho = now;
-  // echoSkip already accounts for a repaired submission (folded in at onChange
-  // time), so the sender that needs its repair is not among those skipped.
-  server.broadcastExcept(echoSkip, {
-    type: 'project',
-    project: state.project,
-    gen: state.gen,
-  });
-  echoSkip = null;
+  const ev: ServerEvent = { type: 'project', project: state.project, gen: state.gen };
+  // Make good the project for any client skipped while backed up. Skipping is
+  // right for disposable snapshots and wrong for the project: the client would
+  // hold a stale show and write it back. `resend` re-marks a client that is
+  // still full, so this retries every window until it lands.
+  for (const ws of server.takeMissed()) server.resend(ws, ev);
+  if (projectDirty) {
+    projectDirty = false;
+    // echoSkip already accounts for a repaired submission (folded in at
+    // onChange time), so the sender that needs its repair is not skipped.
+    server.broadcastExcept(echoSkip, ev);
+    echoSkip = null;
+  }
 }
 
 server.onConnect = (ws) => {
