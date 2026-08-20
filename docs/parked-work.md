@@ -185,7 +185,25 @@ Agreed build order (each step shippable, parity-green):
    NOTE for A1: HeadGeom carries {x,y,z,along,row,col}; row/col are single-row
    (0, headIdx) until B1 parses real pixel grids.
 6. A1 spatial fan (distribute x/y/z/radial/shuffle, fold mirror/centre, parts,
-   segments, seed; value-sign mirror for pan)
+   segments, seed; value-sign mirror for pan) — DONE. Three commits:
+   (a) engine (`c61380f`) — Effect gains distribute/fold/reverse/parts/buddy/
+   seed (tolerant: unknown values degrade to defaults, never drop the effect);
+   fan pipeline basis(+reverse)→buddy→fold→parts→×spread in the effects twins;
+   per-group extents (min/max/centroid/maxR) gen-cached beside geometry with
+   Python-generated extents goldens; the all-defaults path runs the pre-A1
+   expression VERBATIM; pan value-sign mirror on the mirrored wing; 12 twin
+   unit tests with identical f64 constants + a pinned parity matrix.
+   (b) UI (`69c17ac`) — the fan row: seg [idx X Y Z ◎ ⤨], ⟷/◇/⇄ toggles,
+   parts/buddy, shuffle re-roll. (c) adversarial-review fixes (`0ecd499`) —
+   chase compresses its fan to (n−1)/n so spatial chases deal n distinct
+   slots; mirrored uses >=0.5 so even buddy grids split into whole wings;
+   TS skips dangling-group parts before rate-corr like Rust; y/z axes now
+   tested (transposition-proof diagonal rig + live raised/pulled-bar parity);
+   broken-extents-proof vacuousness guard; pool canon covers the fan fields;
+   parts/buddy inputs commit on blur.
+   Semantics note: spatial bases are INCLUSIVE (t ∈ [0,1]; spread 1 = one
+   wavelength across the rig, ends in phase) except under chase; index stays
+   exclusive j/n as ever.
 7. B1 GDTF geometry parser + per-profile layout editor + offsetY
 8. B3 auto-groups slice 1 (per-type, per-truss ordered along the bar)
 9. P1 soft overrides (SoftAddr layer, engine-side commit, Store/Discard)
