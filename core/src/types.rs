@@ -449,6 +449,90 @@ fn de_controls<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Control>, D
     Ok(controls)
 }
 
+/// One binding of a modulator (P2): adds a beat-driven offset to a soft
+/// address. depth −1..1 scales the swing; the combined value clamps
+/// per-field — the offset rides ON TOP of stored → soft.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModBinding {
+    pub look_id: String,
+    pub part_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_id: Option<String>,
+    pub field: SoftField,
+    pub depth: f64,
+}
+
+/// A global modulator (P2, LFO slice): a pure function of the shared effect
+/// beat, so it inherits the speed master and tap alignment for free.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Modulator {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    pub wave: Wave,
+    pub rate: f64,
+    #[serde(default)]
+    pub phase: f64,
+    #[serde(default = "default_true")]
+    pub on: bool,
+    #[serde(default)]
+    pub bindings: Vec<ModBinding>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Tolerant, mirror of the Node sanitizer.
+fn de_modulators<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Modulator>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    let Some(serde_json::Value::Array(items)) = v else { return Ok(Vec::new()) };
+    let fin = |o: &serde_json::Map<String, serde_json::Value>, k: &str, def: f64| -> f64 {
+        match o.get(k).and_then(|x| x.as_f64()) {
+            Some(n) if n.is_finite() => n,
+            _ => def,
+        }
+    };
+    let mods = items
+        .into_iter()
+        .filter_map(|item| {
+            let obj = item.as_object()?;
+            let id = obj.get("id")?.as_str()?.to_string();
+            let wave = serde_json::from_value::<Wave>(obj.get("wave")?.clone()).ok()?;
+            let name = obj.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let rate = match obj.get("rate").and_then(|x| x.as_f64()) {
+                Some(n) if n.is_finite() && n > 0.0 => n.min(512.0),
+                _ => 4.0,
+            };
+            let phase = fin(obj, "phase", 0.0);
+            let on = obj.get("on").and_then(|x| x.as_bool()).unwrap_or(true);
+            let bindings: Vec<ModBinding> = obj
+                .get("bindings")
+                .and_then(|x| x.as_array())
+                .map(|bs| {
+                    bs.iter()
+                        .filter_map(|b| {
+                            let bo = b.as_object()?;
+                            let field = serde_json::from_value::<SoftField>(bo.get("field")?.clone()).ok()?;
+                            Some(ModBinding {
+                                look_id: bo.get("lookId")?.as_str()?.to_string(),
+                                part_id: bo.get("partId")?.as_str()?.to_string(),
+                                effect_id: bo.get("effectId").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                                field,
+                                depth: clamp(fin(bo, "depth", 0.0), -1.0, 1.0),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some(Modulator { id, name, wave, rate, phase, on, bindings })
+        })
+        .collect();
+    Ok(mods)
+}
+
 /// A named entry in the FX pool: a reusable effect template that references no
 /// fixtures. Applying it copies the effect into a look part with a fresh id
 /// (copy-on-apply), so editing the pool never reaches a running show. The
@@ -766,6 +850,9 @@ pub struct Project {
     /// Named Controls (P3): live faders fanning to parameters via soft links.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "de_controls")]
     pub controls: Vec<Control>,
+    /// Global modulators (P2): beat-locked LFOs bound to parameters.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "de_modulators")]
+    pub modulators: Vec<Modulator>,
 }
 
 // ---------- live wire types (engine → ui) ----------

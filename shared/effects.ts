@@ -1,4 +1,4 @@
-import type { Effect, PartParams } from './types.ts';
+import type { Effect, PartParams, SoftField, Wave } from './types.ts';
 import type { GroupExtents, HeadGeom } from './geometry.ts';
 import { clamp } from './types.ts';
 
@@ -29,6 +29,74 @@ export function waveValue(e: Effect, phase: number, headIdx: number): number {
       return hash01(Math.floor(phase), headIdx * 7919 + 13);
     default:
       return 0;
+  }
+}
+
+/** Modulator wave value 0..1 (P2): a pure function of phase — no state, so
+ *  it is byte-identical across engines by construction. Square/chase run at a
+ *  fixed 0.5 width; random is sample-and-hold keyed by the modulator's index.
+ *  Mirrors mod_wave in core/src/effects.rs. */
+export function modWave(wave: Wave, phase: number, seedIdx: number): number {
+  const p = ((phase % 1) + 1) % 1;
+  switch (wave) {
+    case 'sine':
+      return 0.5 - 0.5 * Math.cos(p * Math.PI * 2);
+    case 'triangle':
+      return p < 0.5 ? p * 2 : 2 - p * 2;
+    case 'sawUp':
+      return p;
+    case 'sawDown':
+      return 1 - p;
+    case 'square':
+    case 'chase':
+      return p < 0.5 ? 1 : 0;
+    case 'random':
+      return hash01(Math.floor(phase), seedIdx * 7919 + 13);
+    default:
+      return 0;
+  }
+}
+
+/** The neutral a modulator offset rides on when the look never set the part
+ *  field — the same defaults the soft layer and effects use. Effect fields
+ *  never need this: an effect always carries its knobs.
+ *  Mirrors soft_base in core/src/effects.rs. */
+export function softBase(params: PartParams, field: SoftField): number {
+  switch (field) {
+    case 'dimmer':
+      return params.dimmer ?? 1;
+    case 'hue':
+      return params.color?.h ?? 0;
+    case 'sat':
+      return params.color?.s ?? 1;
+    case 'pan':
+      return params.pan ?? 0.5;
+    case 'tilt':
+      return params.tilt ?? 0.5;
+    case 'zoom':
+      return params.zoom ?? 0.5;
+    case 'focus':
+      return params.focus ?? 0.5;
+    case 'iris':
+      return params.iris ?? 0.5;
+    case 'frost':
+      return params.frost ?? 0.5;
+    case 'cto':
+      return params.cto ?? 0.5;
+    case 'white':
+      return params.white ?? 0;
+    case 'ringFx':
+      return params.ringFx ?? 0;
+    case 'strobe':
+      return params.strobe ?? 0;
+    case 'motorValue':
+      return params.motorValue ?? 0;
+    case 'haze':
+      return params.haze ?? 0;
+    case 'fan':
+      return params.fan ?? 0;
+    default:
+      return 0; // effect-only fields never reach here
   }
 }
 

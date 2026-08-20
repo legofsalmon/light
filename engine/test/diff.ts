@@ -1158,6 +1158,62 @@ async function main(): Promise<void> {
     await settle(node, rust);
   }
 
+  // --- P2 modulators (LFO slice): beat-locked offsets over stored → soft,
+  // byte-identical on both engines at pinned beats, across part fields,
+  // effect knobs, hue scaling, the disabled path and a dangling binding.
+  {
+    await armWash('wash-rainbow', 0.9);
+    const partId = (await currentProject(node)).looks['wash-rainbow'].parts[0].id;
+    const effectId = (await currentProject(node)).looks['wash-rainbow'].parts[0].effects[0].id;
+    const setMods = async (mods: Project['modulators']): Promise<void> => {
+      const p = structuredClone(await currentProject(node));
+      Object.assign(p.looks['wash-rainbow'].parts[0].effects[0], {
+        bypass: false, mix: 1, distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0,
+      });
+      if (mods) p.modulators = mods;
+      else delete p.modulators;
+      both({ type: 'updateProject', project: p });
+      await sleep(400);
+    };
+    await setMods(undefined);
+    const stored = frameOf(node);
+    compareDmx('mods: baseline parity', node, rust);
+
+    await setMods([
+      {
+        id: 'lfo-1', name: 'Breath', wave: 'sine', rate: 4, phase: 0, on: true,
+        bindings: [
+          { lookId: 'wash-rainbow', partId, field: 'sat', depth: 0.8 },
+          { lookId: 'wash-rainbow', partId, field: 'hue', depth: 0.2 },
+          { lookId: 'wash-rainbow', partId, effectId, field: 'phase', depth: 0.5 },
+          { lookId: 'gone', partId: 'nope', field: 'dimmer', depth: 1 }, // dangling: skipped
+        ],
+      },
+    ]);
+    compareDmx('mods: LFO parity at beat 0.9', node, rust);
+    check('mods: the LFO moves DMX', frameOf(node) !== stored, 'modulator changed nothing');
+    for (const beat of [1.7, 2.5, 3.3]) {
+      both({ type: '_pinClock', effBeat: beat });
+      await sleep(300);
+      compareDmx(`mods: LFO parity at beat ${beat}`, node, rust);
+    }
+
+    // disabled modulator: byte-identical to no modulator at the same beat
+    both({ type: '_pinClock', effBeat: 0.9 });
+    await sleep(300);
+    await setMods([
+      { id: 'lfo-1', name: 'Breath', wave: 'sine', rate: 4, phase: 0, on: false,
+        bindings: [{ lookId: 'wash-rainbow', partId, field: 'sat', depth: 0.8 }] },
+    ]);
+    compareDmx('mods: disabled parity', node, rust);
+    check('mods: disabled renders the stored bytes', frameOf(node) === stored, 'off modulator still modulated');
+
+    await setMods(undefined);
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
+  }
+
   // --- A2 pool: the FX pool is data the engine never renders from, but it must
   // survive the save/broadcast round-trip identically on both engines, and both
   // must repair it the same way (drop a malformed preset, clamp an out-of-range

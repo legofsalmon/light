@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::color::{derby_macro_for_value, derby_quantize, hsv_to_rgb, rgb_to_hsv, DERBY_MACROS};
 use crate::cprofile::{render_compiled, CompiledProfile};
-use crate::effects::apply_effects;
+use crate::effects::{apply_effects, effect_field_value, mod_wave, soft_base};
 use crate::geometry::{build_geometry, build_group_extents, GroupExtents, HeadGeom, NO_EXTENTS, NO_GEOM};
 use crate::profiles::{profile_of, HeadKind, Profile, ResolvedParams};
 use crate::state::EngineState;
@@ -180,6 +180,10 @@ pub struct Renderer {
     geom: HashMap<(String, usize), HeadGeom>,
     /// Per-group spatial extents for the fan bases - same gen gate as geom.
     extents: HashMap<String, GroupExtents>,
+    /// Modulator bindings indexed by (look id, part id) (P2) - same gen gate.
+    /// Each entry carries the modulator's array index so its per-tick value
+    /// can be looked up, and the S&H random seed stays stable.
+    mod_index: HashMap<(String, String), Vec<(crate::types::ModBinding, usize)>>,
     geom_gen: Option<u64>,
 }
 
@@ -244,6 +248,7 @@ impl Renderer {
             rate_corr: HashMap::new(),
             geom: HashMap::new(),
             extents: HashMap::new(),
+            mod_index: HashMap::new(),
             geom_gen: None,
         }
     }
@@ -325,8 +330,41 @@ impl Renderer {
             self.geom = build_geometry(&st.project);
             self.extents = build_group_extents(&st.project, &self.geom);
             st.sweep_soft();
+            self.mod_index.clear();
+            for (mod_idx, m) in st.project.modulators.iter().enumerate() {
+                if !m.on {
+                    continue;
+                }
+                for b in &m.bindings {
+                    self.mod_index
+                        .entry((b.look_id.clone(), b.part_id.clone()))
+                        .or_default()
+                        .push((b.clone(), mod_idx));
+                }
+            }
             self.geom_gen = Some(st.gen);
         }
+
+        // Modulator values for THIS tick: pure functions of the shared beat,
+        // one evaluation per modulator however many bindings it fans to.
+        let mod_values: Option<Vec<f64>> = if self.mod_index.is_empty() {
+            None
+        } else {
+            Some(
+                st.project
+                    .modulators
+                    .iter()
+                    .enumerate()
+                    .map(|(i, m)| {
+                        if m.on && m.rate > 0.0 {
+                            mod_wave(m.wave, self.eff_beat / m.rate + m.phase, i)
+                        } else {
+                            0.5
+                        }
+                    })
+                    .collect(),
+            )
+        };
 
         // --- resolved params per head ---
         struct HeadInfo {
@@ -433,6 +471,49 @@ impl Renderer {
                         }
                         _ => &part.effects,
                     };
+                    // P2: modulator offsets ride ON TOP of stored → soft,
+                    // clamped per-field. Copies only for parts actually bound.
+                    let mod_owned_params;
+                    let mod_owned_effects;
+                    let (eff_params, eff_effects): (&crate::types::PartParams, &[crate::types::Effect]) =
+                        match mod_values
+                            .as_ref()
+                            .and_then(|mv| {
+                                self.mod_index
+                                    .get(&(look.id.clone(), part.id.clone()))
+                                    .map(|binds| (mv, binds))
+                            }) {
+                            Some((mv, binds)) => {
+                                let mut p2 = eff_params.clone();
+                                let mut es = eff_effects.to_vec();
+                                for (b, mod_idx) in binds {
+                                    let w = mv[*mod_idx];
+                                    let scale = if b.field == crate::types::SoftField::Hue { 360.0 } else { 1.0 };
+                                    let offset = (w - 0.5) * b.depth * scale;
+                                    match &b.effect_id {
+                                        Some(eid) => {
+                                            if let Some(e) = es.iter_mut().find(|x| x.id == *eid) {
+                                                if let Some(base) = effect_field_value(e, b.field) {
+                                                    if let Some(v) = crate::types::soft_clamp(b.field, base + offset) {
+                                                        crate::state::apply_soft_effect(e, b.field, v);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        None => {
+                                            let base = soft_base(&p2, b.field);
+                                            if let Some(v) = crate::types::soft_clamp(b.field, base + offset) {
+                                                crate::state::apply_soft_param(&mut p2, b.field, v);
+                                            }
+                                        }
+                                    }
+                                }
+                                mod_owned_params = p2;
+                                mod_owned_effects = es;
+                                (&mod_owned_params, mod_owned_effects.as_slice())
+                            }
+                            None => (eff_params, eff_effects),
+                        };
                     // one lookup per part per tick, shared by every head
                     let corr = self.effect_corr(layer_id, &look_id, &part.id, eff_effects);
                     let ext = self.extents.get(&part.group_id).unwrap_or(&NO_EXTENTS);

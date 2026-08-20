@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Control, ControlLink, SoftField } from '../../../shared/types.ts';
+import type { Control, ControlLink, ModBinding, Modulator, SoftField, Wave } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
 import { Fader } from './Fader.tsx';
@@ -121,6 +121,105 @@ function LinkRow({ link, onEdit, onRemove }: {
   );
 }
 
+const MOD_WAVES: Wave[] = ['sine', 'triangle', 'sawUp', 'sawDown', 'square', 'random'];
+const MOD_RATES: { v: number; label: string }[] = [
+  { v: 32, label: '8 bars' }, { v: 16, label: '4 bars' }, { v: 8, label: '2 bars' },
+  { v: 4, label: '1 bar' }, { v: 2, label: '2 beats' }, { v: 1, label: '1 beat' },
+  { v: 0.5, label: '1/2' }, { v: 0.25, label: '1/4' },
+];
+
+function BindingRow({ b, onEdit, onRemove }: {
+  b: ModBinding;
+  onEdit: (fn: (x: ModBinding) => void) => void;
+  onRemove: () => void;
+}) {
+  const project = useStore((s) => s.project)!;
+  const look = Object.hasOwn(project.looks, b.lookId) ? project.looks[b.lookId] : undefined;
+  const part = look?.parts.find((pt) => pt.id === b.partId);
+  const dangling = !part || (b.effectId !== undefined && !part.effects.some((e) => e.id === b.effectId));
+  return (
+    <div className="row" style={{ marginBottom: 4, paddingLeft: 16 }}>
+      {dangling && (
+        <span className="label" title="this binding's look, part or effect no longer exists — the modulator skips it" style={{ color: 'var(--amber, #f0a63e)' }}>
+          ⚠
+        </span>
+      )}
+      <select
+        className="sel"
+        value={b.lookId}
+        onChange={(e) => onEdit((x) => {
+          x.lookId = e.target.value;
+          const lk = project.looks[e.target.value];
+          x.partId = lk?.parts[0]?.id ?? '';
+          delete x.effectId;
+        })}
+      >
+        {!look && <option value={b.lookId}>(missing look)</option>}
+        {Object.values(project.looks)
+          .filter((l) => !l.steps?.length)
+          .sort((a2, b2) => a2.name.localeCompare(b2.name))
+          .map((l) => (
+            <option key={l.id} value={l.id}>{l.name}</option>
+          ))}
+      </select>
+      <select
+        className="sel"
+        value={b.partId}
+        onChange={(e) => onEdit((x) => {
+          x.partId = e.target.value;
+          delete x.effectId;
+        })}
+      >
+        {!part && <option value={b.partId}>(missing part)</option>}
+        {(look?.parts ?? []).map((pt, i) => {
+          const g = project.groups.find((x) => x.id === pt.groupId);
+          return <option key={pt.id} value={pt.id}>part {i + 1} · {g?.name ?? pt.groupId}</option>;
+        })}
+      </select>
+      <select
+        className="sel"
+        value={b.effectId !== undefined ? `fx:${b.effectId}:${b.field}` : `p:${b.field}`}
+        onChange={(e) => onEdit((x) => {
+          const v = e.target.value;
+          if (v.startsWith('p:')) {
+            delete x.effectId;
+            x.field = v.slice(2) as SoftField;
+          } else {
+            const [, effectId, field] = v.split(':');
+            x.effectId = effectId;
+            x.field = field as SoftField;
+          }
+        })}
+      >
+        <optgroup label="part">
+          {PART_FIELDS.map((f) => (
+            <option key={f} value={`p:${f}`}>{f}</option>
+          ))}
+        </optgroup>
+        {(part?.effects ?? []).map((e, i) => (
+          <optgroup key={e.id} label={`effect ${i + 1} · ${e.target} ${e.wave}`}>
+            {EFFECT_FIELDS.map((f) => (
+              <option key={f} value={`fx:${e.id}:${f}`}>{f}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      <Fader
+        label="depth"
+        width={110}
+        min={-1}
+        max={1}
+        def={0}
+        value={b.depth}
+        onChange={(v) => onEdit((x) => (x.depth = v))}
+        fmt={(v) => `${Math.round(v * 100)}%`}
+        variant="dim"
+      />
+      <button className="btn small ghost" onClick={onRemove}>✕</button>
+    </div>
+  );
+}
+
 export function ControlsView(): React.ReactElement {
   const project = useStore((s) => s.project)!;
   const mutate = useStore((s) => s.mutate);
@@ -132,6 +231,11 @@ export function ControlsView(): React.ReactElement {
     mutate((p) => {
       const c = p.controls?.find((x) => x.id === id);
       if (c) fn(c);
+    });
+  const editMod = (id: string, fn: (m: Modulator) => void) =>
+    mutate((p) => {
+      const m = p.modulators?.find((x) => x.id === id);
+      if (m) fn(m);
     });
 
   return (
@@ -210,6 +314,80 @@ export function ControlsView(): React.ReactElement {
         })}
       >
         + add control
+      </button>
+
+      <div className="sectionhead" style={{ marginTop: 18 }}>Modulators — beat-locked LFOs</div>
+      <div className="label" style={{ marginBottom: 8 }}>
+        Pure functions of the beat clock (they follow the speed master and tap for free), riding each
+        bound parameter about its value with a ± depth. Depth 0 is silent; negative inverts.
+      </div>
+      {(project.modulators ?? []).map((m) => (
+        <div key={m.id} style={{ marginBottom: 14, borderLeft: '2px solid var(--line2, #333)', paddingLeft: 8 }}>
+          <div className="row" style={{ marginBottom: 4 }}>
+            <button
+              className={`btn small ${m.on ? 'on' : 'ghost'}`}
+              title={m.on ? 'running — click to freeze' : 'frozen'}
+              onClick={() => editMod(m.id, (x) => (x.on = !x.on))}
+            >
+              {m.on ? '▶' : '❙❙'}
+            </button>
+            <TextField
+              className="text"
+              style={{ width: 150, fontSize: 13 }}
+              entityId={m.id}
+              value={m.name}
+              onCommit={(v) => editMod(m.id, (x) => (x.name = v))}
+            />
+            <select className="sel" value={m.wave} onChange={(e) => editMod(m.id, (x) => (x.wave = e.target.value as Wave))}>
+              {MOD_WAVES.map((w) => (
+                <option key={w} value={w}>{w}</option>
+              ))}
+            </select>
+            <select className="sel" value={String(m.rate)} onChange={(e) => editMod(m.id, (x) => (x.rate = Number(e.target.value)))}>
+              {MOD_RATES.map((r) => (
+                <option key={r.v} value={String(r.v)}>{r.label}</option>
+              ))}
+            </select>
+            <div className="grow" />
+            <button
+              className="btn small ghost"
+              onClick={() => mutate((p) => {
+                p.modulators = (p.modulators ?? []).filter((x) => x.id !== m.id);
+                if (p.modulators.length === 0) delete p.modulators;
+              })}
+            >
+              ✕
+            </button>
+          </div>
+          {m.bindings.map((b, i) => (
+            <BindingRow
+              key={i}
+              b={b}
+              onEdit={(fn) => editMod(m.id, (x) => { if (x.bindings[i]) fn(x.bindings[i]); })}
+              onRemove={() => editMod(m.id, (x) => x.bindings.splice(i, 1))}
+            />
+          ))}
+          <div className="row" style={{ paddingLeft: 16 }}>
+            <button
+              className="btn small ghost"
+              disabled={Object.values(project.looks).every((l) => !!l.steps?.length || l.parts.length === 0)}
+              onClick={() => editMod(m.id, (x) => {
+                const first = Object.values(project.looks).find((l) => !l.steps?.length && l.parts.length > 0);
+                if (first) x.bindings.push({ lookId: first.id, partId: first.parts[0].id, field: 'dimmer', depth: 0.5 });
+              })}
+            >
+              + binding
+            </button>
+          </div>
+        </div>
+      ))}
+      <button
+        className="btn small"
+        onClick={() => mutate((p) => {
+          p.modulators = [...(p.modulators ?? []), { id: uid('lfo'), name: `LFO ${(p.modulators?.length ?? 0) + 1}`, wave: 'sine', rate: 4, phase: 0, on: true, bindings: [] }];
+        })}
+      >
+        + add modulator
       </button>
     </div>
   );

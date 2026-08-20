@@ -3,12 +3,13 @@ import { clamp, lerp } from '../shared/types.ts';
 import type { HeadKind, ResolvedParams } from '../shared/profiles.ts';
 import { PROFILES, defaultResolved } from '../shared/profiles.ts';
 import { renderImported } from './wasmProfiles.ts';
-import { applyEffects } from '../shared/effects.ts';
+import { applyEffects, modWave, softBase } from '../shared/effects.ts';
 import { NO_EXTENTS, NO_GEOM, buildGeometry, buildGroupExtents, type GroupExtents, type HeadGeom } from '../shared/geometry.ts';
 import { DERBY_MACROS, derbyMacroForValue, derbyQuantize, hsvToRgb, rgbToHsv } from '../shared/color.ts';
 import type { EngineState } from './state.ts';
 import { applySoftEffect, applySoftParam } from './state.ts';
-import type { Effect, PartParams, SoftField } from '../shared/types.ts';
+import type { Effect, ModBinding, PartParams, SoftField } from '../shared/types.ts';
+import { softClamp } from '../shared/types.ts';
 
 // Fixtures whose render already threw once. A bad fixture must not be able to
 // spam the log at 40 Hz, and it must not be able to take the tick down either.
@@ -68,6 +69,10 @@ export class Renderer {
   private geom: Map<string, HeadGeom> = new Map();
   /** Per-group spatial extents for the fan bases — same gen gate as geom. */
   private extents: Map<string, GroupExtents> = new Map();
+  /** Modulator bindings indexed by JSON [lookId, partId] (P2) — same gen gate.
+   *  Each entry carries the modulator's array index so its per-tick value can
+   *  be looked up, and the S&H random seed stays stable. */
+  private modIndex: Map<string, (ModBinding & { modIdx: number })[]> = new Map();
   private geomGen = -1; // st.gen starts at 1 and wraps at 32 bits; never -1
 
   constructor(st: EngineState) {
@@ -191,7 +196,29 @@ export class Renderer {
       this.geom = buildGeometry(p);
       this.extents = buildGroupExtents(p, this.geom);
       st.sweepSoft();
+      this.modIndex = new Map();
+      (p.modulators ?? []).forEach((m, modIdx) => {
+        if (!m.on) return;
+        for (const b of m.bindings) {
+          const key = JSON.stringify([b.lookId, b.partId]);
+          let list = this.modIndex.get(key);
+          if (!list) {
+            list = [];
+            this.modIndex.set(key, list);
+          }
+          list.push({ ...b, modIdx });
+        }
+      });
       this.geomGen = st.gen;
+    }
+
+    // Modulator values for THIS tick: pure functions of the shared beat, one
+    // evaluation per modulator however many bindings it fans to.
+    let modValues: number[] | null = null;
+    if (this.modIndex.size > 0) {
+      modValues = (p.modulators ?? []).map((m, i) =>
+        m.on && m.rate > 0 ? modWave(m.wave, this.effBeat / m.rate + m.phase, i) : 0.5,
+      );
     }
 
     // --- resolved params per head, starting from profile defaults ---
@@ -257,6 +284,28 @@ export class Renderer {
               for (const [field, v] of fields) applySoftEffect(c, field, v);
               return c;
             });
+          }
+          // P2: modulator offsets ride ON TOP of stored → soft, clamped
+          // per-field. Copies are forced only for parts actually bound.
+          const modBinds = modValues ? this.modIndex.get(JSON.stringify([look.id, part.id])) : undefined;
+          if (modBinds && modValues) {
+            if (effParams === part.params) {
+              effParams = { ...part.params, color: part.params.color ? { ...part.params.color } : undefined };
+            }
+            if (effEffects === part.effects) effEffects = part.effects.map((e) => ({ ...e }));
+            for (const b of modBinds) {
+              const w = modValues[b.modIdx];
+              const offset = (w - 0.5) * b.depth * (b.field === 'hue' ? 360 : 1);
+              if (b.effectId !== undefined) {
+                const e = effEffects.find((x) => x.id === b.effectId);
+                if (!e) continue;
+                const v = softClamp(b.field, (e as unknown as Record<string, number>)[b.field] + offset);
+                if (v !== null) applySoftEffect(e, b.field, v);
+              } else {
+                const v = softClamp(b.field, softBase(effParams, b.field) + offset);
+                if (v !== null) applySoftParam(effParams, b.field, v);
+              }
+            }
           }
           // one lookup per part per tick, shared by every head
           const corr = this.effectCorr(layer.id, src.lookId, part.id, effEffects);

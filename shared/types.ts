@@ -329,6 +329,31 @@ export type Control = {
   links: ControlLink[];
 };
 
+/** One binding of a modulator (P2): adds a beat-driven offset to a soft
+ *  address. depth −1..1 scales the swing (±half range at |depth| 1); the
+ *  combined value clamps per-field, and the operator always keeps the knob —
+ *  the offset rides ON TOP of stored → soft. */
+export type ModBinding = {
+  lookId: string;
+  partId: string;
+  effectId?: string;
+  field: SoftField;
+  depth: number;
+};
+
+/** A global modulator (P2, LFO slice): a pure function of the shared effect
+ *  beat, so it inherits the speed master and tap alignment for free. `rate`
+ *  is beats per cycle, like an effect's. */
+export type Modulator = {
+  id: string;
+  name: string;
+  wave: Wave;
+  rate: number;
+  phase: number;
+  on: boolean;
+  bindings: ModBinding[];
+};
+
 export type MidiAction =
   | { kind: 'cell'; layerId: string; col: number }
   /** move a Named Control (CC value scales 0..1) */
@@ -418,6 +443,8 @@ export type Project = {
   fxPool?: FxPreset[];
   /** Named Controls (P3): live faders fanning to parameters via soft links */
   controls?: Control[];
+  /** Global modulators (P2): beat-locked LFOs bound to parameters */
+  modulators?: Modulator[];
 };
 
 // ---------- live wire types ----------
@@ -869,6 +896,43 @@ export function sanitizeProject(p: Project): Project | null {
           .filter((c): c is Control => c !== null)
       : [];
     if (p.controls.length === 0) delete p.controls;
+  }
+  // Modulators (P2): same tolerance discipline.
+  if (p.modulators !== undefined) {
+    p.modulators = Array.isArray(p.modulators)
+      ? p.modulators
+          .map((m): Modulator | null => {
+            if (!m || typeof m !== 'object' || typeof m.id !== 'string' || !WAVES.has(m.wave)) return null;
+            const bindings = Array.isArray(m.bindings)
+              ? m.bindings
+                  .filter(
+                    (b): b is ModBinding =>
+                      !!b && typeof b === 'object' && typeof b.lookId === 'string' &&
+                      typeof b.partId === 'string' &&
+                      (b.effectId === undefined || typeof b.effectId === 'string') &&
+                      SOFT_FIELDS.has(b.field),
+                  )
+                  .map((b) => ({
+                    lookId: b.lookId,
+                    partId: b.partId,
+                    ...(b.effectId !== undefined ? { effectId: b.effectId } : {}),
+                    field: b.field,
+                    depth: Number.isFinite(b.depth) ? clamp(b.depth, -1, 1) : 0,
+                  }))
+              : [];
+            return {
+              id: m.id,
+              name: typeof m.name === 'string' ? m.name : '',
+              wave: m.wave,
+              rate: Number.isFinite(m.rate) && m.rate > 0 ? Math.min(m.rate, 512) : 4,
+              phase: Number.isFinite(m.phase) ? m.phase : 0,
+              on: m.on !== false,
+              bindings,
+            };
+          })
+          .filter((m): m is Modulator => m !== null)
+      : [];
+    if (p.modulators.length === 0) delete p.modulators;
   }
   return p;
 }

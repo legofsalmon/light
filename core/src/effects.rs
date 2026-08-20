@@ -33,6 +33,75 @@ pub fn wave_value(e: &Effect, phase: f64, head_idx: usize) -> f64 {
     }
 }
 
+/// Modulator wave value 0..1 (P2): a pure function of phase - no state, so it
+/// is byte-identical across engines by construction. Square/chase run at a
+/// fixed 0.5 width; random is sample-and-hold keyed by the modulator's index.
+/// Mirrors modWave in shared/effects.ts.
+pub fn mod_wave(wave: Wave, phase: f64, seed_idx: usize) -> f64 {
+    let p = ((phase % 1.0) + 1.0) % 1.0;
+    match wave {
+        Wave::Sine => 0.5 - 0.5 * (p * std::f64::consts::PI * 2.0).cos(),
+        Wave::Triangle => {
+            if p < 0.5 {
+                p * 2.0
+            } else {
+                2.0 - p * 2.0
+            }
+        }
+        Wave::SawUp => p,
+        Wave::SawDown => 1.0 - p,
+        Wave::Square | Wave::Chase => {
+            if p < 0.5 {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        Wave::Random => hash01(phase.floor() as i32, seed_idx as i32 * 7919 + 13),
+    }
+}
+
+/// The neutral a modulator offset rides on when the look never set the part
+/// field. Mirrors softBase in shared/effects.ts.
+pub fn soft_base(params: &PartParams, field: crate::types::SoftField) -> f64 {
+    use crate::types::SoftField as F;
+    match field {
+        F::Dimmer => params.dimmer.unwrap_or(1.0),
+        F::Hue => params.color.map_or(0.0, |c| c.h),
+        F::Sat => params.color.map_or(1.0, |c| c.s),
+        F::Pan => params.pan.unwrap_or(0.5),
+        F::Tilt => params.tilt.unwrap_or(0.5),
+        F::Zoom => params.zoom.unwrap_or(0.5),
+        F::Focus => params.focus.unwrap_or(0.5),
+        F::Iris => params.iris.unwrap_or(0.5),
+        F::Frost => params.frost.unwrap_or(0.5),
+        F::Cto => params.cto.unwrap_or(0.5),
+        F::White => params.white.unwrap_or(0.0),
+        F::RingFx => params.ring_fx.unwrap_or(0.0),
+        F::Strobe => params.strobe.unwrap_or(0.0),
+        F::MotorValue => params.motor_value.unwrap_or(0.0),
+        F::Haze => params.haze.unwrap_or(0.0),
+        F::Fan => params.fan.unwrap_or(0.0),
+        _ => 0.0, // effect-only fields never reach here
+    }
+}
+
+/// Current value of an effect knob, for a modulator's base read. None when a
+/// part-field is (mis)bound with an effect address - skipped, matching the
+/// Node twin's NaN-clamp rejection.
+pub fn effect_field_value(e: &Effect, field: crate::types::SoftField) -> Option<f64> {
+    use crate::types::SoftField as F;
+    match field {
+        F::Rate => Some(e.rate),
+        F::Size => Some(e.size),
+        F::Spread => Some(e.spread),
+        F::Width => Some(e.width),
+        F::Phase => Some(e.phase),
+        F::Mix => Some(e.mix),
+        _ => None,
+    }
+}
+
 fn is_centred(e: &Effect) -> bool {
     matches!(e.wave, Wave::Sine | Wave::Triangle | Wave::Square | Wave::Random)
 }
