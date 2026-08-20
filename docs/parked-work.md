@@ -128,7 +128,45 @@ audition panes, the native previz's per-frame snapshot clone, its shadow budget
 spent in patch order rather than by relevance, its sRGB/linear inconsistency
 between pools and shafts, and no fixture labels or selection sync.
 
-## 6. Stages 4–5 (upcoming)
+## 6. The motion engine (LX-operator feedback — investigated, designed, not yet built)
+
+Full investigation: <https://claude.ai/code/artifact/3aa44b37-811d-49b0-a630-940b18aab155>
+("The Motion Engine"). 12 agents: research on MA3/Resolume/consoles/modulation
+systems, code-mapping of LIGHT's seams, three design tracks, one judge.
+
+Verified facts that anchor it:
+- The Spiider GDTF carries real positions for all 19 pixels in its Geometry
+  tree; the CLF Nero (84-pixel strobe plate) has all positions zeroed. So pixel
+  layouts are parsed-from-file when authored, parametric (Strip/Grid/Ring) per
+  TYPE when not — layout on the profile means "every strobe is the same" by
+  construction (`core/src/gdtf.rs` reads only the Geometry NAME today, ~line
+  369, and fabricates evenly-spaced offsets ~line 399).
+- Both renderers call applyEffects at exactly one line each
+  (`engine/renderer.ts:170`, `core/src/renderer.rs:309`) — the single seam.
+- The Rust `Effect` struct has NO serde defaults (`core/src/types.rs:214`), so
+  any new Effect field without a tolerant deserializer bricks old saves.
+- Effect parity coverage is zero at the byte level today (effBeat boot skew +
+  settle() never converges on motion): a `_pinClock` test seam must land first.
+
+Agreed build order (each step shippable, parity-green):
+1. Groundwork: tolerant de_effects + sanitize effect repair
+2. P5 _pinClock seam + golden effect baseline
+3. P4 phase-continuous rates (fixes the live rate-snap bug)
+4. A2 FX pool (copy-on-apply presets, retargeting, inform-not-forbid targets)
+5. B2 geometry builder (HeadCtx at the seam, zero behaviour change)
+6. A1 spatial fan (distribute x/y/z/radial/shuffle, fold mirror/centre, parts,
+   segments, seed; value-sign mirror for pan)
+7. B1 GDTF geometry parser + per-profile layout editor + offsetY
+8. B3 auto-groups slice 1 (per-type, per-truss ordered along the bar)
+9. P1 soft overrides (SoftAddr layer, engine-side commit, Store/Discard)
+10. P3 Named Controls (the macro replacement — typed faders, per-link ranges)
+11. P2 modulators (LFO slice, then ADSR slice)
+12. B4 pixel-map canvas stays deferred (projection, not canvas)
+
+Rejected: A3 (superseded by P1+P4), any macro language, live-linked pool
+presets, k-means auto-grouping, a second RNG.
+
+## 7. Stages 4–5 (upcoming)
 
 Stage 4 (previz quality: bloom/tonemapping, camera bookmarks, soft-falloff beam
 shader, quality tiers, Bevy 0.19, DLSS on PC / MetalFX on macOS) and Stage 5
