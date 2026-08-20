@@ -228,6 +228,7 @@ pub struct LookPart {
     pub id: String,
     pub group_id: String,
     pub params: PartParams,
+    #[serde(default, deserialize_with = "de_effects")]
     pub effects: Vec<Effect>,
 }
 
@@ -252,6 +253,51 @@ fn default_beats() -> f64 {
 /// hand-edited project file with `"beats": "2"` or a null entry must load
 /// here exactly as it does in the Node engine — a hard serde error would
 /// silently boot the core with the default project instead.
+/// Deserialize a part's effects ONE AT A TIME, repairing or dropping each,
+/// exactly as `de_steps` does for cue steps.
+///
+/// Two things this buys, both load-bearing for the motion engine work that adds
+/// fields to `Effect`:
+/// 1. Forward/backward safety — the strict derived struct fails the WHOLE
+///    project (quarantining it to `.corrupt-*` and booting the default show) if
+///    any single effect is missing a field. A future field addition without
+///    this would brick every saved show on the first load by an older core.
+/// 2. NaN hygiene — a non-finite rate/size today reaches the hue-wrap maths.
+///    Each numeric field is finite-or-default here, at the door.
+///
+/// An effect with no id or an unrecognised target/wave is dropped (just that
+/// effect), not fatal.
+fn de_effects<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Effect>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    let Some(serde_json::Value::Array(items)) = v else { return Ok(Vec::new()) };
+    let fin = |o: &serde_json::Map<String, serde_json::Value>, k: &str, def: f64| -> f64 {
+        match o.get(k).and_then(|x| x.as_f64()) {
+            Some(n) if n.is_finite() => n,
+            _ => def,
+        }
+    };
+    let effects = items
+        .into_iter()
+        .filter_map(|item| {
+            let obj = item.as_object()?;
+            let id = obj.get("id")?.as_str()?.to_string();
+            let target = serde_json::from_value::<EffectTarget>(obj.get("target")?.clone()).ok()?;
+            let wave = serde_json::from_value::<Wave>(obj.get("wave")?.clone()).ok()?;
+            Some(Effect {
+                id,
+                target,
+                wave,
+                rate: fin(obj, "rate", 1.0),
+                size: fin(obj, "size", 1.0),
+                spread: fin(obj, "spread", 0.0),
+                width: fin(obj, "width", 0.5),
+                phase: fin(obj, "phase", 0.0),
+            })
+        })
+        .collect();
+    Ok(effects)
+}
+
 fn de_steps<'de, D: serde::Deserializer<'de>>(
     d: D,
 ) -> Result<Option<Vec<CueStep>>, D::Error> {
@@ -623,4 +669,57 @@ pub enum Command {
     SwitchDeck { deck_id: String },
     LaunchPreviz,
     Save,
+}
+
+#[cfg(test)]
+mod effect_repair_tests {
+    use super::*;
+
+    fn part_with_effects(json: &str) -> LookPart {
+        serde_json::from_str(&format!(
+            r#"{{"id":"p","groupId":"g","params":{{}},"effects":{json}}}"#
+        ))
+        .expect("a part with a malformed effect must still deserialize")
+    }
+
+    #[test]
+    fn a_non_finite_rate_is_repaired_not_fatal() {
+        // serde_json cannot encode NaN, but a null or missing numeric arrives
+        // as exactly the "not finite" case the door guard handles
+        let p = part_with_effects(
+            r#"[{"id":"e","target":"dimmer","wave":"sine","rate":null,"size":1,"spread":0,"width":0.5,"phase":0}]"#,
+        );
+        assert_eq!(p.effects.len(), 1);
+        assert_eq!(p.effects[0].rate, 1.0, "null rate defaulted, not propagated");
+    }
+
+    #[test]
+    fn a_missing_field_defaults_rather_than_failing_the_project() {
+        // the whole point: a future field or an old save missing `width` loads
+        let p = part_with_effects(
+            r#"[{"id":"e","target":"hue","wave":"sawUp","rate":4,"size":1,"spread":0.5,"phase":0}]"#,
+        );
+        assert_eq!(p.effects.len(), 1);
+        assert_eq!(p.effects[0].width, 0.5, "missing width defaulted");
+    }
+
+    #[test]
+    fn an_unknown_target_drops_only_that_effect() {
+        let p = part_with_effects(
+            r#"[{"id":"bad","target":"laser","wave":"sine","rate":1,"size":1,"spread":0,"width":0.5,"phase":0},
+                {"id":"ok","target":"pan","wave":"sine","rate":1,"size":1,"spread":0,"width":0.5,"phase":0}]"#,
+        );
+        assert_eq!(p.effects.len(), 1, "the laser effect dropped, the pan effect kept");
+        assert_eq!(p.effects[0].id, "ok");
+    }
+
+    #[test]
+    fn unknown_extra_fields_are_ignored_not_fatal() {
+        // forward compat: a project written by a newer UI with a field this
+        // core does not model must still load
+        let p = part_with_effects(
+            r#"[{"id":"e","target":"dimmer","wave":"sine","rate":1,"size":1,"spread":0,"width":0.5,"phase":0,"distribute":"x","fold":"mirror"}]"#,
+        );
+        assert_eq!(p.effects.len(), 1);
+    }
 }

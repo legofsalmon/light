@@ -156,6 +156,16 @@ export type EffectTarget =
   | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto';
 export type Wave = 'sine' | 'triangle' | 'sawUp' | 'sawDown' | 'square' | 'chase' | 'random';
 
+/** Runtime membership sets for sanitize/repair — the string unions above have
+ *  no runtime form, so these are the single source both the type and the
+ *  validator draw from. */
+export const EFFECT_TARGETS: ReadonlySet<EffectTarget> = new Set<EffectTarget>([
+  'dimmer', 'hue', 'white', 'strobe', 'pan', 'tilt', 'zoom', 'focus', 'iris', 'frost', 'cto',
+]);
+export const WAVES: ReadonlySet<Wave> = new Set<Wave>([
+  'sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random',
+]);
+
 export type Effect = {
   id: string;
   target: EffectTarget;
@@ -524,7 +534,30 @@ export function sanitizeProject(p: Project): Project | null {
     }
     for (const part of lk.parts) {
       if (!part.params || typeof part.params !== 'object') part.params = {};
-      if (!Array.isArray(part.effects)) part.effects = [];
+      // Repair each effect at the door, mirroring de_effects in
+      // core/src/types.rs: drop an effect with no id or an unknown target/wave,
+      // and force every numeric field finite (a NaN rate/size otherwise reaches
+      // the hue-wrap maths). Extra fields are preserved by the spread, which is
+      // what keeps forward-compatibility as the motion engine adds fields.
+      part.effects = Array.isArray(part.effects)
+        ? part.effects
+            .filter(
+              (e): e is Effect =>
+                !!e &&
+                typeof e === 'object' &&
+                typeof (e as Effect).id === 'string' &&
+                EFFECT_TARGETS.has((e as Effect).target) &&
+                WAVES.has((e as Effect).wave),
+            )
+            .map((e) => ({
+              ...e,
+              rate: Number.isFinite(e.rate) ? e.rate : 1,
+              size: Number.isFinite(e.size) ? e.size : 1,
+              spread: Number.isFinite(e.spread) ? e.spread : 0,
+              width: Number.isFinite(e.width) ? e.width : 0.5,
+              phase: Number.isFinite(e.phase) ? e.phase : 0,
+            }))
+        : [];
     }
     if (lk.steps !== undefined) {
       if (!Array.isArray(lk.steps)) delete lk.steps;
