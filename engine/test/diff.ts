@@ -186,11 +186,11 @@ async function main(): Promise<void> {
 
   procs.push(
     spawn(process.execPath, ['engine/index.ts'], {
-      env: { ...process.env, LIGHT_PORT: '9902', LIGHT_PROJECT_DIR: dirs.node, LIGHT_NO_ARTPOLL: '1' },
+      env: { ...process.env, LIGHT_PORT: '9902', LIGHT_PROJECT_DIR: dirs.node, LIGHT_NO_ARTPOLL: '1', LIGHT_TEST_CLOCK: '1' },
       stdio: 'ignore',
     }),
     spawn(RUST_BIN, [], {
-      env: { ...process.env, LIGHT_PORT: '9901', LIGHT_PROJECT_DIR: dirs.rust, LIGHT_NO_MIDI: '1', LIGHT_NO_ARTPOLL: '1' },
+      env: { ...process.env, LIGHT_PORT: '9901', LIGHT_PROJECT_DIR: dirs.rust, LIGHT_NO_MIDI: '1', LIGHT_NO_ARTPOLL: '1', LIGHT_TEST_CLOCK: '1' },
       stdio: 'ignore',
     })
   );
@@ -661,6 +661,58 @@ async function main(): Promise<void> {
 
     both({ type: 'setBlackout', v: false });
     await sleep(400);
+  }
+
+  // --- pinned-clock effect parity: the FIRST byte comparison of moving effects.
+  // Both engines integrate effBeat from their own first tick, and settle() can
+  // never converge on a running effect, so until now none of the demo project's
+  // effect looks was ever byte-compared. _pinClock (LIGHT_TEST_CLOCK gated)
+  // freezes effBeat identically on both, turning every wave into a static frame.
+  {
+    // pin BEFORE firing, so the effect starts frozen while only the crossfade
+    // (wall-time) moves — settle() then converges once the fade completes.
+    both({ type: '_pinClock', effBeat: 0 });
+    both({ type: 'trigger', layerId: 'layer-wash', col: 6 }); // wash-rainbow: hue sawUp
+    both({ type: 'trigger', layerId: 'layer-fx', col: 2 });   // fx-chase: dimmer chase
+    await settle(node, rust);
+    compareDmx('pinned beat 0.00 (chase + rainbow)', node, rust);
+
+    // step the frozen beat and re-compare — the effect value jumps each pin,
+    // then holds, so settle converges and the bytes must match at every phase
+    for (const beat of [0.125, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.33]) {
+      both({ type: '_pinClock', effBeat: beat });
+      await settle(node, rust);
+      compareDmx(`pinned beat ${beat.toFixed(3)} (chase + rainbow)`, node, rust);
+    }
+
+    // the strongest case: a RANDOM wave is byte-comparable only because its
+    // hash is a deterministic function of the (now pinned) beat + head index
+    both({ type: '_pinClock', effBeat: 0 });
+    both({ type: 'trigger', layerId: 'layer-fx', col: 5 }); // fx-flicker: dimmer random
+    await settle(node, rust);
+    for (const beat of [0, 0.5, 1.0, 2.5, 7.0]) {
+      both({ type: '_pinClock', effBeat: beat });
+      await settle(node, rust);
+      compareDmx(`pinned beat ${beat.toFixed(3)} (random flicker)`, node, rust);
+    }
+
+    // the sine wave is the ONLY one calling cos(), and JS (V8 fdlibm) vs Rust
+    // (libm) cos are not guaranteed bit-identical — this is the case that would
+    // surface such a divergence. Non-round beats push the argument off the easy
+    // exact points.
+    both({ type: '_pinClock', effBeat: 0 });
+    both({ type: 'trigger', layerId: 'layer-fx', col: 3 }); // fx-swell: dimmer sine
+    await settle(node, rust);
+    for (const beat of [0.137, 1.618, 2.718, 5.0, 11.11]) {
+      both({ type: '_pinClock', effBeat: beat });
+      await settle(node, rust);
+      compareDmx(`pinned beat ${beat.toFixed(3)} (sine swell — cos path)`, node, rust);
+    }
+
+    // hand back a clean slate for the scenarios below
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
   }
 
   // --- project-generation staleness: both engines must reject a write whose

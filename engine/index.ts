@@ -348,6 +348,12 @@ function handleCommand(cmd: Command, _ws?: unknown, clientId: number = LOCAL_CLI
     }
     return;
   }
+  // TEST ONLY, LIGHT_TEST_CLOCK gated: pin the effect clock so a moving effect
+  // is byte-comparable between the two engines. Ignored in a show.
+  if (cmd.type === '_pinClock') {
+    if (process.env.LIGHT_TEST_CLOCK) renderer.pinClock(cmd.effBeat);
+    return;
+  }
   // Record WHO is auditioning so the preview head set goes to them alone; the
   // look id itself still reaches the state machine below.
   if (cmd.type === 'previewLook') {

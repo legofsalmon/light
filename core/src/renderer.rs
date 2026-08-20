@@ -150,6 +150,10 @@ struct CueAnchor {
 
 pub struct Renderer {
     eff_beat: f64,
+    /// TEST ONLY — when true the effect clock is frozen at eff_beat instead of
+    /// integrating, so both engines produce identical bytes on a moving effect.
+    /// Set via the LIGHT_TEST_CLOCK-gated _pinClock command; never true in a show.
+    pinned: bool,
     last_t: Option<f64>,
     /// Cue-list anchors, keyed (layer id, look id): the trigger this anchor
     /// belongs to (fade_start) and the eff_beat it started at. Keyed per
@@ -211,10 +215,16 @@ fn resolve_cue<'a>(
 
 impl Renderer {
     pub fn new() -> Self {
-        Renderer { eff_beat: 0.0, last_t: None, cue_anchors: HashMap::new() }
+        Renderer { eff_beat: 0.0, pinned: false, last_t: None, cue_anchors: HashMap::new() }
     }
 
     /// Land the effect phase on a downbeat (tap / resync).
+    /// TEST ONLY: pin the effect clock to a fixed beat and freeze integration.
+    pub fn pin_clock(&mut self, eff_beat: f64) {
+        self.eff_beat = eff_beat;
+        self.pinned = true;
+    }
+
     pub fn align_phase(&mut self) {
         let rounded = self.eff_beat.round();
         // shift cue anchors by the same delta so running cue lists keep
@@ -231,8 +241,12 @@ impl Renderer {
         let beat = st.clock.beat_at(t);
         let dt = self.last_t.map_or(0.0, |lt| t - lt);
         self.last_t = Some(t);
-        // Integrated so speed-master changes never jump effect phase.
-        self.eff_beat += (dt / 60000.0) * st.clock.bpm * st.speed;
+        // Integrated so speed-master changes never jump effect phase. When the
+        // clock is test-pinned the value is held fixed so a moving effect is
+        // byte-comparable between the two engines.
+        if !self.pinned {
+            self.eff_beat += (dt / 60000.0) * st.clock.bpm * st.speed;
+        }
         if !self.eff_beat.is_finite() {
             self.eff_beat = 0.0; // never let NaN become absorbing
         }

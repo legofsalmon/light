@@ -439,6 +439,9 @@ export type Command =
   // Subscribe this client to raw DMX for the given universes; [] unsubscribes.
   // Only the Output tab wants it, so nothing else pays for it.
   | { type: 'watchDmx'; universeIds: string[] }
+  // TEST ONLY (LIGHT_TEST_CLOCK gated) — pin the effect clock so a moving effect
+  // is byte-comparable between the two engines. Ignored otherwise.
+  | { type: '_pinClock'; effBeat: number }
   | { type: 'midi'; status: number; d1: number; d2: number }
   /** arm (or cancel with null) engine-side MIDI learn — next note/cc maps to the action */
   | { type: 'learn'; action: MidiAction | null }

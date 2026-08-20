@@ -647,6 +647,12 @@ pub enum Command {
         #[serde(default)]
         universe_ids: Vec<String>,
     },
+    /// TEST ONLY — pins the effect clock to a fixed beat and freezes its
+    /// integration, so a moving effect produces the same bytes on both engines
+    /// frame by frame. Gated behind the LIGHT_TEST_CLOCK env var and otherwise
+    /// ignored, so it can never touch a show. See engine::run.
+    #[serde(rename = "_pinClock")]
+    PinClock { eff_beat: f64 },
     UpdateProject {
         project: Box<Project>,
         /// The project generation this edit was composed against; the engine

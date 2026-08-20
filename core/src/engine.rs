@@ -386,6 +386,10 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
                     if align {
                         renderer.align_phase();
                     }
+                    // TEST ONLY: apply a pending clock pin so the next tick uses it.
+                    if let Some(v) = state.pending_pin.take() {
+                        renderer.pin_clock(v);
+                    }
                     // a locally-set tempo (tap / setBpm / OSC) leads the session
                     if state.clock.bpm != bpm_before {
                         link.push_tempo(state.clock.bpm);
@@ -727,6 +731,15 @@ fn handle_msg(
             match &cmd {
                 Command::Projects => {
                     broadcast_projects(bc, dir);
+                    return false;
+                }
+                // TEST ONLY, LIGHT_TEST_CLOCK gated: pin the effect clock so a
+                // moving effect is byte-comparable between the two engines.
+                // Applied to the renderer by run() before the next tick.
+                Command::PinClock { eff_beat } => {
+                    if std::env::var("LIGHT_TEST_CLOCK").is_ok() {
+                        state.pending_pin = Some(*eff_beat);
+                    }
                     return false;
                 }
                 // Transport-level subscription: never reaches the state machine.

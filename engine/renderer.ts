@@ -41,6 +41,10 @@ export type TickResult = {
 export class Renderer {
   /** Effect-time in beats, integrated so speed-master changes never jump phase. */
   private effBeat = 0;
+  /** TEST ONLY — when true the effect clock is frozen so a moving effect is
+   *  byte-comparable between the two engines. Set via the LIGHT_TEST_CLOCK-gated
+   *  _pinClock command; never true in a show. */
+  private pinned = false;
   private lastT: number | null = null;
   private st: EngineState;
   /** Cue-list anchors, keyed "layerId lookId" (space-joined; neither id can
@@ -52,6 +56,12 @@ export class Renderer {
 
   constructor(st: EngineState) {
     this.st = st;
+  }
+
+  /** TEST ONLY: pin the effect clock to a fixed beat and freeze integration. */
+  pinClock(effBeat: number): void {
+    this.effBeat = effBeat;
+    this.pinned = true;
   }
 
   /** Land the effect phase on a downbeat (tap / resync). */
@@ -124,7 +134,7 @@ export class Renderer {
     const beat = st.clock.beatAt(t);
     const dt = this.lastT === null ? 0 : t - this.lastT;
     this.lastT = t;
-    this.effBeat += (dt / 60000) * st.clock.bpm * st.speed;
+    if (!this.pinned) this.effBeat += (dt / 60000) * st.clock.bpm * st.speed;
     if (!Number.isFinite(this.effBeat)) this.effBeat = 0; // never let NaN become absorbing
 
     // --- resolved params per head, starting from profile defaults ---

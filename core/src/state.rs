@@ -198,6 +198,9 @@ pub struct EngineState {
     /// universe id -> channel(0-511) -> value. Raw override, applied last.
     pub overrides: HashMap<String, HashMap<usize, u8>>,
     pub learn_target: Option<MidiAction>,
+    /// TEST ONLY — a pending effect-clock pin (LIGHT_TEST_CLOCK gated), consumed
+    /// by the engine loop before the next tick. Not show state; never persisted.
+    pub pending_pin: Option<f64>,
     /// Monotonic project generation. Bumped on every change to the project, and
     /// echoed to clients, which quote it back as updateProject.base_gen so a
     /// stale full-project write (composed before a deck switch, a project open,
@@ -221,6 +224,7 @@ impl EngineState {
             overrides: HashMap::new(),
             learn_target: None,
             gen: 1,
+            pending_pin: None,
         };
         st.ensure_decks();
         st.reconcile();
@@ -907,9 +911,10 @@ impl EngineState {
                 self.project.settings.haze_fan = clamp01(v);
                 out.project_changed = true;
             }
-            // Transport-level subscription, handled in engine.rs before the
-            // state machine ever sees it; this arm only exists for exhaustiveness.
+            // Handled in engine.rs before the state machine ever sees them;
+            // these arms exist only for exhaustiveness.
             Command::WatchDmx { .. } => {}
+            Command::PinClock { .. } => {}
             Command::UpdateProject { project, base_gen: _ } => {
                 // base_gen is a transport-layer concern (staleness rejection in
                 // engine.rs); by the time a command reaches the state machine it
