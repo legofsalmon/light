@@ -827,6 +827,7 @@ impl EngineState {
                     id: uid("g"),
                     name: g.name.clone(),
                     heads,
+                    auto: None, // MVR groups are the file's authored layers, not derived
                 });
             }
         }

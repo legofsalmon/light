@@ -10,6 +10,7 @@ import { useStore } from '../store.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
 import { isPlaceholderProfile } from '../../../shared/gdtfShare.ts';
 import { PixelLayout } from './PixelLayout.tsx';
+import { applyAutoGroups, planAutoGroups } from '../autoGroups.ts';
 import type { StageProp } from '../../../shared/types.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 
@@ -941,7 +942,34 @@ export function PatchView() {
       </div>
 
       <div>
-        <div className="sectionhead">Groups</div>
+        <div className="sectionhead">
+          Groups
+          <button
+            className="btn small ghost"
+            style={{ marginLeft: 10 }}
+            title="derive groups from the rig: one per fixture type, one per truss (ordered along the bar). Groups you have renamed or edited are yours and are never touched."
+            onClick={() => {
+              void (async () => {
+                const plan = planAutoGroups(project);
+                if (plan.create.length + plan.update.length + plan.remove.length === 0) {
+                  await askConfirm('Auto-groups are up to date', { body: 'Nothing to create, update or remove.', confirmLabel: 'OK' });
+                  return;
+                }
+                const lines: string[] = [];
+                if (plan.create.length) lines.push(`Create: ${plan.create.map((g) => `${g.name} (${g.heads.length})`).join(', ')}`);
+                if (plan.update.length) lines.push(`Update membership: ${plan.update.map((u) => u.existing.name).join(', ')}`);
+                if (plan.remove.length) lines.push(`Remove (source gone): ${plan.remove.map((g) => g.name).join(', ')}`);
+                const ok = await askConfirm('Regenerate auto-groups?', {
+                  body: lines.join('\n\n') + '\n\nRenamed or hand-edited groups are not auto-managed and stay untouched.',
+                  confirmLabel: 'Apply',
+                });
+                if (ok) mutate((p) => applyAutoGroups(p, planAutoGroups(p)));
+              })();
+            }}
+          >
+            ⟳ auto-groups
+          </button>
+        </div>
         {project.groups.map((g) => (
           <div key={g.id} className="row" style={{ marginBottom: 6, alignItems: 'flex-start' }}>
             <input
@@ -950,9 +978,24 @@ export function PatchView() {
               value={g.name}
               onChange={(e) => mutate((p) => {
                 const x = p.groups.find((y) => y.id === g.id);
-                if (x) x.name = e.target.value;
+                if (!x) return;
+                x.name = e.target.value;
+                delete x.auto; // renamed = promoted to authored: regenerate keeps its hands off
               })}
             />
+            {g.auto !== undefined && (
+              <span
+                className="chip"
+                title="derived group — ⟳ may rewrite it; click to pin as yours (renaming or editing also promotes it)"
+                style={{ cursor: 'pointer' }}
+                onClick={() => mutate((p) => {
+                  const x = p.groups.find((y) => y.id === g.id);
+                  if (x) delete x.auto;
+                })}
+              >
+                auto
+              </span>
+            )}
             <div className="grow" style={{ lineHeight: 1.9 }}>
               {project.fixtures.flatMap((f) => {
                 const prof = profileMeta(project, f.profileId);
@@ -972,6 +1015,7 @@ export function PatchView() {
                         const idx = x.heads.findIndex((h) => h.fixtureId === f.id && h.head === hi);
                         if (idx >= 0) x.heads.splice(idx, 1);
                         else x.heads.push({ fixtureId: f.id, head: hi });
+                        delete x.auto; // edited membership = promoted to authored
                       })}
                     >
                       {on ? `${pos + 1}· ` : ''}{label}
@@ -986,7 +1030,9 @@ export function PatchView() {
               disabled={g.heads.length < 2}
               onClick={() => mutate((p) => {
                 const x = p.groups.find((y) => y.id === g.id);
-                if (x) x.heads.reverse();
+                if (!x) return;
+                x.heads.reverse();
+                delete x.auto; // edited chase order = promoted to authored
               })}
             >
               ⇄

@@ -116,7 +116,11 @@ export type StageProp = {
   /** structural kinds only — height of the base off the floor; a truss bar hangs */
   y?: number;
 };
-export type Group = { id: string; name: string; heads: HeadRef[] };
+/** `auto` is the provenance tag for derived groups (B3): "type:<profileId>"
+ *  or "truss:<propId>". Tagged groups may be rewritten by an explicit
+ *  regenerate; the UI clears the tag the moment the operator renames or edits
+ *  one (promotion to authored). Inert to the engine. */
+export type Group = { id: string; name: string; heads: HeadRef[]; auto?: string };
 
 export type ColorHS = { h: number; s: number }; // hue 0..360, sat 0..1
 export type MotorMode = 'off' | 'aim' | 'rotate';
@@ -662,6 +666,8 @@ export function sanitizeProject(p: Project): Project | null {
   if (!p.decks.some((d) => d.id === p.activeDeckId)) p.activeDeckId = p.decks[0].id;
   for (const g of p.groups) {
     if (!Array.isArray(g.heads)) g.heads = [];
+    // mirror Rust's de_opt_string: a non-string provenance tag loads as absent
+    if (g.auto !== undefined && typeof g.auto !== 'string') delete g.auto;
   }
   if (p.props !== undefined) {
     if (!Array.isArray(p.props)) delete p.props;

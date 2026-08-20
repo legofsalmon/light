@@ -180,6 +180,7 @@ fn gdtf_import_end_to_end() {
         id: "g-spot".into(),
         name: "Spot".into(),
         heads: vec![HeadRef { fixture_id: "spot1".into(), head: 0 }],
+        auto: None,
     });
     st.project.looks.insert(
         "look-spot".into(),

@@ -116,6 +116,18 @@ pub struct Group {
     pub name: String,
     #[serde(default)]
     pub heads: Vec<HeadRef>,
+    /// Provenance tag for derived groups (B3): "type:<profileId>" or
+    /// "truss:<propId>". Tagged groups may be rewritten by an explicit
+    /// regenerate; the UI clears the tag the moment the operator renames or
+    /// edits one (promotion to authored). Inert to the engine. Tolerant:
+    /// a non-string value loads as absent, matching the Node sanitizer.
+    #[serde(default, deserialize_with = "de_opt_string", skip_serializing_if = "Option::is_none")]
+    pub auto: Option<String>,
+}
+
+fn de_opt_string<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(v.as_ref().and_then(|x| x.as_str()).map(|s| s.to_string()))
 }
 
 /// A dummy performer on the stage — previz-only scenery. Tolerantly decoded
@@ -960,5 +972,30 @@ mod fixture_spatial_repair_tests {
         assert_eq!(f.rot_y, 1.5707963267948966);
         assert_eq!(f.rot_x, Some(0.3));
         assert_eq!(f.rot_z, None);
+    }
+}
+
+#[cfg(test)]
+mod group_auto_tests {
+    use super::*;
+
+    #[test]
+    fn the_provenance_tag_round_trips_and_tolerates_junk() {
+        let g: Group =
+            serde_json::from_str(r#"{"id":"g","name":"G","heads":[],"auto":"type:kam"}"#).unwrap();
+        assert_eq!(g.auto.as_deref(), Some("type:kam"));
+        let s = serde_json::to_string(&g).unwrap();
+        assert!(s.contains(r#""auto":"type:kam""#), "tag survives a save");
+
+        // a non-string tag loads as absent, matching the Node sanitizer
+        let g: Group =
+            serde_json::from_str(r#"{"id":"g","name":"G","heads":[],"auto":7}"#).unwrap();
+        assert_eq!(g.auto, None);
+        let s = serde_json::to_string(&g).unwrap();
+        assert!(!s.contains("auto"), "absent tag is not serialized");
+
+        // authored groups (no tag) are unchanged
+        let g: Group = serde_json::from_str(r#"{"id":"g","name":"G","heads":[]}"#).unwrap();
+        assert_eq!(g.auto, None);
     }
 }

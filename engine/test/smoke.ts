@@ -643,5 +643,64 @@ await new Promise<void>((resolve) => {
   );
 }
 
+// --- auto-groups (B3 slice 1) ------------------------------------------------
+{
+  const { desiredAutoGroups, planAutoGroups, applyAutoGroups } = await import('../../ui/src/autoGroups.ts');
+  const p = sanitizeProject(demoProject())!;
+  const auto = desiredAutoGroups(p);
+  const byId = new Map(auto.map((g) => [g.id, g]));
+  check(
+    'auto-groups: one per multi-head type, none for single heads',
+    byId.has('auto-type-kam-partybar-wfs-20ch') && byId.has('auto-type-varytec-derby-st-4ch') &&
+      ![...byId.keys()].some((k) => k.includes('hazer')),
+    `got ${[...byId.keys()].join(', ')}`,
+  );
+  check(
+    'auto-groups: the type group holds every head of the type in patch order',
+    byId.get('auto-type-kam-partybar-wfs-20ch')!.heads.length === 8 &&
+      byId.get('auto-type-kam-partybar-wfs-20ch')!.heads[0].fixtureId === 'bar1',
+  );
+
+  // rig a truss with both bars on it, bar2 to the LEFT: the truss group must
+  // order along the bar, not by patch order
+  const p2 = structuredClone(p);
+  p2.props = [{ id: 't1', kind: 'trussBar', pos: { x: 0, z: 0 }, rotY: 0, size: { w: 7, h: 0.3, d: 0.3 }, y: 4 } as NonNullable<Project['props']>[number]];
+  for (const f of p2.fixtures) {
+    if (f.id === 'bar1') { f.parentId = 't1'; f.pos = { x: 1.5, y: 4, z: 0 }; }
+    if (f.id === 'bar2') { f.parentId = 't1'; f.pos = { x: -1.5, y: 4, z: 0 }; }
+  }
+  const truss = desiredAutoGroups(p2).find((g) => g.id === 'auto-truss-t1');
+  check(
+    'auto-groups: truss group orders along the bar',
+    !!truss && truss.heads.length === 8 && truss.heads[0].fixtureId === 'bar2' && truss.heads[4].fixtureId === 'bar1',
+    truss ? `first=${truss.heads[0].fixtureId}` : 'no truss group',
+  );
+
+  // regenerate honours promotion: a renamed (untagged) group is never touched
+  const p3 = structuredClone(p2);
+  applyAutoGroups(p3, planAutoGroups(p3));
+  const g = p3.groups.find((x) => x.id === 'auto-truss-t1')!;
+  delete g.auto; // operator promoted it
+  g.heads = [g.heads[0]];
+  const plan = planAutoGroups(p3);
+  check(
+    'auto-groups: a promoted group is not updated or removed by regenerate',
+    !plan.update.some((u) => u.existing.id === 'auto-truss-t1') && !plan.remove.some((x) => x.id === 'auto-truss-t1'),
+  );
+  // a STILL-TAGGED group whose truss vanished is removed on regenerate (the
+  // promoted one above is untagged and must survive even with no source)
+  const p5 = structuredClone(p2);
+  applyAutoGroups(p5, planAutoGroups(p5));
+  p5.props = [];
+  check(
+    'auto-groups: a still-tagged group with no source is removed on regenerate',
+    planAutoGroups(p5).remove.some((x) => x.id === 'auto-truss-t1'),
+  );
+
+  // sanitize: a non-string tag is dropped, matching Rust's de_opt_string
+  const bad = sanitizeProject({ ...demoProject(), groups: [{ id: 'g', name: 'G', heads: [], auto: 7 }] } as unknown as Project)!;
+  check('auto-groups: sanitize drops a non-string tag', bad.groups[0].auto === undefined);
+}
+
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);
