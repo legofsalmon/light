@@ -895,13 +895,48 @@ async function main(): Promise<void> {
       await sleep(300);
     }
 
-    // and the spatial fan genuinely moves the frame off the legacy fan
+    // Degenerate basis: every g-pars head shares z = 0, so a z-fan collapses
+    // to uniform phase. Compared for parity AND captured — it is exactly the
+    // frame a broken extents wiring would produce for EVERY spatial basis.
+    await setFan({ distribute: 'z' });
+    compareDmx('fan: degenerate z parity (uniform phase)', node, rust);
+    const uniform = frameOf(node);
+
+    // the spatial fan genuinely moves the frame — different from the legacy
+    // patch-order fan AND from the uniform frame, so a broken extents lookup
+    // (which would collapse x to uniform) cannot satisfy this
     await setFan({ distribute: 'x' });
+    const xFrame = frameOf(node);
     check(
       'fan: x-distribute produces different bytes than the legacy fan',
-      frameOf(node) !== legacy,
+      xFrame !== legacy,
       'spatial fan rendered identically to patch-order fan',
     );
+    check(
+      'fan: x-distribute differs from the degenerate uniform frame',
+      xFrame !== uniform,
+      'x-fan collapsed to uniform phase — extents wiring broken?',
+    );
+
+    // End-to-end y and z with REAL variation: raise and pull one bar so both
+    // axes genuinely order the heads (the unit twins cover the maths; this
+    // proves the geometry → extents → fan path through both live engines).
+    {
+      const p = structuredClone(await currentProject(node));
+      const bar2 = p.fixtures.find((f) => f.id === 'bar2');
+      if (bar2) {
+        bar2.pos = { x: bar2.pos.x, y: 4.5, z: 1.5 };
+      }
+      both({ type: 'updateProject', project: p });
+      await sleep(400);
+    }
+    await setFan({ distribute: 'y' });
+    compareDmx('fan: y parity (raised bar)', node, rust);
+    const yFrame = frameOf(node);
+    check('fan: y-distribute moves the frame once y varies', yFrame !== uniform, 'y-fan stayed uniform');
+    await setFan({ distribute: 'z' });
+    compareDmx('fan: z parity (pulled bar)', node, rust);
+    check('fan: z-distribute moves the frame once z varies', frameOf(node) !== uniform, 'z-fan stayed uniform');
 
     both({ type: 'allStop' });
     both({ type: 'setBlackout', v: false });
@@ -920,7 +955,9 @@ async function main(): Promise<void> {
     });
     const p = structuredClone(await currentProject(node));
     p.fxPool = [
-      { id: 'fp1', name: 'Rainbow', effect: mkEffect({ id: 'tpl1' }) },
+      // non-default fan fields: the canon comparison below proves the Rust
+      // enums serialize back with EXACTLY the TS spellings ('radial','mirror')
+      { id: 'fp1', name: 'Rainbow', effect: mkEffect({ id: 'tpl1', distribute: 'radial', fold: 'mirror', reverse: true, parts: 3, buddy: 2, seed: 99 }) },
       // unknown target -> both engines drop this whole preset
       { id: 'fp-bad', name: 'Bad', effect: mkEffect({ id: 'tpl2', target: 'laser' as Effect['target'] }) },
       // out-of-range mix -> clamped to 1 by both
@@ -932,7 +969,9 @@ async function main(): Promise<void> {
       (proj.fxPool ?? [])
         .map((fp) => {
           const e = fp.effect;
-          return `${fp.id}|${fp.name}|${e.id}|${e.target}|${e.wave}|${e.rate}|${e.size}|${e.spread}|${e.width}|${e.phase}|${e.bypass}|${e.mix}`;
+          // EVERY effect field — a field left out of this string is a field a
+          // serialization divergence could mangle unobserved
+          return `${fp.id}|${fp.name}|${e.id}|${e.target}|${e.wave}|${e.rate}|${e.size}|${e.spread}|${e.width}|${e.phase}|${e.bypass}|${e.mix}|${e.distribute}|${e.fold}|${e.reverse}|${e.parts}|${e.buddy}|${e.seed}`;
         })
         .join(';');
     const nPool = canon(await currentProject(nodeObs));

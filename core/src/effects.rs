@@ -92,7 +92,10 @@ fn fan_pos(
         let m = (n as f64 / e.buddy as f64).ceil();
         t = (t * m).floor().min(m - 1.0) / m;
     }
-    let mirrored = e.fold == Fold::Mirror && t > 0.5;
+    // >= so an even buddy grid (which lands a clump exactly on 0.5) splits into
+    // two whole wings - with strict > that clump joined the near wing and its
+    // pan failed to counter-rotate
+    let mirrored = e.fold == Fold::Mirror && t >= 0.5;
     if e.fold == Fold::Mirror {
         t = if t <= 0.5 { 2.0 * t } else { 2.0 * (1.0 - t) };
     } else if e.fold == Fold::Centre {
@@ -101,6 +104,14 @@ fn fan_pos(
     // tile k repeats across the group - phase is circular, so the mod is safe
     if e.parts > 1 {
         t = (t * e.parts as f64) % 1.0;
+    }
+    // A chase deals n distinct slots. The spatial bases (and folds) are
+    // INCLUSIVE - the far head sits at exactly t = 1, which under chase's
+    // forced full spread wraps onto the near head and locks the two ends
+    // together with no operator escape. Compress the finished fan to the
+    // index-style exclusive span instead; linear, so slots stay evenly spaced.
+    if e.wave == Wave::Chase && n > 1 {
+        t *= (n - 1) as f64 / n as f64;
     }
     (t, mirrored)
 }
@@ -336,6 +347,86 @@ mod fan_tests {
             dims(&e),
             vec![0.9707432389259338, 0.6836519397329539, 0.5080116945318878, 0.5004639013204724]
         );
+    }
+
+    #[test]
+    fn y_and_z_sweep_their_own_axes() {
+        // Heads on a diagonal where y INCREASES with index and z DECREASES, so
+        // a transposed-axis typo (the y branch reading z, or vice versa) fails
+        // — with co-linear axes, normalisation would erase the difference.
+        let ext = GroupExtents {
+            min_x: 0.0, max_x: 3.0, min_y: 2.0, max_y: 5.0, min_z: 0.0, max_z: 3.0,
+            cx: 1.5, cy: 3.5, cz: 1.5, max_r: 2.598076211353316,
+        };
+        let g = |i: usize| HeadGeom {
+            x: i as f64, y: 2.0 + i as f64, z: 3.0 - i as f64, along: 0.0, row: 0, col: 0,
+        };
+        let params = PartParams { dimmer: Some(1.0), ..Default::default() };
+        let run = |e: &Effect| -> Vec<f64> {
+            (0..4)
+                .map(|j| {
+                    apply_effects(&params, std::slice::from_ref(e), 0.0, &[0.0], j, 4, &g(j), &ext)
+                        .dimmer
+                        .unwrap()
+                })
+                .collect()
+        };
+        let ey = Effect { distribute: Distribute::Y, ..base() };
+        let ez = Effect { distribute: Distribute::Z, ..base() };
+        assert_eq!(run(&ey), vec![0.0, 0.33333333333333326, 0.6666666666666665, 0.0]);
+        assert_eq!(run(&ez), vec![0.0, 0.6666666666666665, 0.33333333333333326, 0.0], "z runs the other way on this rig");
+    }
+
+    #[test]
+    fn buddy_mirror_far_clump_counter_rotates_pan() {
+        // regression: with strict t > 0.5 an even buddy grid put its far clump
+        // exactly ON 0.5 and it panned WITH the near wing
+        let e = Effect {
+            target: EffectTarget::Pan,
+            wave: Wave::Sine,
+            size: 0.5,
+            spread: 0.0,
+            fold: Fold::Mirror,
+            buddy: 2,
+            ..base()
+        };
+        let got: Vec<f64> = [0.0, 1.0, 2.0, 3.0]
+            .iter()
+            .enumerate()
+            .map(|(j, &x)| {
+                apply_effects(&PartParams::default(), std::slice::from_ref(&e), 0.125, &[0.0], j, 4, &g_at(x), &ext())
+                    .pan
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(
+            got,
+            vec![0.32322330470336313, 0.32322330470336313, 0.6767766952966369, 0.6767766952966369]
+        );
+    }
+
+    #[test]
+    fn chase_deals_distinct_slots_on_a_spatial_fan() {
+        // regression: the inclusive spatial t = 1 wrapped onto t = 0 under
+        // chase's forced full spread, locking the two end heads together
+        let e = Effect {
+            wave: Wave::Chase,
+            width: 0.25,
+            distribute: Distribute::X,
+            ..base()
+        };
+        let params = PartParams { dimmer: Some(1.0), ..Default::default() };
+        let got: Vec<f64> = [0.0, 1.0, 2.0, 3.0]
+            .iter()
+            .enumerate()
+            .map(|(j, &x)| {
+                apply_effects(&params, std::slice::from_ref(&e), 0.1, &[0.0], j, 4, &g_at(x), &ext())
+                    .dimmer
+                    .unwrap()
+            })
+            .collect();
+        // one lit slot — before the fix the far head wrapped into it: [1,0,0,1]
+        assert_eq!(got, vec![1.0, 0.0, 0.0, 0.0]);
     }
 
     #[test]

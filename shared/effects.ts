@@ -90,11 +90,20 @@ function fanPos(
     const m = Math.ceil(n / e.buddy);
     t = Math.min(Math.floor(t * m), m - 1) / m;
   }
-  const mirrored = e.fold === 'mirror' && t > 0.5;
+  // >= so an even buddy grid (which lands a clump exactly on 0.5) splits into
+  // two whole wings — with strict > that clump joined the near wing and its
+  // pan failed to counter-rotate
+  const mirrored = e.fold === 'mirror' && t >= 0.5;
   if (e.fold === 'mirror') t = t <= 0.5 ? 2 * t : 2 * (1 - t);
   else if (e.fold === 'centre') t = Math.abs(2 * t - 1);
   // tile k repeats across the group — phase is circular, so the mod is safe
   if (e.parts > 1) t = (t * e.parts) % 1;
+  // A chase deals n distinct slots. The spatial bases (and folds) are
+  // INCLUSIVE — the far head sits at exactly t = 1, which under chase's forced
+  // full spread wraps onto the near head and locks the two ends together with
+  // no operator escape. Compress the finished fan to the index-style exclusive
+  // span instead; linear, so slots stay evenly spaced.
+  if (e.wave === 'chase' && n > 1) t = t * ((n - 1) / n);
   return { t, mirrored };
 }
 

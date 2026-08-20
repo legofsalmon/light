@@ -223,7 +223,13 @@ export class Renderer {
         const look = this.resolveCue(src.lookId, layer.id, src.incoming ? live.fadeStart : -1);
         if (!look) continue;
         for (const part of look.parts) {
-          const refs = groupHeads.get(part.groupId) ?? [];
+          // skip a dangling-group part BEFORE touching effectCorr, exactly as
+          // the Rust renderer does — running the corr bookkeeping for a part
+          // Rust never reaches would accumulate rate corrections here only,
+          // and the two engines would render different phases if the group
+          // ever reappeared under the same id mid-look
+          const refs = groupHeads.get(part.groupId);
+          if (!refs) continue;
           const n = refs.length;
           // one lookup per part per tick, shared by every head
           const corr = this.effectCorr(layer.id, src.lookId, part);

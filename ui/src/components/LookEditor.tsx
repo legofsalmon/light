@@ -94,6 +94,48 @@ function Enable({ on, toggle }: { on: boolean; toggle: () => void }) {
   return <div className={`enable ${on ? 'on' : ''}`} onClick={toggle} />;
 }
 
+/** Small integer editor that commits on blur/Enter — the same discipline as
+ *  BeatsInput below: clamping per keystroke makes a controlled field
+ *  unclearable and floods a project write (plus an undo entry) per keypress. */
+function IntInput({ value, min, max, width = 44, title, onCommit }: {
+  value: number;
+  min: number;
+  max: number;
+  width?: number;
+  title?: string;
+  onCommit: (v: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  const ref = React.useRef<HTMLInputElement>(null);
+  // never clobber a draft mid-edit — a project echo must not erase typing
+  useEffect(() => {
+    if (document.activeElement !== ref.current) setDraft(String(value));
+  }, [value]);
+  const commit = () => {
+    const v = Math.floor(Number(draft));
+    const clean = Number.isFinite(v) ? Math.min(Math.max(min, v), max) : value;
+    setDraft(String(clean));
+    if (clean !== value) onCommit(clean);
+  };
+  return (
+    <input
+      ref={ref}
+      className="num"
+      type="number"
+      min={min}
+      max={max}
+      style={{ width }}
+      title={title}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+    />
+  );
+}
+
 function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool }: {
   fx: Effect;
   kinds: Set<HeadKind>;
@@ -207,26 +249,20 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
         ⇄
       </button>
       <span className="label">parts</span>
-      <input
-        className="num"
-        type="number"
+      <IntInput
+        value={fx.parts}
         min={1}
         max={64}
-        style={{ width: 44 }}
-        value={fx.parts}
         title="tile the fan into k repeats across the group"
-        onChange={(e) => onEdit((x) => (x.parts = Math.min(Math.max(1, Math.floor(Number(e.target.value) || 1)), 64)))}
+        onCommit={(v) => onEdit((x) => (x.parts = v))}
       />
       <span className="label">buddy</span>
-      <input
-        className="num"
-        type="number"
+      <IntInput
+        value={fx.buddy}
         min={1}
         max={64}
-        style={{ width: 44 }}
-        value={fx.buddy}
         title="clump size — adjacent heads share a phase"
-        onChange={(e) => onEdit((x) => (x.buddy = Math.min(Math.max(1, Math.floor(Number(e.target.value) || 1)), 64)))}
+        onCommit={(v) => onEdit((x) => (x.buddy = v))}
       />
       {fx.distribute === 'shuffle' && (
         <button

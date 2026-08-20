@@ -579,6 +579,30 @@ await new Promise<void>((resolve) => {
     eq(pans, [0.32322330470336313, 0.32322330470336313, 0.6767766952966369, 0.6767766952966369]),
     `got ${pans.join(',')}`,
   );
+
+  // regression: with strict t > 0.5 an even buddy grid put its far clump
+  // exactly ON 0.5 and it panned WITH the near wing
+  const buddyPans = [0, 1, 2, 3].map((x, j) => applyEffects({}, [{ ...panE, buddy: 2 }], 0.125, [0], j, 4, gAt(x), ext).pan);
+  check(
+    'fan: buddy+mirror far clump still counter-rotates',
+    eq(buddyPans, [0.32322330470336313, 0.32322330470336313, 0.6767766952966369, 0.6767766952966369]),
+    `got ${buddyPans.join(',')}`,
+  );
+
+  // regression: the inclusive spatial t = 1 wrapped onto t = 0 under chase's
+  // forced full spread, locking the two end heads together ([1,0,0,1])
+  const chaseE = { ...base, wave: 'chase', width: 0.25 } as import('../../shared/types.ts').Effect;
+  const slots = [0, 1, 2, 3].map((x, j) => applyEffects({ dimmer: 1 }, [chaseE], 0.1, [0], j, 4, gAt(x), ext).dimmer);
+  check('fan: chase deals distinct slots on a spatial fan', eq(slots, [1, 0, 0, 0]), `got ${slots.join(',')}`);
+
+  // y and z sweep their own axes — heads on a diagonal where y INCREASES with
+  // index and z DECREASES, so a transposed-axis typo cannot pass
+  const dExt = { minX: 0, maxX: 3, minY: 2, maxY: 5, minZ: 0, maxZ: 3, cx: 1.5, cy: 3.5, cz: 1.5, maxR: 2.598076211353316 };
+  const dAt = (i: number) => ({ x: i, y: 2 + i, z: 3 - i, along: 0, row: 0, col: 0 });
+  const dRun = (distribute: 'y' | 'z') =>
+    [0, 1, 2, 3].map((j) => applyEffects({ dimmer: 1 }, [{ ...base, distribute }], 0, [0], j, 4, dAt(j), dExt).dimmer);
+  check('fan: y sweeps its own axis', eq(dRun('y'), [0, 0.33333333333333326, 0.6666666666666665, 0]));
+  check('fan: z sweeps its own axis (reversed on this rig)', eq(dRun('z'), [0, 0.6666666666666665, 0.33333333333333326, 0]));
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
