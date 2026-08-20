@@ -39,20 +39,27 @@ function isCentred(e: Effect): boolean {
 /**
  * Apply a part's effects to its resolved params for one head.
  * `beat` is the musical position (already includes the global speed master).
+ * `phaseCorr[i]` is a per-effect phase offset that keeps the waveform
+ * continuous when an effect's rate is changed on a live look (see the
+ * renderer's rate-correction map). It is 0 for every effect of an untouched
+ * show, so the output is byte-identical to passing nothing.
  */
 export function applyEffects(
   params: PartParams,
   effects: Effect[],
   beat: number,
+  phaseCorr: readonly number[],
   headIdx: number,
   headCount: number
 ): PartParams {
   if (effects.length === 0) return params;
   const out: PartParams = { ...params, color: params.color ? { ...params.color } : undefined };
-  for (const e of effects) {
+  for (let i = 0; i < effects.length; i++) {
+    const e = effects[i];
     if (e.size <= 0 || e.rate <= 0) continue;
     const spread = e.wave === 'chase' ? 1 : e.spread;
-    const phase = beat / e.rate + e.phase + (headCount > 1 ? (headIdx / headCount) * spread : 0);
+    const corr = phaseCorr[i] ?? 0;
+    const phase = beat / e.rate + corr + e.phase + (headCount > 1 ? (headIdx / headCount) * spread : 0);
     const v = waveValue(e, phase, headIdx);
     switch (e.target) {
       case 'dimmer': {

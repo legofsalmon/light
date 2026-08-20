@@ -142,16 +142,23 @@ Verified facts that anchor it:
   construction (`core/src/gdtf.rs` reads only the Geometry NAME today, ~line
   369, and fabricates evenly-spaced offsets ~line 399).
 - Both renderers call applyEffects at exactly one line each
-  (`engine/renderer.ts:170`, `core/src/renderer.rs:309`) — the single seam.
+  (`engine/renderer.ts:218`, `core/src/renderer.rs:374`) — the single seam.
 - The Rust `Effect` struct has NO serde defaults (`core/src/types.rs:214`), so
   any new Effect field without a tolerant deserializer bricks old saves.
 - Effect parity coverage is zero at the byte level today (effBeat boot skew +
   settle() never converges on motion): a `_pinClock` test seam must land first.
 
 Agreed build order (each step shippable, parity-green):
-1. Groundwork: tolerant de_effects + sanitize effect repair
-2. P5 _pinClock seam + golden effect baseline
-3. P4 phase-continuous rates (fixes the live rate-snap bug)
+1. Groundwork: tolerant de_effects + sanitize effect repair — DONE (`c2575c6`)
+2. P5 _pinClock seam + golden effect baseline — DONE (`ed47ac1`)
+3. P4 phase-continuous rates (fixes the live rate-snap bug) — DONE. Per-effect
+   `corr` map beside cueAnchors in each renderer, keyed (layer, look, part,
+   effect); `phase = beat/rate + corr`, where `corr += beat*(1/oldRate -
+   1/newRate)` the tick a rate changes. Exactly 0.0 for untouched effects, so
+   golden bytes + all prior parity are byte-identical. applyEffects gained a
+   `phaseCorr[]` param (both twins). Proven by 6 new parity assertions incl. two
+   before/after continuity checks (frame does NOT move when only rate changes)
+   and correction accumulation across successive edits.
 4. A2 FX pool (copy-on-apply presets, retargeting, inform-not-forbid targets)
 5. B2 geometry builder (HeadCtx at the seam, zero behaviour change)
 6. A1 spatial fan (distribute x/y/z/radial/shuffle, fold mirror/centre, parts,

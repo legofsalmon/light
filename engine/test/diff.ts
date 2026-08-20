@@ -130,6 +130,16 @@ async function settle(a: Client, b: Client, maxMs = 4000): Promise<void> {
   }
 }
 
+/** One client's whole DMX state as a stable string — same shape settle() uses,
+ *  so a before/after comparison on ONE engine proves a frame did or didn't move
+ *  (compareDmx only ever compares the two engines to each other). */
+function frameOf(c: Client): string {
+  return Object.keys(c.dmx)
+    .sort()
+    .map((u) => (c.dmx[u] ?? []).join(','))
+    .join('|');
+}
+
 function compareDmx(name: string, a: Client | null, b: Client | null): void {
   // An empty map is a HARNESS failure, not a pass: DMX is opt-in per client
   // now, so a missing watchDmx subscription would otherwise turn every byte
@@ -710,6 +720,65 @@ async function main(): Promise<void> {
     }
 
     // hand back a clean slate for the scenarios below
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
+  }
+
+  // --- P4 phase-continuous rate: editing an effect's rate on a LIVE look must
+  // not jump its waveform (the old code set phase = beat/rate, which snapped),
+  // and both engines must apply the identical correction. Pinned at a nonzero
+  // beat so beat/rate is nonzero and a naive rate edit WOULD move the frame.
+  {
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
+
+    // fx-swell is a dimmer sine at rate 8. At beat 4 its phase is 4/8 = 0.5, the
+    // crest of the sine, so the correction target (full dimmer) is easy to see.
+    both({ type: '_pinClock', effBeat: 4 });
+    both({ type: 'trigger', layerId: 'layer-fx', col: 3 }); // fx-swell: dimmer sine, rate 8
+    await settle(node, rust);
+    compareDmx('rate-cont: baseline (rate 8) parity', node, rust);
+    const baseline = frameOf(node);
+
+    // rewrite fx-swell's one effect rate on the live project and push to both
+    const setSwellRate = async (rate: number): Promise<void> => {
+      const p = structuredClone(await currentProject(node));
+      p.looks['fx-swell'].parts[0].effects[0].rate = rate; // effect fx36
+      both({ type: 'updateProject', project: p });
+    };
+
+    // 8 -> 2: the old code would drop dimmer from full to 0.2 here. Continuous:
+    // corr = 4*(1/8 - 1/2) = -1.5, so phase = 4/2 - 1.5 = 0.5 — frame unchanged.
+    await setSwellRate(2);
+    await settle(node, rust);
+    check(
+      'rate-cont: frame unchanged after 8->2 (no phase jump)',
+      frameOf(node) === baseline,
+      'the rate edit moved the waveform — phase was not corrected',
+    );
+    compareDmx('rate-cont: rate 8->2 parity', node, rust);
+
+    // 2 -> 5: the correction must COMPOSE across successive edits, not reset.
+    // corr += 4*(1/2 - 1/5) = +1.2 -> -0.3, phase = 4/5 - 0.3 = 0.5 — unchanged.
+    await setSwellRate(5);
+    await settle(node, rust);
+    check(
+      'rate-cont: frame unchanged after 2->5 (correction accumulates)',
+      frameOf(node) === baseline,
+      'a second rate edit moved the waveform — correction did not accumulate',
+    );
+    compareDmx('rate-cont: rate 2->5 parity', node, rust);
+
+    // control: at beat 0 there is nothing to correct (beat/rate == 0 either way),
+    // but the two engines must still agree byte-for-byte through the edit.
+    both({ type: '_pinClock', effBeat: 0 });
+    await settle(node, rust);
+    await setSwellRate(3);
+    await settle(node, rust);
+    compareDmx('rate-cont: rate edit at beat 0 parity', node, rust);
+
     both({ type: 'allStop' });
     both({ type: 'setBlackout', v: false });
     await settle(node, rust);

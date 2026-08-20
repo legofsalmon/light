@@ -148,6 +148,14 @@ struct CueAnchor {
     at: f64,
 }
 
+/// Per-effect phase bookkeeping so a rate change on a live look doesn't jump
+/// the waveform. `corr` is the accumulated offset; `last_rate` is the rate we
+/// last folded in. For an untouched effect `corr` stays exactly 0.0.
+struct RateCorr {
+    last_rate: f64,
+    corr: f64,
+}
+
 pub struct Renderer {
     eff_beat: f64,
     /// TEST ONLY — when true the effect clock is frozen at eff_beat instead of
@@ -160,6 +168,10 @@ pub struct Renderer {
     /// layer+look so a cue-to-cue crossfade keeps the outgoing cue's phase,
     /// and anchoring at trigger time keeps both engines in the same step.
     cue_anchors: HashMap<(String, String), CueAnchor>,
+    /// Phase corrections, keyed (layer, look, part, effect). Absorbs the
+    /// discontinuity when an effect's rate is edited while its look is live,
+    /// so `beat/rate + corr` stays continuous. GC'd alongside cue_anchors.
+    rate_corr: HashMap<(String, String, String, String), RateCorr>,
 }
 
 /// Follow a cue-list look to its active step (one level; a step that points
@@ -215,16 +227,53 @@ fn resolve_cue<'a>(
 
 impl Renderer {
     pub fn new() -> Self {
-        Renderer { eff_beat: 0.0, pinned: false, last_t: None, cue_anchors: HashMap::new() }
+        Renderer {
+            eff_beat: 0.0,
+            pinned: false,
+            last_t: None,
+            cue_anchors: HashMap::new(),
+            rate_corr: HashMap::new(),
+        }
     }
 
-    /// Land the effect phase on a downbeat (tap / resync).
     /// TEST ONLY: pin the effect clock to a fixed beat and freeze integration.
     pub fn pin_clock(&mut self, eff_beat: f64) {
         self.eff_beat = eff_beat;
         self.pinned = true;
     }
 
+    /// Per-effect phase corrections for one part, aligned with `part.effects`.
+    /// When an effect's rate has changed since we last saw it, fold the jump
+    /// into `corr` so `beat/rate + corr` is continuous across the edit. For an
+    /// effect whose rate never changes this returns 0.0 for every tick, so an
+    /// untouched show renders byte-for-byte as before. A rate that is not a
+    /// positive finite number carries no continuity (the effect is inactive),
+    /// so we only re-anchor `last_rate` without touching `corr`.
+    fn effect_corr(&mut self, layer_id: &str, look_id: &str, part: &crate::types::LookPart) -> Vec<f64> {
+        let beat = self.eff_beat;
+        let map = &mut self.rate_corr;
+        part.effects
+            .iter()
+            .map(|e| {
+                let key = (
+                    layer_id.to_string(),
+                    look_id.to_string(),
+                    part.id.clone(),
+                    e.id.clone(),
+                );
+                let entry = map.entry(key).or_insert(RateCorr { last_rate: e.rate, corr: 0.0 });
+                if entry.last_rate != e.rate {
+                    if entry.last_rate > 0.0 && e.rate > 0.0 {
+                        entry.corr += beat * (1.0 / entry.last_rate - 1.0 / e.rate);
+                    }
+                    entry.last_rate = e.rate;
+                }
+                entry.corr
+            })
+            .collect()
+    }
+
+    /// Land the effect phase on a downbeat (tap / resync).
     pub fn align_phase(&mut self) {
         let rounded = self.eff_beat.round();
         // shift cue anchors by the same delta so running cue lists keep
@@ -315,12 +364,14 @@ impl Renderer {
                 for part in &look.parts {
                     let Some(group) = st.project.groups.iter().find(|g| g.id == part.group_id) else { continue };
                     let n = group.heads.len();
+                    // one lookup per part per tick, shared by every head
+                    let corr = self.effect_corr(layer_id, &look_id, part);
                     for (j, r) in group.heads.iter().enumerate() {
                         let key = (r.fixture_id.clone(), r.head);
                         if !heads.contains_key(&key) {
                             continue;
                         }
-                        let prm = apply_effects(&part.params, &part.effects, self.eff_beat, j, n);
+                        let prm = apply_effects(&part.params, &part.effects, self.eff_beat, &corr, j, n);
                         let a = acc.entry(key).or_default();
                         let mut add_num = |field: Field, v: Option<f64>| {
                             if let Some(v) = v {
@@ -427,8 +478,10 @@ impl Renderer {
         }
 
         // drop anchors whose (layer, look) is no longer live or fading -
-        // keeps the map from growing forever as looks and layers come and go
-        if !self.cue_anchors.is_empty() {
+        // keeps the map from growing forever as looks and layers come and go.
+        // rate_corr is keyed finer (layer, look, part, effect) but is scoped to
+        // the same live/fading looks, so the same alive set gates both.
+        if !self.cue_anchors.is_empty() || !self.rate_corr.is_empty() {
             let mut alive: std::collections::HashSet<(String, String)> =
                 std::collections::HashSet::new();
             for layer in &st.project.layers {
@@ -442,6 +495,8 @@ impl Renderer {
                 }
             }
             self.cue_anchors.retain(|k, _| alive.contains(k));
+            self.rate_corr
+                .retain(|k, _| alive.contains(&(k.0.clone(), k.1.clone())));
         }
 
         // --- manual haze merges HTP so looks can only add ---

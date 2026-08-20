@@ -1,4 +1,4 @@
-import type { HeadRef, HeadSnap, LayerSnap, MotorMode } from '../shared/types.ts';
+import type { HeadRef, HeadSnap, LayerSnap, LookPart, MotorMode } from '../shared/types.ts';
 import { clamp, lerp } from '../shared/types.ts';
 import type { HeadKind, ResolvedParams } from '../shared/profiles.ts';
 import { PROFILES, defaultResolved } from '../shared/profiles.ts';
@@ -53,6 +53,11 @@ export class Renderer {
    *  keeps the outgoing cue's phase, and anchoring at trigger time keeps the
    *  two engines in the same step. */
   private cueAnchors = new Map<string, { fadeStart: number; at: number }>();
+  /** Phase corrections, keyed "layerId lookId partId effectId": absorbs the
+   *  discontinuity when an effect's rate is edited while its look is live, so
+   *  `beat/rate + corr` stays continuous. lastRate is the rate we last folded
+   *  in. For an untouched effect corr stays exactly 0. GC'd with cueAnchors. */
+  private rateCorr = new Map<string, { lastRate: number; corr: number }>();
 
   constructor(st: EngineState) {
     this.st = st;
@@ -62,6 +67,31 @@ export class Renderer {
   pinClock(effBeat: number): void {
     this.effBeat = effBeat;
     this.pinned = true;
+  }
+
+  /** Per-effect phase corrections for one part, aligned with `part.effects`.
+   *  When an effect's rate has changed since we last saw it, fold the jump
+   *  into corr so `beat/rate + corr` is continuous across the edit. An effect
+   *  whose rate never changes yields 0 every tick, so an untouched show renders
+   *  byte-for-byte as before. A non-positive rate carries no continuity (the
+   *  effect is inactive), so we only re-anchor lastRate without touching corr. */
+  private effectCorr(layerId: string, lookId: string, part: LookPart): number[] {
+    const beat = this.effBeat;
+    return part.effects.map((e) => {
+      const key = `${layerId} ${lookId} ${part.id} ${e.id}`;
+      let entry = this.rateCorr.get(key);
+      if (!entry) {
+        entry = { lastRate: e.rate, corr: 0 };
+        this.rateCorr.set(key, entry);
+      }
+      if (entry.lastRate !== e.rate) {
+        if (entry.lastRate > 0 && e.rate > 0) {
+          entry.corr += beat * (1 / entry.lastRate - 1 / e.rate);
+        }
+        entry.lastRate = e.rate;
+      }
+      return entry.corr;
+    });
   }
 
   /** Land the effect phase on a downbeat (tap / resync). */
@@ -116,7 +146,7 @@ export class Renderer {
   /** Drop anchors whose (layer, look) is no longer live or fading - keeps
    *  the map from growing forever as looks and layers come and go. */
   private pruneCueAnchors(): void {
-    if (this.cueAnchors.size === 0) return;
+    if (this.cueAnchors.size === 0 && this.rateCorr.size === 0) return;
     const alive = new Set<string>();
     for (const layer of this.st.project.layers) {
       const live = this.st.layerLive(layer.id);
@@ -125,6 +155,12 @@ export class Renderer {
     }
     for (const key of this.cueAnchors.keys()) {
       if (!alive.has(key)) this.cueAnchors.delete(key);
+    }
+    // rateCorr keys are "layer look part effect" - the first two tokens are the
+    // same (layer, look) scope, so the same alive set gates both maps.
+    for (const key of this.rateCorr.keys()) {
+      const sp = key.indexOf(' ', key.indexOf(' ') + 1);
+      if (!alive.has(key.slice(0, sp))) this.rateCorr.delete(key);
     }
   }
 
@@ -173,11 +209,13 @@ export class Renderer {
         for (const part of look.parts) {
           const refs = groupHeads.get(part.groupId) ?? [];
           const n = refs.length;
+          // one lookup per part per tick, shared by every head
+          const corr = this.effectCorr(layer.id, src.lookId, part);
           for (let j = 0; j < n; j++) {
             const ref = refs[j];
             const key = `${ref.fixtureId}:${ref.head}`;
             if (!heads.has(key)) continue;
-            const prm = applyEffects(part.params, part.effects, this.effBeat, j, n);
+            const prm = applyEffects(part.params, part.effects, this.effBeat, corr, j, n);
             let a = acc.get(key);
             if (!a) {
               a = { num: {}, beam: {}, col: null, motorMode: null, macro: undefined };

@@ -38,10 +38,15 @@ fn is_centred(e: &Effect) -> bool {
 }
 
 /// Apply a part's effects for one head. `beat` already includes the speed master.
+/// `phase_corr[i]` is a per-effect phase offset that keeps the waveform
+/// continuous when an effect's rate is changed on a live look (see the
+/// renderer's rate-correction map). It is 0 for every effect of an untouched
+/// show, so the output is byte-identical to passing an all-zero slice.
 pub fn apply_effects(
     params: &PartParams,
     effects: &[Effect],
     beat: f64,
+    phase_corr: &[f64],
     head_idx: usize,
     head_count: usize,
 ) -> PartParams {
@@ -49,12 +54,14 @@ pub fn apply_effects(
         return params.clone();
     }
     let mut out = params.clone();
-    for e in effects {
+    for (i, e) in effects.iter().enumerate() {
         if e.size <= 0.0 || e.rate <= 0.0 {
             continue;
         }
         let spread = if e.wave == Wave::Chase { 1.0 } else { e.spread };
+        let corr = phase_corr.get(i).copied().unwrap_or(0.0);
         let phase = beat / e.rate
+            + corr
             + e.phase
             + if head_count > 1 {
                 (head_idx as f64 / head_count as f64) * spread
