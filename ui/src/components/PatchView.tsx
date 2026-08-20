@@ -9,6 +9,7 @@ import { ShareFixtures } from './ShareFixtures.tsx';
 import { useStore } from '../store.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
 import { isPlaceholderProfile } from '../../../shared/gdtfShare.ts';
+import { PixelLayout } from './PixelLayout.tsx';
 import type { StageProp } from '../../../shared/types.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 
@@ -1025,6 +1026,7 @@ export function PatchView() {
         <div className="label" style={{ marginTop: 6 }}>chip order = chase order (first chip runs first)</div>
       </div>
 
+      <PixelLayout />
       <StageTable />
       <ShareFixtures />
     </div>
