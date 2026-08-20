@@ -106,6 +106,51 @@ impl EchoTo {
     }
 }
 
+/// Raw DMX for one client's subscribed universes.
+///
+/// Serialised from a typed struct, NOT through `json!`: that round-trips via
+/// `serde_json::Value`, whose map is a BTreeMap, so every object comes out with
+/// its keys alphabetised — which silently diverged this event's wire order from
+/// the Node engine's while the data was identical.
+#[derive(serde::Serialize)]
+struct DmxEvent<'a> {
+    #[serde(rename = "type")]
+    typ: &'static str,
+    u: std::collections::HashMap<&'a str, &'a [u8]>,
+}
+
+/// The audition head set, for the one client that asked. `heads: null` means the
+/// preview ended — without that the client would keep showing the last frame
+/// forever. Typed for the same wire-order reason as above.
+#[derive(serde::Serialize)]
+struct PreviewEvent {
+    #[serde(rename = "type")]
+    typ: &'static str,
+    heads: Option<Vec<crate::types::HeadSnap>>,
+}
+
+/// Per-client transport subscriptions.
+///
+/// Deliberately NOT in EngineState: these are facts about sockets, not about
+/// the show, they never persist, and they must vanish when a client goes away.
+/// Keeping them here also means the state machine stays free of client ids.
+#[derive(Default)]
+struct Subs {
+    /// client -> universes it wants raw DMX for
+    dmx: std::collections::HashMap<ClientId, Vec<String>>,
+    /// the one client auditioning a look, if any
+    preview: Option<ClientId>,
+}
+
+impl Subs {
+    fn forget(&mut self, id: ClientId) {
+        self.dmx.remove(&id);
+        if self.preview == Some(id) {
+            self.preview = None;
+        }
+    }
+}
+
 /// Why the engine loop ended.
 ///
 /// It used to return `()`, so a clean quit and a failed bind were the same
@@ -191,6 +236,7 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
     let mut dirty_first: Option<Instant> = None;
     let mut project_echo = EchoTo::Idle;
     let mut last_echo = Instant::now();
+    let mut subs = Subs::default();
     let mut osc_log: (f64, u32) = (0.0, 0); // monitor rate-limit window
 
     // Keep the machine awake through a set — display sleep or App Nap
@@ -269,7 +315,7 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
                     let bpm_before = state.clock.bpm;
                     let align = handle_msg(
                         msg, &mut state, &bc, &mut osc, &tx, &dir, &mut dirty_at, &mut midi_names,
-                        &mut osc_log, now_ms(), &mut project_echo,
+                        &mut osc_log, now_ms(), &mut project_echo, &mut subs,
                     );
                     if align {
                         renderer.align_phase();
@@ -377,14 +423,39 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
         // Snapshots to the UI at 20 fps.
         snap_flip = !snap_flip;
         if snap_flip && bc.count() > 0 {
-            // Only when someone is actually auditioning, and only on the frames
-            // that carry a snapshot — so the show pays nothing for this the rest
-            // of the time.
-            let preview = preview_heads(&mut state, &mut preview_renderer, t);
-            let snap =
-                build_snapshot(&state, &res, t, &stats, &link, &artnet, osc.status(), preview);
+            // The snapshot is identical for every client, so it is serialised
+            // once and broadcast as one string.
+            let snap = build_snapshot(&state, &res, t, &stats, &link, &artnet, osc.status());
             if let Ok(s) = serde_json::to_string(&snap) {
                 bc.broadcast(&s);
+            }
+
+            // Raw DMX goes ONLY to clients that asked for it. Only the Output
+            // tab reads it, one universe at a time, yet it used to ride inside
+            // every snapshot — ~8 KB of the ~28 KB at arena scale, 20x a second,
+            // to the previz and the tablet as well, which never read a byte.
+            subs.dmx.retain(|_, ids| !ids.is_empty());
+            for (id, ids) in &subs.dmx {
+                let mut u = std::collections::HashMap::new();
+                for uid in ids {
+                    if let Some(buf) = res.buffers.get(uid) {
+                        u.insert(uid.as_str(), &buf[..]);
+                    }
+                }
+                if let Ok(s) = serde_json::to_string(&DmxEvent { typ: "dmx", u }) {
+                    bc.send_to(*id, s);
+                }
+            }
+
+            // The audition head set likewise goes only to whoever asked for it.
+            // Rendering it at all is already gated on someone auditioning, and
+            // only on snapshot frames, so the show pays nothing the rest of the
+            // time.
+            if let Some(owner) = subs.preview {
+                let heads = preview_heads(&mut state, &mut preview_renderer, t);
+                if let Ok(s) = serde_json::to_string(&PreviewEvent { typ: "preview", heads }) {
+                    bc.send_to(owner, s);
+                }
             }
         }
 
@@ -545,6 +616,7 @@ fn handle_msg(
     osc_log: &mut (f64, u32),
     t: f64,
     project_echo: &mut EchoTo,
+    subs: &mut Subs,
 ) -> bool {
     match msg {
         // handled by the drain loop before it reaches here
@@ -584,6 +656,37 @@ fn handle_msg(
                 Command::Projects => {
                     broadcast_projects(bc, dir);
                     return false;
+                }
+                // Transport-level subscription: never reaches the state machine.
+                Command::WatchDmx { universe_ids } => {
+                    if let Some(id) = owner {
+                        if universe_ids.is_empty() {
+                            subs.dmx.remove(&id);
+                        } else {
+                            subs.dmx.insert(id, universe_ids.clone());
+                        }
+                    }
+                    return false;
+                }
+                // Record WHO is auditioning so the preview head set can be sent
+                // to them alone; the look id itself still goes to the state
+                // machine below.
+                Command::PreviewLook { look_id } => {
+                    if look_id.is_none() {
+                        // One last event so the client drops the head set — it
+                        // has no other way to learn the audition is over, and
+                        // would otherwise keep drawing the last frame.
+                        if let Some(prev) = subs.preview {
+                            if let Ok(s) =
+                                serde_json::to_string(&PreviewEvent { typ: "preview", heads: None })
+                            {
+                                bc.send_to(prev, s);
+                            }
+                        }
+                        subs.preview = None;
+                    } else {
+                        subs.preview = owner;
+                    }
                 }
                 Command::NewProject { name } => {
                     let name = if name.trim().is_empty() { "Untitled" } else { name.trim() };
@@ -713,6 +816,10 @@ fn handle_msg(
             bc.send_to(id, json!({ "type": "midiInputs", "names": midi_names }).to_string());
         }
         EngineMsg::ClientDisconnected(gone) => {
+            // A socket that has gone away must not keep a DMX subscription or
+            // hold the audition — the next client to take that id would inherit
+            // both.
+            subs.forget(gone);
             // Release exactly what this client was holding. Waiting for the
             // last client to go was the wrong half of the trade: a tablet
             // dropping off the WiFi mid-flash left its blinder latched on
@@ -862,12 +969,7 @@ fn build_snapshot(
     link: &crate::link::LinkSync,
     artnet: &crate::artnet::ArtnetOut,
     osc_status: Option<&'static str>,
-    preview_heads: Option<Vec<crate::types::HeadSnap>>,
 ) -> Snapshot {
-    let mut dmx = std::collections::HashMap::new();
-    for (id, buf) in &res.buffers {
-        dmx.insert(id.clone(), buf.to_vec());
-    }
     Snapshot {
         typ: "snap",
         now: t,
@@ -915,9 +1017,7 @@ fn build_snapshot(
         haze: state.project.settings.haze,
         haze_fan: state.project.settings.haze_fan,
         heads: res.heads.clone(),
-        preview_heads,
         layers: res.layers.clone(),
-        dmx,
         stats: stats.clone(),
     }
 }

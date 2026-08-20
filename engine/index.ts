@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { Command, CompiledProfile, ServerEvent, Snapshot } from '../shared/types.ts';
+import type { Command, CompiledProfile, HeadSnap, ServerEvent, Snapshot } from '../shared/types.ts';
 import { WS_PORT, clamp, sanitizeProject } from '../shared/types.ts';
 import { PROFILES } from '../shared/profiles.ts';
 import { EngineState, LOCAL_CLIENT } from './state.ts';
@@ -189,7 +189,7 @@ const previewRenderer = new Renderer(state);
  *  channel overrides and identify are deliberately left in force, because they
  *  are things the operator switched on and the audition should show the rig as
  *  it would really respond. Mirrors preview_heads() in core/src/engine.rs. */
-function previewHeads(t: number): { previewHeads: Snapshot['previewHeads'] } | null {
+function previewHeads(t: number): { previewHeads: HeadSnap[] } | null {
   const lookId = state.previewLook;
   if (!lookId || !Object.hasOwn(state.project.looks, lookId)) return null;
   const layer =
@@ -256,6 +256,13 @@ let currentCommandWs: unknown = null;
  *  gen bump per command, matching the Rust engine. */
 let changedThisCommand = false;
 
+// Per-client transport subscriptions. Deliberately NOT on EngineState: these
+// are facts about sockets, not about the show, they never persist, and they
+// must vanish when a client goes away. Mirrors `Subs` in core/src/engine.rs.
+const dmxSubs = new Map<unknown, string[]>();
+/** the one client auditioning a look, if any */
+let previewWs: unknown = null;
+
 state.onChange = () => {
   changedThisCommand = true;
   if (!projectDirty) echoSkip = currentCommandWs;
@@ -309,7 +316,11 @@ server.onConnect = (ws) => {
 // If the client holding a flash look crashes, nothing will ever release it.
 // The protocol doesn't attribute holds to clients, so release on ANY
 // disconnect: a spurious release beats a blinder latched on stage.
-server.onDisconnect = (clientId) => {
+server.onDisconnect = (clientId, ws) => {
+  // A socket that has gone must not keep a DMX subscription or hold the
+  // audition — otherwise the engine keeps serialising payloads for nobody.
+  dmxSubs.delete(ws);
+  if (previewWs === ws) previewWs = null;
   // Release exactly what this client held. Waiting for the last client to go
   // was the wrong half of the trade: a tablet dropping off the WiFi mid-flash
   // left its blinder latched on stage while the console stayed connected.
@@ -329,6 +340,27 @@ function handleCommand(cmd: Command, _ws?: unknown, clientId: number = LOCAL_CLI
     if (_ws) server.send(_ws as WebSocket, { type: 'project', project: state.project, gen: state.gen });
     return;
   }
+  // Transport-level subscription: never reaches the state machine.
+  if (cmd.type === 'watchDmx') {
+    if (_ws) {
+      if (cmd.universeIds.length === 0) dmxSubs.delete(_ws);
+      else dmxSubs.set(_ws, cmd.universeIds);
+    }
+    return;
+  }
+  // Record WHO is auditioning so the preview head set goes to them alone; the
+  // look id itself still reaches the state machine below.
+  if (cmd.type === 'previewLook') {
+    if (!cmd.lookId) {
+      // One last event so the client drops the head set — it has no other way
+      // to learn the audition is over, and would keep drawing the last frame.
+      if (previewWs) server.send(previewWs as never, { type: 'preview', heads: null });
+      previewWs = null;
+    } else {
+      previewWs = _ws ?? null;
+    }
+  }
+
   // Only an updateProject echo may be withheld from its sender: that client
   // composed the exact state. Any other command can change the project in ways
   // the sender did not compute (an import adding fixtures, sanitize repairing
@@ -677,8 +709,6 @@ function loopBody(): void {
 
   // Snapshots to the UI at 20 fps — the UI interpolates.
   if ((tickCount & 1) === 0 && server.clientCount > 0) {
-    const dmx: Record<string, number[]> = {};
-    for (const [id, buf] of res.buffers) dmx[id] = Array.from(buf);
     const snap: Snapshot = {
       type: 'snap',
       now,
@@ -690,9 +720,7 @@ function loopBody(): void {
       haze: state.project.settings.haze,
       hazeFan: state.project.settings.hazeFan,
       heads: res.heads,
-      ...(previewHeads(now) ?? {}),
       layers: res.layers,
-      dmx,
       ...(state.muted.size > 0 ? { muted: [...state.muted] } : {}),
       ...(state.identify ? { identify: state.identify } : {}),
       ...((() => {
@@ -727,7 +755,27 @@ function loopBody(): void {
       })()),
       stats,
     };
+    // Identical for every client, so one serialisation, one broadcast.
     server.broadcast(snap);
+
+    // Raw DMX only to clients that asked: the Output tab reads one universe,
+    // and it used to ride in every snapshot to every client (~8 KB of ~28 KB at
+    // arena scale, 20x a second) including ones that never read a byte.
+    for (const [ws, ids] of dmxSubs) {
+      if (ids.length === 0) continue;
+      const u: Record<string, number[]> = {};
+      for (const id of ids) {
+        const buf = res.buffers.get(id);
+        if (buf) u[id] = Array.from(buf);
+      }
+      server.send(ws as never, { type: 'dmx', u });
+    }
+
+    // The audition head set goes only to whoever asked for it.
+    if (previewWs) {
+      const pv = previewHeads(now);
+      server.send(previewWs as never, { type: 'preview', heads: pv ? pv.previewHeads ?? null : null });
+    }
   }
 
 }

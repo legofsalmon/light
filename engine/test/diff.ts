@@ -29,6 +29,11 @@ class Client {
   snap: Snapshot | null = null;
   project: Project | null = null;
   gen = 0;
+  /** Raw DMX now arrives as its own event, only for the universes this client
+   *  subscribed to — see watchAllDmx below. Latest wins, same as a snapshot. */
+  dmx: Record<string, number[]> = {};
+  /** The audition head set, likewise now targeted at the requesting client. */
+  previewHeads: unknown = null;
 
   async connect(port: number): Promise<void> {
     for (let i = 0; i < 50; i++) {
@@ -44,6 +49,8 @@ class Client {
         this.ws.on('message', (d) => {
           const ev = JSON.parse(String(d));
           if (ev.type === 'snap') this.snap = ev;
+          if (ev.type === 'dmx') this.dmx = ev.u;
+          if (ev.type === 'preview') this.previewHeads = ev.heads;
           if (ev.type === 'project') {
             this.project = ev.project;
             this.gen = ev.gen;
@@ -71,6 +78,18 @@ class Client {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Subscribe a client to EVERY universe's raw DMX.
+ *
+ *  DMX is opt-in per client now, because only the Output tab reads it. The
+ *  whole point of this suite is byte-comparing DMX, so the harness has to ask
+ *  for all of it — and compareDmx fails loudly on an empty map rather than
+ *  quietly comparing nothing, which is the way this change could have turned
+ *  the entire parity suite into a no-op. */
+async function watchAllDmx(c: Client, p: Project): Promise<void> {
+  c.send({ type: 'watchDmx', universeIds: p.universes.map((u) => u.id) });
+  await sleep(150);
+}
+
 async function currentProject(c: Client): Promise<Project> {
   for (let i = 0; i < 30; i++) {
     if (c.project) return c.project;
@@ -92,9 +111,9 @@ async function currentProject(c: Client): Promise<Project> {
  *  disagree once both are still. */
 async function settle(a: Client, b: Client, maxMs = 4000): Promise<void> {
   const snapshot = (c: Client) =>
-    Object.keys(c.snap?.dmx ?? {})
+    Object.keys(c.dmx)
       .sort()
-      .map((u) => (c.snap?.dmx[u] ?? []).join(','))
+      .map((u) => (c.dmx[u] ?? []).join(','))
       .join('|');
   let prevA = snapshot(a);
   let prevB = snapshot(b);
@@ -111,9 +130,12 @@ async function settle(a: Client, b: Client, maxMs = 4000): Promise<void> {
   }
 }
 
-function compareDmx(name: string, a: Snapshot | null, b: Snapshot | null): void {
-  if (!a?.dmx || !b?.dmx) {
-    check(name, false, 'missing snapshot');
+function compareDmx(name: string, a: Client | null, b: Client | null): void {
+  // An empty map is a HARNESS failure, not a pass: DMX is opt-in per client
+  // now, so a missing watchDmx subscription would otherwise turn every byte
+  // comparison below into a silent no-op.
+  if (!a?.dmx || !b?.dmx || Object.keys(a.dmx).length === 0 || Object.keys(b.dmx).length === 0) {
+    check(name, false, 'no DMX received — is the client subscribed via watchDmx?');
     return;
   }
   // EVERY universe, not just u1. Indexing dmx['u1'] literally meant a second
@@ -187,6 +209,9 @@ async function main(): Promise<void> {
   const rustObs = new Client();
   await nodeObs.connect(9902);
   await rustObs.connect(9901);
+  // DMX is opt-in per client now — every client this suite compares bytes with
+  // has to ask for all of it, or compareDmx fails loudly (by design).
+  for (const c of [node, rust, nodeObs, rustObs]) await watchAllDmx(c, proj);
   console.log('both engines up');
 
   const both = (cmd: Command) => {
@@ -195,29 +220,29 @@ async function main(): Promise<void> {
   };
 
   await sleep(400);
-  compareDmx('idle output identical', node.snap, rust.snap);
+  compareDmx('idle output identical', node, rust);
 
   both({ type: 'column', col: 0 }); // Intro: amber wash (no effects)
   await sleep(1400); // > 0.8 s fade
-  compareDmx('column 1 (amber wash)', node.snap, rust.snap);
+  compareDmx('column 1 (amber wash)', node, rust);
 
   both({ type: 'trigger', layerId: 'layer-derby', col: 2 }); // R+B spin: macro 88, motor 192
   await sleep(1100);
-  compareDmx('derby macro + motor', node.snap, rust.snap);
+  compareDmx('derby macro + motor', node, rust);
 
   both({ type: 'setMaster', v: 0.5 });
   await sleep(300);
-  compareDmx('grand master 50%', node.snap, rust.snap);
+  compareDmx('grand master 50%', node, rust);
 
   both({ type: 'setBlackout', v: true });
   await sleep(300);
-  compareDmx('blackout', node.snap, rust.snap);
+  compareDmx('blackout', node, rust);
   both({ type: 'setBlackout', v: false });
   both({ type: 'setMaster', v: 1 });
 
   both({ type: 'setHaze', v: 0.5 });
   await sleep(300);
-  compareDmx('manual haze', node.snap, rust.snap);
+  compareDmx('manual haze', node, rust);
 
   both({ type: 'setBpm', bpm: 150 });
   await sleep(300);
@@ -229,10 +254,10 @@ async function main(): Promise<void> {
 
   both({ type: 'trigger', layerId: 'layer-strobe', col: 1 }); // ring blinder flash
   await sleep(300);
-  compareDmx('blinder held', node.snap, rust.snap);
+  compareDmx('blinder held', node, rust);
   both({ type: 'release', layerId: 'layer-strobe', col: 1 });
   await sleep(400);
-  compareDmx('blinder released', node.snap, rust.snap);
+  compareDmx('blinder released', node, rust);
 
   const colsN = node.snap?.layers.map((l) => `${l.id}:${l.col}`).join(' ');
   const colsR = rust.snap?.layers.map((l) => `${l.id}:${l.col}`).join(' ');
@@ -246,7 +271,7 @@ async function main(): Promise<void> {
   {
     both({ type: 'column', col: 0 }); // Intro: something is lit
     await settle(node, rust);
-    const lit = (c: Client) => (c.snap?.dmx['u1'] ?? []).some((v) => v > 0);
+    const lit = (c: Client) => (c.dmx['u1'] ?? []).some((v: number) => v > 0);
     check('out-of-range column: rig lit to begin with', lit(node) && lit(rust));
 
     both({ type: 'column', col: 99 }); // far past the last column
@@ -256,7 +281,7 @@ async function main(): Promise<void> {
       lit(node) && lit(rust),
       `node lit=${lit(node)} rust lit=${lit(rust)}`,
     );
-    compareDmx('out-of-range column parity', node.snap, rust.snap);
+    compareDmx('out-of-range column parity', node, rust);
   }
 
   // --- a MIDI deck step must release whatever is held ------------------------
@@ -277,12 +302,12 @@ async function main(): Promise<void> {
 
     both({ type: 'trigger', layerId: 'layer-strobe', col: 1 }); // hold the blinder
     await sleep(300);
-    const heldN = (node.snap?.dmx['u1'] ?? []).some((v) => v > 0);
+    const heldN = (node.dmx['u1'] ?? []).some((v) => v > 0);
     check('deck step: blinder is held first', heldN);
 
     both({ type: 'midi', status: 0x90, d1: 94, d2: 127 }); // bank arrow, still held
     await settle(node, rust);
-    compareDmx('deck step while holding a flash: parity', node.snap, rust.snap);
+    compareDmx('deck step while holding a flash: parity', node, rust);
 
     // Assert here, with the pad still DOWN and no release sent. The deck step
     // itself must have dropped the hold. Checking after a release instead would
@@ -297,7 +322,7 @@ async function main(): Promise<void> {
       !held(node) && !held(rust),
       `still held — node=${JSON.stringify(node.snap?.layers)} rust=${JSON.stringify(rust.snap?.layers)}`,
     );
-    compareDmx('deck step: released parity', node.snap, rust.snap);
+    compareDmx('deck step: released parity', node, rust);
     both({ type: 'release', layerId: 'layer-strobe', col: 1 }); // the late note-off
     await settle(node, rust);
 
@@ -319,27 +344,27 @@ async function main(): Promise<void> {
     if (!staticLook) {
       console.log('  --   no effect-free look in the fixture; preview parity skipped');
     } else {
-      const dmxBefore = JSON.stringify(node.snap?.dmx ?? {});
+      const dmxBefore = JSON.stringify(node.dmx);
       both({ type: 'previewLook', lookId: staticLook });
       await sleep(500);
-      const pn = JSON.stringify(node.snap?.previewHeads ?? null);
-      const pr = JSON.stringify(rust.snap?.previewHeads ?? null);
+      const pn = JSON.stringify(node.previewHeads ?? null);
+      const pr = JSON.stringify(rust.previewHeads ?? null);
       check('preview: engine resolved the look', pn !== 'null' && pn !== '[]', `node=${pn.slice(0, 90)}`);
       check('preview: parity', pn === pr, `node=${pn.slice(0, 140)}\nrust=${pr.slice(0, 140)}`);
       // the whole point: auditioning must not reach the rig
       check(
         'preview does not change live DMX',
-        JSON.stringify(node.snap?.dmx ?? {}) === dmxBefore,
+        JSON.stringify(node.dmx) === dmxBefore,
         'auditioning a look altered live output',
       );
-      compareDmx('preview: live output parity while auditioning', node.snap, rust.snap);
+      compareDmx('preview: live output parity while auditioning', node, rust);
 
       both({ type: 'previewLook', lookId: null });
       await sleep(400);
       check(
         'preview: cleared on deselect',
-        !node.snap?.previewHeads && !rust.snap?.previewHeads,
-        `node=${JSON.stringify(node.snap?.previewHeads)?.slice(0, 60)}`,
+        !node.previewHeads && !rust.previewHeads,
+        `node=${JSON.stringify(node.previewHeads)?.slice(0, 60)}`,
       );
     }
   }
@@ -375,8 +400,8 @@ async function main(): Promise<void> {
   await sleep(300);
   both({ type: 'trigger', layerId: 'layer-wash', col: 0 });
   await sleep(1400);
-  compareDmx('imported GDTF fixture (wasm vs native)', node.snap, rust.snap);
-  const spot = node.snap?.dmx['u1']?.slice(199, 210);
+  compareDmx('imported GDTF fixture (wasm vs native)', node, rust);
+  const spot = node.dmx['u1']?.slice(199, 210);
   check(
     'imported fixture bytes correct',
     JSON.stringify(spot) === JSON.stringify([128, 0, 255, 255, 255, 8, 255, 0, 0, 128, 23]),
@@ -394,20 +419,20 @@ async function main(): Promise<void> {
     // base 0.5 must be arithmetically identical to no base at all
     both({ type: 'updateProject', project: withBase(structuredClone(await currentProject(node)), 0.5, 0.5) });
     await sleep(400);
-    const same = node.snap?.dmx['u1']?.slice(199, 210);
+    const same = node.dmx['u1']?.slice(199, 210);
     check(
       'focus: base 0.5 leaves output unchanged',
       JSON.stringify(same) === JSON.stringify([128, 0, 255, 255, 255, 8, 255, 0, 0, 128, 23]),
       `got ${JSON.stringify(same)}`,
     );
-    compareDmx('focus: base 0.5 parity', node.snap, rust.snap);
+    compareDmx('focus: base 0.5 parity', node, rust);
 
     // pan base 0.25 with the look at centre (0.5) -> resolved 0.25
     // tilt base 0.25 with the look at 1.0        -> resolved 0.75 (clamped delta)
     both({ type: 'updateProject', project: withBase(structuredClone(await currentProject(node)), 0.25, 0.25) });
     await sleep(400);
-    compareDmx('focus: offset parity', node.snap, rust.snap);
-    const aimed = node.snap?.dmx['u1'] ?? [];
+    compareDmx('focus: offset parity', node, rust);
+    const aimed = node.dmx['u1'] ?? [];
     const near = (got: number, want: number) => Math.abs(got - want) <= 1;
     check(
       'focus: pan base shifts pan (0.5 -> 0.25)',
@@ -423,7 +448,7 @@ async function main(): Promise<void> {
     // back to unset for the scenarios that follow
     both({ type: 'updateProject', project: withBase(structuredClone(await currentProject(node)), undefined, undefined) });
     await sleep(400);
-    compareDmx('focus: cleared parity', node.snap, rust.snap);
+    compareDmx('focus: cleared parity', node, rust);
   }
 
   // --- beam parameters: a look that never mentions zoom must leave the zoom
@@ -439,20 +464,20 @@ async function main(): Promise<void> {
 
     both({ type: 'updateProject', project: setZoom(structuredClone(await currentProject(node)), 1) });
     await sleep(400);
-    compareDmx('zoom: driven parity', node.snap, rust.snap);
+    compareDmx('zoom: driven parity', node, rust);
     check(
       'zoom: a look driving zoom to 1 opens the channel fully',
-      node.snap?.dmx['u1']?.[208] === 255,
-      `zoom byte ${node.snap?.dmx['u1']?.[208]} (expected 255)`,
+      node.dmx['u1']?.[208] === 255,
+      `zoom byte ${node.dmx['u1']?.[208]} (expected 255)`,
     );
 
     both({ type: 'updateProject', project: setZoom(structuredClone(await currentProject(node)), 0.25) });
     await sleep(400);
-    compareDmx('zoom: quarter parity', node.snap, rust.snap);
+    compareDmx('zoom: quarter parity', node, rust);
     check(
       'zoom: 0.25 lands a quarter up the channel',
-      Math.abs((node.snap?.dmx['u1']?.[208] ?? -1) - 64) <= 1,
-      `zoom byte ${node.snap?.dmx['u1']?.[208]} (expected ~64)`,
+      Math.abs((node.dmx['u1']?.[208] ?? -1) - 64) <= 1,
+      `zoom byte ${node.dmx['u1']?.[208]} (expected ~64)`,
     );
 
     // The previz reads zoom off the snapshot to widen its cone, so the two
@@ -475,7 +500,7 @@ async function main(): Promise<void> {
     // rather than to zero — the whole reason these params are optional
     both({ type: 'updateProject', project: setZoom(structuredClone(await currentProject(node)), undefined) });
     await sleep(400);
-    compareDmx('zoom: released parity', node.snap, rust.snap);
+    compareDmx('zoom: released parity', node, rust);
     check(
       'zoom: released heads report no zm (previz falls back to the profile angle)',
       (node.snap?.heads ?? []).every((h) => (h as { zm?: number }).zm === undefined) &&
@@ -484,8 +509,8 @@ async function main(): Promise<void> {
     );
     check(
       'zoom: releasing it parks the channel again, it does not fall to 0',
-      node.snap?.dmx['u1']?.[208] === 128,
-      `zoom byte ${node.snap?.dmx['u1']?.[208]} (expected 128, the GDTF default)`,
+      node.dmx['u1']?.[208] === 128,
+      `zoom byte ${node.dmx['u1']?.[208]} (expected 128, the GDTF default)`,
     );
   }
 
@@ -514,18 +539,18 @@ async function main(): Promise<void> {
       // steps of 2/1/1 beats → boundaries at 1000/1500/2000 ms after trigger;
       // checkpoints sit mid-step so snapshot lag and trigger skew can't bite
       await sleep(700);
-      compareDmx('cue list: step 1 parity', node.snap, rust.snap);
+      compareDmx('cue list: step 1 parity', node, rust);
       await sleep(550);
-      compareDmx('cue list: step 2 parity', node.snap, rust.snap);
+      compareDmx('cue list: step 2 parity', node, rust);
       await sleep(500);
-      compareDmx('cue list: step 3 parity', node.snap, rust.snap);
+      compareDmx('cue list: step 3 parity', node, rust);
       await sleep(500);
-      compareDmx('cue list: loop back to step 1 parity', node.snap, rust.snap);
+      compareDmx('cue list: loop back to step 1 parity', node, rust);
       // tap while the cue runs: alignPhase must shift anchors so both
       // engines stay in the same step (regression: permanent desync)
       both({ type: 'tap' });
       await sleep(450);
-      compareDmx('cue list: step parity after tap/align', node.snap, rust.snap);
+      compareDmx('cue list: step parity after tap/align', node, rust);
 
       // cue-to-cue crossfade: firing a second chaser must not corrupt the
       // first one's anchor (regression: outgoing cue snapped to step 1)
@@ -544,7 +569,7 @@ async function main(): Promise<void> {
       await sleep(300);
       both({ type: 'trigger', layerId: 'layer-wash', col: 6 });
       await sleep(1250); // past the 0.8 s fade, mid-step of B
-      compareDmx('cue list: cue-to-cue crossfade parity', node.snap, rust.snap);
+      compareDmx('cue list: cue-to-cue crossfade parity', node, rust);
 
       // poisoned step id: "constructor" resolves via Object.prototype in JS —
       // both engines must render it dark and KEEP TICKING (regression: the
@@ -559,7 +584,7 @@ async function main(): Promise<void> {
       await sleep(200);
       both({ type: 'trigger', layerId: 'layer-wash', col: 7 });
       await sleep(1300);
-      compareDmx('cue list: prototype-key step renders dark in both', node.snap, rust.snap);
+      compareDmx('cue list: prototype-key step renders dark in both', node, rust);
       const nodeAlive = (node.snap?.now ?? 0);
       await sleep(400);
       check(
@@ -570,7 +595,7 @@ async function main(): Promise<void> {
 
       both({ type: 'clearLayer', layerId: 'layer-wash' });
       await sleep(1200); // > 0.8 s fade — mid-fade bytes are skew-sensitive
-      compareDmx('cue list: released parity', node.snap, rust.snap);
+      compareDmx('cue list: released parity', node, rust);
     } else {
       check('cue list scenario prerequisites', false, 'wash layer content missing');
     }
@@ -580,52 +605,52 @@ async function main(): Promise<void> {
   {
     both({ type: 'column', col: 0 });
     await sleep(1200);
-    compareDmx('gig tools: baseline cue parity', node.snap, rust.snap);
+    compareDmx('gig tools: baseline cue parity', node, rust);
 
     both({ type: 'setFixtureMute', fixtureId: 'bar1', on: true });
     await sleep(600);
-    compareDmx('mute: silenced fixture parity', node.snap, rust.snap);
+    compareDmx('mute: silenced fixture parity', node, rust);
     // a muted fixture's whole span must be zero — not merely "dimmer 0", which
     // trusts a fixture that is by definition misbehaving
-    const bar1Span = (node.snap?.dmx['u1'] ?? []).slice(20, 40);
+    const bar1Span = (node.dmx['u1'] ?? []).slice(20, 40);
     check('mute: bar1 whole channel span is zero', bar1Span.every((v) => v === 0),
       `still emitting: ${bar1Span.map((v, i) => (v ? `${i + 21}:${v}` : '')).filter(Boolean).join(' ')}`);
 
     both({ type: 'identify', fixtureId: 'derby1' });
     await sleep(600);
-    compareDmx('identify: full-white override parity', node.snap, rust.snap);
+    compareDmx('identify: full-white override parity', node, rust);
 
     // identify must beat blackout — that is the point at load-in
     both({ type: 'setBlackout', v: true });
     await sleep(600);
-    compareDmx('identify: survives blackout parity', node.snap, rust.snap);
-    const derbyLit = (node.snap?.dmx['u1'] ?? [])[0] > 0;
+    compareDmx('identify: survives blackout parity', node, rust);
+    const derbyLit = (node.dmx['u1'] ?? [])[0] > 0;
     check('identify: derby1 still lit under blackout', derbyLit, 'identify lost to blackout');
 
     both({ type: 'identify', fixtureId: null });
     both({ type: 'setFixtureMute', fixtureId: 'bar1', on: false });
     both({ type: 'setBlackout', v: false });
     await sleep(600);
-    compareDmx('gig tools: cleared parity', node.snap, rust.snap);
+    compareDmx('gig tools: cleared parity', node, rust);
 
     // raw channel override is the last word in the buffer
     both({ type: 'setChannel', universeId: 'u1', channel: 5, value: 200 });
     await sleep(600);
-    compareDmx('channel override parity', node.snap, rust.snap);
+    compareDmx('channel override parity', node, rust);
     check(
       'channel override reaches the wire',
-      (node.snap?.dmx['u1'] ?? [])[4] === 200,
-      `ch5 = ${(node.snap?.dmx['u1'] ?? [])[4]}`
+      (node.dmx['u1'] ?? [])[4] === 200,
+      `ch5 = ${(node.dmx['u1'] ?? [])[4]}`
     );
 
     // all-stop: dark, quiet, and no overrides left behind
     both({ type: 'allStop' });
     await settle(node, rust);
-    compareDmx('all-stop parity', node.snap, rust.snap);
+    compareDmx('all-stop parity', node, rust);
     // all-stop is about the room going dark and QUIET: every dimmer at zero,
     // the hazer and its fan stopped, derby motors stopped. (Colour channels
     // may still hold their last value behind a zero dimmer — harmless.)
-    const dmx = node.snap?.dmx['u1'] ?? [];
+    const dmx = node.dmx['u1'] ?? [];
     check('all-stop: hazer output and fan are off', dmx[100] === 0 && dmx[101] === 0,
       `hazer=${dmx[100]} fan=${dmx[101]}`);
     check('all-stop: derbies fully zeroed (motors stopped)',

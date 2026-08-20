@@ -114,7 +114,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
 
     const draw = () => {
       raf = requestAnimationFrame(draw);
-      const { project, snap, previz2dView: view, fxSel } = useStore.getState();
+      const { project, snap, previewHeads, previz2dView: view, fxSel } = useStore.getState();
       // refresh cached size every frame — see mapping() for why
       const hr = host.getBoundingClientRect();
       w = Math.max(1, hr.width);
@@ -189,7 +189,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       }
 
       const headMap = new Map<string, HeadSnap>();
-      const headSrc = source === 'preview' ? (snap?.previewHeads ?? []) : (snap?.heads ?? []);
+      const headSrc = source === 'preview' ? (previewHeads ?? []) : (snap?.heads ?? []);
       for (const hs of headSrc) headMap.set(`${hs.f}:${hs.h}`, hs);
 
       for (const f of project.fixtures) {

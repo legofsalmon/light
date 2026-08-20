@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type {
-  Command, MidiAction, OscLogEntry, Project, ServerEvent, Snapshot,
+  Command, HeadSnap, MidiAction, OscLogEntry, Project, ServerEvent, Snapshot,
 } from '../../shared/types.ts';
 import { WS_PORT } from '../../shared/types.ts';
 
@@ -23,6 +23,12 @@ type Store = {
   engineStalled: boolean;
   project: Project | null;
   snap: Snapshot | null;
+  /** Raw DMX for the universes this client subscribed to, keyed by universe id.
+   *  Arrives as its own event now: only the Output tab wants it, so nothing
+   *  else pays for ~8 KB a frame. */
+  dmx: Record<string, number[]>;
+  /** The audition head set, sent only to the client that asked for it. */
+  previewHeads: HeadSnap[] | null;
   oscLog: OscLogEntry[];
   savedFlash: number;
   sel: Sel;
@@ -247,6 +253,8 @@ export const useStore = create<Store>()((set, get) => ({
   engineStalled: false,
   project: null,
   snap: null,
+  dmx: {},
+  previewHeads: null,
   oscLog: [],
   savedFlash: 0,
   sel: null,
@@ -506,7 +514,11 @@ function connect(): void {
         redoDepth: redoStack.length,
       });
     }
-    else if (ev.type === 'snap') {
+    else if (ev.type === 'dmx') {
+      useStore.setState({ dmx: ev.u });
+    } else if (ev.type === 'preview') {
+      useStore.setState({ previewHeads: ev.heads });
+    } else if (ev.type === 'snap') {
       lastSnapAt = Date.now();
       useStore.setState((s) => (s.engineStalled ? { snap: ev as Snapshot, engineStalled: false } : { snap: ev as Snapshot }));
     }

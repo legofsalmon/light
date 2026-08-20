@@ -21,7 +21,10 @@ export class Server {
   private httpServer: http.Server;
   private wss: WebSocketServer;
   onConnect: ((ws: WebSocket) => void) | null = null;
-  onDisconnect: ((clientId: number) => void) | null = null;
+  /** Both the id (for hold ownership) and the socket (for per-client
+   *  subscriptions, which are keyed by socket because that is what `send`
+   *  takes). Mirrors Subs::forget in core/src/engine.rs. */
+  onDisconnect: ((clientId: number, ws: WebSocket) => void) | null = null;
   private nextClientId = 1;
 
   constructor(port: number, distDir: string, onCommand: (cmd: Command, ws: WebSocket, clientId: number) => void) {
@@ -56,7 +59,7 @@ export class Server {
       // holds are attributed to this id so a disconnect releases only its own
       const clientId = this.nextClientId++;
       this.onConnect?.(ws);
-      ws.on('close', () => this.onDisconnect?.(clientId));
+      ws.on('close', () => this.onDisconnect?.(clientId, ws));
       ws.on('message', (data) => {
         let cmd: Command;
         try {

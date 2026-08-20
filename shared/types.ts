@@ -350,10 +350,6 @@ export type Snapshot = {
   /** OSC input socket: 'failed' = the port is held by another app (a second
    *  engine? QLC+?) so nothing from Resolume will ever arrive. Absent = off. */
   oscIn?: 'on' | 'failed';
-  /** Heads as they WOULD look if the previewed look were running on its own:
-   *  full master, no blackout, nothing else live. Present only while a client
-   *  has asked for a preview. Never touches DMX. */
-  previewHeads?: HeadSnap[];
   /** fixtures currently silenced */
   muted?: string[];
   /** fixture being identified (driven to full white), if any */
@@ -367,9 +363,24 @@ export type Snapshot = {
   hazeFan: number;
   heads: HeadSnap[];
   layers: LayerSnap[];
-  dmx: Record<string, number[]>;
   stats: EngineStats;
 };
+
+// The snapshot is IDENTICAL for every client, so the engine serialises it once
+// and broadcasts one string. The two payloads below used to ride inside it even
+// though each is wanted by at most one client at a time — raw DMX (only the
+// Output tab reads it, one universe) and the audition head set. At arena scale
+// that was ~9 KB of the ~28 KB snapshot, 20x a second, to every client
+// including the previz and the tablet, which pay for data they never read.
+// They are targeted events instead: sent only to the client that asked.
+
+/** Raw DMX for the universes this client subscribed to via `watchDmx`. */
+export type DmxEvent = { type: 'dmx'; u: Record<string, number[]> };
+
+/** Heads as they WOULD look if the previewed look were running on its own: full
+ *  master, no blackout, nothing else live. Sent only to the client that asked
+ *  for the audition. `heads: null` means the preview ended. Never touches DMX. */
+export type PreviewEvent = { type: 'preview'; heads: HeadSnap[] | null };
 
 export type OscLogEntry = { t: number; addr: string; args: (number | string)[] };
 
@@ -415,6 +426,9 @@ export type Command =
   // openProject — instead of letting last-write-wins clobber the newer state.
   // Optional so a non-UI writer (a test, a script) can still submit blind.
   | { type: 'updateProject'; project: Project; baseGen?: number }
+  // Subscribe this client to raw DMX for the given universes; [] unsubscribes.
+  // Only the Output tab wants it, so nothing else pays for it.
+  | { type: 'watchDmx'; universeIds: string[] }
   | { type: 'midi'; status: number; d1: number; d2: number }
   /** arm (or cancel with null) engine-side MIDI learn — next note/cc maps to the action */
   | { type: 'learn'; action: MidiAction | null }
@@ -443,6 +457,8 @@ export type ServerEvent =
   // echoes the last gen it saw back as updateProject.baseGen, which is how the
   // engine detects and rejects a stale write.
   | { type: 'project'; project: Project; gen: number }
+  | DmxEvent
+  | PreviewEvent
   | Snapshot
   | { type: 'osc'; entry: OscLogEntry }
   | { type: 'saved'; path: string }

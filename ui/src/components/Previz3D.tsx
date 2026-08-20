@@ -592,7 +592,7 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
 
       if (rig && snap) {
         const heads = new Map<string, HeadSnap>();
-        for (const hs of source === 'preview' ? (snap.previewHeads ?? []) : snap.heads) {
+        for (const hs of source === 'preview' ? (useStore.getState().previewHeads ?? []) : snap.heads) {
           heads.set(`${hs.f}:${hs.h}`, hs);
         }
         const beamGain = 0.07 + hazeViz * 0.5;

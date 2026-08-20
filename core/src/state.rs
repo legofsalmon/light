@@ -899,6 +899,9 @@ impl EngineState {
                 self.project.settings.haze_fan = clamp01(v);
                 out.project_changed = true;
             }
+            // Transport-level subscription, handled in engine.rs before the
+            // state machine ever sees it; this arm only exists for exhaustiveness.
+            Command::WatchDmx { .. } => {}
             Command::UpdateProject { project, base_gen: _ } => {
                 // base_gen is a transport-layer concern (staleness rejection in
                 // engine.rs); by the time a command reaches the state machine it

@@ -506,12 +506,7 @@ pub struct Snapshot {
     pub unknown_profiles: Vec<String>,
     pub haze_fan: f64,
     pub heads: Vec<HeadSnap>,
-    /// Heads as they WOULD look if the previewed look were running on its own.
-    /// Present only while a client is auditioning; never reaches DMX.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preview_heads: Option<Vec<HeadSnap>>,
     pub layers: Vec<LayerSnap>,
-    pub dmx: HashMap<String, Vec<u8>>,
     pub stats: EngineStats,
 }
 
@@ -600,6 +595,12 @@ pub enum Command {
     SetBlackout { v: bool },
     SetHaze { v: f64 },
     SetHazeFan { v: f64 },
+    /// Subscribe this client to raw DMX for the given universes; an empty list
+    /// unsubscribes. Only the Output tab wants it, so nothing else pays for it.
+    WatchDmx {
+        #[serde(default)]
+        universe_ids: Vec<String>,
+    },
     UpdateProject {
         project: Box<Project>,
         /// The project generation this edit was composed against; the engine

@@ -48,7 +48,7 @@ function DmxMeters({
   onPick: (ch: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const data = useStore((s) => s.snap?.dmx[universeId]);
+  const data = useStore((s) => s.dmx[universeId]);
   const project = useStore((s) => s.project)!;
   const [hover, setHover] = useState<number | null>(null);
   const spans = useMemo(() => spansFor(project, universeId), [project, universeId]);
@@ -327,6 +327,17 @@ export function OutputView() {
   useEffect(() => {
     if (meterUniverse !== meterU) setMeterU(meterUniverse);
   }, [meterUniverse, meterU]);
+
+  // Raw DMX is opt-in per client: this tab is the only thing that reads it, and
+  // only one universe at a time. Subscribing here (and unsubscribing on the way
+  // out) is what keeps ~8 KB a frame off every other client — the previz, the
+  // FOH tablet — that never looks at a byte of it.
+  const send = useStore((s) => s.send);
+  useEffect(() => {
+    if (!meterUniverse) return;
+    send({ type: 'watchDmx', universeIds: [meterUniverse] });
+    return () => send({ type: 'watchDmx', universeIds: [] });
+  }, [meterUniverse, send]);
 
   return (
     <div className="col" style={{ gap: 14 }}>
