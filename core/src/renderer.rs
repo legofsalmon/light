@@ -623,16 +623,27 @@ impl Renderer {
             } else {
                 0.0
             };
+            // Round to 3 decimals before it goes on the wire. These floats are
+            // previz-only — they never reach DMX — and at full shortest-round-
+            // trip precision a single mid-fade value is 17-19 characters, so the
+            // head list dominates a 129-fixture snapshot at ~556 KB/s per
+            // client. 1/1000 is past what any previz can show. Both engines
+            // round identically (all values are 0..1, so round-half matches JS),
+            // so parity holds. `ring` is already banded; rounding is a no-op.
+            let q = |v: f64| (v * 1000.0).round() / 1000.0;
             head_snaps.push(HeadSnap {
                 f: ho.key.0.clone(),
                 h: ho.key.1,
-                r, g, b, i,
-                st: o.strobe,
+                r: q(r),
+                g: q(g),
+                b: q(b),
+                i: q(i),
+                st: q(o.strobe),
                 ring,
                 mm: o.motor_mode,
-                mv: o.motor_value,
-                pan: o.pan,
-                tilt: o.tilt,
+                mv: q(o.motor_value),
+                pan: q(o.pan),
+                tilt: q(o.tilt),
                 mc: mc.filter(|v| !v.is_empty()),
             });
         }

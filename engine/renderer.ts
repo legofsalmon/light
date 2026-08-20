@@ -424,11 +424,16 @@ export class Renderer {
         r = g = b = 0.85;
       }
       const ring = o.white >= 0.5 ? 1 : o.ringFx > 0.01 ? 0.5 : 0;
+      // Round to 3 decimals before the wire — previz-only floats at full
+      // precision are 17-19 chars each and dominate the snapshot. Identical to
+      // core/src/renderer.rs (all values 0..1, so Math.round matches Rust's
+      // round-half-away-from-zero), so parity holds.
+      const q = (v: number): number => Math.round(v * 1000) / 1000;
       const snap: HeadSnap = {
         f: ho.fixtureId, h: ho.head,
-        r, g, b, i,
-        st: o.strobe, ring, mm: o.motorMode, mv: o.motorValue,
-        pan: o.pan, tilt: o.tilt,
+        r: q(r), g: q(g), b: q(b), i: q(i),
+        st: q(o.strobe), ring, mm: o.motorMode, mv: q(o.motorValue),
+        pan: q(o.pan), tilt: q(o.tilt),
       };
       if (mc && mc.length) snap.mc = mc;
       return snap;
