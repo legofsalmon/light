@@ -84,13 +84,14 @@ function Enable({ on, toggle }: { on: boolean; toggle: () => void }) {
   return <div className={`enable ${on ? 'on' : ''}`} onClick={toggle} />;
 }
 
-function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove }: {
+function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool }: {
   fx: Effect;
   kinds: Set<HeadKind>;
   canAim: boolean;
   beamCaps: BeamCaps;
   onEdit: (fn: (e: Effect) => void) => void;
   onRemove: () => void;
+  onSaveToPool: () => void;
 }) {
   // Which targets the rig in this group can actually take.
   const capable: EffectTarget[] = ['dimmer'];
@@ -156,6 +157,7 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove }: {
       <Fader label="phase" width={80} value={fx.phase} def={0} onChange={(v) => onEdit((x) => (x.phase = v))} fmt={pct} variant="dim" />
       {/* wet/dry: how much of the effect lands. 100% is full effect. */}
       <Fader label="mix" width={80} value={fx.mix} def={1} onChange={(v) => onEdit((x) => (x.mix = v))} fmt={pct} variant="dim" />
+      <button className="btn small ghost" title="save this effect to the FX pool as a reusable preset" onClick={onSaveToPool}>☆</button>
       <button className="btn small ghost" onClick={onRemove}>✕</button>
     </div>
   );
@@ -397,6 +399,12 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
               if (e) fn(e);
             })}
             onRemove={() => edit((pt) => (pt.effects = pt.effects.filter((x) => x.id !== fx.id)))}
+            onSaveToPool={() => mutate((p) => {
+              // copy-on-apply's mirror: snapshot the effect into the pool, so a
+              // later edit to this look never rewrites the stored preset.
+              const preset = { id: uid('fp'), name: `${fx.target} ${fx.wave}`, effect: { ...fx } };
+              p.fxPool = [...(p.fxPool ?? []), preset];
+            })}
           />
         ))}
         <div className="row">
@@ -406,6 +414,25 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
           >
             + effect
           </button>
+          {(project.fxPool?.length ?? 0) > 0 && (
+            <select
+              className="sel"
+              value=""
+              title="drop a saved preset onto this group (copied in — editing it later never changes the pool)"
+              onChange={(e) => {
+                const id = e.target.value;
+                if (!id) return;
+                const preset = project.fxPool?.find((fp) => fp.id === id);
+                // copy-on-apply: a fresh id so the running look owns its copy
+                if (preset) edit((pt) => pt.effects.push({ ...preset.effect, id: uid('fx') }));
+              }}
+            >
+              <option value="">apply from pool…</option>
+              {(project.fxPool ?? []).map((fp) => (
+                <option key={fp.id} value={fp.id}>{fp.name}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
     </div>
@@ -786,6 +813,41 @@ export function LookEditor() {
               );
             })()}
           </div>
+
+          {(project.fxPool?.length ?? 0) > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <div className="sectionhead">FX pool — reusable presets ({project.fxPool!.length})</div>
+              <div className="label" style={{ marginBottom: 6 }}>
+                Copies in on “apply from pool”, so editing a look never rewrites the preset — and editing the preset never changes a look already using it.
+              </div>
+              {project.fxPool!.map((fp) => (
+                <div className="row" key={fp.id} style={{ marginBottom: 4 }}>
+                  <TextField
+                    className="text"
+                    style={{ width: 180, fontSize: 13 }}
+                    entityId={fp.id}
+                    value={fp.name}
+                    onCommit={(v) => mutate((p) => {
+                      const e = p.fxPool?.find((x) => x.id === fp.id);
+                      if (e) e.name = v;
+                    })}
+                  />
+                  <span className="label">{fp.effect.target} · {fp.effect.wave}</span>
+                  <div className="grow" />
+                  <button
+                    className="btn small ghost"
+                    title="remove this preset from the pool (looks that already used it keep their copy)"
+                    onClick={() => mutate((p) => {
+                      p.fxPool = (p.fxPool ?? []).filter((x) => x.id !== fp.id);
+                      if (p.fxPool.length === 0) delete p.fxPool;
+                    })}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>
