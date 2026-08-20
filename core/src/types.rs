@@ -435,6 +435,11 @@ pub struct HeadSnap {
     pub mv: f64,
     pub pan: f64,
     pub tilt: f64,
+    /// Resolved zoom 0..1, present only when a look is driving zoom on this
+    /// head. The previz widens/narrows its cone from it; absent keeps the
+    /// profile's own beam angle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zm: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mc: Option<Vec<[u8; 3]>>,
 }

@@ -312,6 +312,10 @@ export type HeadSnap = {
   mv: number;
   pan: number;
   tilt: number;
+  /** Resolved zoom 0..1, present only when a look is actually driving zoom on
+   *  this head. The previz widens or narrows its beam cone from it; absent
+   *  means "nobody asked", and the cone keeps the profile's own beam angle. */
+  zm?: number;
   /** derby macro component colours (0..255 triples), for multi-colour beam fans */
   mc?: [number, number, number][];
 };

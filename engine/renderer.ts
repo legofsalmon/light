@@ -435,6 +435,8 @@ export class Renderer {
         st: q(o.strobe), ring, mm: o.motorMode, mv: q(o.motorValue),
         pan: q(o.pan), tilt: q(o.tilt),
       };
+      // only when a look drives it — absent keeps the profile's beam angle
+      if (o.zoom !== null) snap.zm = q(o.zoom);
       if (mc && mc.length) snap.mc = mc;
       return snap;
     });

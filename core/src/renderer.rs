@@ -644,6 +644,10 @@ impl Renderer {
                 mv: q(o.motor_value),
                 pan: q(o.pan),
                 tilt: q(o.tilt),
+                // Only when a look is actually driving it: the previz falls
+                // back to the profile's own beam angle when this is absent,
+                // which is exactly the "parked" semantics on the DMX side.
+                zm: o.beam.zoom.map(q),
                 mc: mc.filter(|v| !v.is_empty()),
             });
         }

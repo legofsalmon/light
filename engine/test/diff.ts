@@ -455,11 +455,33 @@ async function main(): Promise<void> {
       `zoom byte ${node.snap?.dmx['u1']?.[208]} (expected ~64)`,
     );
 
+    // The previz reads zoom off the snapshot to widen its cone, so the two
+    // engines must agree on that too — it is the only head field that is
+    // present-or-absent rather than always numeric.
+    const zmOf = (c: Client) =>
+      JSON.stringify((c.snap?.heads ?? []).map((h) => (h as { zm?: number }).zm ?? null));
+    check(
+      'zoom: snapshot zm parity while driven',
+      zmOf(node) === zmOf(rust),
+      `node=${zmOf(node).slice(0, 80)} rust=${zmOf(rust).slice(0, 80)}`,
+    );
+    check(
+      'zoom: a driven head reports zm on the wire',
+      (node.snap?.heads ?? []).some((h) => (h as { zm?: number }).zm !== undefined),
+      'no head carried zm — the previz cannot show zoom',
+    );
+
     // and releasing it returns the channel to the fixture's parked value,
     // rather than to zero — the whole reason these params are optional
     both({ type: 'updateProject', project: setZoom(structuredClone(await currentProject(node)), undefined) });
     await sleep(400);
     compareDmx('zoom: released parity', node.snap, rust.snap);
+    check(
+      'zoom: released heads report no zm (previz falls back to the profile angle)',
+      (node.snap?.heads ?? []).every((h) => (h as { zm?: number }).zm === undefined) &&
+        (rust.snap?.heads ?? []).every((h) => (h as { zm?: number }).zm === undefined),
+      'zm lingered after release',
+    );
     check(
       'zoom: releasing it parks the channel again, it does not fall to 0',
       node.snap?.dmx['u1']?.[208] === 128,

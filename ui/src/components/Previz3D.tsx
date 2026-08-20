@@ -17,6 +17,8 @@ type HeadHandle = {
   pan: THREE.Group | null;
   tilt: THREE.Group | null;
   spin: number;
+  /** last zoom applied to this head's cones, so static beams re-cut only on change */
+  lastZoom: number | undefined;
   cur: { r: number; g: number; b: number; i: number };
 };
 
@@ -45,17 +47,37 @@ function makeBeam(deg: number, len: number): THREE.Mesh<THREE.CylinderGeometry, 
 const _o = new THREE.Vector3();
 const _d = new THREE.Vector3();
 
-/** Scale one beam so its cone ends where the light lands. The cone is built
- *  along local -Y, and its spread is proportional to its length, so a uniform
- *  scale keeps the beam angle honest. */
-function fitBeam(beam: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>, occ: Occluder[]): void {
+/** How much wider or narrower a zoom value makes the beam.
+ *
+ *  A compiled profile carries ONE beam angle — GDTF's physical zoom range is
+ *  not surfaced by the interpreter — so there is no honest way to compute the
+ *  real angle at a given zoom. This is a deliberate visual approximation: zoom
+ *  0 reads about half the profile's angle, 1 about double, 0.5 leaves it as
+ *  drawn. It shows the operator that zoom is doing something and roughly how
+ *  much, which is the judgement the previz exists for; it is not a photometric
+ *  claim. If profiles ever carry the physical range, this becomes real. */
+function zoomSpread(zm: number | undefined): number {
+  if (zm === undefined) return 1; // nobody asked — keep the profile's own angle
+  return 0.5 + Math.max(0, Math.min(1, zm)) * 1.5;
+}
+
+/** Scale one beam so its cone ends where the light lands, at the current zoom.
+ *
+ *  The cone is built along local -Y with its spread proportional to its length,
+ *  so scaling all three axes together keeps the beam angle as built. Widening
+ *  is therefore a separate factor on the two lateral axes only. */
+function fitBeam(
+  beam: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>,
+  occ: Occluder[],
+  spread = 1,
+): void {
   const base = (beam.userData.baseLen as number) || 1;
   const m = beam.matrixWorld.elements;
   _o.set(m[12], m[13], m[14]);
   // -Y column, normalised out of the parent's scale
   _d.set(-m[4], -m[5], -m[6]).normalize();
   const k = throwDistance(_o, _d, occ) / base;
-  beam.scale.set(k, k, k);
+  beam.scale.set(k * spread, k, k * spread);
 }
 
 function basicBox(w: number, h: number, d: number, color: number): THREE.Mesh {
@@ -108,6 +130,7 @@ function buildRig(project: Project): {
         pan: null,
         tilt: null,
         spin: 0,
+        lastZoom: undefined,
         cur: { r: 0, g: 0, b: 0, i: 0 },
       };
 
@@ -622,7 +645,16 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             else if (hs.mm === 'aim') h.spin += (hs.mv * Math.PI - h.spin) * 0.2;
             h.fan.rotation.y = h.spin;
             h.fan.updateMatrixWorld(true);
-            for (const b of h.beams) fitBeam(b, rig.occ);
+            for (const b of h.beams) fitBeam(b, rig.occ, zoomSpread(hs.zm));
+          }
+
+          // Static heads (bars, pars, washes) are cut once at rig build, so a
+          // zoom change would never reach them. Re-cut only when the value
+          // actually moves — a per-frame refit of every static beam is exactly
+          // the cost the build-time cut exists to avoid.
+          if (hs && !h.pan && !h.fan && hs.zm !== h.lastZoom) {
+            h.lastZoom = hs.zm;
+            for (const b of h.beams) fitBeam(b, rig.occ, zoomSpread(hs.zm));
           }
 
           if (h.ring && hs) {
@@ -640,7 +672,7 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             // tilt alone cut every beam against the previous frame's pan.
             // force=true propagates down through tilt to the beam.
             h.pan.updateMatrixWorld(true);
-            for (const b of h.beams) fitBeam(b, rig.occ);
+            for (const b of h.beams) fitBeam(b, rig.occ, zoomSpread(hs.zm));
           }
         }
       }
