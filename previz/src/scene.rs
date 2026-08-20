@@ -6,20 +6,22 @@ use crate::protocol::ProjectLite;
 use crate::state::Live;
 
 /// Profile metadata from either source: built-in code or imported GDTF data.
+/// Heads are (kind, offset along local X, offset up local Y) — the Y offset
+/// is B1's 2D pixel layout; built-ins are flat bars.
 struct ProfMeta {
-    heads: Vec<(HeadKind, f64)>,
+    heads: Vec<(HeadKind, f64, f64)>,
     beam_deg: f64,
 }
 
 fn prof_meta(project: &ProjectLite, id: &str) -> Option<ProfMeta> {
     if let Some(p) = profile_of(id) {
         return Some(ProfMeta {
-            heads: p.heads.iter().map(|h| (h.kind, h.offset)).collect(),
+            heads: p.heads.iter().map(|h| (h.kind, h.offset, 0.0)).collect(),
             beam_deg: p.beam_deg,
         });
     }
     project.profiles.get(id).map(|c| ProfMeta {
-        heads: c.heads.iter().map(|h| (h.kind, h.offset)).collect(),
+        heads: c.heads.iter().map(|h| (h.kind, h.offset, h.offset_y)).collect(),
         beam_deg: c.beam_deg,
     })
 }
@@ -619,7 +621,7 @@ pub fn rebuild_fixtures(
             ));
         });
 
-        for (hi, &(kind, offset)) in prof.heads.iter().enumerate() {
+        for (hi, &(kind, offset, offset_y)) in prof.heads.iter().enumerate() {
             let tag = HeadTag { fixture: f.id.clone(), head: hi, kind };
             let rigged = f.pos.y > 1.2;
             let beam_dir = match kind {
@@ -635,7 +637,7 @@ pub fn rebuild_fixtures(
             commands.entity(root).with_children(|p| {
                 let mut head = p.spawn((
                     tag.clone(),
-                    Transform::from_xyz(offset as f32, 0.0, 0.0),
+                    Transform::from_xyz(offset as f32, offset_y as f32, 0.0),
                     Visibility::default(),
                 ));
 

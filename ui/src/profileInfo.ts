@@ -9,7 +9,7 @@ export type ProfileMeta = {
   id: string;
   label: string;
   channels: number;
-  heads: { kind: HeadKind; offset: number; label: string }[];
+  heads: { kind: HeadKind; offset: number; offsetY?: number; row?: number; col?: number; label: string }[];
   /** one name per channel of the footprint, for the DMX monitor */
   channelNames: string[];
   /** moving heads only: whether this profile actually has a pan / tilt axis,

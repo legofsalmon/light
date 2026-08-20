@@ -117,7 +117,9 @@ function buildRig(project: Project): {
 
     prof.heads.forEach((hd, hi) => {
       const headRoot = new THREE.Group();
-      headRoot.position.set(hd.offset, 0, 0);
+      // 2D pixel layouts (B1): offsetY lifts a head up the fixture's local Y,
+      // so a Spiider's rings and a matrix panel read as their real shape
+      headRoot.position.set(hd.offset, hd.offsetY ?? 0, 0);
       fg.add(headRoot);
 
       const handle: HeadHandle = {
