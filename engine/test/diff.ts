@@ -947,6 +947,82 @@ async function main(): Promise<void> {
     await settle(node, rust);
   }
 
+  // --- P1 soft overrides: a ride must move DMX identically on both engines
+  // WITHOUT a project write; Store must land the identical stored show; and
+  // Discard/ALL STOP must drop rides byte-cleanly.
+  {
+    await armWash('wash-rainbow', 1.35);
+    const setFan = async (): Promise<void> => {
+      const p = structuredClone(await currentProject(node));
+      Object.assign(p.looks['wash-rainbow'].parts[0].effects[0], {
+        bypass: false, mix: 1,
+        distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0,
+      });
+      both({ type: 'updateProject', project: p });
+      await sleep(400);
+    };
+    await setFan(); // normalize whatever earlier scenarios left on fx18
+    const stored = frameOf(node);
+    compareDmx('soft: stored baseline parity', node, rust);
+
+    const partId = (await currentProject(node)).looks['wash-rainbow'].parts[0].id;
+
+    // ride the part's saturation down — a ~40-byte command, no gen bump
+    const genBefore = nodeObs.gen;
+    both({ type: 'soft', lookId: 'wash-rainbow', partId, field: 'sat', value: 0.25 });
+    await sleep(400);
+    compareDmx('soft: sat ride parity', node, rust);
+    const ridden = frameOf(node);
+    check('soft: the ride moves DMX', ridden !== stored, 'sat ride changed nothing');
+    check('soft: a ride is NOT a project write', nodeObs.gen === genBefore, `gen moved ${genBefore} -> ${nodeObs.gen}`);
+
+    // ride an effect field too (the rainbow's rate) — phase-continuity holds
+    // (P4 reads the EFFECTIVE effects), and both engines agree
+    const effectId = (await currentProject(node)).looks['wash-rainbow'].parts[0].effects[0].id;
+    both({ type: 'soft', lookId: 'wash-rainbow', partId, effectId, field: 'rate', value: 4 });
+    await sleep(400);
+    compareDmx('soft: effect-rate ride parity', node, rust);
+
+    // Discard: byte-identical return to the stored show
+    both({ type: 'softClear' });
+    await sleep(400);
+    compareDmx('soft: discard parity', node, rust);
+    check('soft: discard restores the stored bytes', frameOf(node) === stored, 'discard did not restore');
+
+    // ride again, then Store: one gen bump, stored looks updated identically
+    both({ type: 'soft', lookId: 'wash-rainbow', partId, field: 'sat', value: 0.25 });
+    await sleep(300);
+    both({ type: 'softCommit' });
+    await sleep(400);
+    compareDmx('soft: post-commit parity', node, rust);
+    check('soft: commit still renders the ridden bytes', frameOf(node) === ridden, 'commit changed the frame');
+    const nSat = (await currentProject(nodeObs)).looks['wash-rainbow'].parts[0].params.color?.s;
+    const rSat = (await currentProject(rustObs)).looks['wash-rainbow'].parts[0].params.color?.s;
+    check('soft: commit stored the same value in both engines', nSat === 0.25 && rSat === 0.25, `node=${nSat} rust=${rSat}`);
+    check('soft: commit bumped the generation once', nodeObs.gen !== genBefore, 'no gen bump on commit');
+
+    // ALL STOP drops any ride
+    both({ type: 'soft', lookId: 'wash-rainbow', partId, field: 'dimmer', value: 0.1 });
+    await sleep(300);
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
+    await armWash('wash-rainbow', 1.35);
+    compareDmx('soft: post-allStop parity (ride dropped)', node, rust);
+
+    // restore the stored sat for later scenarios
+    {
+      const p = structuredClone(await currentProject(node));
+      const c = p.looks['wash-rainbow'].parts[0].params.color;
+      if (c) c.s = 1;
+      both({ type: 'updateProject', project: p });
+      await sleep(300);
+    }
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
+  }
+
   // --- A2 pool: the FX pool is data the engine never renders from, but it must
   // survive the save/broadcast round-trip identically on both engines, and both
   // must repair it the same way (drop a malformed preset, clamp an out-of-range

@@ -286,6 +286,49 @@ pub enum Fold {
     Centre,
 }
 
+/// Parameters a soft override can ride (P1). Part fields are the numeric
+/// PartParams (Hue/Sat address the colour components); effect fields are the
+/// numeric Effect knobs. One vocabulary, shared with P2/P3 bindings later.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SoftField {
+    Dimmer,
+    White,
+    RingFx,
+    Strobe,
+    MotorValue,
+    Pan,
+    Tilt,
+    Haze,
+    Fan,
+    Zoom,
+    Focus,
+    Iris,
+    Frost,
+    Cto,
+    Hue,
+    Sat,
+    Rate,
+    Size,
+    Spread,
+    Width,
+    Phase,
+    Mix,
+}
+
+/// Per-field clamp for soft values — validated at the door, so the renderer
+/// never meets an out-of-range ride. Mirrors softClamp in shared/types.ts.
+pub fn soft_clamp(field: SoftField, v: f64) -> Option<f64> {
+    if !v.is_finite() {
+        return None;
+    }
+    Some(match field {
+        SoftField::Hue => clamp(v, 0.0, 360.0),
+        SoftField::Rate => clamp(v, 0.05, 64.0),
+        _ => clamp01(v),
+    })
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Effect {
     pub id: String,
@@ -703,6 +746,18 @@ pub struct ArtnetNodeSnap {
     pub age_ms: u64,
 }
 
+/// One live soft override, as the snapshot carries it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SoftSnap {
+    pub look_id: String,
+    pub part_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effect_id: Option<String>,
+    pub field: SoftField,
+    pub value: f64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
@@ -725,6 +780,9 @@ pub struct Snapshot {
     pub osc_in: Option<&'static str>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub muted: Vec<String>,
+    /// live soft overrides (P1) — present only while something is ridden
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub soft: Vec<SoftSnap>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identify: Option<String>,
     #[serde(skip_serializing_if = "is_zero")]
@@ -834,6 +892,21 @@ pub enum Command {
     /// ignored, so it can never touch a show. See engine::run.
     #[serde(rename = "_pinClock")]
     PinClock { eff_beat: f64 },
+    /// P1 soft override: ride one stored parameter live without a project
+    /// write. value None clears the single entry.
+    #[serde(rename_all = "camelCase")]
+    Soft {
+        look_id: String,
+        part_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        effect_id: Option<String>,
+        field: SoftField,
+        value: Option<f64>,
+    },
+    /// Store: write every soft value into the project (one gen bump), clear.
+    SoftCommit,
+    /// Discard: drop every soft value, stored data untouched.
+    SoftClear,
     UpdateProject {
         project: Box<Project>,
         /// The project generation this edit was composed against; the engine

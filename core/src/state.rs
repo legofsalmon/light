@@ -1,7 +1,65 @@
 use std::collections::HashMap;
 
 use crate::clock::BeatClock;
-use crate::types::{clamp, clamp01, Command, MidiAction, MidiMapping, MidiType, Project};
+use crate::types::{
+    clamp, clamp01, soft_clamp, Command, MidiAction, MidiMapping, MidiType, Project, SoftField,
+    SoftSnap,
+};
+
+/// Soft overrides for one (look, part): part-level fields plus per-effect
+/// fields. Grouped so the renderer resolves a whole part with one lookup.
+#[derive(Debug, Clone, Default)]
+pub struct SoftPatch {
+    pub params: HashMap<SoftField, f64>,
+    pub effects: HashMap<String, HashMap<SoftField, f64>>,
+}
+
+/// Route one soft part-field onto PartParams. Hue/Sat address the colour
+/// components, creating the colour with the other component at its default
+/// (s 1 / h 0) when the look never set one. Mirrors applySoftParam in
+/// engine/state.ts — identical routing or stored shows diverge.
+pub fn apply_soft_param(params: &mut crate::types::PartParams, field: SoftField, v: f64) {
+    match field {
+        SoftField::Hue => {
+            let s = params.color.map_or(1.0, |c| c.s);
+            params.color = Some(crate::types::ColorHS { h: v, s });
+        }
+        SoftField::Sat => {
+            let h = params.color.map_or(0.0, |c| c.h);
+            params.color = Some(crate::types::ColorHS { h, s: v });
+        }
+        SoftField::Dimmer => params.dimmer = Some(v),
+        SoftField::White => params.white = Some(v),
+        SoftField::RingFx => params.ring_fx = Some(v),
+        SoftField::Strobe => params.strobe = Some(v),
+        SoftField::MotorValue => params.motor_value = Some(v),
+        SoftField::Pan => params.pan = Some(v),
+        SoftField::Tilt => params.tilt = Some(v),
+        SoftField::Haze => params.haze = Some(v),
+        SoftField::Fan => params.fan = Some(v),
+        SoftField::Zoom => params.zoom = Some(v),
+        SoftField::Focus => params.focus = Some(v),
+        SoftField::Iris => params.iris = Some(v),
+        SoftField::Frost => params.frost = Some(v),
+        SoftField::Cto => params.cto = Some(v),
+        // effect-only fields never reach a params patch (set_soft routes)
+        SoftField::Rate | SoftField::Size | SoftField::Spread | SoftField::Width
+        | SoftField::Phase | SoftField::Mix => {}
+    }
+}
+
+/// Route one soft effect-field onto an Effect.
+pub fn apply_soft_effect(e: &mut crate::types::Effect, field: SoftField, v: f64) {
+    match field {
+        SoftField::Rate => e.rate = v,
+        SoftField::Size => e.size = v,
+        SoftField::Spread => e.spread = v,
+        SoftField::Width => e.width = v,
+        SoftField::Phase => e.phase = v,
+        SoftField::Mix => e.mix = v,
+        _ => {}
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct LayerLive {
@@ -231,6 +289,11 @@ pub struct EngineState {
     pub preview_look: Option<String>,
     /// universe id -> channel(0-511) -> value. Raw override, applied last.
     pub overrides: HashMap<String, HashMap<usize, u8>>,
+    /// P1 soft overrides: live rides over stored look data, keyed
+    /// (look id, part id) and grouped per part so the renderer resolves a
+    /// whole part with ONE lookup. Runtime-only — SoftCommit writes them into
+    /// the project, SoftClear/AllStop/project switch drops them.
+    pub soft: HashMap<(String, String), SoftPatch>,
     pub learn_target: Option<MidiAction>,
     /// TEST ONLY — a pending effect-clock pin (LIGHT_TEST_CLOCK gated), consumed
     /// by the engine loop before the next tick. Not show state; never persisted.
@@ -256,6 +319,7 @@ impl EngineState {
             identify: None,
             preview_look: None,
             overrides: HashMap::new(),
+            soft: HashMap::new(),
             learn_target: None,
             gen: 1,
             pending_pin: None,
@@ -691,11 +755,139 @@ impl EngineState {
         out
     }
 
+    /// Ingest one soft override (P1). Validates the address against the
+    /// CURRENT project and clamps the value at the door, so the renderer never
+    /// meets a dangling or out-of-range ride. value None clears the entry.
+    /// Mirrors setSoft in engine/state.ts.
+    pub fn set_soft(
+        &mut self,
+        look_id: &str,
+        part_id: &str,
+        effect_id: Option<&str>,
+        field: SoftField,
+        value: Option<f64>,
+    ) -> bool {
+        let Some(look) = self.project.looks.get(look_id) else { return false };
+        let Some(part) = look.parts.iter().find(|pt| pt.id == part_id) else { return false };
+        if let Some(eid) = effect_id {
+            if !part.effects.iter().any(|e| e.id == eid) {
+                return false;
+            }
+        }
+        let key = (look_id.to_string(), part_id.to_string());
+        match value {
+            None => {
+                let Some(patch) = self.soft.get_mut(&key) else { return false };
+                if let Some(eid) = effect_id {
+                    if let Some(ef) = patch.effects.get_mut(eid) {
+                        ef.remove(&field);
+                        if ef.is_empty() {
+                            patch.effects.remove(eid);
+                        }
+                    }
+                } else {
+                    patch.params.remove(&field);
+                }
+                if patch.params.is_empty() && patch.effects.is_empty() {
+                    self.soft.remove(&key);
+                }
+                true
+            }
+            Some(raw) => {
+                let Some(v) = soft_clamp(field, raw) else { return false };
+                let patch = self.soft.entry(key).or_default();
+                if let Some(eid) = effect_id {
+                    patch.effects.entry(eid.to_string()).or_default().insert(field, v);
+                } else {
+                    patch.params.insert(field, v);
+                }
+                true
+            }
+        }
+    }
+
+    /// Flat view of the live rides, for the snapshot. Sorted for a stable
+    /// wire order (HashMap iteration is arbitrary).
+    pub fn soft_entries(&self) -> Vec<SoftSnap> {
+        let mut out: Vec<SoftSnap> = Vec::new();
+        for ((look_id, part_id), patch) in &self.soft {
+            for (field, value) in &patch.params {
+                out.push(SoftSnap {
+                    look_id: look_id.clone(),
+                    part_id: part_id.clone(),
+                    effect_id: None,
+                    field: *field,
+                    value: *value,
+                });
+            }
+            for (effect_id, fields) in &patch.effects {
+                for (field, value) in fields {
+                    out.push(SoftSnap {
+                        look_id: look_id.clone(),
+                        part_id: part_id.clone(),
+                        effect_id: Some(effect_id.clone()),
+                        field: *field,
+                        value: *value,
+                    });
+                }
+            }
+        }
+        out.sort_by(|a, b| {
+            (&a.look_id, &a.part_id, &a.effect_id, format!("{:?}", a.field))
+                .cmp(&(&b.look_id, &b.part_id, &b.effect_id, format!("{:?}", b.field)))
+        });
+        out
+    }
+
+    /// Store: write every soft value into the project, then clear. Returns
+    /// whether anything was written (→ gen bump + broadcast). Mirrors
+    /// softCommit in engine/state.ts — identical field routing or the two
+    /// engines' stored shows diverge.
+    pub fn soft_commit(&mut self) -> bool {
+        let mut changed = false;
+        let soft = std::mem::take(&mut self.soft);
+        for ((look_id, part_id), patch) in soft {
+            let Some(look) = self.project.looks.get_mut(&look_id) else { continue };
+            let Some(part) = look.parts.iter_mut().find(|pt| pt.id == part_id) else { continue };
+            for (field, v) in patch.params {
+                apply_soft_param(&mut part.params, field, v);
+                changed = true;
+            }
+            for (effect_id, fields) in patch.effects {
+                let Some(e) = part.effects.iter_mut().find(|x| x.id == effect_id) else { continue };
+                for (field, v) in fields {
+                    apply_soft_effect(e, field, v);
+                    changed = true;
+                }
+            }
+        }
+        changed
+    }
+
+    /// Drop rides whose look/part/effect no longer exists — called from the
+    /// renderer's gen-gated rebuild, so every project change sweeps exactly
+    /// once, in both engines, with the same discipline as the geometry cache.
+    pub fn sweep_soft(&mut self) {
+        if self.soft.is_empty() {
+            return;
+        }
+        let project = &self.project;
+        self.soft.retain(|(look_id, part_id), patch| {
+            let Some(look) = project.looks.get(look_id) else { return false };
+            let Some(part) = look.parts.iter().find(|pt| pt.id == *part_id) else { return false };
+            patch
+                .effects
+                .retain(|eid, _| part.effects.iter().any(|e| e.id == *eid));
+            !patch.params.is_empty() || !patch.effects.is_empty()
+        });
+    }
+
     pub fn replace_project(&mut self, p: Project) {
         self.project = p;
         self.ensure_decks();
         self.live.clear();
         self.overrides.clear();
+        self.soft.clear(); // rides belong to the show they were ridden in
         self.identify = None;
         self.muted.clear();
         self.preview_look = None;
@@ -910,9 +1102,21 @@ impl EngineState {
                 self.release_all_held(t, None);
                 self.identify = None;
                 self.overrides.clear();
+                self.soft.clear(); // rides are transient state; panic drops them too
                 self.project.settings.haze = 0.0;
                 self.project.settings.haze_fan = 0.0; // the fan is the audible one
                 out.project_changed = true;
+            }
+            Command::Soft { look_id, part_id, effect_id, field, value } => {
+                self.set_soft(&look_id, &part_id, effect_id.as_deref(), field, value);
+            }
+            Command::SoftCommit => {
+                if self.soft_commit() {
+                    out.project_changed = true;
+                }
+            }
+            Command::SoftClear => {
+                self.soft.clear();
             }
             Command::SetChannel { universe_id, channel, value } => {
                 // protocol is 1-512

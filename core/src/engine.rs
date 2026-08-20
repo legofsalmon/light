@@ -1075,6 +1075,7 @@ fn build_snapshot(
             m.sort(); // stable wire order
             m
         },
+        soft: state.soft_entries(),
         identify: state.identify.clone(),
         overrides: state.overrides.values().map(|m| m.len()).sum(),
         osc_in: osc_status,

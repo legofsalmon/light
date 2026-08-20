@@ -186,6 +186,29 @@ export const DISTRIBUTES: ReadonlySet<Distribute> = new Set<Distribute>([
 ]);
 export const FOLDS: ReadonlySet<Fold> = new Set<Fold>(['none', 'mirror', 'centre']);
 
+/** Parameters a soft override can ride (P1). Part fields are the numeric
+ *  PartParams (hue/sat address the colour components); effect fields are the
+ *  numeric Effect knobs. One vocabulary, shared with P2/P3 bindings later. */
+export type SoftField =
+  | 'dimmer' | 'white' | 'ringFx' | 'strobe' | 'motorValue' | 'pan' | 'tilt'
+  | 'haze' | 'fan' | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'hue' | 'sat'
+  | 'rate' | 'size' | 'spread' | 'width' | 'phase' | 'mix';
+
+/** Per-field clamp for soft values — the engine validates at the door, so the
+ *  renderer never meets an out-of-range ride. Mirrors soft_clamp in
+ *  core/src/state.rs. */
+export function softClamp(field: SoftField, v: number): number | null {
+  if (!Number.isFinite(v)) return null;
+  switch (field) {
+    case 'hue':
+      return clamp(v, 0, 360);
+    case 'rate':
+      return clamp(v, 0.05, 64);
+    default:
+      return clamp(v, 0, 1);
+  }
+}
+
 export type Effect = {
   id: string;
   target: EffectTarget;
@@ -405,6 +428,9 @@ export type Snapshot = {
   haze: number;
   /** Ableton Link session state — native (Rust) engine only */
   link?: { on: boolean; peers: number };
+  /** live soft overrides (P1) — present only while something is ridden, so
+   *  the UI can draw dual-state faders and offer Store/Discard */
+  soft?: { lookId: string; partId: string; effectId?: string; field: SoftField; value: number }[];
   /** Art-Net nodes discovered via ArtPoll (present when polling is active) */
   artnetNodes?: { ip: string; name: string; ageMs: number }[];
   /** 'failed' = reply port 6454 is held by another app — discovery unavailable */
@@ -494,6 +520,16 @@ export type Command =
   // TEST ONLY (LIGHT_TEST_CLOCK gated) — pin the effect clock so a moving effect
   // is byte-comparable between the two engines. Ignored otherwise.
   | { type: '_pinClock'; effBeat: number }
+  /** P1 soft override: ride one stored parameter live without a project
+   *  write (~40 bytes per knob-turn instead of two full project clones).
+   *  Keys are STORAGE-shaped — (look, part[, effect], field) — so a ride
+   *  applies wherever the look plays, and Store writes exactly there.
+   *  value null clears the single override. */
+  | { type: 'soft'; lookId: string; partId: string; effectId?: string; field: SoftField; value: number | null }
+  /** Store: write every soft value into the project (one gen bump), clear */
+  | { type: 'softCommit' }
+  /** Discard: drop every soft value, stored data untouched */
+  | { type: 'softClear' }
   | { type: 'midi'; status: number; d1: number; d2: number }
   /** arm (or cancel with null) engine-side MIDI learn — next note/cc maps to the action */
   | { type: 'learn'; action: MidiAction | null }

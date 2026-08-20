@@ -486,11 +486,21 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       state.releaseAllHeld();
       state.identify = null;
       state.overrides.clear();
+      state.soft.clear(); // rides are transient state; panic drops them too
       state.project.settings.haze = 0;
       state.project.settings.hazeFan = 0; // the fan is the audible one
       state.onChange?.();
       break;
     }
+    case 'soft':
+      state.setSoft(cmd.lookId, cmd.partId, cmd.effectId, cmd.field, cmd.value);
+      break;
+    case 'softCommit':
+      state.softCommit(); // onChange fires inside when anything was written
+      break;
+    case 'softClear':
+      state.soft.clear();
+      break;
     case 'setChannel': {
       const ch = Math.round(cmd.channel) - 1; // protocol is 1-512
       if (ch < 0 || ch > 511) break;
@@ -758,6 +768,7 @@ function loopBody(): void {
       heads: res.heads,
       layers: res.layers,
       ...(state.muted.size > 0 ? { muted: [...state.muted] } : {}),
+      ...(state.soft.size > 0 ? { soft: state.softEntries() } : {}),
       ...(state.identify ? { identify: state.identify } : {}),
       ...((() => {
         let n = 0;

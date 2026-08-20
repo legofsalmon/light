@@ -261,16 +261,22 @@ impl Renderer {
     /// untouched show renders byte-for-byte as before. A rate that is not a
     /// positive finite number carries no continuity (the effect is inactive),
     /// so we only re-anchor `last_rate` without touching `corr`.
-    fn effect_corr(&mut self, layer_id: &str, look_id: &str, part: &crate::types::LookPart) -> Vec<f64> {
+    fn effect_corr(
+        &mut self,
+        layer_id: &str,
+        look_id: &str,
+        part_id: &str,
+        effects: &[crate::types::Effect],
+    ) -> Vec<f64> {
         let beat = self.eff_beat;
         let map = &mut self.rate_corr;
-        part.effects
+        effects
             .iter()
             .map(|e| {
                 let key = (
                     layer_id.to_string(),
                     look_id.to_string(),
-                    part.id.clone(),
+                    part_id.to_string(),
                     e.id.clone(),
                 );
                 let entry = map.entry(key).or_insert(RateCorr { last_rate: e.rate, corr: 0.0 });
@@ -312,10 +318,13 @@ impl Renderer {
             self.eff_beat = 0.0; // never let NaN become absorbing
         }
 
-        // world geometry rebuilds only when the project changed - never per tick
+        // world geometry rebuilds only when the project changed - never per
+        // tick. Soft rides sweep here too: same discipline, and a ride whose
+        // look was deleted out from under it must not linger.
         if self.geom_gen != Some(st.gen) {
             self.geom = build_geometry(&st.project);
             self.extents = build_group_extents(&st.project, &self.geom);
+            st.sweep_soft();
             self.geom_gen = Some(st.gen);
         }
 
@@ -383,8 +392,49 @@ impl Renderer {
                 for part in &look.parts {
                     let Some(group) = st.project.groups.iter().find(|g| g.id == part.group_id) else { continue };
                     let n = group.heads.len();
+                    // P1: resolve the soft layer into an effective view BEFORE
+                    // the seam - stored → soft, one lookup per part, copies
+                    // only when a ride actually targets this part. The
+                    // rate-corr map reads the EFFECTIVE effects, so a soft
+                    // rate ride stays phase-continuous.
+                    // keyed by the RESOLVED look (a cue list renders its
+                    // step's look, and the ride addresses the look being
+                    // edited - the step)
+                    let patch = if st.soft.is_empty() {
+                        None
+                    } else {
+                        st.soft.get(&(look.id.clone(), part.id.clone()))
+                    };
+                    let owned_params;
+                    let eff_params: &crate::types::PartParams = match patch {
+                        Some(p2) if !p2.params.is_empty() => {
+                            let mut p = part.params.clone();
+                            for (f, v) in &p2.params {
+                                crate::state::apply_soft_param(&mut p, *f, *v);
+                            }
+                            owned_params = p;
+                            &owned_params
+                        }
+                        _ => &part.params,
+                    };
+                    let owned_effects;
+                    let eff_effects: &[crate::types::Effect] = match patch {
+                        Some(p2) if !p2.effects.is_empty() => {
+                            let mut es = part.effects.clone();
+                            for e in &mut es {
+                                if let Some(fields) = p2.effects.get(&e.id) {
+                                    for (f, v) in fields {
+                                        crate::state::apply_soft_effect(e, *f, *v);
+                                    }
+                                }
+                            }
+                            owned_effects = es;
+                            &owned_effects
+                        }
+                        _ => &part.effects,
+                    };
                     // one lookup per part per tick, shared by every head
-                    let corr = self.effect_corr(layer_id, &look_id, part);
+                    let corr = self.effect_corr(layer_id, &look_id, &part.id, eff_effects);
                     let ext = self.extents.get(&part.group_id).unwrap_or(&NO_EXTENTS);
                     for (j, r) in group.heads.iter().enumerate() {
                         let key = (r.fixture_id.clone(), r.head);
@@ -395,7 +445,7 @@ impl Renderer {
                         // built both); NO_GEOM is defence in depth, not an
                         // expected path
                         let g = self.geom.get(&key).unwrap_or(&NO_GEOM);
-                        let prm = apply_effects(&part.params, &part.effects, self.eff_beat, &corr, j, n, g, ext);
+                        let prm = apply_effects(eff_params, eff_effects, self.eff_beat, &corr, j, n, g, ext);
                         let a = acc.entry(key).or_default();
                         let mut add_num = |field: Field, v: Option<f64>| {
                             if let Some(v) = v {

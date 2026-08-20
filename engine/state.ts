@@ -1,5 +1,5 @@
-import type { MidiAction, MidiMapping, Project } from '../shared/types.ts';
-import { clamp, sanitizeProject, uid } from '../shared/types.ts';
+import type { MidiAction, MidiMapping, Project, SoftField } from '../shared/types.ts';
+import { clamp, sanitizeProject, softClamp, uid } from '../shared/types.ts';
 import { BeatClock } from './clock.ts';
 
 export type LayerLive = {
@@ -20,6 +20,39 @@ export const LOCAL_CLIENT = Number.MAX_SAFE_INTEGER;
 const freshLive = (): LayerLive => ({ lookId: null, prevId: null, col: null, fadeStart: 0, fadeDur: 0, heldBy: null });
 
 /** Authoritative engine state: the project plus everything live. */
+/** Route one soft part-field onto PartParams. Hue/sat address the colour
+ *  components, creating the colour with the other component at its default
+ *  (s 1 / h 0) when the look never set one. Mirrors apply_soft_param in
+ *  core/src/state.rs — identical routing or stored shows diverge. */
+export function applySoftParam(params: Project['looks'][string]['parts'][number]['params'], field: SoftField, v: number): void {
+  switch (field) {
+    case 'hue':
+      params.color = { h: v, s: params.color?.s ?? 1 };
+      break;
+    case 'sat':
+      params.color = { h: params.color?.h ?? 0, s: v };
+      break;
+    case 'dimmer': case 'white': case 'ringFx': case 'strobe': case 'motorValue':
+    case 'pan': case 'tilt': case 'haze': case 'fan':
+    case 'zoom': case 'focus': case 'iris': case 'frost': case 'cto':
+      params[field] = v;
+      break;
+    default:
+      break; // effect-only fields never reach a params patch (setSoft routes)
+  }
+}
+
+/** Route one soft effect-field onto an Effect. */
+export function applySoftEffect(e: import('../shared/types.ts').Effect, field: SoftField, v: number): void {
+  switch (field) {
+    case 'rate': case 'size': case 'spread': case 'width': case 'phase': case 'mix':
+      e[field] = v;
+      break;
+    default:
+      break;
+  }
+}
+
 export class EngineState {
   project: Project;
   live = new Map<string, LayerLive>();
@@ -35,6 +68,11 @@ export class EngineState {
   previewLook: string | null = null;
   /** universeId -> channel(0-511) -> value. Raw override applied last. */
   overrides = new Map<string, Map<number, number>>();
+  /** P1 soft overrides: live rides over stored look data, keyed
+   *  "lookId partId" and grouped per part so the renderer resolves a
+   *  whole part with ONE lookup. Runtime-only — Store (softCommit) writes
+   *  them into the project, Discard/ALL STOP/project switch drops them. */
+  soft = new Map<string, { params: Map<SoftField, number>; effects: Map<string, Map<SoftField, number>> }>();
   clock = new BeatClock();
   master = 1;
   speed = 1;
@@ -298,12 +336,117 @@ export class EngineState {
     this.project = clean;
     this.live.clear();
     this.overrides.clear();
+    this.soft.clear(); // rides belong to the show they were ridden in
     this.identify = null;
     this.muted.clear();
     this.previewLook = null;
     this.project.settings.haze = 0;
     this.project.settings.hazeFan = 0;
     this.onChange?.();
+  }
+
+  /** Ingest one soft override (P1). Validates the address against the CURRENT
+   *  project and clamps the value at the door, so the renderer never meets a
+   *  dangling or out-of-range ride. value null clears the single entry. */
+  setSoft(lookId: string, partId: string, effectId: string | undefined, field: SoftField, value: number | null): boolean {
+    const look = Object.hasOwn(this.project.looks, lookId) ? this.project.looks[lookId] : undefined;
+    const part = look?.parts.find((pt) => pt.id === partId);
+    if (!part) return false;
+    if (effectId !== undefined && !part.effects.some((e) => e.id === effectId)) return false;
+    const key = `${lookId} ${partId}`;
+    if (value === null) {
+      const patch = this.soft.get(key);
+      if (!patch) return false;
+      if (effectId !== undefined) {
+        const ef = patch.effects.get(effectId);
+        ef?.delete(field);
+        if (ef && ef.size === 0) patch.effects.delete(effectId);
+      } else {
+        patch.params.delete(field);
+      }
+      if (patch.params.size === 0 && patch.effects.size === 0) this.soft.delete(key);
+      return true;
+    }
+    const v = softClamp(field, value);
+    if (v === null) return false;
+    let patch = this.soft.get(key);
+    if (!patch) {
+      patch = { params: new Map(), effects: new Map() };
+      this.soft.set(key, patch);
+    }
+    if (effectId !== undefined) {
+      let ef = patch.effects.get(effectId);
+      if (!ef) {
+        ef = new Map();
+        patch.effects.set(effectId, ef);
+      }
+      ef.set(field, v);
+    } else {
+      patch.params.set(field, v);
+    }
+    return true;
+  }
+
+  /** Flat view of the live rides, for the snapshot. */
+  softEntries(): { lookId: string; partId: string; effectId?: string; field: SoftField; value: number }[] {
+    const out: { lookId: string; partId: string; effectId?: string; field: SoftField; value: number }[] = [];
+    for (const [key, patch] of this.soft) {
+      const [lookId, partId] = key.split(' ');
+      for (const [field, value] of patch.params) out.push({ lookId, partId, field, value });
+      for (const [effectId, fields] of patch.effects) {
+        for (const [field, value] of fields) out.push({ lookId, partId, effectId, field, value });
+      }
+    }
+    return out;
+  }
+
+  /** Store: write every soft value into the project, then clear. Returns
+   *  whether anything was written (→ gen bump + broadcast). Mirrors
+   *  soft_commit in core/src/state.rs — the two engines must apply the
+   *  identical field routing or their stored shows diverge. */
+  softCommit(): boolean {
+    let changed = false;
+    for (const [key, patch] of this.soft) {
+      const [lookId, partId] = key.split(' ');
+      const look = Object.hasOwn(this.project.looks, lookId) ? this.project.looks[lookId] : undefined;
+      const part = look?.parts.find((pt) => pt.id === partId);
+      if (!part) continue; // swept-away address — nothing to store
+      for (const [field, v] of patch.params) {
+        applySoftParam(part.params, field, v);
+        changed = true;
+      }
+      for (const [effectId, fields] of patch.effects) {
+        const e = part.effects.find((x) => x.id === effectId);
+        if (!e) continue;
+        for (const [field, v] of fields) {
+          applySoftEffect(e, field, v);
+          changed = true;
+        }
+      }
+    }
+    this.soft.clear();
+    if (changed) this.onChange?.();
+    return changed;
+  }
+
+  /** Drop rides whose look/part/effect no longer exists — called from the
+   *  renderer's gen-gated rebuild, so every project change sweeps exactly
+   *  once, in both engines, with the same discipline as the geometry cache. */
+  sweepSoft(): void {
+    if (this.soft.size === 0) return;
+    for (const [key, patch] of this.soft) {
+      const [lookId, partId] = key.split(' ');
+      const look = Object.hasOwn(this.project.looks, lookId) ? this.project.looks[lookId] : undefined;
+      const part = look?.parts.find((pt) => pt.id === partId);
+      if (!part) {
+        this.soft.delete(key);
+        continue;
+      }
+      for (const effectId of patch.effects.keys()) {
+        if (!part.effects.some((e) => e.id === effectId)) patch.effects.delete(effectId);
+      }
+      if (patch.params.size === 0 && patch.effects.size === 0) this.soft.delete(key);
+    }
   }
 
   /** Sets `repairedSubmission` when the sanitiser changed what arrived — the

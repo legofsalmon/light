@@ -7,6 +7,8 @@ import { applyEffects } from '../shared/effects.ts';
 import { NO_EXTENTS, NO_GEOM, buildGeometry, buildGroupExtents, type GroupExtents, type HeadGeom } from '../shared/geometry.ts';
 import { DERBY_MACROS, derbyMacroForValue, derbyQuantize, hsvToRgb, rgbToHsv } from '../shared/color.ts';
 import type { EngineState } from './state.ts';
+import { applySoftEffect, applySoftParam } from './state.ts';
+import type { Effect, PartParams, SoftField } from '../shared/types.ts';
 
 // Fixtures whose render already threw once. A bad fixture must not be able to
 // spam the log at 40 Hz, and it must not be able to take the tick down either.
@@ -84,10 +86,10 @@ export class Renderer {
    *  whose rate never changes yields 0 every tick, so an untouched show renders
    *  byte-for-byte as before. A non-positive rate carries no continuity (the
    *  effect is inactive), so we only re-anchor lastRate without touching corr. */
-  private effectCorr(layerId: string, lookId: string, part: LookPart): number[] {
+  private effectCorr(layerId: string, lookId: string, partId: string, effects: Effect[]): number[] {
     const beat = this.effBeat;
-    return part.effects.map((e) => {
-      const key = `${layerId} ${lookId} ${part.id} ${e.id}`;
+    return effects.map((e) => {
+      const key = `${layerId} ${lookId} ${partId} ${e.id}`;
       let entry = this.rateCorr.get(key);
       if (!entry) {
         entry = { lastRate: e.rate, corr: 0 };
@@ -182,10 +184,13 @@ export class Renderer {
     if (!this.pinned) this.effBeat += (dt / 60000) * st.clock.bpm * st.speed;
     if (!Number.isFinite(this.effBeat)) this.effBeat = 0; // never let NaN become absorbing
 
-    // world geometry rebuilds only when the project changed — never per tick
+    // world geometry rebuilds only when the project changed — never per tick.
+    // Soft rides sweep here too: same discipline, and a ride whose look was
+    // deleted out from under it must not linger as a dangling address.
     if (this.geomGen !== st.gen) {
       this.geom = buildGeometry(p);
       this.extents = buildGroupExtents(p, this.geom);
+      st.sweepSoft();
       this.geomGen = st.gen;
     }
 
@@ -231,8 +236,30 @@ export class Renderer {
           const refs = groupHeads.get(part.groupId);
           if (!refs) continue;
           const n = refs.length;
+          // P1: resolve the soft layer into an effective view BEFORE the
+          // seam — stored → soft, one lookup per part, copies only when a
+          // ride actually targets this part. The rate-corr map reads the
+          // EFFECTIVE effects, so a soft rate ride stays phase-continuous.
+          // keyed by the RESOLVED look (a cue list renders its step's look,
+          // and the ride addresses the look being edited — the step)
+          const patch = st.soft.size > 0 ? st.soft.get(`${look.id} ${part.id}`) : undefined;
+          let effParams = part.params;
+          if (patch && patch.params.size > 0) {
+            effParams = { ...part.params, color: part.params.color ? { ...part.params.color } : undefined };
+            for (const [field, v] of patch.params) applySoftParam(effParams, field, v);
+          }
+          let effEffects = part.effects;
+          if (patch && patch.effects.size > 0) {
+            effEffects = part.effects.map((e) => {
+              const fields = patch.effects.get(e.id);
+              if (!fields) return e;
+              const c = { ...e };
+              for (const [field, v] of fields) applySoftEffect(c, field, v);
+              return c;
+            });
+          }
           // one lookup per part per tick, shared by every head
-          const corr = this.effectCorr(layer.id, src.lookId, part);
+          const corr = this.effectCorr(layer.id, src.lookId, part.id, effEffects);
           const ext = this.extents.get(part.groupId) ?? NO_EXTENTS;
           for (let j = 0; j < n; j++) {
             const ref = refs[j];
@@ -241,7 +268,7 @@ export class Renderer {
             // present in `heads` ⇒ present in geom (same enumeration built
             // both); NO_GEOM is defence in depth, not an expected path
             const g = this.geom.get(key) ?? NO_GEOM;
-            const prm = applyEffects(part.params, part.effects, this.effBeat, corr, j, n, g, ext);
+            const prm = applyEffects(effParams, effEffects, this.effBeat, corr, j, n, g, ext);
             let a = acc.get(key);
             if (!a) {
               a = { num: {}, beam: {}, col: null, motorMode: null, macro: undefined };
