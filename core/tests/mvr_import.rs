@@ -104,3 +104,81 @@ fn rejects_garbage() {
     }
     assert!(parse_mvr(&buf).is_err());
 }
+
+/// A scene nested absurdly deep must not overflow the import worker's stack
+/// (a hard SIGABRT). It is refused with a clear error, before roxmltree — whose
+/// own tree build/drop recurses — ever sees it.
+#[test]
+fn pathologically_deep_scene_is_refused_not_fatal() {
+    let mut scene = String::from(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<GeneralSceneDescription verMajor="1" verMinor="6"><Scene><Layers><Layer name="Deep">"#,
+    );
+    // 10000 levels of real nesting — far past what roxmltree survives
+    for _ in 0..5000 {
+        scene.push_str("<GroupObject><ChildList>");
+    }
+    scene.push_str(
+        r#"<Fixture name="Buried"><GDTFSpec>TestSpot.gdtf</GDTFSpec><GDTFMode>Standard</GDTFMode><Addresses><Address break="0">1</Address></Addresses></Fixture>"#,
+    );
+    for _ in 0..5000 {
+        scene.push_str("</ChildList></GroupObject>");
+    }
+    scene.push_str("</Layer></Layers></Scene></GeneralSceneDescription>");
+
+    let mut buf = Vec::new();
+    {
+        let mut z = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts = zip::write::SimpleFileOptions::default();
+        z.start_file::<_, ()>("GeneralSceneDescription.xml", opts).unwrap();
+        z.write_all(scene.as_bytes()).unwrap();
+        z.finish().unwrap();
+    }
+    // returns Err rather than crashing the process
+    let r = parse_mvr(&buf);
+    assert!(r.is_err(), "a depth-bomb MVR is refused");
+    assert!(r.unwrap_err().contains("deeper"), "the error names the depth limit");
+}
+
+/// A moderately deep but legal scene (well under the guard limit) still imports
+/// normally — the guard must not punish real, if unusual, nesting.
+#[test]
+fn moderately_deep_scene_still_imports() {
+    let gdtf_xml = include_str!("data/synthetic.gdtf.xml");
+    let mut gdtf = Vec::new();
+    {
+        let mut z = zip::ZipWriter::new(std::io::Cursor::new(&mut gdtf));
+        z.start_file::<_, ()>("description.xml", zip::write::SimpleFileOptions::default()).unwrap();
+        z.write_all(gdtf_xml.as_bytes()).unwrap();
+        z.finish().unwrap();
+    }
+    let mut scene = String::from(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<GeneralSceneDescription verMajor="1" verMinor="6"><Scene><Layers><Layer name="Nested">"#,
+    );
+    // 100 levels of grouping — unusual but legal, comfortably under the limit
+    for _ in 0..50 {
+        scene.push_str("<GroupObject><ChildList>");
+    }
+    scene.push_str(
+        r#"<Fixture name="Deep One"><GDTFSpec>TestSpot.gdtf</GDTFSpec><GDTFMode>Standard</GDTFMode><Addresses><Address break="0">1</Address></Addresses></Fixture>"#,
+    );
+    for _ in 0..50 {
+        scene.push_str("</ChildList></GroupObject>");
+    }
+    scene.push_str("</Layer></Layers></Scene></GeneralSceneDescription>");
+
+    let mut buf = Vec::new();
+    {
+        let mut z = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts = zip::write::SimpleFileOptions::default();
+        z.start_file::<_, ()>("GeneralSceneDescription.xml", opts).unwrap();
+        z.write_all(scene.as_bytes()).unwrap();
+        z.start_file::<_, ()>("TestSpot.gdtf", opts).unwrap();
+        z.write_all(&gdtf).unwrap();
+        z.finish().unwrap();
+    }
+    let b = parse_mvr(&buf).expect("a 100-deep scene parses");
+    assert_eq!(b.fixtures.len(), 1);
+    assert_eq!(b.fixtures[0].name, "Deep One");
+}

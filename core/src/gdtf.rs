@@ -11,6 +11,104 @@ use std::io::{Cursor, Read};
 use crate::cprofile::{CChannel, CHead, CompiledProfile, Cond, Func, FuncCase, Source, WheelSet};
 use crate::profiles::HeadKind;
 
+/// Deepest element nesting we will hand to roxmltree. Its tree construction and
+/// drop recurse, overflowing the stack on the order of ten thousand levels deep
+/// — a hard SIGABRT the panic hook cannot catch — so a crafted `.mvr` or
+/// `.gdtf` from an untrusted LAN client (or a corrupt file) could kill the
+/// engine on import. Real scenes and fixtures nest a handful of levels; this
+/// bound is orders of magnitude of headroom, verified in one linear byte pass
+/// that never itself recurses. Both roxmltree parse sites (GDTF here, MVR in
+/// `mvr.rs`) go through `guard_xml_depth` first.
+const MAX_XML_DEPTH: i32 = 512;
+
+/// Refuse XML nested deeper than [`MAX_XML_DEPTH`] before roxmltree ever sees
+/// it. Conservative by construction: it counts element open/close depth and
+/// steps over comments, CDATA, processing instructions and declarations so
+/// their contents cannot be mistaken for structure. Miscounting can only make
+/// it stricter (reject a valid-but-absurd file), never let a bomb through.
+pub(crate) fn guard_xml_depth(xml: &str) -> Result<(), String> {
+    let b = xml.as_bytes();
+    let n = b.len();
+    let find = |from: usize, needle: &[u8]| -> Option<usize> {
+        if from > n || needle.is_empty() || from + needle.len() > n {
+            return None;
+        }
+        b[from..].windows(needle.len()).position(|w| w == needle).map(|p| p + from)
+    };
+    let mut i = 0usize;
+    let mut depth: i32 = 0;
+    while i < n {
+        if b[i] != b'<' {
+            i += 1;
+            continue;
+        }
+        if b[i..].starts_with(b"<!--") {
+            match find(i + 4, b"-->") {
+                Some(j) => i = j + 3,
+                None => break,
+            }
+        } else if b[i..].starts_with(b"<![CDATA[") {
+            match find(i + 9, b"]]>") {
+                Some(j) => i = j + 3,
+                None => break,
+            }
+        } else if b.get(i + 1) == Some(&b'!') {
+            // DOCTYPE / declaration — step to its '>' (best effort)
+            match find(i + 2, b">") {
+                Some(j) => i = j + 1,
+                None => break,
+            }
+        } else if b.get(i + 1) == Some(&b'?') {
+            match find(i + 2, b"?>") {
+                Some(j) => i = j + 2,
+                None => break,
+            }
+        } else if b.get(i + 1) == Some(&b'/') {
+            depth -= 1;
+            match find(i + 2, b">") {
+                Some(j) => i = j + 1,
+                None => break,
+            }
+        } else {
+            // an opening tag; scan to its unquoted '>' noting self-closing '/>'
+            let mut j = i + 1;
+            let mut quote: u8 = 0;
+            let mut last_nonspace: u8 = 0;
+            let mut end = None;
+            while j < n {
+                let c = b[j];
+                if quote != 0 {
+                    if c == quote {
+                        quote = 0;
+                    }
+                } else if c == b'"' || c == b'\'' {
+                    quote = c;
+                } else if c == b'>' {
+                    end = Some(j);
+                    break;
+                }
+                if !c.is_ascii_whitespace() {
+                    last_nonspace = c;
+                }
+                j += 1;
+            }
+            if last_nonspace != b'/' {
+                depth += 1;
+                if depth > MAX_XML_DEPTH {
+                    return Err(format!(
+                        "XML nested deeper than {MAX_XML_DEPTH} levels — refused as malformed"
+                    ));
+                }
+            }
+            match end {
+                Some(j) => i = j + 1,
+                None => break,
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn parse_gdtf(bytes: &[u8]) -> Result<Vec<CompiledProfile>, String> {
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| format!("not a zip: {e}"))?;
     let mut xml = String::new();
@@ -59,6 +157,7 @@ struct WheelDef {
 }
 
 fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
+    guard_xml_depth(xml)?;
     let doc = roxmltree::Document::parse(xml).map_err(|e| format!("bad XML: {e}"))?;
     let ft = doc
         .descendants()
@@ -460,4 +559,70 @@ fn synthesize_heads(
         ch.head = head.max(0) as usize;
     }
     (head + 1).max(1) as usize
+}
+
+#[cfg(test)]
+mod depth_guard_tests {
+    use super::guard_xml_depth;
+
+    fn chain(open: &str, close: &str, n: usize) -> String {
+        let mut s = String::from("<root>");
+        for _ in 0..n {
+            s.push_str(open);
+        }
+        for _ in 0..n {
+            s.push_str(close);
+        }
+        s.push_str("</root>");
+        s
+    }
+
+    #[test]
+    fn accepts_shallow_and_flat() {
+        assert!(guard_xml_depth("<a><b/><c>x</c></a>").is_ok());
+        // 5000 flat siblings are only depth 2 — must not be refused
+        let mut s = String::from("<root>");
+        for _ in 0..5000 {
+            s.push_str("<f/>");
+        }
+        s.push_str("</root>");
+        assert!(guard_xml_depth(&s).is_ok());
+    }
+
+    #[test]
+    fn refuses_a_deep_chain() {
+        assert!(guard_xml_depth(&chain("<g>", "</g>", 100)).is_ok());
+        assert!(guard_xml_depth(&chain("<g>", "</g>", 600)).is_err());
+    }
+
+    #[test]
+    fn self_closing_tags_do_not_accumulate_depth() {
+        // 2000 self-closing siblings stay at depth 1, well under the limit
+        let mut s = String::from("<root>");
+        for _ in 0..2000 {
+            s.push_str("<f a=\"1\"/>");
+        }
+        s.push_str("</root>");
+        assert!(guard_xml_depth(&s).is_ok());
+    }
+
+    #[test]
+    fn structure_inside_comments_and_cdata_is_ignored() {
+        let mut s = String::from("<root><!-- ");
+        for _ in 0..2000 {
+            s.push_str("<g>");
+        }
+        s.push_str(" --><![CDATA[");
+        for _ in 0..2000 {
+            s.push_str("<g>");
+        }
+        s.push_str("]]></root>");
+        assert!(guard_xml_depth(&s).is_ok(), "fake tags in comments/CDATA must not count");
+    }
+
+    #[test]
+    fn quoted_gt_does_not_close_a_tag() {
+        // the '>' inside the attribute value must not be read as the tag end
+        assert!(guard_xml_depth("<a b=\"x &gt; y\"><c d='p>q'/></a>").is_ok());
+    }
 }

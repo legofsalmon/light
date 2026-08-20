@@ -42,7 +42,7 @@ pub fn drain_ws(rx: Res<WsReceiver>, mut live: ResMut<Live>) {
                     ));
                 }
                 let mut prof_ids: Vec<_> = p.profiles.iter().collect();
-                prof_ids.sort_by_key(|(id, _)| id.clone());
+                prof_ids.sort_by(|a, b| a.0.cmp(b.0));
                 for (id, cp) in prof_ids {
                     sig.push_str(&format!("{}#{};", id, cp.heads.len()));
                 }
