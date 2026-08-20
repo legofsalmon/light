@@ -667,16 +667,10 @@ fn parse_pixel_layout(
         // depth (GDTF Y) is dropped - a pixel face is planar
         px.push((p[0], p[2]));
     }
-    // Unit heuristic: the spec says metres, console exports have shipped mm;
-    // no fixture face is 5 m wide, so larger magnitudes are millimetres.
-    let max_abs = px.iter().fold(0.0f64, |m, &(x, y)| m.max(x.abs()).max(y.abs()));
-    if max_abs > 5.0 {
-        for p in &mut px {
-            p.0 *= 0.001;
-            p.1 *= 0.001;
-        }
-    }
-    // Centre the layout: LIGHT treats fixture.pos as the visual centre.
+    // Centre the layout FIRST: LIGHT treats fixture.pos as the visual centre,
+    // and centring first makes the unit heuristic below depend on the
+    // fixture's physical extent rather than where the author happened to put
+    // the geometry origin.
     let n = px.len() as f64;
     let cx = px.iter().map(|p| p.0).sum::<f64>() / n;
     let cy = px.iter().map(|p| p.1).sum::<f64>() / n;
@@ -685,13 +679,29 @@ fn parse_pixel_layout(
         p.1 -= cy;
     }
     // Degenerate (all pixels at one point): the flat-export signature.
-    let span = px.iter().fold(0.0f64, |m, &(x, y)| m.max(x.abs()).max(y.abs()));
-    if span < 1e-4 {
+    let span_raw = px.iter().fold(0.0f64, |m, &(x, y)| m.max(x.abs()).max(y.abs()));
+    if span_raw < 1e-4 {
         return None;
     }
-    // Rows: cluster the vertical offsets top-down with a 5 mm tolerance;
-    // cols: x order within each row. Reading order, deterministic (stable
-    // sort; ties keep head order).
+    // Unit heuristic: the spec says metres, console exports have shipped mm;
+    // no fixture face is 5 m wide, so a centred extent above 5 is millimetres.
+    if span_raw > 5.0 {
+        for p in &mut px {
+            p.0 *= 0.001;
+            p.1 *= 0.001;
+        }
+    }
+    // A span still over 5 m is wrong under EITHER unit reading — refuse it
+    // and keep the synthesized fallback rather than a 100 m-wide "fixture".
+    let span = px.iter().fold(0.0f64, |m, &(x, y)| m.max(x.abs()).max(y.abs()));
+    if span > 5.0 {
+        return None;
+    }
+    // Rows: sort top-down, then break where the gap between CONSECUTIVE
+    // vertical values exceeds 5 mm (single-linkage — a tilted bar whose y
+    // drifts gradually stays ONE row instead of fragmenting at every 5 mm of
+    // cumulative drift). Cols run in x order WITHIN each row, re-sorted after
+    // clustering so sub-tolerance jitter cannot scramble the chase direction.
     let mut order: Vec<usize> = (0..px.len()).collect();
     order.sort_by(|&a, &b| {
         px[b].1
@@ -699,20 +709,28 @@ fn parse_pixel_layout(
             .unwrap_or(std::cmp::Ordering::Equal)
             .then(px[a].0.partial_cmp(&px[b].0).unwrap_or(std::cmp::Ordering::Equal))
     });
+    let mut rows: Vec<Vec<usize>> = Vec::new();
+    let mut prev_y = px[order[0]].1;
+    for &i in &order {
+        if rows.is_empty() || (prev_y - px[i].1) > 0.005 {
+            rows.push(Vec::new());
+        }
+        prev_y = px[i].1;
+        rows.last_mut().unwrap().push(i);
+    }
     let mut row_of = vec![0usize; px.len()];
     let mut col_of = vec![0usize; px.len()];
-    let mut row = 0usize;
-    let mut col = 0usize;
-    let mut row_y = px[order[0]].1;
-    for (k, &i) in order.iter().enumerate() {
-        if k > 0 && (row_y - px[i].1) > 0.005 {
-            row += 1;
-            col = 0;
-            row_y = px[i].1;
+    for (r, members) in rows.iter_mut().enumerate() {
+        members.sort_by(|&a, &b| {
+            px[a].0
+                .partial_cmp(&px[b].0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.cmp(&b)) // deterministic on exact x ties
+        });
+        for (c, &i) in members.iter().enumerate() {
+            row_of[i] = r;
+            col_of[i] = c;
         }
-        row_of[i] = row;
-        col_of[i] = col;
-        col += 1;
     }
     Some(
         (0..px.len())

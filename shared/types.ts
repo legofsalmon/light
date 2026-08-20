@@ -720,6 +720,21 @@ export function sanitizeProject(p: Project): Project | null {
     if (f.rotX !== undefined && !Number.isFinite(f.rotX)) delete f.rotX;
     if (f.rotZ !== undefined && !Number.isFinite(f.rotZ)) delete f.rotZ;
   }
+  // Profile head spatial fields (B1): geometry consumes offset/offsetY/row/col
+  // now, so both engines must land on identical values for any wire shape —
+  // Rust's de_metres/de_index repair non-finite to 0 and indices to floor≥0,
+  // and this is the Node mirror. Kind/channels stay untouched: they were
+  // machine-generated and unvalidated long before B1.
+  for (const prof of Object.values(p.profiles ?? {})) {
+    if (!prof || !Array.isArray(prof.heads)) continue;
+    for (const h of prof.heads) {
+      if (!h || typeof h !== 'object') continue;
+      if (!Number.isFinite(h.offset)) h.offset = 0;
+      if (h.offsetY !== undefined && !Number.isFinite(h.offsetY)) delete h.offsetY;
+      if (h.row !== undefined) h.row = Number.isFinite(h.row) ? Math.max(0, Math.floor(h.row)) : 0;
+      if (h.col !== undefined) h.col = Number.isFinite(h.col) ? Math.max(0, Math.floor(h.col)) : 0;
+    }
+  }
   // FX pool: tolerant like the effect repair above (de_fx_pool in Rust). A
   // preset with no id or an unrepairable effect is dropped, not fatal. Cleared
   // when empty to match the engine's skip-empty serialisation.

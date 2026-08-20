@@ -84,7 +84,41 @@ mod uid_tests {
 /// engines cannot disagree the way a structural f64 compare would.
 fn layout_sig(p: &crate::cprofile::CompiledProfile) -> String {
     let names: Vec<&str> = p.channels.iter().map(|c| c.name.as_str()).collect();
-    format!("{}|{}|{}", p.footprint, p.heads.len(), names.join(","))
+    // The head layout signs too (B1): since the layout editor, offsets and
+    // row/col are operator-authored state — a re-import that changes them is a
+    // replacement worth announcing. Engine-local strings, never compared
+    // across engines, so the float formatting needs no parity discipline.
+    let heads: Vec<String> = p
+        .heads
+        .iter()
+        .map(|h| format!("{:.4},{:.4},{},{}", h.offset, h.offset_y, h.row, h.col))
+        .collect();
+    format!("{}|{}|{}|{}", p.footprint, p.heads.len(), names.join(","), heads.join(";"))
+}
+
+/// An operator-authored pixel layout must survive a re-import that brings no
+/// layout of its own. The flat fallback is recognisable — every head at
+/// (row 0, col 0) — and a stored non-flat layout on a same-shape profile is
+/// strictly better informed than that, so it wins, silently (nothing is
+/// lost, so there is nothing to warn about). A file that carries REAL parsed
+/// geometry has non-flat heads and stays authoritative — re-importing a
+/// corrected file must still correct, and describe_profile_replacement
+/// announces the layout change.
+fn preserve_authored_layout(project: &Project, incoming: &mut crate::cprofile::CompiledProfile) {
+    let Some(existing) = project.profiles.get(&incoming.id) else { return };
+    if existing.heads.len() != incoming.heads.len() {
+        return;
+    }
+    let flat =
+        |hs: &[crate::cprofile::CHead]| hs.iter().all(|h| h.row == 0 && h.col == 0);
+    if flat(&incoming.heads) && !flat(&existing.heads) {
+        for (inc, ex) in incoming.heads.iter_mut().zip(&existing.heads) {
+            inc.offset = ex.offset;
+            inc.offset_y = ex.offset_y;
+            inc.row = ex.row;
+            inc.col = ex.col;
+        }
+    }
 }
 
 /// Replacing a profile that fixtures are patched to rewrites what every one of
@@ -619,6 +653,7 @@ impl EngineState {
                     // Attribution travels with the profile into the project
                     // file — see CompiledProfile::credit.
                     p.credit = credit.clone();
+                    preserve_authored_layout(&self.project, &mut p);
                     if let Some(note) = describe_profile_replacement(&self.project, &p) {
                         replaced.push(note);
                     }
@@ -717,7 +752,8 @@ impl EngineState {
             let _ = t;
         }
         let mut replaced: Vec<String> = Vec::new();
-        for (id, p) in bundle.profiles {
+        for (id, mut p) in bundle.profiles {
+            preserve_authored_layout(&self.project, &mut p);
             if let Some(note) = describe_profile_replacement(&self.project, &p) {
                 replaced.push(note);
             }

@@ -109,18 +109,22 @@ pub struct CChannel {
 #[serde(rename_all = "camelCase")]
 pub struct CHead {
     pub kind: HeadKind,
-    /// metres along the fixture's local X axis
+    /// metres along the fixture's local X axis. Tolerant: the Node sanitizer
+    /// repairs a non-finite/absent spatial field to 0, and the two engines
+    /// must land on the same values or geometry diverges — so a shape Node
+    /// repairs must never fail the whole Rust project load.
+    #[serde(default, deserialize_with = "de_metres")]
     pub offset: f64,
     /// metres along the fixture's local Y axis (up) — B1: real pixel layouts
     /// are 2D. Defaults keep every pre-B1 save loading as a flat bar.
-    #[serde(default, skip_serializing_if = "is_zero")]
+    #[serde(default, deserialize_with = "de_metres", skip_serializing_if = "is_zero")]
     pub offset_y: f64,
     /// grid coordinates within the fixture (row 0 = top). When EVERY head of a
     /// profile is (0, 0) — pre-B1 saves, single-row imports — the geometry
     /// builder falls back to col = head index, one row.
-    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    #[serde(default, deserialize_with = "de_index", skip_serializing_if = "is_zero_usize")]
     pub row: usize,
-    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    #[serde(default, deserialize_with = "de_index", skip_serializing_if = "is_zero_usize")]
     pub col: usize,
     pub label: String,
 }
@@ -131,6 +135,24 @@ fn is_zero(v: &f64) -> bool {
 
 fn is_zero_usize(v: &usize) -> bool {
     *v == 0
+}
+
+/// Finite number or 0 — mirrors the Node sanitizer's profile-head repair.
+fn de_metres<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(match v.as_ref().and_then(|x| x.as_f64()) {
+        Some(n) if n.is_finite() => n,
+        _ => 0.0,
+    })
+}
+
+/// Non-negative integer or 0 (floor, clamp) — mirrors the Node sanitizer.
+fn de_index<'de, D: serde::Deserializer<'de>>(d: D) -> Result<usize, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(match v.as_ref().and_then(|x| x.as_f64()) {
+        Some(n) if n.is_finite() && n >= 0.0 => n.floor() as usize,
+        _ => 0,
+    })
 }
 
 impl CHead {
@@ -562,4 +584,33 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
     });
 
     out
+}
+
+#[cfg(test)]
+mod head_repair_tests {
+    use super::*;
+
+    #[test]
+    fn malformed_spatial_fields_repair_instead_of_failing_the_project() {
+        // a shape the Node sanitizer repairs must never fail the Rust load —
+        // geometry consumes these fields now, so both engines must land on
+        // the same values (finite-or-0; indices floor≥0-or-0)
+        let h: CHead = serde_json::from_str(
+            r#"{"kind":"rgb","offset":null,"offsetY":"oops","row":1.7,"col":-3,"label":"px"}"#,
+        )
+        .expect("malformed spatial fields must load");
+        assert_eq!(h.offset, 0.0);
+        assert_eq!(h.offset_y, 0.0);
+        assert_eq!(h.row, 1, "1.7 floors to 1, matching Math.floor");
+        assert_eq!(h.col, 0, "negative clamps to 0");
+    }
+
+    #[test]
+    fn good_spatial_fields_pass_through() {
+        let h: CHead = serde_json::from_str(
+            r#"{"kind":"rgb","offset":-0.25,"offsetY":0.1,"row":2,"col":5,"label":"px"}"#,
+        )
+        .unwrap();
+        assert_eq!((h.offset, h.offset_y, h.row, h.col), (-0.25, 0.1, 2, 5));
+    }
 }

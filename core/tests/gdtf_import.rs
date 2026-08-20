@@ -318,3 +318,138 @@ fn metre_scale_positions_skip_the_mm_heuristic() {
     let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
     assert!(near(p.heads[0].offset, -0.3) && near(p.heads[1].offset, 0.3), "got {}", p.heads[0].offset);
 }
+
+#[test]
+fn jittered_rows_keep_x_order() {
+    // review repro: 2 mm of z jitter (inside the 5 mm row tolerance) must NOT
+    // scramble cols — the row re-sorts by x after clustering
+    let geoms = format!(
+        r#"<Geometry Name="Base">
+             <Geometry Name="PxA" Position="{I3}{{-300,0,2,1}}"/>
+             <Geometry Name="PxB" Position="{I3}{{-100,0,0,1}}"/>
+             <Geometry Name="PxC" Position="{I3}{{100,0,2,1}}"/>
+             <Geometry Name="PxD" Position="{I3}{{300,0,0,1}}"/>
+           </Geometry>"#
+    );
+    let xml = pixel_bar_xml(&geoms, &["PxA", "PxB", "PxC", "PxD"]);
+    let p = &parse_gdtf(&zip_xml(&xml)).expect("parses")[0];
+    assert_eq!(
+        p.heads.iter().map(|h| (h.row, h.col)).collect::<Vec<_>>(),
+        vec![(0, 0), (0, 1), (0, 2), (0, 3)],
+        "one jittered row, cols strictly in x order"
+    );
+}
+
+#[test]
+fn a_tilted_strip_stays_one_row() {
+    // y drifts 2 mm per pixel (8 mm total): consecutive gaps stay under the
+    // 5 mm tolerance, so this is ONE tilted row — not fragments of two
+    let geoms = format!(
+        r#"<Geometry Name="Base">
+             <Geometry Name="PxA" Position="{I3}{{-300,0,0,1}}"/>
+             <Geometry Name="PxB" Position="{I3}{{-100,0,2,1}}"/>
+             <Geometry Name="PxC" Position="{I3}{{100,0,4,1}}"/>
+             <Geometry Name="PxD" Position="{I3}{{300,0,6,1}}"/>
+           </Geometry>"#
+    );
+    let xml = pixel_bar_xml(&geoms, &["PxA", "PxB", "PxC", "PxD"]);
+    let p = &parse_gdtf(&zip_xml(&xml)).expect("parses")[0];
+    assert!(p.heads.iter().all(|h| h.row == 0), "gradual drift is one row");
+    assert_eq!(
+        p.heads.iter().map(|h| h.col).collect::<Vec<_>>(),
+        vec![0, 1, 2, 3]
+    );
+}
+
+#[test]
+fn an_off_origin_mm_file_is_classified_by_extent() {
+    // pixels 5 m from the author's origin, 40 mm apart: the unit heuristic
+    // must see the CENTRED 40 mm extent (mm-scale pitch, metres reading),
+    // not the 5000 raw magnitude
+    let geoms = format!(
+        r#"<Geometry Name="Base">
+             <Geometry Name="PxA" Position="{I3}{{5000,0,0,1}}"/>
+             <Geometry Name="PxB" Position="{I3}{{5040,0,0,1}}"/>
+           </Geometry>"#
+    );
+    let xml = pixel_bar_xml(&geoms, &["PxA", "PxB"]);
+    let p = &parse_gdtf(&zip_xml(&xml)).expect("parses")[0];
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+    // centred ±20, raw > 5 → mm → ±0.02 m
+    assert!(near(p.heads[0].offset, -0.02), "got {}", p.heads[0].offset);
+    assert!(near(p.heads[1].offset, 0.02));
+}
+
+#[test]
+fn an_absurd_span_falls_back_to_synthesized() {
+    // ±6000 raw → mm reading → still ±6 m: wrong under either unit, so the
+    // synthesized fallback wins over a 12 m-wide "fixture"
+    let geoms = format!(
+        r#"<Geometry Name="Base">
+             <Geometry Name="PxA" Position="{I3}{{-6000,0,0,1}}"/>
+             <Geometry Name="PxB" Position="{I3}{{6000,0,0,1}}"/>
+           </Geometry>"#
+    );
+    let xml = pixel_bar_xml(&geoms, &["PxA", "PxB"]);
+    let p = &parse_gdtf(&zip_xml(&xml)).expect("parses")[0];
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+    assert!(near(p.heads[0].offset, -0.3), "synthesized 2-head spacing, got {}", p.heads[0].offset);
+}
+
+#[test]
+fn a_reimport_preserves_an_operator_authored_layout() {
+    use light_core::state::EngineState;
+    let project: light_core::types::Project = serde_json::from_str(
+        r#"{"version":1,"universes":[],"fixtures":[],"groups":[],"layers":[],"columns":[]}"#,
+    )
+    .unwrap();
+    let mut st = EngineState::new(project, 0.0);
+
+    // a zero-geometry bar imports with the flat fallback
+    let geoms = format!(
+        r#"<Geometry Name="Base">
+             <Geometry Name="PxA" Position="{I3}{{0,0,0,1}}"/>
+             <Geometry Name="PxB" Position="{I3}{{0,0,0,1}}"/>
+             <Geometry Name="PxC" Position="{I3}{{0,0,0,1}}"/>
+             <Geometry Name="PxD" Position="{I3}{{0,0,0,1}}"/>
+           </Geometry>"#
+    );
+    let xml = pixel_bar_xml(&geoms, &["PxA", "PxB", "PxC", "PxD"]);
+    let parsed = parse_gdtf(&zip_xml(&xml)).unwrap();
+    let id = parsed[0].id.clone();
+    st.apply_gdtf("bar.gdtf", Ok(parsed.clone()), None);
+
+    // the operator lays it out as a 2×2 grid (what PixelLayout writes)
+    {
+        let prof = st.project.profiles.get_mut(&id).unwrap();
+        for (i, h) in prof.heads.iter_mut().enumerate() {
+            h.offset = if i % 2 == 0 { -0.1 } else { 0.1 };
+            h.offset_y = if i < 2 { 0.05 } else { -0.05 };
+            h.row = i / 2;
+            h.col = i % 2;
+        }
+    }
+
+    // re-importing the SAME layout-less file must not flatten their work
+    st.apply_gdtf("bar.gdtf", Ok(parsed), None);
+    let prof = st.project.profiles.get(&id).unwrap();
+    assert_eq!(prof.heads[3].row, 1, "authored layout survived the re-import");
+    assert_eq!(prof.heads[3].col, 1);
+    assert!((prof.heads[3].offset - 0.1).abs() < 1e-9);
+    assert!((prof.heads[3].offset_y + 0.05).abs() < 1e-9);
+
+    // but a file that DOES carry real geometry stays authoritative
+    let real = format!(
+        r#"<Geometry Name="Base">
+             <Geometry Name="PxA" Position="{I3}{{-150,0,0,1}}"/>
+             <Geometry Name="PxB" Position="{I3}{{-50,0,0,1}}"/>
+             <Geometry Name="PxC" Position="{I3}{{50,0,0,1}}"/>
+             <Geometry Name="PxD" Position="{I3}{{150,0,0,1}}"/>
+           </Geometry>"#
+    );
+    let xml2 = pixel_bar_xml(&real, &["PxA", "PxB", "PxC", "PxD"]);
+    st.apply_gdtf("bar.gdtf", Ok(parse_gdtf(&zip_xml(&xml2)).unwrap()), None);
+    let prof = st.project.profiles.get(&id).unwrap();
+    assert!((prof.heads[0].offset + 0.15).abs() < 1e-9, "real file geometry wins, got {}", prof.heads[0].offset);
+    assert_eq!(prof.heads[0].row, 0);
+}

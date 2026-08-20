@@ -28,7 +28,35 @@ let bootWarning: string | null = null;
  *  entirely different things — exactly the case an operator re-imports to fix.
  *  Mirrors layout_sig in core/src/state.rs. */
 function layoutSig(p: CompiledProfile): string {
-  return `${p.footprint}|${p.heads.length}|${p.channels.map((c: CompiledProfile['channels'][number]) => c.name).join(',')}`;
+  // The head layout signs too (B1): since the layout editor, offsets and
+  // row/col are operator-authored state — a re-import that changes them is a
+  // replacement worth announcing. Engine-local strings, never compared across
+  // engines, so the float formatting needs no parity discipline.
+  const heads = p.heads
+    .map((h) => `${h.offset.toFixed(4)},${(h.offsetY ?? 0).toFixed(4)},${h.row ?? 0},${h.col ?? 0}`)
+    .join(';');
+  return `${p.footprint}|${p.heads.length}|${p.channels.map((c: CompiledProfile['channels'][number]) => c.name).join(',')}|${heads}`;
+}
+
+/** An operator-authored pixel layout must survive a re-import that brings no
+ *  layout of its own. The flat fallback is recognisable — every head at
+ *  (row 0, col 0) — and a stored non-flat layout on a same-shape profile is
+ *  strictly better informed, so it wins silently. A file carrying REAL parsed
+ *  geometry has non-flat heads and stays authoritative.
+ *  Mirrors preserve_authored_layout in core/src/state.rs. */
+function preserveAuthoredLayout(p: Project, incoming: CompiledProfile): void {
+  const existing = Object.hasOwn(p.profiles ?? {}, incoming.id) ? p.profiles![incoming.id] : undefined;
+  if (!existing || existing.heads.length !== incoming.heads.length) return;
+  const flat = (hs: CompiledProfile['heads']) => hs.every((h) => !(h.row ?? 0) && !(h.col ?? 0));
+  if (flat(incoming.heads) && !flat(existing.heads)) {
+    incoming.heads = incoming.heads.map((h, i) => ({
+      ...h,
+      offset: existing.heads[i].offset,
+      offsetY: existing.heads[i].offsetY,
+      row: existing.heads[i].row,
+      col: existing.heads[i].col,
+    }));
+  }
 }
 
 /** Replacing a profile that fixtures are patched to rewrites what every one of
@@ -64,6 +92,7 @@ function applyMvrBundle(p: Project, bundle: MvrBundle, replace: boolean): string
   p.profiles ??= {};
   const replaced: string[] = [];
   for (const [id, prof] of Object.entries(bundle.profiles)) {
+    preserveAuthoredLayout(p, prof);
     const note = describeProfileReplacement(p, prof);
     if (note) replaced.push(note);
     p.profiles[id] = prof;
@@ -557,6 +586,7 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
           // Attribution travels with the profile into the project file — a GDTF
           // carries no author attribute, so this can only come from the source.
           if (cmd.credit) p.credit = cmd.credit;
+          preserveAuthoredLayout(state.project, p);
           const note = describeProfileReplacement(state.project, p);
           if (note) replacedGdtf.push(note);
           state.project.profiles[p.id] = p;

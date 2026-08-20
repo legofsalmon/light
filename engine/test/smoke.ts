@@ -623,5 +623,25 @@ await new Promise<void>((resolve) => {
   );
 }
 
+// --- profile-head spatial repair (B1): twin of Rust de_metres/de_index ------
+{
+  const p = sanitizeProject({
+    ...demoProject(),
+    profiles: {
+      bad: {
+        id: 'bad', manufacturer: 'T', model: 'Bad', mode: 'x', footprint: 3,
+        heads: [{ kind: 'rgb', offset: Number.NaN, offsetY: Number.POSITIVE_INFINITY, row: 1.7, col: -3, label: 'px' }],
+        channels: [], beamDeg: 20, virtualDimmer: false,
+      },
+    },
+  } as unknown as Project)!;
+  const h = p.profiles!.bad.heads[0];
+  check(
+    'profile heads: malformed spatial fields repair to the Rust values',
+    h.offset === 0 && h.offsetY === undefined && h.row === 1 && h.col === 0,
+    `got offset=${h.offset} offsetY=${h.offsetY} row=${h.row} col=${h.col}`,
+  );
+}
+
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);
