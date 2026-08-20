@@ -15,9 +15,12 @@ function StatusDot({ ok, label, warn, title }: { ok: boolean; label: string; war
 
 function ProjectMenu({ name }: { name: string }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const send = useStore((s) => s.send);
   const projects = useStore((s) => s.projects);
+  const snap = useStore((s) => s.snap);
   const boxRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -29,17 +32,48 @@ function ProjectMenu({ name }: { name: string }) {
     return () => window.removeEventListener('pointerdown', close);
   }, [open, send]);
 
+  // Anything currently on stage — so opening another show can warn that it goes
+  // dark, rather than doing it on a stray tap.
+  const anyLive = (snap?.layers ?? []).some((l) => !!l.lookId);
+
+  const openMenu = () => {
+    // Position the dropdown with the viewport, not the top bar: the bar is an
+    // overflow scroll container (narrow-window survival), which clips an
+    // absolutely-positioned child to its own 46px height. A fixed element
+    // computed from the button's rect escapes that box.
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 2, left: r.left });
+    setOpen((o) => !o);
+  };
+
+  const openProject = (slug: string, projName: string) => {
+    setOpen(false);
+    if (slug === projects?.current) return;
+    void (async () => {
+      if (anyLive) {
+        const ok = await askConfirm(`Open "${projName}"?`, {
+          body: 'The current show stops and the stage goes dark. You can reopen this one afterwards, but every layer will need re-firing.',
+          confirmLabel: 'Open project',
+          danger: true,
+        });
+        if (!ok) return;
+      }
+      send({ type: 'openProject', slug });
+    })();
+  };
+
   return (
     <div ref={boxRef} style={{ position: 'relative' }}>
-      <button className="btn small ghost projname" title="projects" onClick={() => setOpen((o) => !o)}>
+      <button ref={btnRef} className="btn small ghost projname" title="projects" onClick={openMenu}>
         {name} ▾
       </button>
       {open && (
         <div
           style={{
-            position: 'absolute', top: '100%', left: 0, zIndex: 40, minWidth: 220,
+            position: 'fixed', top: pos.top, left: pos.left, zIndex: 60, minWidth: 220,
             background: 'var(--panel2, #1c1c20)', border: '1px solid var(--line)',
             borderRadius: 4, padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
           }}
         >
           {(projects?.list ?? []).map((p) => (
@@ -47,10 +81,7 @@ function ProjectMenu({ name }: { name: string }) {
               key={p.slug}
               className={`btn small ghost ${p.slug === projects?.current ? 'on' : ''}`}
               style={{ justifyContent: 'flex-start', textAlign: 'left' }}
-              onClick={() => {
-                if (p.slug !== projects?.current) send({ type: 'openProject', slug: p.slug });
-                setOpen(false);
-              }}
+              onClick={() => openProject(p.slug, p.name)}
             >
               {p.slug === projects?.current ? '✓ ' : ''}{p.name}
             </button>
@@ -276,6 +307,20 @@ export function TopBar() {
           title="raw channel overrides are held from the Output tab — the show is not driving those channels"
         >
           {snap!.overrides} override{snap!.overrides === 1 ? '' : 's'}
+        </span>
+      )}
+      {snap?.identify && (
+        // Identify drives a fixture to full white and overrides EVERYTHING,
+        // blackout included — so it must never be a thing you can leave on
+        // without seeing it. This chip shows it from any tab and clears it on
+        // click; blackout and 'B' will not touch it, only this or ALL STOP.
+        <span
+          className="mutedchip identifychip"
+          title="a fixture is held at full white for identify — it ignores blackout. Click to release it."
+          onClick={() => send({ type: 'identify', fixtureId: null })}
+          style={{ cursor: 'pointer' }}
+        >
+          ◎ identify: {project.fixtures.find((f) => f.id === snap.identify)?.name ?? 'fixture'}
         </span>
       )}
       <button

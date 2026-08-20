@@ -68,6 +68,10 @@ type Store = {
   send: (cmd: Command) => void;
   /** Clone-mutate-commit a project edit; optimistic locally, authoritative echo follows. */
   mutate: (fn: (p: Project) => void) => void;
+  /** Send any pending throttled project write to the engine right now. Needed
+   *  before a command that depends on a just-mutated project already being on
+   *  the engine — e.g. switching to a deck you created this tick. */
+  flushProjectWrite: () => void;
   undo: () => void;
   redo: () => void;
   setSel: (s: Sel) => void;
@@ -181,6 +185,16 @@ function queueProjectWrite(send: () => void): void {
   }, 50);
 }
 
+/** Drop any pending throttled write without sending it. Returns whether one was
+ *  actually pending, so a caller can decide whether a follow-up send is needed. */
+function cancelProjectWrite(): boolean {
+  if (!projectWriteTimer) return false;
+  clearTimeout(projectWriteTimer);
+  projectWriteTimer = null;
+  projectWriteFirst = 0;
+  return true;
+}
+
 /** Live show state lives inside the project blob — which song is up, the column
  *  labels, and every layer's cells. A snapshot taken during song 1 and applied
  *  during song 3 therefore drags the operator back to song 1: the grid repaints,
@@ -262,6 +276,14 @@ export const useStore = create<Store>()((set, get) => ({
       if (currentSlug !== slugAtEdit) return; // a different show is open now
       get().send({ type: 'updateProject', project: get().project! });
     });
+  },
+
+  flushProjectWrite: () => {
+    // Cancel the pending deferred write and send the authoritative project
+    // NOW, so a follow-up command (switchDeck onto a just-created deck) can't
+    // outrun it on the wire and be dropped by the engine as an unknown target.
+    if (!cancelProjectWrite()) return;
+    get().send({ type: 'updateProject', project: get().project! });
   },
 
   undo: () => {

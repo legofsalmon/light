@@ -271,6 +271,23 @@ select.sel { cursor: pointer; }
   text-align: right;
   cursor: ns-resize;
 }
+
+/* Touch drag ownership. Every continuous control here drags a pointer, and the
+   UI is served to a FOH tablet (docs/user-guide.md). Without touch-action the
+   browser claims a drag as a pan after a few pixels — the pointer stream ends
+   in pointercancel and the control stops tracking — so masters, haze, speed,
+   the BPM scrub, numeric scrubs, the previz plan, and the panel splitters are
+   all unreliable on the surface the docs recommend for exactly this. Pad cells
+   are deliberately NOT listed: they fire on pointerdown and their swipe should
+   still scroll the grid. */
+.fader,
+.bpm,
+input.num,
+.vsplit,
+.hsplit,
+.previzview canvas {
+  touch-action: none;
+}
 .beatled {
   width: 8px;
   height: 8px;
@@ -754,6 +771,21 @@ table.tbl th { color: var(--text-dim); }
   border-radius: 3px;
   padding: 3px 7px;
   white-space: nowrap;
+}
+/* identify overrides blackout, so its chip earns the warn colour and a pulse —
+   it is the one held state that can burn a light into the room during a
+   blackout, and it must read at a glance from across a dark stage */
+.identifychip {
+  color: var(--warn);
+  border-color: var(--warn);
+  animation: identifypulse 1.4s ease-in-out infinite;
+}
+@keyframes identifypulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .identifychip { animation: none; }
 }
 .deckmove {
   margin-left: 5px;

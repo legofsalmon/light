@@ -8,14 +8,17 @@ import { askConfirm } from '../dialog.tsx';
 /**
  * Akai APC40 mk2 (generic mode 0):
  * clip grid 5×8, notes 0–39 (bottom-left = 0, rows ascend); scene launch
- * column notes 82–86 (top→bottom); track faders CC 7 on channels 0–7 (the
- * channel is the track!); master fader CC 14 ch 0; tap tempo note 99.
+ * column notes 82–86 (top→bottom); STOP ALL CLIPS note 81; track faders CC 7
+ * on channels 0–7 (the channel is the track!); master fader CC 14 ch 0; bank
+ * ◀ ▶ notes 97/96; tap tempo note 99.
  *
- * Mapping: top four grid rows mirror the on-screen grid (top row = STROBE),
- * the fifth (bottom) row fires columns as cues; scene buttons 1–4 clear the
- * matching layer, scene 5 = blackout; track faders 1–4 = layer masters
- * (WASH→STROBE), 5 = haze, 6 = effect speed; master fader = grand master;
- * TAP TEMPO button = tap.
+ * Mapping (see apc40Mk2Mappings for the authority): all FIVE grid rows mirror
+ * the on-screen layers; the five scene buttons clear their matching layer;
+ * STOP ALL CLIPS = blackout (the surface's closest thing to a panic key);
+ * track faders 1–5 = layer masters, 6 = haze, 7 = effect speed; master fader =
+ * grand master; bank ◀ ▶ = previous / next song; TAP TEMPO = tap. (An earlier
+ * layout put cues on the bottom row and blackout on a scene button — the mini
+ * preset still does — so don't "restore" that here.)
  */
 function apc40Mk2Mappings(p: Project): MidiMapping[] {
   const maps: MidiMapping[] = [];
@@ -183,6 +186,7 @@ export function SyncView() {
         <div className="row">
           <button
             className="btn small"
+            title="5 grid rows → layers · scene buttons → layer clears · STOP ALL CLIPS → blackout · TAP → tempo · bank ◀ ▶ → prev / next song · track faders 1–5 → layer masters, 6 → haze, 7 → speed · master → grand"
             onClick={() => {
               void (async () => {
                 const ok = await askConfirm('Load the APC40 mk2 preset?', {
@@ -200,6 +204,7 @@ export function SyncView() {
           </button>
           <button
             className="btn small ghost"
+            title="4 grid rows → layers · bottom row → column cues · round buttons → layer clears · TAP + blackout keys · faders → 4 layer masters, haze, speed, grand"
             onClick={() => {
               void (async () => {
                 const ok = await askConfirm('Load the APC mini mk2 preset?', {
@@ -215,7 +220,7 @@ export function SyncView() {
           >
             APC mini mk2
           </button>
-          <span className="label">grid rows = layers · bottom row = cues · scene col = clears + blackout · faders = masters</span>
+          <span className="label">load a controller layout (hover a preset for its map), or MIDI-learn any control on its own</span>
         </div>
         <table className="tbl">
           <thead>

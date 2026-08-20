@@ -27,7 +27,13 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
   return (
     <div
       className={`cell ${look ? '' : 'empty'} ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${armed ? 'learn-armed' : ''}`}
-      title={look ? `${look.name} — click to fire` : undefined}
+      title={
+        look
+          ? `${look.name} — click to fire`
+          : live?.lookId
+            ? 'empty — click to select (layer keeps playing)'
+            : 'empty — click to stop the layer'
+      }
       onPointerDown={(e) => {
         setSel({ layerId: layer.id, col });
         if (e.button !== 0) return; // right/middle-click must never latch a flash look
@@ -35,12 +41,15 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
           useStore.getState().armLearn({ kind: 'cell', layerId: layer.id, col });
           return;
         }
-        // An empty pad stops the layer, the way an empty clip slot does in
-        // Resolume — the same thing the ✕ on the layer head does, but reachable
-        // in the grid where your hand already is. The cell is still selected, so
-        // the editor can offer to create a look here.
+        // An empty pad is also where you START a look — the editor invites
+        // "click an empty cell to create one". So a stray click while building
+        // must NOT black out a layer that is currently live: selecting is
+        // enough (done above), and the deliberate stop is the ✕ on the layer
+        // head. When the layer is already idle the clear is harmless and kept,
+        // so the Resolume "empty slot stops the layer" reflex still works where
+        // it cannot hurt.
         if (!look) {
-          send({ type: 'clearLayer', layerId: layer.id });
+          if (!live?.lookId) send({ type: 'clearLayer', layerId: layer.id });
           return;
         }
         send({ type: 'trigger', layerId: layer.id, col });
@@ -176,8 +185,16 @@ function DeckBar() {
   const project = useStore((s) => s.project)!;
   const send = useStore((s) => s.send);
   const mutate = useStore((s) => s.mutate);
+  const flushProjectWrite = useStore((s) => s.flushProjectWrite);
   const decks = project.decks ?? [];
   const activeChipRef = useRef<HTMLDivElement>(null);
+  // A chip carries both gestures: click switches the live song, double-click
+  // renames. The browser delivers click, click, dblclick — so a naive handler
+  // switches the whole show (grid, APC LEDs, OSC follow target) to the wrong
+  // song the instant you start a rename. Hold the switch briefly; if a
+  // double-click follows, cancel it. The eyes-off switch paths (APC bank
+  // arrows, [ / ]) are untouched and stay instant.
+  const switchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // a deck change from the APC bank arrows (or [ / ]) must bring the live
   // song on screen — with 12 songs the active chip is often scrolled away
   useEffect(() => {
@@ -218,8 +235,21 @@ function DeckBar() {
           ref={d.id === project.activeDeckId ? activeChipRef : undefined}
           className={`deckchip ${d.id === project.activeDeckId ? 'on' : ''}`}
           title="click to switch · double-click to rename"
-          onClick={() => send({ type: 'switchDeck', deckId: d.id })}
+          onClick={() => {
+            // already on this deck: a switch is a no-op, so don't delay the
+            // rename that a double-click here is about to ask for
+            if (d.id === project.activeDeckId) return;
+            if (switchTimer.current) clearTimeout(switchTimer.current);
+            switchTimer.current = setTimeout(() => {
+              switchTimer.current = null;
+              send({ type: 'switchDeck', deckId: d.id });
+            }, 220);
+          }}
           onDoubleClick={() => {
+            if (switchTimer.current) {
+              clearTimeout(switchTimer.current);
+              switchTimer.current = null; // the pending switch was the first click of this double
+            }
             void (async () => {
               const name = await askPrompt('Rename deck', d.name);
               if (!name) return;
@@ -305,6 +335,10 @@ function DeckBar() {
             p.decks ??= [];
             p.decks.push({ id, name: `Song ${p.decks.length + 1}`, columns: [...p.columns], cells: {} });
           });
+          // The engine must SEE the new deck before we ask it to switch — the
+          // project write is throttled, and a switchDeck racing ahead of it is
+          // silently dropped (unknown deck). Flush the write first, then switch.
+          flushProjectWrite();
           send({ type: 'switchDeck', deckId: id }); // land on the deck you just made
         }}
       >
@@ -326,6 +360,8 @@ function DeckBar() {
               cells: Object.fromEntries(p.layers.map((l) => [l.id, [...l.cells]])),
             });
           });
+          // flush before switching — the deck must exist on the engine first
+          flushProjectWrite();
           send({ type: 'switchDeck', deckId: id });
         }}
       >

@@ -1,7 +1,8 @@
 // APC40 mk2 LED feedback: the pad grid mirrors the look grid (bright = the
-// playing cell, dim = available cells, coloured by each look's swatch), the
-// bottom row mirrors cue columns, scene LEDs light when their layer has
-// something to clear, and scene 5 blinks while blackout is armed.
+// playing cell, dim = available cells, coloured by each look's swatch); all
+// five rows are layers, the scene LEDs light when their layer has something to
+// clear, and STOP ALL CLIPS (note 81) blinks while blackout is armed. (The
+// bottom row is a fifth layer now, not cue columns — see apc40Mk2Mappings.)
 //
 // Hardware notes (mk2, generic mode): only the 5×8 clip grid is RGB — pads
 // take a 128-entry palette index as note-on velocity (channel 0 = solid).

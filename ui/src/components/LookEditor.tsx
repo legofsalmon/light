@@ -417,12 +417,17 @@ export function LookEditor() {
   const mutate = useStore((s) => s.mutate);
   const send = useStore((s) => s.send);
 
-  if (!sel) return <div className="hint">Select a cell in the grid to edit its look — or click an empty cell to create one.</div>;
+  if (!sel) return <div className="hint">Select a cell in the grid to edit its look — click an empty cell to start a new one (it won't fire the layer).</div>;
 
   const layer = project.layers.find((l) => l.id === sel.layerId);
   if (!layer) return <div className="hint">Layer no longer exists.</div>;
   const lookId = layer.cells[sel.col] ?? null;
-  const look: Look | null = lookId ? project.looks[lookId] ?? null : null;
+  // hasOwn, not a bare index: a cell id of "constructor"/"toString" resolves to
+  // a function off Object's prototype (truthy), and look.parts.map below then
+  // throws and takes down the whole bottom-panel Region. The grid, previz and
+  // swatch code all guard this way — this reader was the one that didn't.
+  const look: Look | null =
+    lookId && Object.hasOwn(project.looks, lookId) ? project.looks[lookId] : null;
 
   if (!look || !lookId) {
     // Looks are a shared pool across decks, so filling a cell from the pool is
@@ -618,11 +623,16 @@ export function LookEditor() {
                 value={st.lookId}
                 onChange={(e) => editLook((lk) => { if (lk.steps?.[i]) lk.steps[i].lookId = e.target.value; })}
               >
-                {(!project.looks[st.lookId] || project.looks[st.lookId]?.steps?.length) ? (
-                  <option value={st.lookId}>
-                    {project.looks[st.lookId] ? '(cue list - renders dark)' : '(missing look)'}
-                  </option>
-                ) : null}
+                {(() => {
+                  // hasOwn: a prototype-key step id must read as "missing", not
+                  // resolve to Object.prototype and mislabel itself
+                  const stepLook = Object.hasOwn(project.looks, st.lookId) ? project.looks[st.lookId] : undefined;
+                  return !stepLook || stepLook.steps?.length ? (
+                    <option value={st.lookId}>
+                      {stepLook ? '(cue list - renders dark)' : '(missing look)'}
+                    </option>
+                  ) : null;
+                })()}
                 {Object.values(project.looks)
                   .filter((l) => !l.steps?.length)
                   .map((l) => (
