@@ -245,8 +245,30 @@ Agreed build order (each step shippable, parity-green):
    amber RIDING banner with Store/Discard, browser-verified. APC-knob focus
    follows in P3.
 10. P3 Named Controls (the macro replacement — typed faders, per-link ranges)
-11. P2 modulators (LFO slice, then ADSR slice)
-12. B4 pixel-map canvas stays deferred (projection, not canvas)
+    — DONE (`cf917f0`). Control { id, name, value, links[] } with per-link
+    (look, part[, effect], field, min, max) brackets (min>max inverts);
+    setControl resolves EVERY link through the P1 soft layer, so rendering,
+    the RIDING chip, Store/Discard, ALL STOP and sweeping come free; MIDI
+    'control' learn action drives any CC onto a control; Controls tab UI with
+    dangling-link ⚠. 7 parity assertions incl. the MIDI path. APC 8-knob
+    LED-ring bank deferred as polish.
+11. P2 modulators (LFO slice, then ADSR slice) — LFO SLICE DONE (`116a736`).
+    Modulator { wave, rate, phase, on, bindings[] }; value = pure function of
+    the shared effBeat (speed master + tap for free); bindings add
+    (wave−0.5)·depth (hue ×360) over stored → soft, clamped per-field;
+    gen-gated binding index; 8 parity assertions. The full resolution order
+    (stored → soft → modulation) is live in both engines.
+    ADSR SLICE STILL PARKED — pickup notes: envelope triggered by look fire,
+    release anchored in LayerLive (needs a release timestamp field), sustain
+    is a LEVEL not a time, release tails are voice-overlap semantics (the
+    two-source crossfade merge already models this), allStop gates envelopes
+    dark; add an 'adsr' modulator kind beside the LFO so bindings/UI reuse.
+12. B4 pixel-map canvas — DECIDED (deferred permanently unless demanded).
+    The pixel map is a computed projection of real head positions (the
+    geometry module), always current, never hand-stale. The 2D previz front
+    view IS that projection since B1 slice 3. A hand-drawn per-group
+    arrangement override gets built only if physically-false layouts are ever
+    actually wanted on this rig.
 
 Rejected: A3 (superseded by P1+P4), any macro language, live-linked pool
 presets, k-means auto-grouping, a second RNG.
