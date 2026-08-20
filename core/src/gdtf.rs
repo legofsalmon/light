@@ -189,6 +189,9 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
         })
         .collect();
 
+    // the Geometries tree — pixel fixtures carry per-pixel Position matrices
+    let geometries = ft.descendants().find(|n| n.has_tag_name("Geometries"));
+
     // beam physicals
     let beam_deg = ft
         .descendants()
@@ -379,7 +382,7 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
 
         // Multi-pixel fixtures (strips, bars): synthesize one head per pixel
         // group so the previz shows a strip and chases can run across it.
-        let head_count = synthesize_heads(&mut channels, &chan_geom, &chan_color);
+        let (head_count, head_geoms) = synthesize_heads(&mut channels, &chan_geom, &chan_color);
 
         if channels.is_empty() {
             continue;
@@ -392,16 +395,21 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             HeadKind::Dimmer
         };
         let heads: Vec<CHead> = if head_count > 1 {
-            let width = if head_count >= 4 { 1.0 } else { 0.3 * head_count as f64 };
-            (0..head_count)
-                .map(|i| {
-                    CHead::flat(
-                        HeadKind::Rgb,
-                        (i as f64 / (head_count - 1) as f64 - 0.5) * width,
-                        format!("Px {}", i + 1),
-                    )
-                })
-                .collect()
+            // Real positions from the file when authored (B1); the even-spaced
+            // fabrication stays as the fallback for flat console exports and
+            // zeroed geometry (the CLF Nero case).
+            parse_pixel_layout(geometries, &head_geoms, head_count).unwrap_or_else(|| {
+                let width = if head_count >= 4 { 1.0 } else { 0.3 * head_count as f64 };
+                (0..head_count)
+                    .map(|i| {
+                        CHead::flat(
+                            HeadKind::Rgb,
+                            (i as f64 / (head_count - 1) as f64 - 0.5) * width,
+                            format!("Px {}", i + 1),
+                        )
+                    })
+                    .collect()
+            })
         } else {
             vec![CHead::flat(kind, 0.0, model.clone())]
         };
@@ -522,12 +530,14 @@ fn wheel_sets_from_functions(
 /// attributes that each carry colour channels (well-formed pixel fixtures).
 /// Strategy 2: repeated colour cycles — every repeated red channel starts a
 /// new pixel. Non-colour channels stay on head 0 (globals). Returns the head
-/// count (1 = leave single-head).
+/// count (1 = leave single-head) and, for strategy 1, the per-head geometry
+/// NAME — the key into the Geometries tree that may carry the pixel's real
+/// position (strategy 2 heads have no geometry identity; empty vec).
 fn synthesize_heads(
     channels: &mut [CChannel],
     geoms: &[String],
     colors: &[Option<char>],
-) -> usize {
+) -> (usize, Vec<String>) {
     // Strategy 1: geometry grouping
     let mut geom_order: Vec<&String> = Vec::new();
     for (g, c) in geoms.iter().zip(colors) {
@@ -541,13 +551,14 @@ fn synthesize_heads(
                 ch.head = pos;
             }
         }
-        return geom_order.len();
+        let names = geom_order.iter().map(|g| (*g).clone()).collect();
+        return (geom_order.len(), names);
     }
 
     // Strategy 2: repeated colour cycles (e.g. R,G,B,R,G,B,…)
     let reds = colors.iter().filter(|c| **c == Some('r')).count();
     if reds < 2 {
-        return 1;
+        return (1, Vec::new());
     }
     let mut head: isize = -1;
     let mut seen_in_head: Vec<char> = Vec::new();
@@ -560,7 +571,161 @@ fn synthesize_heads(
         seen_in_head.push(c);
         ch.head = head.max(0) as usize;
     }
-    (head + 1).max(1) as usize
+    ((head + 1).max(1) as usize, Vec::new())
+}
+
+/// A GDTF Matrix attribute: 3×3 rotation rows plus a translation, row-vector
+/// convention (world = local·R + t). The wire format is four brace groups;
+/// the translation is the first three values of the FOURTH group under both
+/// 4×4-row-major and u/v/w/o spellings seen in the wild.
+struct GMat {
+    r: [[f64; 3]; 3],
+    t: [f64; 3],
+}
+
+fn parse_matrix(s: &str) -> Option<GMat> {
+    let groups: Vec<Vec<f64>> = s
+        .split('}')
+        .filter(|g| !g.trim().is_empty())
+        .map(|g| {
+            g.trim_start_matches(|c: char| c == '{' || c.is_whitespace())
+                .split(',')
+                .filter_map(|v| v.trim().parse::<f64>().ok())
+                .collect()
+        })
+        .collect();
+    if groups.len() != 4 || groups.iter().any(|g| g.len() < 3) {
+        return None;
+    }
+    let mut r = [[0.0; 3]; 3];
+    for (i, row) in r.iter_mut().enumerate() {
+        for (j, v) in row.iter_mut().enumerate() {
+            *v = groups[i][j];
+        }
+    }
+    Some(GMat { r, t: [groups[3][0], groups[3][1], groups[3][2]] })
+}
+
+fn gmat_apply(m: &GMat, p: [f64; 3]) -> [f64; 3] {
+    // row-vector: p' = p·R + t
+    [
+        p[0] * m.r[0][0] + p[1] * m.r[1][0] + p[2] * m.r[2][0] + m.t[0],
+        p[0] * m.r[0][1] + p[1] * m.r[1][1] + p[2] * m.r[2][1] + m.t[1],
+        p[0] * m.r[0][2] + p[1] * m.r[1][2] + p[2] * m.r[2][2] + m.t[2],
+    ]
+}
+
+/// Origin of the named geometry in the fixture's frame: (0,0,0) run through
+/// its own Position and every ancestor's up to the Geometries root. Any
+/// geometry-typed element counts (Geometry, GeometryReference, Beam, …) —
+/// pixel fixtures use GeometryReference instances, each with its own matrix.
+fn geometry_origin(geometries: roxmltree::Node, name: &str) -> Option<[f64; 3]> {
+    let node = geometries
+        .descendants()
+        .find(|n| n.is_element() && n.attribute("Name") == Some(name))?;
+    let mut p = [0.0f64; 3];
+    let mut cur = node;
+    loop {
+        if cur == geometries {
+            break;
+        }
+        if let Some(m) = cur.attribute("Position").and_then(parse_matrix) {
+            p = gmat_apply(&m, p);
+        }
+        match cur.parent() {
+            Some(parent) if parent.is_element() => cur = parent,
+            _ => break,
+        }
+    }
+    Some(p)
+}
+
+/// Real pixel positions from the Geometries tree, when the file carries them.
+/// Returns None when any head's geometry is missing, a position is
+/// non-finite, or the layout is degenerate (all pixels at one point — flat
+/// console exports write exactly this); the caller then keeps the synthesized
+/// evenly-spaced fallback, so a well-formed import can never get WORSE.
+fn parse_pixel_layout(
+    geometries: Option<roxmltree::Node>,
+    head_geoms: &[String],
+    head_count: usize,
+) -> Option<Vec<CHead>> {
+    let geometries = geometries?;
+    if head_geoms.len() != head_count || head_count < 2 {
+        return None;
+    }
+    let mut px: Vec<(f64, f64)> = Vec::with_capacity(head_count);
+    for name in head_geoms {
+        if name.is_empty() {
+            return None;
+        }
+        let p = geometry_origin(geometries, name)?;
+        if !p.iter().all(|v| v.is_finite()) {
+            return None;
+        }
+        // GDTF is Z-up: X stays the fixture's local X, Z becomes local Y (up);
+        // depth (GDTF Y) is dropped - a pixel face is planar
+        px.push((p[0], p[2]));
+    }
+    // Unit heuristic: the spec says metres, console exports have shipped mm;
+    // no fixture face is 5 m wide, so larger magnitudes are millimetres.
+    let max_abs = px.iter().fold(0.0f64, |m, &(x, y)| m.max(x.abs()).max(y.abs()));
+    if max_abs > 5.0 {
+        for p in &mut px {
+            p.0 *= 0.001;
+            p.1 *= 0.001;
+        }
+    }
+    // Centre the layout: LIGHT treats fixture.pos as the visual centre.
+    let n = px.len() as f64;
+    let cx = px.iter().map(|p| p.0).sum::<f64>() / n;
+    let cy = px.iter().map(|p| p.1).sum::<f64>() / n;
+    for p in &mut px {
+        p.0 -= cx;
+        p.1 -= cy;
+    }
+    // Degenerate (all pixels at one point): the flat-export signature.
+    let span = px.iter().fold(0.0f64, |m, &(x, y)| m.max(x.abs()).max(y.abs()));
+    if span < 1e-4 {
+        return None;
+    }
+    // Rows: cluster the vertical offsets top-down with a 5 mm tolerance;
+    // cols: x order within each row. Reading order, deterministic (stable
+    // sort; ties keep head order).
+    let mut order: Vec<usize> = (0..px.len()).collect();
+    order.sort_by(|&a, &b| {
+        px[b].1
+            .partial_cmp(&px[a].1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(px[a].0.partial_cmp(&px[b].0).unwrap_or(std::cmp::Ordering::Equal))
+    });
+    let mut row_of = vec![0usize; px.len()];
+    let mut col_of = vec![0usize; px.len()];
+    let mut row = 0usize;
+    let mut col = 0usize;
+    let mut row_y = px[order[0]].1;
+    for (k, &i) in order.iter().enumerate() {
+        if k > 0 && (row_y - px[i].1) > 0.005 {
+            row += 1;
+            col = 0;
+            row_y = px[i].1;
+        }
+        row_of[i] = row;
+        col_of[i] = col;
+        col += 1;
+    }
+    Some(
+        (0..px.len())
+            .map(|i| CHead {
+                kind: HeadKind::Rgb,
+                offset: px[i].0,
+                offset_y: px[i].1,
+                row: row_of[i],
+                col: col_of[i],
+                label: head_geoms[i].clone(),
+            })
+            .collect(),
+    )
 }
 
 #[cfg(test)]
