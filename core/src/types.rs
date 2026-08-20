@@ -37,6 +37,41 @@ pub struct UniverseCfg {
     pub unicast: Option<String>,
 }
 
+/// Tolerant Vec3 for fixture positions: mirrors the Node sanitizer, which
+/// repairs each COMPONENT independently (x→0, y→2, z→0 when missing or not a
+/// finite number). Plain serde would fail the whole project on `"pos": null`
+/// or `{"x": null}` — shapes Node repairs — and a `.corrupt-*` rename over a
+/// component-level nit is exactly what rust_accepts_every_shape_node_repairs
+/// exists to prevent. Geometry consumes positions now, so both engines must
+/// land on identical values.
+fn de_vec3<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec3, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    let comp = |o: Option<&serde_json::Map<String, serde_json::Value>>, k: &str, def: f64| -> f64 {
+        match o.and_then(|m| m.get(k)).and_then(|x| x.as_f64()) {
+            Some(n) if n.is_finite() => n,
+            _ => def,
+        }
+    };
+    let obj = v.as_ref().and_then(|x| x.as_object());
+    Ok(Vec3 { x: comp(obj, "x", 0.0), y: comp(obj, "y", 2.0), z: comp(obj, "z", 0.0) })
+}
+
+/// Node repairs a non-finite rotY to 0; a null/absent/string one must load, not
+/// fail the project.
+fn de_rot_y<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(match v.as_ref().and_then(|x| x.as_f64()) {
+        Some(n) if n.is_finite() => n,
+        _ => 0.0,
+    })
+}
+
+/// Node DELETES a non-finite optional angle (rotX/rotZ) — absent, not zero.
+fn de_opt_finite<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<f64>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(v.as_ref().and_then(|x| x.as_f64()).filter(|n| n.is_finite()))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Fixture {
@@ -45,15 +80,15 @@ pub struct Fixture {
     pub profile_id: String,
     pub universe_id: String,
     pub address: usize,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_vec3")]
     pub pos: Vec3,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_rot_y")]
     pub rot_y: f64,
     /// mounting tilt (pitch, radians) — composes on the kind's default aim
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "de_opt_finite", skip_serializing_if = "Option::is_none")]
     pub rot_x: Option<f64>,
     /// mounting roll (radians)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "de_opt_finite", skip_serializing_if = "Option::is_none")]
     pub rot_z: Option<f64>,
     /// Base aim for moving heads, 0..1. Focus, not an override — a look's
     /// pan/tilt applies as a delta from centre on top of it. None = 0.5.
@@ -803,5 +838,47 @@ mod effect_repair_tests {
         assert_eq!(p.effects.len(), 1);
         assert!(p.effects[0].bypass, "explicit bypass kept");
         assert_eq!(p.effects[0].mix, 1.0, "out-of-range mix clamped to 1");
+    }
+}
+
+#[cfg(test)]
+mod fixture_spatial_repair_tests {
+    use super::*;
+
+    fn fixture(json: &str) -> Fixture {
+        serde_json::from_str(json).expect("a fixture with malformed spatial fields must still load")
+    }
+
+    #[test]
+    fn a_null_pos_repairs_to_the_default_not_a_corrupt_rename() {
+        let f = fixture(r#"{"id":"f","name":"F","profileId":"p","universeId":"u","address":1,"pos":null,"rotY":0}"#);
+        assert_eq!((f.pos.x, f.pos.y, f.pos.z), (0.0, 2.0, 0.0), "2 m up, centre stage — Node's repair value");
+    }
+
+    #[test]
+    fn a_partial_pos_fills_each_component_like_node_does() {
+        // {x:1} must land on {1, 2, 0} in BOTH engines — geometry consumes
+        // positions now, so a component-level divergence is a parity break
+        let f = fixture(r#"{"id":"f","name":"F","profileId":"p","universeId":"u","address":1,"pos":{"x":1},"rotY":0}"#);
+        assert_eq!((f.pos.x, f.pos.y, f.pos.z), (1.0, 2.0, 0.0));
+        let g = fixture(r#"{"id":"f","name":"F","profileId":"p","universeId":"u","address":1,"pos":{"x":1,"y":null,"z":"oops"},"rotY":0}"#);
+        assert_eq!((g.pos.x, g.pos.y, g.pos.z), (1.0, 2.0, 0.0), "null and non-numeric components repaired");
+    }
+
+    #[test]
+    fn a_bad_rot_y_repairs_to_zero_and_bad_optional_angles_vanish() {
+        let f = fixture(r#"{"id":"f","name":"F","profileId":"p","universeId":"u","address":1,"pos":{"x":0,"y":2,"z":0},"rotY":null,"rotX":"bad","rotZ":null}"#);
+        assert_eq!(f.rot_y, 0.0, "null rotY → 0, matching the Node sanitizer");
+        assert_eq!(f.rot_x, None, "non-numeric rotX deleted, not zeroed — absent means 'unset'");
+        assert_eq!(f.rot_z, None);
+    }
+
+    #[test]
+    fn good_spatial_values_pass_through_untouched() {
+        let f = fixture(r#"{"id":"f","name":"F","profileId":"p","universeId":"u","address":1,"pos":{"x":-1.5,"y":3.25,"z":0.75},"rotY":1.5707963267948966,"rotX":0.3}"#);
+        assert_eq!((f.pos.x, f.pos.y, f.pos.z), (-1.5, 3.25, 0.75));
+        assert_eq!(f.rot_y, 1.5707963267948966);
+        assert_eq!(f.rot_x, Some(0.3));
+        assert_eq!(f.rot_z, None);
     }
 }

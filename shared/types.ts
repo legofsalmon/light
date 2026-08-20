@@ -663,6 +663,14 @@ export function sanitizeProject(p: Project): Project | null {
   for (const f of p.fixtures) {
     if (!Number.isFinite(f.address)) f.address = 1;
     if (!f.pos || typeof f.pos !== 'object') f.pos = { x: 0, y: 2, z: 0 };
+    // Per-COMPONENT, not just per-object: a pos like {x:1} used to sail through
+    // with y/z undefined. Harmless while nothing in the engine read positions —
+    // but the geometry module consumes them now, and Rust serde fills missing
+    // components from the Vec3 default (0, 2, 0), so TS must land on the same
+    // values or the two engines compute different world positions.
+    if (!Number.isFinite(f.pos.x)) f.pos.x = 0;
+    if (!Number.isFinite(f.pos.y)) f.pos.y = 2;
+    if (!Number.isFinite(f.pos.z)) f.pos.z = 0;
     if (!Number.isFinite(f.rotY)) f.rotY = 0;
     if (f.rotX !== undefined && !Number.isFinite(f.rotX)) delete f.rotX;
     if (f.rotZ !== undefined && !Number.isFinite(f.rotZ)) delete f.rotZ;
