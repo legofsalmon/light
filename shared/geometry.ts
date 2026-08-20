@@ -39,6 +39,32 @@ function q(v: number): number {
 }
 
 /**
+ * World direction of a fixture's local +X axis (where its head fan points),
+ * under the same Ry·Rx·Rz composition as buildGeometry. For VISUAL consumers —
+ * bar outlines, handles, projections. Head positions must come from
+ * buildGeometry, whose quantized output is the parity contract; this is
+ * unquantized and carries no such guarantee.
+ */
+export function localXDir(
+  rotY: number,
+  rotX: number | undefined,
+  rotZ: number | undefined
+): { x: number; y: number; z: number } {
+  const yaw = rotY;
+  const pitch = rotX ?? 0;
+  const roll = rotZ ?? 0;
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  const cx = Math.cos(pitch), sx = Math.sin(pitch);
+  const cz = Math.cos(roll), sz = Math.sin(roll);
+  // Rz then Rx then Ry applied to (1, 0, 0)
+  const ax = cz;
+  const ay = sz;
+  const by = ay * cx;
+  const bz = ay * sx;
+  return { x: ax * cy + bz * sy, y: by, z: -ax * sy + bz * cy };
+}
+
+/**
  * Build world geometry for every head of every fixture, keyed
  * `${fixtureId}:${head}` — the same key the renderer's heads map uses, from
  * the same enumeration (fixtures × profile heads, builtin profile first),

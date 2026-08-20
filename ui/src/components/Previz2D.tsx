@@ -1,10 +1,26 @@
 import React, { useEffect, useRef } from 'react';
-import type { HeadSnap } from '../../../shared/types.ts';
+import type { HeadSnap, Project } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
+import { buildGeometry, localXDir, type HeadGeom } from '../../../shared/geometry.ts';
 import { hitsPropFootprint } from '../../../shared/beamThrow.ts';
 import { askConfirm } from '../dialog.tsx';
+
+/** Head world positions from the shared geometry module — the same builder the
+ *  engines use, so the plan view can never disagree with the 3D previz (it
+ *  historically mirrored the head fan on rotated bars: +sin z where everything
+ *  renderer-grade uses −sin). Keyed on the project object: mutate() clones, so
+ *  identity change ⇔ project change (same pattern as profileInfo's META_CACHE). */
+const GEOM_CACHE = new WeakMap<Project, Map<string, HeadGeom>>();
+function geomOf(project: Project): Map<string, HeadGeom> {
+  let g = GEOM_CACHE.get(project);
+  if (!g) {
+    g = buildGeometry(project);
+    GEOM_CACHE.set(project, g);
+  }
+  return g;
+}
 
 /** How close a dragged fixture has to come to a bar before it clamps on. */
 const SNAP_M = 0.35;
@@ -192,30 +208,34 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       const headSrc = source === 'preview' ? (previewHeads ?? []) : (snap?.heads ?? []);
       for (const hs of headSrc) headMap.set(`${hs.f}:${hs.h}`, hs);
 
+      const geom = geomOf(project);
       for (const f of project.fixtures) {
         const prof = profileMeta(project, f.profileId);
         if (!prof) continue;
         const fx = m.toX(f.pos.x);
         const fy = m.toY(vertOf(f.pos, view));
-        // head offsets fan out along local X; in plan view they rotate with
-        // rotY, in front view they project onto X directly
-        const cos = view === 'plan' ? Math.cos(f.rotY) : 1;
-        const sin = view === 'plan' ? Math.sin(f.rotY) : 0;
+        // Heads sit at their real world positions (shared geometry module) and
+        // both views are honest projections of them: plan looks down (x, z),
+        // front looks along z at (x, y) — so a yawed bar foreshortens in the
+        // front view and a rolled bar's heads slope, exactly as in 3D.
+        const dir = localXDir(f.rotY, f.rotX, f.rotZ);
 
         if (prof.heads.length > 1) {
-          const half = 0.55 * m.scale;
+          const dx = 0.55 * dir.x * m.scale;
+          const dv = 0.55 * (view === 'plan' ? dir.z : dir.y) * m.scale * (view === 'plan' ? 1 : -1);
           ctx.strokeStyle = '#3c3c44';
           ctx.lineWidth = 6;
           ctx.beginPath();
-          ctx.moveTo(fx - half * cos, fy - half * sin);
-          ctx.lineTo(fx + half * cos, fy + half * sin);
+          ctx.moveTo(fx - dx, fy - dv);
+          ctx.lineTo(fx + dx, fy + dv);
           ctx.stroke();
         }
 
         for (let hi = 0; hi < prof.heads.length; hi++) {
           const hd = prof.heads[hi];
-          const hx = fx + hd.offset * m.scale * cos;
-          const hy = fy + hd.offset * m.scale * sin;
+          const hg = geom.get(`${f.id}:${hi}`);
+          const hx = hg ? m.toX(hg.x) : fx + hd.offset * m.scale;
+          const hy = hg ? m.toY(view === 'plan' ? hg.z : hg.y) : fy;
           const hs = headMap.get(`${f.id}:${hi}`);
           const i = hs?.i ?? 0;
           let strobeGate = 1;
@@ -598,7 +618,10 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       if (drag.kind === 'rotate') {
         const f = useStore.getState().project?.fixtures.find((fx) => fx.id === drag.id);
         if (!f) return;
-        const raw = Math.atan2(pos.v - f.pos.z, pos.x - f.pos.x);
+        // canonical yaw (mvr.rs yaw_from): θ = atan2(−dz, dx), so the bar's +X
+        // end follows the mouse now that heads draw at their true world z.
+        // The old +atan2(dz, dx) matched the old mirrored (+sin) fan.
+        const raw = Math.atan2(-(pos.v - f.pos.z), pos.x - f.pos.x);
         // snap to 5° so bars land on tidy angles
         const step = (5 * Math.PI) / 180;
         drag.rot = Math.round(raw / step) * step;
