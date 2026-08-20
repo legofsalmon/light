@@ -104,7 +104,7 @@ the Broadcaster's per-client string copy (`server.rs:56`, `Arc<str>` would fix
 it), the native previz's per-frame snapshot clone (`previz/src/update.rs:90`),
 and `structuredClone`-ing the whole project twice per UI edit (`store.ts:250`).
 
-## 4. Stage 3 — done
+## 5. Stage 3 — done
 
 Every confirmed previz-correctness defect is fixed (commits `d915a50`,
 `67c967f`, `a70641f`):
@@ -128,7 +128,7 @@ audition panes, the native previz's per-frame snapshot clone, its shadow budget
 spent in patch order rather than by relevance, its sRGB/linear inconsistency
 between pools and shafts, and no fixture labels or selection sync.
 
-## 5. Stages 4–5 (upcoming)
+## 6. Stages 4–5 (upcoming)
 
 Stage 4 (previz quality: bloom/tonemapping, camera bookmarks, soft-falloff beam
 shader, quality tiers, Bevy 0.19, DLSS on PC / MetalFX on macOS) and Stage 5
