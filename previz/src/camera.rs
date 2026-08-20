@@ -40,7 +40,19 @@ pub fn orbit_camera(
     mut motion: EventReader<MouseMotion>,
     mut wheel: EventReader<MouseWheel>,
     mut camera: Query<&mut Transform, With<Camera3d>>,
+    live: Res<crate::state::Live>,
 ) {
+    // Frame the rig that is actually loaded. The fixed limits below were sized
+    // for the 16 x 12 m demo stage: on a 37 m arena plot hung at 10 m, max
+    // zoom-out left the stage edges outside the frustum and the orbit target
+    // could not be raised to the truss to inspect the hangs — the wide shot
+    // this window exists for was physically unreachable. Never tighter than the
+    // demo limits, so a small rig behaves exactly as before.
+    let (max_dist, max_target_y, near_dist) = match live.rig_extent {
+        Some(e) => ((e.diag * 2.0).max(22.0), (e.height + 3.0).max(5.0), e.diag * 0.8),
+        None => (22.0, 5.0, 8.5),
+    };
+
     let mut delta = Vec2::ZERO;
     for ev in motion.read() {
         delta += ev.delta;
@@ -53,25 +65,41 @@ pub fn orbit_camera(
         let right = yaw_rot * Vec3::X;
         let pan = (right * -delta.x + Vec3::Y * delta.y) * 0.004 * orbit.dist.max(1.0) * 0.35;
         orbit.target += pan;
-        orbit.target.y = orbit.target.y.clamp(0.0, 5.0);
+        orbit.target.y = orbit.target.y.clamp(0.0, max_target_y);
     }
     for ev in wheel.read() {
         let step = match ev.unit {
             bevy::input::mouse::MouseScrollUnit::Line => ev.y * 0.6,
             bevy::input::mouse::MouseScrollUnit::Pixel => ev.y * 0.02,
         };
-        orbit.dist = (orbit.dist - step).clamp(2.0, 22.0);
+        orbit.dist = (orbit.dist - step).clamp(2.0, max_dist);
     }
 
     // presets
+    // Presets scale with the rig: on an arena plot a "FOH" preset framing 8.5 m
+    // of a 37 m stage is not the shot anyone wanted.
+    let eye_h = (max_target_y * 0.25).clamp(1.5, 4.0);
     if keys.just_pressed(KeyCode::Digit1) {
-        *orbit = Orbit::default(); // FOH
+        // FOH
+        *orbit = Orbit { yaw: 0.0, pitch: 0.32, dist: near_dist, target: Vec3::new(0.0, eye_h, 0.0) };
     }
     if keys.just_pressed(KeyCode::Digit2) {
-        *orbit = Orbit { yaw: std::f32::consts::FRAC_PI_2, pitch: 0.18, dist: 8.0, target: Vec3::new(0.0, 1.6, 0.5) };
+        // side
+        *orbit = Orbit {
+            yaw: std::f32::consts::FRAC_PI_2,
+            pitch: 0.18,
+            dist: near_dist * 0.95,
+            target: Vec3::new(0.0, eye_h, 0.5),
+        };
     }
     if keys.just_pressed(KeyCode::Digit3) {
-        *orbit = Orbit { yaw: 0.0, pitch: 1.42, dist: 11.0, target: Vec3::new(0.0, 0.0, 0.8) };
+        // top
+        *orbit = Orbit {
+            yaw: 0.0,
+            pitch: 1.42,
+            dist: near_dist * 1.3,
+            target: Vec3::new(0.0, 0.0, 0.8),
+        };
     }
 
     if let Ok(mut tf) = camera.single_mut() {

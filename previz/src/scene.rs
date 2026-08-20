@@ -167,6 +167,15 @@ pub struct MoverHead {
     pub rest: Quat,
     pub pan_range: f32,
     pub tilt_range: f32,
+    /// World rotation of the fixture root. Fixtures only move on a rebuild, so
+    /// capturing it at spawn is exact and avoids a GlobalTransform round-trip.
+    pub root_rot: Quat,
+    /// Height this head is rigged at — the other half of the floor intersection.
+    pub height: f32,
+    /// Beam half-angle, so the cone keeps its spread when its length changes.
+    pub outer: f32,
+    /// Longest shaft to draw, from the fitted rig bounds.
+    pub max_throw: f32,
 }
 
 pub fn setup_stage(
@@ -554,6 +563,27 @@ pub fn rebuild_fixtures(
         .and_then(|v| v.parse().ok())
         .unwrap_or(10);
 
+    // Beam reach, sized to the room rather than to the demo stage. The shaft
+    // clamp used to be a hard 9 m and spotlight range a hard 11-12 m — fine for
+    // a club, wrong for an arena plot: heads at 10 m trim throw ~10.7 m to the
+    // deck, so every shaft stopped ~1.5 m in mid-air, and any pool more than
+    // 12 m away simply was not lit, which reads as "the looks are broken" when
+    // the data is correct. Never smaller than the old constants, so a small rig
+    // looks exactly as it did.
+    let (max_throw, light_range) = match Bounds::of(&project) {
+        Some(b) => {
+            let size = b.max - b.min;
+            let diag = (size.x * size.x + size.y * size.y + size.z * size.z).sqrt();
+            // publish it so the camera can frame the same rig
+            live.rig_extent = Some(crate::state::RigExtent { diag, height: b.max.y });
+            ((b.max.y + 2.0).max(9.0), diag.max(12.0))
+        }
+        None => {
+            live.rig_extent = None;
+            (9.0, 12.0)
+        }
+    };
+
     for f in &project.fixtures {
         let Some(prof) = prof_meta(&project, &f.profile_id) else { continue };
         // Pixel strips (imported multi-pixel fixtures): each pixel renders as
@@ -599,7 +629,7 @@ pub fn rebuild_fixtures(
             };
             let outer = (prof.beam_deg.max(2.0) as f32).to_radians() / 2.0;
             // shaft length: throw to the floor along the beam, clamped sane
-            let throw = (f.pos.y.max(0.3) / beam_dir.y.abs().max(0.2)).clamp(1.0, 9.0);
+            let throw = (f.pos.y.max(0.3) / beam_dir.y.abs().max(0.2)).clamp(1.0, max_throw);
             let cone_scale = Vec3::new(throw * outer.tan().max(0.02), throw * outer.tan().max(0.02), throw);
 
             commands.entity(root).with_children(|p| {
@@ -662,7 +692,7 @@ pub fn rebuild_fixtures(
                                             SpotLight {
                                                 color: Color::BLACK,
                                                 intensity: 0.0,
-                                                range: 11.0,
+                                                range: light_range,
                                                 radius: 0.02,
                                                 inner_angle: outer * 0.6,
                                                 outer_angle: outer,
@@ -698,7 +728,7 @@ pub fn rebuild_fixtures(
                                 SpotLight {
                                     color: Color::BLACK,
                                     intensity: 0.0,
-                                    range: 12.0,
+                                    range: light_range,
                                     radius: 0.04,
                                     inner_angle: outer * 0.7,
                                     outer_angle: outer,
@@ -717,6 +747,10 @@ pub fn rebuild_fixtures(
                                     rest: Transform::default().looking_to(beam_dir, Vec3::Y).rotation,
                                     pan_range: 540f32.to_radians(),
                                     tilt_range: 270f32.to_radians(),
+                                    root_rot: root_tf.rotation,
+                                    height: f.pos.y,
+                                    outer,
+                                    max_throw,
                                 },
                                 || kind == HeadKind::Mover,
                             )
@@ -779,6 +813,32 @@ mod tests {
         assert!((b.min.x - -3.0).abs() < 1e-4, "min.x was {}", b.min.x);
         // base height plus the piece's own height
         assert!((b.max.y - 4.0).abs() < 1e-4, "max.y was {}", b.max.y);
+    }
+
+    /// One profile the previz binary cannot understand — a newer engine adding a
+    /// Source/Func variant, or plain corruption — must cost that one profile,
+    /// not the whole project message and with it the entire stage.
+    #[test]
+    fn an_unreadable_profile_does_not_discard_the_project() {
+        let p = project(
+            r#"{"fixtures":[{"id":"a","profileId":"good","pos":{"x":0,"y":3,"z":0}}],
+                "props":[],
+                "profiles":{
+                  "good":{"id":"good","manufacturer":"M","model":"X","mode":"m","footprint":1,
+                          "heads":[{"kind":"rgb","offset":0,"label":"h"}],
+                          "channels":[],"beamDeg":15,"virtualDimmer":false},
+                  "future":{"id":"future","manufacturer":"M","model":"Y","mode":"m","footprint":1,
+                          "heads":[{"kind":"rgb","offset":0,"label":"h"}],
+                          "channels":[{"offsets":[0],"head":0,"name":"Zoom","default":0,
+                                       "cases":[{"cond":{"kind":"always"},"dmxFrom":0,"dmxTo":255,
+                                                 "func":{"kind":"linear","source":"tachyonFlux"}}]}],
+                          "beamDeg":15,"virtualDimmer":false}
+                }}"#,
+        );
+        // the project survived, the fixture is intact, and the good profile came through
+        assert_eq!(p.fixtures.len(), 1, "the project itself must not be discarded");
+        assert!(p.profiles.contains_key("good"), "readable profiles are kept");
+        assert!(!p.profiles.contains_key("future"), "the unreadable one is skipped");
     }
 
     #[test]

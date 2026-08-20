@@ -23,4 +23,17 @@ pub struct Live {
     pub snap: Option<SnapLite>,
     pub smoothed: HashMap<(String, usize), Smoothed>,
     pub connected: bool,
+    /// How big the rig actually is, published by the scene rebuild so the
+    /// camera can frame it. The demo scene's fixed limits (22 m orbit, 5 m
+    /// target height) cannot frame a 37 m arena plot hung at 10 m — the room,
+    /// the beams and the camera all have to learn the same bounds.
+    pub rig_extent: Option<RigExtent>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RigExtent {
+    /// diagonal of the rig's bounding box, in metres
+    pub diag: f32,
+    /// highest thing in the rig, in metres
+    pub height: f32,
 }
