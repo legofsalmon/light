@@ -1,4 +1,5 @@
 import type { Effect, PartParams } from './types.ts';
+import type { HeadGeom } from './geometry.ts';
 import { clamp } from './types.ts';
 
 /** Deterministic 0..1 hash for sample-and-hold randomness. */
@@ -51,6 +52,12 @@ function applyMix(dry: number, wet: number, mix: number): number {
  * continuous when an effect's rate is changed on a live look (see the
  * renderer's rate-correction map). It is 0 for every effect of an untouched
  * show, so the output is byte-identical to passing nothing.
+ *
+ * (headIdx, headCount, _g) together are the HeadCtx — flattened into three
+ * arguments so the hot loop allocates nothing: _g is the renderer's cached
+ * HeadGeom, passed by reference. Carried since B2, consumed from A1 (spatial
+ * fan); until then it must not influence output, which the golden byte suites
+ * gate.
  */
 export function applyEffects(
   params: PartParams,
@@ -58,7 +65,8 @@ export function applyEffects(
   beat: number,
   phaseCorr: readonly number[],
   headIdx: number,
-  headCount: number
+  headCount: number,
+  _g: HeadGeom
 ): PartParams {
   if (effects.length === 0) return params;
   const out: PartParams = { ...params, color: params.color ? { ...params.color } : undefined };

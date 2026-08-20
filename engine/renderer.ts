@@ -4,6 +4,7 @@ import type { HeadKind, ResolvedParams } from '../shared/profiles.ts';
 import { PROFILES, defaultResolved } from '../shared/profiles.ts';
 import { renderImported } from './wasmProfiles.ts';
 import { applyEffects } from '../shared/effects.ts';
+import { NO_GEOM, buildGeometry, type HeadGeom } from '../shared/geometry.ts';
 import { DERBY_MACROS, derbyMacroForValue, derbyQuantize, hsvToRgb, rgbToHsv } from '../shared/color.ts';
 import type { EngineState } from './state.ts';
 
@@ -58,6 +59,12 @@ export class Renderer {
    *  `beat/rate + corr` stays continuous. lastRate is the rate we last folded
    *  in. For an untouched effect corr stays exactly 0. GC'd with cueAnchors. */
   private rateCorr = new Map<string, { lastRate: number; corr: number }>();
+  /** Per-head world geometry, keyed like the heads map ("fixtureId:head").
+   *  Gen-gated: rebuilt only when the project generation moves — the first
+   *  gen-keyed cache in either renderer, so the discipline is set here: compare
+   *  by INEQUALITY (gen wraps), rebuild whole, never patch. */
+  private geom: Map<string, HeadGeom> = new Map();
+  private geomGen = -1; // st.gen starts at 1 and wraps at 32 bits; never -1
 
   constructor(st: EngineState) {
     this.st = st;
@@ -173,6 +180,12 @@ export class Renderer {
     if (!this.pinned) this.effBeat += (dt / 60000) * st.clock.bpm * st.speed;
     if (!Number.isFinite(this.effBeat)) this.effBeat = 0; // never let NaN become absorbing
 
+    // world geometry rebuilds only when the project changed — never per tick
+    if (this.geomGen !== st.gen) {
+      this.geom = buildGeometry(p);
+      this.geomGen = st.gen;
+    }
+
     // --- resolved params per head, starting from profile defaults ---
     const heads = new Map<string, ResolvedParams>();
     const headOrder: { key: string; fixtureId: string; head: number; kind: HeadKind }[] = [];
@@ -215,7 +228,10 @@ export class Renderer {
             const ref = refs[j];
             const key = `${ref.fixtureId}:${ref.head}`;
             if (!heads.has(key)) continue;
-            const prm = applyEffects(part.params, part.effects, this.effBeat, corr, j, n);
+            // present in `heads` ⇒ present in geom (same enumeration built
+            // both); NO_GEOM is defence in depth, not an expected path
+            const g = this.geom.get(key) ?? NO_GEOM;
+            const prm = applyEffects(part.params, part.effects, this.effBeat, corr, j, n, g);
             let a = acc.get(key);
             if (!a) {
               a = { num: {}, beam: {}, col: null, motorMode: null, macro: undefined };

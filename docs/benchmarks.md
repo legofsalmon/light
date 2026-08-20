@@ -17,6 +17,21 @@ not speed).
 | Previz frame | ≤ 8.3 ms | ProMotion 120 Hz; ≥ 60 fps mandatory |
 | GDTF import | interactive (< 100 ms/file) | import-time only, never on the tick path |
 
+## 2026-08-20 — B2 geometry builder (motion engine)
+
+Per-head world positions (`shared/geometry.ts` / `core/src/geometry.rs`),
+gen-gated in each renderer — rebuilt on project change only, one hash lookup
+per head per tick otherwise:
+
+| Bench | Result | Notes |
+|---|---|---|
+| build_geometry, demo rig (13 fixtures) | 1.4 µs (node) / 1.9 µs (rust) | full rebuild |
+| build_geometry, 100 partybars (400 heads) | 33.8 µs (node) / 37.9 µs (rust) | 0.15 % of the tick budget even if it rebuilt EVERY tick |
+
+Verdict: rebuild-at-fader-ride-rate (gen bumps per project-changing command) is
+free at any plausible rig size; no rebuild throttle needed. Reproduce with
+`cargo test -p light-core --test geobench -- --ignored --nocapture`.
+
 ## 2026-08-14 — previz shadow budget (large-rig cliff)
 
 Every shadow-casting spotlight costs its own depth pass, and the previz was

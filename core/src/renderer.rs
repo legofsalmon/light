@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::color::{derby_macro_for_value, derby_quantize, hsv_to_rgb, rgb_to_hsv, DERBY_MACROS};
 use crate::cprofile::{render_compiled, CompiledProfile};
 use crate::effects::apply_effects;
+use crate::geometry::{build_geometry, HeadGeom, NO_GEOM};
 use crate::profiles::{profile_of, HeadKind, Profile, ResolvedParams};
 use crate::state::EngineState;
 use crate::types::{clamp01, lerp, HeadSnap, LayerBlend, LayerSnap, MotorMode, Project};
@@ -172,6 +173,12 @@ pub struct Renderer {
     /// discontinuity when an effect's rate is edited while its look is live,
     /// so `beat/rate + corr` stays continuous. GC'd alongside cue_anchors.
     rate_corr: HashMap<(String, String, String, String), RateCorr>,
+    /// Per-head world geometry, keyed like the heads map (fixture id, head).
+    /// Gen-gated: rebuilt only when the project generation moves — the first
+    /// gen-keyed cache in either renderer, so the discipline is set here:
+    /// compare by INEQUALITY (gen wraps), rebuild whole, never patch.
+    geom: HashMap<(String, usize), HeadGeom>,
+    geom_gen: Option<u64>,
 }
 
 /// Follow a cue-list look to its active step (one level; a step that points
@@ -233,6 +240,8 @@ impl Renderer {
             last_t: None,
             cue_anchors: HashMap::new(),
             rate_corr: HashMap::new(),
+            geom: HashMap::new(),
+            geom_gen: None,
         }
     }
 
@@ -298,6 +307,12 @@ impl Renderer {
         }
         if !self.eff_beat.is_finite() {
             self.eff_beat = 0.0; // never let NaN become absorbing
+        }
+
+        // world geometry rebuilds only when the project changed - never per tick
+        if self.geom_gen != Some(st.gen) {
+            self.geom = build_geometry(&st.project);
+            self.geom_gen = Some(st.gen);
         }
 
         // --- resolved params per head ---
@@ -371,7 +386,11 @@ impl Renderer {
                         if !heads.contains_key(&key) {
                             continue;
                         }
-                        let prm = apply_effects(&part.params, &part.effects, self.eff_beat, &corr, j, n);
+                        // present in `heads` ⇒ present in geom (same enumeration
+                        // built both); NO_GEOM is defence in depth, not an
+                        // expected path
+                        let g = self.geom.get(&key).unwrap_or(&NO_GEOM);
+                        let prm = apply_effects(&part.params, &part.effects, self.eff_beat, &corr, j, n, g);
                         let a = acc.entry(key).or_default();
                         let mut add_num = |field: Field, v: Option<f64>| {
                             if let Some(v) = v {

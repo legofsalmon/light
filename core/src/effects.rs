@@ -42,6 +42,12 @@ fn is_centred(e: &Effect) -> bool {
 /// continuous when an effect's rate is changed on a live look (see the
 /// renderer's rate-correction map). It is 0 for every effect of an untouched
 /// show, so the output is byte-identical to passing an all-zero slice.
+///
+/// (head_idx, head_count, _g) together are the HeadCtx — flattened into three
+/// arguments so the hot loop allocates nothing: _g is the renderer's cached
+/// HeadGeom, passed by reference. Carried since B2, consumed from A1 (spatial
+/// fan); until then it must not influence output, which the golden byte suites
+/// gate.
 pub fn apply_effects(
     params: &PartParams,
     effects: &[Effect],
@@ -49,6 +55,7 @@ pub fn apply_effects(
     phase_corr: &[f64],
     head_idx: usize,
     head_count: usize,
+    _g: &crate::geometry::HeadGeom,
 ) -> PartParams {
     if effects.is_empty() {
         return params.clone();
