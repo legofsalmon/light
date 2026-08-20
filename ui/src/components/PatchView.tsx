@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Project } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { PROFILES } from '../../../shared/profiles.ts';
@@ -122,18 +122,44 @@ export function PatchView() {
   const importMsg = useStore((s) => s.importMsg);
   const fxSel = useStore((s) => s.fxSel);
   const send = useStore((s) => s.send);
-  const muted = useStore((s) => s.snap?.muted) ?? [];
-  const unknownProfiles = useStore((s) => s.snap?.unknownProfiles) ?? [];
+  // Select STABLE keys, not the arrays: snap is freshly parsed 20×/s, so
+  // `s.snap?.muted` is a new reference every frame and would re-render this
+  // 129-row table (and its O(n²) conflict scan) 20 times a second the whole
+  // time anything is muted or dark. A joined string changes only when the
+  // membership actually does.
+  const mutedKey = useStore((s) => (s.snap?.muted ?? []).join(','));
+  const unknownKey = useStore((s) => (s.snap?.unknownProfiles ?? []).join(','));
+  const muted = useMemo(() => (mutedKey ? mutedKey.split(',') : []), [mutedKey]);
+  const unknownProfiles = useMemo(() => (unknownKey ? unknownKey.split(',') : []), [unknownKey]);
   /** Fixtures whose profile is a placeholder — an MVR that travelled without
    *  its real fixture definitions. They are not dark, they just have a dimmer
    *  and nothing else, which looks like a bug in the app until you know. */
-  const stubProfiles = new Set(
-    Object.entries(project.profiles ?? {})
-      .filter(([, pr]) => isPlaceholderProfile(pr))
-      .map(([id]) => id),
+  const stubProfiles = useMemo(
+    () =>
+      new Set(
+        Object.entries(project.profiles ?? {})
+          .filter(([, pr]) => isPlaceholderProfile(pr))
+          .map(([id]) => id),
+      ),
+    [project],
   );
   const identify = useStore((s) => s.snap?.identify) ?? null;
-  const conflicts = findConflicts(project);
+  // O(n²) with a profileMeta allocation per pair — recompute only when the
+  // project changes, never on an unrelated re-render.
+  const conflicts = useMemo(() => findConflicts(project), [project]);
+  // The profile dropdown is identical in every row and rebuilt full metas for
+  // every built-in plus every imported profile, per row — ~5,000 metas per
+  // render at 40 profiles × 129 rows. Build the options once.
+  const profileOptions = useMemo(
+    () =>
+      allProfileMetas(project).map((pr) => (
+        <option key={pr.id} value={pr.id}>
+          {pr.imported ? '⇩ ' : ''}
+          {pr.label}
+        </option>
+      )),
+    [project],
+  );
   const uniOrder = new Map(project.universes.map((u, i) => [u.id, i]));
   /** Column sort. Defaults to patch order — universe then address — because
    *  that is the order the rig is addressed in and the order you walk it. */
@@ -447,11 +473,7 @@ export function PatchView() {
                       }
                       onChange={(e) => eachTarget(f.id, (x) => { x.profileId = e.target.value; })}
                     >
-                      {allProfileMetas(project).map((pr) => (
-                        <option key={pr.id} value={pr.id}>
-                          {pr.imported ? '⇩ ' : ''}{pr.label}
-                        </option>
-                      ))}
+                      {profileOptions}
                     </select>
                   </td>
                   <td>

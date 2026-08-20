@@ -6,7 +6,24 @@ import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
 import { lookSwatch } from '../lookColors.ts';
 
-function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap | undefined }) {
+// Live layer state reaches a cell as three primitives, not the LayerSnap
+// object — that object is freshly parsed 20×/s, so passing it re-rendered every
+// cell on every snapshot even when nothing on stage moved. As primitives, the
+// memo below sees no change while a look plays steadily (fadeT stays 1), and
+// only the cells of a layer that is actually crossfading re-render, briefly.
+const Cell = React.memo(function Cell({
+  layer,
+  col,
+  liveLookId,
+  liveCol,
+  fadeT,
+}: {
+  layer: Layer;
+  col: number;
+  liveLookId: string | null;
+  liveCol: number | null;
+  fadeT: number;
+}) {
   const project = useStore((s) => s.project)!;
   const sel = useStore((s) => s.sel);
   const learnMode = useStore((s) => s.learnMode);
@@ -18,8 +35,8 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
   // hasOwn, not a bare index: a cell holding "constructor" or "toString"
   // resolves to a function off the prototype and renders as a phantom look
   const look = lookId && Object.hasOwn(project.looks, lookId) ? project.looks[lookId] : null;
-  const active = !!lookId && live?.lookId === lookId && live?.col === col;
-  const fading = active && (live?.t ?? 1) < 1;
+  const active = !!lookId && liveLookId === lookId && liveCol === col;
+  const fading = active && fadeT < 1;
   const selected = sel?.layerId === layer.id && sel?.col === col;
   const armed =
     !!learnTarget && learnTarget.kind === 'cell' && learnTarget.layerId === layer.id && learnTarget.col === col;
@@ -30,7 +47,7 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
       title={
         look
           ? `${look.name} — click to fire`
-          : live?.lookId
+          : liveLookId
             ? 'empty — click to select (layer keeps playing)'
             : 'empty — click to stop the layer'
       }
@@ -49,7 +66,7 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
         // so the Resolume "empty slot stops the layer" reflex still works where
         // it cannot hurt.
         if (!look) {
-          if (!live?.lookId) send({ type: 'clearLayer', layerId: layer.id });
+          if (!liveLookId) send({ type: 'clearLayer', layerId: layer.id });
           return;
         }
         send({ type: 'trigger', layerId: layer.id, col });
@@ -88,12 +105,12 @@ function Cell({ layer, col, live }: { layer: Layer; col: number; live: LayerSnap
           >
             {look.steps?.length ? '⛓ ' : ''}{look.name}
           </div>
-          {fading && <div className="fadebar" style={{ width: `${(live?.t ?? 0) * 100}%` }} />}
+          {fading && <div className="fadebar" style={{ width: `${fadeT * 100}%` }} />}
         </>
       )}
     </div>
   );
-}
+});
 
 /** Blend only affects intensity — colour, pan/tilt, strobe and macros always
  *  take the upper layer's value whatever the mode says. Worth saying on hover,
@@ -486,11 +503,16 @@ export function LookGrid() {
       </div>
       {layers.map((layer) => {
         const live = liveLayers?.find((l) => l.id === layer.id);
+        // primitives, not the freshly-parsed LayerSnap object, so a memoized
+        // cell only re-renders when its own live state actually changes
+        const liveLookId = live?.lookId ?? null;
+        const liveCol = live?.col ?? null;
+        const fadeT = live?.t ?? 1;
         return (
           <React.Fragment key={layer.id}>
             <LayerHead layer={layer} live={live} />
             {cols.map((_, col) => (
-              <Cell key={col} layer={layer} col={col} live={live} />
+              <Cell key={col} layer={layer} col={col} liveLookId={liveLookId} liveCol={liveCol} fadeT={fadeT} />
             ))}
             {/* grid auto-flow is continuous, so every row must fill the
                 add-column track or the next layer head slides up into it */}

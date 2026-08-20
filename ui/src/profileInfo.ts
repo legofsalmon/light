@@ -65,12 +65,40 @@ function beamCaps(c: NonNullable<Project['profiles']>[string]): BeamCaps {
   return out;
 }
 
-/** A 16-bit axis shows up as "Pan (coarse)"/"Pan (fine)", so match the stem. */
+/** A 16-bit axis shows up as "Pan (coarse)"/"Pan (fine)", so match the stem.
+ *  The patterns are module-scope so a 129-fixture conflict scan does not compile
+ *  two RegExps per fixture per pass. */
+const AXIS_RE = { pan: /^pan\b/i, tilt: /^tilt\b/i };
 const hasAxis = (names: string[], axis: 'pan' | 'tilt', heads: { kind: HeadKind }[]): boolean =>
-  heads.some((h) => h.kind === 'mover') ||
-  names.some((n) => new RegExp(`^${axis}\\b`, 'i').test(n));
+  heads.some((h) => h.kind === 'mover') || names.some((n) => AXIS_RE[axis].test(n));
+
+// profileMeta for an imported profile rebuilds channel-name and beam-capability
+// tables from scratch, and the patch view calls it thousands of times per
+// render (an O(n^2) conflict scan, plus a full profile dropdown per row). Cache
+// per project: the key is the profiles object, which is replaced wholesale on
+// every edit, so a WeakMap entry is naturally invalidated when the project
+// changes and collected when it is dropped.
+const META_CACHE = new WeakMap<object, Map<string, ProfileMeta | null>>();
+function metaCacheFor(project: Project | null): Map<string, ProfileMeta | null> | null {
+  const profiles = project?.profiles;
+  if (!profiles) return null;
+  let m = META_CACHE.get(profiles);
+  if (!m) {
+    m = new Map();
+    META_CACHE.set(profiles, m);
+  }
+  return m;
+}
 
 export function profileMeta(project: Project | null, id: string): ProfileMeta | null {
+  const cache = metaCacheFor(project);
+  if (cache?.has(id)) return cache.get(id)!;
+  const meta = computeProfileMeta(project, id);
+  cache?.set(id, meta);
+  return meta;
+}
+
+function computeProfileMeta(project: Project | null, id: string): ProfileMeta | null {
   const b = PROFILES[id];
   if (b) {
     return {
