@@ -1092,6 +1092,72 @@ async function main(): Promise<void> {
     await settle(node, rust);
   }
 
+  // --- P3 Named Controls: one fader fanning to several soft addresses through
+  // per-link brackets, resolved through P1's layer — byte-identical on both
+  // engines, including via a MIDI mapping and past a dangling link.
+  {
+    await armWash('wash-rainbow', 1.35);
+    const partId = (await currentProject(node)).looks['wash-rainbow'].parts[0].id;
+    const effectId = (await currentProject(node)).looks['wash-rainbow'].parts[0].effects[0].id;
+    {
+      const p = structuredClone(await currentProject(node));
+      Object.assign(p.looks['wash-rainbow'].parts[0].effects[0], {
+        bypass: false, mix: 1, distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0,
+      });
+      p.controls = [{
+        id: 'ctl-1',
+        name: 'Chorus feel',
+        value: 0,
+        links: [
+          // inverted bracket: v 0..1 maps sat 1 -> 0.2
+          { lookId: 'wash-rainbow', partId, field: 'sat', min: 1, max: 0.2 },
+          // effect-field link: rate 16 -> 2 as the fader rises
+          { lookId: 'wash-rainbow', partId, effectId, field: 'rate', min: 16, max: 2 },
+          // dangling link: must be skipped identically, not break the fan
+          { lookId: 'no-such-look', partId: 'nope', field: 'dimmer', min: 0, max: 1 },
+        ],
+      }];
+      // and a MIDI mapping driving the control from CC 20 ch1
+      p.midi = [...p.midi, { id: 'm-ctl', type: 'cc', channel: 0, number: 20, action: { kind: 'control', controlId: 'ctl-1' } }];
+      both({ type: 'updateProject', project: p });
+      await sleep(400);
+    }
+    const stored = frameOf(node);
+    compareDmx('controls: baseline parity', node, rust);
+
+    both({ type: 'setControl', controlId: 'ctl-1', value: 0.5 });
+    await sleep(400);
+    compareDmx('controls: half-fader fan-out parity', node, rust);
+    check('controls: the fan-out moves DMX', frameOf(node) !== stored, 'setControl changed nothing');
+
+    both({ type: 'setControl', controlId: 'ctl-1', value: 1 });
+    await sleep(400);
+    compareDmx('controls: full-fader parity (inverted + effect brackets)', node, rust);
+
+    // the same fan-out via MIDI: CC 20 = 32/127
+    both({ type: 'midi', status: 0xb0, d1: 20, d2: 32 });
+    await sleep(400);
+    compareDmx('controls: MIDI-driven parity', node, rust);
+
+    // discard drops the whole fan; bytes return to stored
+    both({ type: 'softClear' });
+    await sleep(400);
+    compareDmx('controls: discard parity', node, rust);
+    check('controls: discard restores stored bytes', frameOf(node) === stored, 'discard did not restore');
+
+    // clean up the control + mapping
+    {
+      const p = structuredClone(await currentProject(node));
+      delete p.controls;
+      p.midi = p.midi.filter((m) => m.id !== 'm-ctl');
+      both({ type: 'updateProject', project: p });
+      await sleep(300);
+    }
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
+  }
+
   // --- A2 pool: the FX pool is data the engine never renders from, but it must
   // survive the save/broadcast round-trip identically on both engines, and both
   // must repair it the same way (drop a malformed preset, clamp an out-of-range

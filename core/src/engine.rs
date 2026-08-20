@@ -1076,6 +1076,7 @@ fn build_snapshot(
             m
         },
         soft: state.soft_entries(),
+        controls: state.control_entries(),
         identify: state.identify.clone(),
         overrides: state.overrides.values().map(|m| m.len()).sum(),
         osc_in: osc_status,

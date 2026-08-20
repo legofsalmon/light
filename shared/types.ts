@@ -305,8 +305,34 @@ export type Layer = {
   cells: (string | null)[];
 };
 
+/** One fan-out of a Named Control (P3): drives a single soft address through
+ *  a per-link bracket. value v (0..1) maps to min + (max − min)·v — set
+ *  min > max to invert. The engine clamps the mapped value per-field at the
+ *  soft door, so a bracket can never push a parameter out of range. */
+export type ControlLink = {
+  lookId: string;
+  partId: string;
+  effectId?: string;
+  field: SoftField;
+  min: number;
+  max: number;
+};
+
+/** A Named Control (P3) — the macro answer: a typed live fader fanning out to
+ *  parameters through per-link brackets. No strings, no conditionals; what
+ *  drives what is data you can read. `value` is the SAVED position; the live
+ *  position is runtime state carried in the snapshot. */
+export type Control = {
+  id: string;
+  name: string;
+  value: number;
+  links: ControlLink[];
+};
+
 export type MidiAction =
   | { kind: 'cell'; layerId: string; col: number }
+  /** move a Named Control (CC value scales 0..1) */
+  | { kind: 'control'; controlId: string }
   | { kind: 'column'; col: number }
   | { kind: 'layerMaster'; layerId: string }
   | { kind: 'layerClear'; layerId: string }
@@ -390,6 +416,8 @@ export type Project = {
   activeDeckId?: string;
   /** FX pool: named, reusable effect templates (copy-on-apply) */
   fxPool?: FxPreset[];
+  /** Named Controls (P3): live faders fanning to parameters via soft links */
+  controls?: Control[];
 };
 
 // ---------- live wire types ----------
@@ -439,6 +467,9 @@ export type Snapshot = {
   /** live soft overrides (P1) — present only while something is ridden, so
    *  the UI can draw dual-state faders and offer Store/Discard */
   soft?: { lookId: string; partId: string; effectId?: string; field: SoftField; value: number }[];
+  /** live Named Control positions (P3) — present only while any differ from
+   *  their stored value */
+  controls?: { id: string; value: number }[];
   /** Art-Net nodes discovered via ArtPoll (present when polling is active) */
   artnetNodes?: { ip: string; name: string; ageMs: number }[];
   /** 'failed' = reply port 6454 is held by another app — discovery unavailable */
@@ -538,6 +569,8 @@ export type Command =
   | { type: 'softCommit' }
   /** Discard: drop every soft value, stored data untouched */
   | { type: 'softClear' }
+  /** move a Named Control: resolves through the soft layer per link */
+  | { type: 'setControl'; controlId: string; value: number }
   | { type: 'midi'; status: number; d1: number; d2: number }
   /** arm (or cancel with null) engine-side MIDI learn — next note/cc maps to the action */
   | { type: 'learn'; action: MidiAction | null }
@@ -800,6 +833,42 @@ export function sanitizeProject(p: Project): Project | null {
           .filter((fp): fp is FxPreset => fp !== null)
       : [];
     if (p.fxPool.length === 0) delete p.fxPool;
+  }
+  // Named Controls (P3): tolerant like the pool — drop a control with no id
+  // or a link whose field is unknown; force numerics finite; clamp value 0..1.
+  if (p.controls !== undefined) {
+    p.controls = Array.isArray(p.controls)
+      ? p.controls
+          .map((c): Control | null => {
+            if (!c || typeof c !== 'object' || typeof c.id !== 'string') return null;
+            const links = Array.isArray(c.links)
+              ? c.links
+                  .filter(
+                    (l): l is ControlLink =>
+                      !!l && typeof l === 'object' && typeof l.lookId === 'string' &&
+                      typeof l.partId === 'string' &&
+                      (l.effectId === undefined || typeof l.effectId === 'string') &&
+                      SOFT_FIELDS.has(l.field),
+                  )
+                  .map((l) => ({
+                    lookId: l.lookId,
+                    partId: l.partId,
+                    ...(l.effectId !== undefined ? { effectId: l.effectId } : {}),
+                    field: l.field,
+                    min: Number.isFinite(l.min) ? l.min : 0,
+                    max: Number.isFinite(l.max) ? l.max : 1,
+                  }))
+              : [];
+            return {
+              id: c.id,
+              name: typeof c.name === 'string' ? c.name : '',
+              value: Number.isFinite(c.value) ? clamp(c.value, 0, 1) : 0,
+              links,
+            };
+          })
+          .filter((c): c is Control => c !== null)
+      : [];
+    if (p.controls.length === 0) delete p.controls;
   }
   return p;
 }

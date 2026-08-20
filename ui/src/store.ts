@@ -4,7 +4,7 @@ import type {
 } from '../../shared/types.ts';
 import { WS_PORT } from '../../shared/types.ts';
 
-export type Tab = 'look' | 'patch' | 'output' | 'sync';
+export type Tab = 'look' | 'patch' | 'controls' | 'output' | 'sync';
 
 /** Which panels are on screen.
  *

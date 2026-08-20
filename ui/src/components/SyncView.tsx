@@ -99,6 +99,8 @@ function describeAction(p: Project, a: MidiAction): string {
       return `Layer master · ${p.layers.find((l) => l.id === a.layerId)?.name ?? '?'}`;
     case 'layerClear':
       return `Clear layer · ${p.layers.find((l) => l.id === a.layerId)?.name ?? '?'}`;
+    case 'control':
+      return `Control · ${p.controls?.find((c) => c.id === a.controlId)?.name ?? a.controlId}`;
     case 'grand':
       return 'Grand master';
     case 'speed':

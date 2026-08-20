@@ -375,6 +375,80 @@ fn default_one() -> u32 {
     1
 }
 
+/// One fan-out of a Named Control (P3): drives a single soft address through
+/// a per-link bracket. value v (0..1) maps to min + (max − min)·v — set
+/// min > max to invert. The soft door clamps the mapped value per-field.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ControlLink {
+    pub look_id: String,
+    pub part_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_id: Option<String>,
+    pub field: SoftField,
+    pub min: f64,
+    pub max: f64,
+}
+
+/// A Named Control (P3) — the macro answer: a typed live fader fanning out to
+/// parameters through per-link brackets. `value` is the SAVED position; the
+/// live position is runtime state carried in the snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Control {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub value: f64,
+    #[serde(default)]
+    pub links: Vec<ControlLink>,
+}
+
+/// Tolerant like de_fx_pool: drop a control with no id, drop a link whose
+/// field is unknown, force numerics finite — mirror of the Node sanitizer.
+fn de_controls<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Control>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    let Some(serde_json::Value::Array(items)) = v else { return Ok(Vec::new()) };
+    let fin = |o: &serde_json::Map<String, serde_json::Value>, k: &str, def: f64| -> f64 {
+        match o.get(k).and_then(|x| x.as_f64()) {
+            Some(n) if n.is_finite() => n,
+            _ => def,
+        }
+    };
+    let controls = items
+        .into_iter()
+        .filter_map(|item| {
+            let obj = item.as_object()?;
+            let id = obj.get("id")?.as_str()?.to_string();
+            let name = obj.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let value = clamp01(fin(obj, "value", 0.0));
+            let links: Vec<ControlLink> = obj
+                .get("links")
+                .and_then(|x| x.as_array())
+                .map(|ls| {
+                    ls.iter()
+                        .filter_map(|l| {
+                            let lo = l.as_object()?;
+                            let field = serde_json::from_value::<SoftField>(lo.get("field")?.clone()).ok()?;
+                            Some(ControlLink {
+                                look_id: lo.get("lookId")?.as_str()?.to_string(),
+                                part_id: lo.get("partId")?.as_str()?.to_string(),
+                                effect_id: lo.get("effectId").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                                field,
+                                min: fin(lo, "min", 0.0),
+                                max: fin(lo, "max", 1.0),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some(Control { id, name, value, links })
+        })
+        .collect();
+    Ok(controls)
+}
+
 /// A named entry in the FX pool: a reusable effect template that references no
 /// fixtures. Applying it copies the effect into a look part with a fresh id
 /// (copy-on-apply), so editing the pool never reaches a running show. The
@@ -594,6 +668,8 @@ pub struct Layer {
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum MidiAction {
     Cell { layer_id: String, col: usize },
+    /// move a Named Control (CC value scales 0..1)
+    Control { control_id: String },
     Column { col: usize },
     LayerMaster { layer_id: String },
     LayerClear { layer_id: String },
@@ -687,6 +763,9 @@ pub struct Project {
     /// through the round-trip; never rendered from directly.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "de_fx_pool")]
     pub fx_pool: Vec<FxPreset>,
+    /// Named Controls (P3): live faders fanning to parameters via soft links.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "de_controls")]
+    pub controls: Vec<Control>,
 }
 
 // ---------- live wire types (engine → ui) ----------
@@ -746,6 +825,13 @@ pub struct ArtnetNodeSnap {
     pub age_ms: u64,
 }
 
+/// One live Named Control position, as the snapshot carries it.
+#[derive(Debug, Clone, Serialize)]
+pub struct ControlSnap {
+    pub id: String,
+    pub value: f64,
+}
+
 /// One live soft override, as the snapshot carries it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -783,6 +869,9 @@ pub struct Snapshot {
     /// live soft overrides (P1) — present only while something is ridden
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub soft: Vec<SoftSnap>,
+    /// live Named Control positions (P3)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub controls: Vec<ControlSnap>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identify: Option<String>,
     #[serde(skip_serializing_if = "is_zero")]
@@ -907,6 +996,9 @@ pub enum Command {
     SoftCommit,
     /// Discard: drop every soft value, stored data untouched.
     SoftClear,
+    /// Move a Named Control: resolves through the soft layer per link.
+    #[serde(rename_all = "camelCase")]
+    SetControl { control_id: String, value: f64 },
     UpdateProject {
         project: Box<Project>,
         /// The project generation this edit was composed against; the engine

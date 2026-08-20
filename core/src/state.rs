@@ -294,6 +294,9 @@ pub struct EngineState {
     /// whole part with ONE lookup. Runtime-only — SoftCommit writes them into
     /// the project, SoftClear/AllStop/project switch drops them.
     pub soft: HashMap<(String, String), SoftPatch>,
+    /// Live Named Control positions (P3). Runtime-only; the STORED position
+    /// is Control.value in the project. Cleared with the soft layer.
+    pub control_live: HashMap<String, f64>,
     pub learn_target: Option<MidiAction>,
     /// TEST ONLY — a pending effect-clock pin (LIGHT_TEST_CLOCK gated), consumed
     /// by the engine loop before the next tick. Not show state; never persisted.
@@ -320,6 +323,7 @@ impl EngineState {
             preview_look: None,
             overrides: HashMap::new(),
             soft: HashMap::new(),
+            control_live: HashMap::new(),
             learn_target: None,
             gen: 1,
             pending_pin: None,
@@ -680,6 +684,11 @@ impl EngineState {
             }
             MidiAction::DeckNext => pressed && self.deck_step(1, t),
             MidiAction::DeckPrev => pressed && self.deck_step(-1, t),
+            MidiAction::Control { control_id } => {
+                let id = control_id.clone();
+                self.set_control(&id, value);
+                false
+            }
         }
     }
 
@@ -864,6 +873,39 @@ impl EngineState {
         changed
     }
 
+    /// Move a Named Control (P3): resolve every link through the soft layer.
+    /// Each link maps v (0..1) onto its bracket min + (max − min)·v; the soft
+    /// door clamps per-field, so a bracket cannot push a parameter out of
+    /// range. Dangling links are skipped — they stay inspectable in the
+    /// control's data. Mirrors setControl in engine/state.ts.
+    pub fn set_control(&mut self, control_id: &str, value: f64) -> bool {
+        if !value.is_finite() {
+            return false;
+        }
+        let v = clamp01(value);
+        let Some(control) = self.project.controls.iter().find(|c| c.id == control_id) else {
+            return false;
+        };
+        let links: Vec<crate::types::ControlLink> = control.links.clone();
+        for l in links {
+            let mapped = l.min + (l.max - l.min) * v;
+            self.set_soft(&l.look_id, &l.part_id, l.effect_id.as_deref(), l.field, Some(mapped));
+        }
+        self.control_live.insert(control_id.to_string(), v);
+        true
+    }
+
+    /// Live control positions for the snapshot — only those that moved.
+    pub fn control_entries(&self) -> Vec<crate::types::ControlSnap> {
+        let mut out: Vec<crate::types::ControlSnap> = self
+            .control_live
+            .iter()
+            .map(|(id, value)| crate::types::ControlSnap { id: id.clone(), value: *value })
+            .collect();
+        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out
+    }
+
     /// Drop rides whose look/part/effect no longer exists — called from the
     /// renderer's gen-gated rebuild, so every project change sweeps exactly
     /// once, in both engines, with the same discipline as the geometry cache.
@@ -888,6 +930,7 @@ impl EngineState {
         self.live.clear();
         self.overrides.clear();
         self.soft.clear(); // rides belong to the show they were ridden in
+        self.control_live.clear();
         self.identify = None;
         self.muted.clear();
         self.preview_look = None;
@@ -1103,6 +1146,7 @@ impl EngineState {
                 self.identify = None;
                 self.overrides.clear();
                 self.soft.clear(); // rides are transient state; panic drops them too
+                self.control_live.clear();
                 self.project.settings.haze = 0.0;
                 self.project.settings.haze_fan = 0.0; // the fan is the audible one
                 out.project_changed = true;
@@ -1117,6 +1161,9 @@ impl EngineState {
             }
             Command::SoftClear => {
                 self.soft.clear();
+            }
+            Command::SetControl { control_id, value } => {
+                self.set_control(&control_id, value);
             }
             Command::SetChannel { universe_id, channel, value } => {
                 // protocol is 1-512

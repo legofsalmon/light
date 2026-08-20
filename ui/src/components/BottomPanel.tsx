@@ -4,10 +4,12 @@ import { LookEditor } from './LookEditor.tsx';
 import { PatchView } from './PatchView.tsx';
 import { OutputView } from './OutputView.tsx';
 import { SyncView } from './SyncView.tsx';
+import { ControlsView } from './ControlsView.tsx';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'look', label: 'Look' },
   { id: 'patch', label: 'Fixtures' },
+  { id: 'controls', label: 'Controls' },
   { id: 'output', label: 'Output' },
   { id: 'sync', label: 'Sync · MIDI' },
 ];
@@ -33,6 +35,7 @@ export function BottomPanel() {
       <div className="tabbody" ref={bodyRef}>
         {tab === 'look' && <LookEditor />}
         {tab === 'patch' && <PatchView />}
+        {tab === 'controls' && <ControlsView />}
         {tab === 'output' && <OutputView />}
         {tab === 'sync' && <SyncView />}
       </div>

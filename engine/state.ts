@@ -76,6 +76,9 @@ export class EngineState {
    *  whole part with ONE lookup. Runtime-only — Store (softCommit) writes
    *  them into the project, Discard/ALL STOP/project switch drops them. */
   soft = new Map<string, { lookId: string; partId: string; params: Map<SoftField, number>; effects: Map<string, Map<SoftField, number>> }>();
+  /** Live Named Control positions (P3). Runtime-only; the STORED position is
+   *  Control.value in the project. Cleared with the soft layer. */
+  controlLive = new Map<string, number>();
   clock = new BeatClock();
   master = 1;
   speed = 1;
@@ -260,7 +263,7 @@ export class EngineState {
       return;
     }
 
-    const CONTINUOUS = new Set(['layerMaster', 'grand', 'speed', 'haze']);
+    const CONTINUOUS = new Set(['layerMaster', 'grand', 'speed', 'haze', 'control']);
     for (const m of this.project.midi) {
       if (m.channel !== channel || m.number !== d1) continue;
       if (m.type === 'note' && (isNoteOn || isNoteOff)) {
@@ -316,7 +319,37 @@ export class EngineState {
       case 'deckPrev':
         if (pressed) this.deckStep(-1);
         break;
+      case 'control':
+        this.setControl(a.controlId, value);
+        break;
     }
+  }
+
+  /** Move a Named Control (P3): resolve every link through the soft layer.
+   *  Each link maps v (0..1) onto its bracket min + (max − min)·v; the soft
+   *  door clamps per-field, so a bracket cannot push a parameter out of
+   *  range. Dangling links (deleted look/part/effect) are skipped — they stay
+   *  inspectable in the control's data. Mirrors set_control in
+   *  core/src/state.rs. */
+  setControl(controlId: string, value: number): boolean {
+    if (!Number.isFinite(value)) return false;
+    const v = clamp(value);
+    const control = this.project.controls?.find((c) => c.id === controlId);
+    if (!control) return false;
+    for (const l of control.links) {
+      const mapped = l.min + (l.max - l.min) * v;
+      this.setSoft(l.lookId, l.partId, l.effectId, l.field, mapped);
+    }
+    this.controlLive.set(controlId, v);
+    return true;
+  }
+
+  /** Live control positions for the snapshot — only those that moved. */
+  controlEntries(): { id: string; value: number }[] {
+    const out: { id: string; value: number }[] = [];
+    for (const [id, value] of this.controlLive) out.push({ id, value });
+    out.sort((a, b) => (a.id < b.id ? -1 : 1));
+    return out;
   }
 
   /** Replace the project (UI edit) and drop any live references that no longer exist. */
@@ -340,6 +373,7 @@ export class EngineState {
     this.live.clear();
     this.overrides.clear();
     this.soft.clear(); // rides belong to the show they were ridden in
+    this.controlLive.clear();
     this.identify = null;
     this.muted.clear();
     this.previewLook = null;
