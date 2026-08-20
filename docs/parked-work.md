@@ -223,7 +223,14 @@ Agreed build order (each step shippable, parity-green):
    clustering, tolerant CHead spatial loading in both engines (`91ee69c`).
    NOTE: every GDTF embedded in the mainstage MVR is a flat single-Base
    console export — rich geometry lives on GDTF Share (fetch is parked, §2).
-8. B3 auto-groups slice 1 (per-type, per-truss ordered along the bar)
+8. B3 auto-groups slice 1 (per-type, per-truss ordered along the bar) — DONE
+   (`2ed93e4`). Group gains an inert `auto` provenance tag (tolerant both
+   engines); desiredAutoGroups/planAutoGroups/applyAutoGroups in
+   ui/src/autoGroups.ts; ⟳ button with create/update/remove diff-confirm in
+   the Groups panel; rename/chip-edit/reverse promotes (deletes the tag);
+   deterministic ids make regenerate idempotent. Browser-verified: dialog
+   plan correct, engine holds tagged groups, truss ordered along the bar.
+   Halves/pairs/odd-even linked groups stay deferred until wanted.
 9. P1 soft overrides (SoftAddr layer, engine-side commit, Store/Discard)
 10. P3 Named Controls (the macro replacement — typed faders, per-link ranges)
 11. P2 modulators (LFO slice, then ADSR slice)
