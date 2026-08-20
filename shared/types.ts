@@ -193,6 +193,15 @@ export type LookPart = {
   effects: Effect[];
 };
 
+/** A named entry in the FX pool: a reusable effect template that references no
+ *  fixtures. Applying it copies the effect into a look part with a fresh id
+ *  (copy-on-apply), so editing the pool never reaches a running show. */
+export type FxPreset = {
+  id: string;
+  name: string;
+  effect: Effect;
+};
+
 /** One entry of a cue list: play `lookId` for `beats` beats, then advance. */
 export type CueStep = { lookId: string; beats: number };
 
@@ -311,6 +320,8 @@ export type Project = {
   /** grid pages (one per song); layer.cells mirrors the active deck */
   decks?: Deck[];
   activeDeckId?: string;
+  /** FX pool: named, reusable effect templates (copy-on-apply) */
+  fxPool?: FxPreset[];
 };
 
 // ---------- live wire types ----------
@@ -505,6 +516,29 @@ export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+/** Repair one effect at the door, mirroring repair_effect in core/src/types.rs:
+ *  drop it (null) if it has no id or an unknown target/wave, force every numeric
+ *  field finite (a NaN rate/size otherwise reaches the hue-wrap maths), coerce
+ *  bypass and clamp mix. Extra fields survive via the spread, keeping
+ *  forward-compatibility as the motion engine adds fields. */
+export function repairEffect(e: unknown): Effect | null {
+  if (!e || typeof e !== 'object') return null;
+  const x = e as Effect;
+  if (typeof x.id !== 'string' || !EFFECT_TARGETS.has(x.target) || !WAVES.has(x.wave)) return null;
+  return {
+    ...x,
+    rate: Number.isFinite(x.rate) ? x.rate : 1,
+    size: Number.isFinite(x.size) ? x.size : 1,
+    spread: Number.isFinite(x.spread) ? x.spread : 0,
+    width: Number.isFinite(x.width) ? x.width : 0.5,
+    phase: Number.isFinite(x.phase) ? x.phase : 0,
+    // A2: absent on pre-A2 saves — default to an active, full-wet effect so
+    // those shows render byte-identically to before.
+    bypass: x.bypass === true,
+    mix: Number.isFinite(x.mix) ? clamp(x.mix, 0, 1) : 1,
+  };
+}
+
 /**
  * Structural validation + repair for untrusted project data (updateProject
  * commands, files from disk). Repairs what it can, drops what it can't, and
@@ -541,33 +575,8 @@ export function sanitizeProject(p: Project): Project | null {
     }
     for (const part of lk.parts) {
       if (!part.params || typeof part.params !== 'object') part.params = {};
-      // Repair each effect at the door, mirroring de_effects in
-      // core/src/types.rs: drop an effect with no id or an unknown target/wave,
-      // and force every numeric field finite (a NaN rate/size otherwise reaches
-      // the hue-wrap maths). Extra fields are preserved by the spread, which is
-      // what keeps forward-compatibility as the motion engine adds fields.
       part.effects = Array.isArray(part.effects)
-        ? part.effects
-            .filter(
-              (e): e is Effect =>
-                !!e &&
-                typeof e === 'object' &&
-                typeof (e as Effect).id === 'string' &&
-                EFFECT_TARGETS.has((e as Effect).target) &&
-                WAVES.has((e as Effect).wave),
-            )
-            .map((e) => ({
-              ...e,
-              rate: Number.isFinite(e.rate) ? e.rate : 1,
-              size: Number.isFinite(e.size) ? e.size : 1,
-              spread: Number.isFinite(e.spread) ? e.spread : 0,
-              width: Number.isFinite(e.width) ? e.width : 0.5,
-              phase: Number.isFinite(e.phase) ? e.phase : 0,
-              // A2: absent on pre-A2 saves — default to an active, full-wet
-              // effect so those shows render byte-identically to before.
-              bypass: e.bypass === true,
-              mix: Number.isFinite(e.mix) ? clamp(e.mix, 0, 1) : 1,
-            }))
+        ? part.effects.map(repairEffect).filter((e): e is Effect => e !== null)
         : [];
     }
     if (lk.steps !== undefined) {
@@ -657,6 +666,22 @@ export function sanitizeProject(p: Project): Project | null {
     if (!Number.isFinite(f.rotY)) f.rotY = 0;
     if (f.rotX !== undefined && !Number.isFinite(f.rotX)) delete f.rotX;
     if (f.rotZ !== undefined && !Number.isFinite(f.rotZ)) delete f.rotZ;
+  }
+  // FX pool: tolerant like the effect repair above (de_fx_pool in Rust). A
+  // preset with no id or an unrepairable effect is dropped, not fatal. Cleared
+  // when empty to match the engine's skip-empty serialisation.
+  if (p.fxPool !== undefined) {
+    p.fxPool = Array.isArray(p.fxPool)
+      ? p.fxPool
+          .map((fp): FxPreset | null => {
+            if (!fp || typeof fp !== 'object' || typeof fp.id !== 'string') return null;
+            const effect = repairEffect(fp.effect);
+            if (!effect) return null;
+            return { id: fp.id, name: typeof fp.name === 'string' ? fp.name : '', effect };
+          })
+          .filter((fp): fp is FxPreset => fp !== null)
+      : [];
+    if (p.fxPool.length === 0) delete p.fxPool;
   }
   return p;
 }

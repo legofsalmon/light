@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import WebSocket from 'ws';
 import { defaultProject } from '../defaultProject.ts';
-import type { Command, Effect, Project, Snapshot } from '../../shared/types.ts';
+import type { Command, Effect, FxPreset, Project, Snapshot } from '../../shared/types.ts';
 
 const ROOT = process.cwd();
 const TMP = path.join(ROOT, '.parity-tmp');
@@ -846,6 +846,41 @@ async function main(): Promise<void> {
     both({ type: 'allStop' });
     both({ type: 'setBlackout', v: false });
     await settle(node, rust);
+  }
+
+  // --- A2 pool: the FX pool is data the engine never renders from, but it must
+  // survive the save/broadcast round-trip identically on both engines, and both
+  // must repair it the same way (drop a malformed preset, clamp an out-of-range
+  // mix). Compared field-by-field so serialisation key-order can't matter.
+  {
+    const mkEffect = (over: Partial<Effect>): Effect => ({
+      id: 'tpl', target: 'hue', wave: 'sawUp', rate: 8, size: 1, spread: 0.5,
+      width: 0.5, phase: 0, bypass: false, mix: 1, ...over,
+    });
+    const p = structuredClone(await currentProject(node));
+    p.fxPool = [
+      { id: 'fp1', name: 'Rainbow', effect: mkEffect({ id: 'tpl1' }) },
+      // unknown target -> both engines drop this whole preset
+      { id: 'fp-bad', name: 'Bad', effect: mkEffect({ id: 'tpl2', target: 'laser' as Effect['target'] }) },
+      // out-of-range mix -> clamped to 1 by both
+      { id: 'fp2', name: 'Dim', effect: mkEffect({ id: 'tpl3', target: 'dimmer', wave: 'sine', mix: 3 }) },
+    ];
+    both({ type: 'updateProject', project: p });
+    await sleep(400);
+    const canon = (proj: Project) =>
+      (proj.fxPool ?? [])
+        .map((fp) => {
+          const e = fp.effect;
+          return `${fp.id}|${fp.name}|${e.id}|${e.target}|${e.wave}|${e.rate}|${e.size}|${e.spread}|${e.width}|${e.phase}|${e.bypass}|${e.mix}`;
+        })
+        .join(';');
+    const nPool = canon(await currentProject(nodeObs));
+    const rPool = canon(await currentProject(rustObs));
+    check('pool: survives the round-trip identically on both engines', nPool === rPool, `node=${nPool} rust=${rPool}`);
+    const ids = (await currentProject(nodeObs)).fxPool?.map((fp) => fp.id) ?? [];
+    check('pool: the malformed preset is dropped by both', !ids.includes('fp-bad') && ids.length === 2, `ids=${ids.join(',')}`);
+    const dim = (await currentProject(rustObs)).fxPool?.find((fp) => fp.id === 'fp2');
+    check('pool: out-of-range mix clamped to 1', dim?.effect.mix === 1, `got ${dim?.effect.mix}`);
   }
 
   // --- project-generation staleness: both engines must reject a write whose

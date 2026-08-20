@@ -233,6 +233,38 @@ fn default_mix() -> f64 {
     1.0
 }
 
+/// A named entry in the FX pool: a reusable effect template that references no
+/// fixtures. Applying it copies the effect into a look part with a fresh id
+/// (copy-on-apply), so editing the pool never reaches a running show. The
+/// engine never renders from the pool — it is carried so it survives the
+/// save/broadcast round-trip and syncs across clients.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FxPreset {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    pub effect: Effect,
+}
+
+/// Tolerant like de_effects: drop a preset with no id or an unrepairable
+/// effect rather than failing the whole project load.
+fn de_fx_pool<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<FxPreset>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    let Some(serde_json::Value::Array(items)) = v else { return Ok(Vec::new()) };
+    let pool = items
+        .into_iter()
+        .filter_map(|item| {
+            let obj = item.as_object()?;
+            let id = obj.get("id")?.as_str()?.to_string();
+            let name = obj.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let effect = repair_effect(obj.get("effect")?.as_object()?)?;
+            Some(FxPreset { id, name, effect })
+        })
+        .collect();
+    Ok(pool)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LookPart {
@@ -278,36 +310,40 @@ fn default_beats() -> f64 {
 ///
 /// An effect with no id or an unrecognised target/wave is dropped (just that
 /// effect), not fatal.
-fn de_effects<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Effect>, D::Error> {
-    let v = Option::<serde_json::Value>::deserialize(d)?;
-    let Some(serde_json::Value::Array(items)) = v else { return Ok(Vec::new()) };
-    let fin = |o: &serde_json::Map<String, serde_json::Value>, k: &str, def: f64| -> f64 {
-        match o.get(k).and_then(|x| x.as_f64()) {
+/// Repair one effect object at the door: drop it (None) if it has no id or an
+/// unknown target/wave; otherwise force every numeric field finite and clamp
+/// mix. Shared by de_effects (look parts) and de_fx_pool (preset templates).
+fn repair_effect(obj: &serde_json::Map<String, serde_json::Value>) -> Option<Effect> {
+    let fin = |k: &str, def: f64| -> f64 {
+        match obj.get(k).and_then(|x| x.as_f64()) {
             Some(n) if n.is_finite() => n,
             _ => def,
         }
     };
+    let id = obj.get("id")?.as_str()?.to_string();
+    let target = serde_json::from_value::<EffectTarget>(obj.get("target")?.clone()).ok()?;
+    let wave = serde_json::from_value::<Wave>(obj.get("wave")?.clone()).ok()?;
+    Some(Effect {
+        id,
+        target,
+        wave,
+        rate: fin("rate", 1.0),
+        size: fin("size", 1.0),
+        spread: fin("spread", 0.0),
+        width: fin("width", 0.5),
+        phase: fin("phase", 0.0),
+        bypass: obj.get("bypass").and_then(|x| x.as_bool()).unwrap_or(false),
+        // clamp to 0..1; a missing or non-finite mix means full wet
+        mix: fin("mix", 1.0).clamp(0.0, 1.0),
+    })
+}
+
+fn de_effects<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Effect>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    let Some(serde_json::Value::Array(items)) = v else { return Ok(Vec::new()) };
     let effects = items
         .into_iter()
-        .filter_map(|item| {
-            let obj = item.as_object()?;
-            let id = obj.get("id")?.as_str()?.to_string();
-            let target = serde_json::from_value::<EffectTarget>(obj.get("target")?.clone()).ok()?;
-            let wave = serde_json::from_value::<Wave>(obj.get("wave")?.clone()).ok()?;
-            Some(Effect {
-                id,
-                target,
-                wave,
-                rate: fin(obj, "rate", 1.0),
-                size: fin(obj, "size", 1.0),
-                spread: fin(obj, "spread", 0.0),
-                width: fin(obj, "width", 0.5),
-                phase: fin(obj, "phase", 0.0),
-                bypass: obj.get("bypass").and_then(|x| x.as_bool()).unwrap_or(false),
-                // clamp to 0..1; a missing or non-finite mix means full wet
-                mix: fin(obj, "mix", 1.0).clamp(0.0, 1.0),
-            })
-        })
+        .filter_map(|item| repair_effect(item.as_object()?))
         .collect();
     Ok(effects)
 }
@@ -477,6 +513,10 @@ pub struct Project {
     /// project converts itself the next time it is saved.
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "active_deck_id")]
     pub active_deck_id: Option<String>,
+    /// FX pool: named, reusable effect templates (copy-on-apply). Carried
+    /// through the round-trip; never rendered from directly.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "de_fx_pool")]
+    pub fx_pool: Vec<FxPreset>,
 }
 
 // ---------- live wire types (engine → ui) ----------
