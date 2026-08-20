@@ -6,64 +6,22 @@ an adversarial verifier — these are real, not speculative.
 
 Full review: <https://claude.ai/code/artifact/a877b38b-6309-46b8-ac5f-bfbb9963bd4a>
 
-Done so far on `show-safety-v1.2.3`: Stage 1 (show safety) and most of Stage 2
-(protocol correctness + UI scale). See `git log` from `4ccd150` onward.
+Done so far on `show-safety-v1.2.3`: Stages 1–3 (show safety, protocol
+correctness + scale, previz correctness) and the low-severity sweep. See
+`git log` from `4ccd150` onward.
+
+**Only two items remain parked**: authentication (§2 below) and the moved-port
+Tauri capability (§3). Everything else in this file has been done.
 
 ---
 
-## 1. Per-client snapshot content — DMX opt-in and previewHeads targeting
+## 1. Per-client snapshot content — DONE (`23d2a77`)
 
-**Why parked:** the snapshot is currently built once per tick and broadcast as
-one JSON string to every client (`Broadcaster::broadcast` in
-`core/src/server.rs`, `server.broadcast` in `engine/server.ts`). Making the
-content differ per client is an architectural change to the broadcast path in
-*both* engines, and it needs its own parity coverage. It did not belong bolted
-onto the protocol pass.
-
-**Measured, on the 129-fixture / 7-universe arena show** (scratch engine, outputs
-off): **28.5 KB per snapshot, 20 fps → ~556 KB/s per client.** Composition:
-
-| part | bytes | note |
-|---|---|---|
-| `heads` | ~17.0 KB | ~200–260 heads × 10 floats |
-| `dmx` | ~8.1 KB | all 7 universes, every tick |
-| everything else | ~0.4 KB | layers, stats, bpm, flags |
-
-Head-float rounding (commit `3520e4a`) already caps the *crossfade peak*; these
-two items are the *sustained* rate.
-
-### 1a. Make `dmx` opt-in per client
-Only `OutputView`'s DmxMeters reads `snap.dmx`, one universe at a time, and only
-while the Output tab is open — yet all 7 universes ship 20×/s to every client
-including the previz and the tablet.
-
-- Add a `watchDmx { universeId | null }` command; the engine remembers it per
-  client and includes only that buffer for that client (`null` = none).
-- Sites: `build_snapshot` (`core/src/engine.rs:~840-852`), the Node twin
-  (`engine/index.ts:~650-665`), `Snapshot.dmx` in `shared/types.ts:~509` (no
-  skip attribute today), and the UI's `OutputView` to send the subscription on
-  mount/unmount and universe change.
-- Cheaper interim if per-client proves invasive: base64 the buffers (512 bytes →
-  683 chars vs ~1.5–2 KB of JSON number array). Roughly 3× on the dmx portion
-  with **no** per-client machinery — a good first step.
-- **Parity note:** `engine/test/diff.ts`'s `compareDmx` reads `snap.dmx` for
-  every universe. If dmx becomes opt-in, the harness clients must subscribe to
-  all universes or the comparison silently compares nothing. This is the main
-  trap in this item.
-
-### 1b. Send `previewHeads` only to the auditioning client
-`state.preview_look` is set by *any* cell selection (`store.ts` `setSel` →
-`previewLook`) and stays set, so the audition head set — which roughly doubles
-the head payload — is broadcast to every client indefinitely.
-
-- Track which client requested the preview and include `previewHeads` only for
-  that client.
-- Related, and worth doing at the same time: the audition pane never clears
-  `sel`, so the preview stays alive after editing (see item 4 — the second
-  WebGL context leak). Clearing `sel` when the editor is left fixes both the
-  bandwidth and the context churn.
-
----
+The snapshot is now identical for every client (serialised once, broadcast
+once), and the two per-client payloads became targeted events: raw DMX behind a
+`watchDmx` subscription the Output tab sends, and the audition head set to
+whoever requested it. Measured on the arena show: **556 → 385 KB/s** per client
+not showing the Output tab, 408 KB/s for the one that is.
 
 ## 2. Authentication on the control surface  *(review severity: high)*
 
@@ -99,66 +57,52 @@ the app and a local browser need no pairing, and only genuine LAN clients do.
 
 ---
 
-## 3. Remaining low-severity findings (not yet triaged into a stage)
+## 3. Moved-port Tauri capability *(parked — needs a packaged build to verify)*
 
-Each was verified; none is show-critical.
+When port 9900 is taken the shell navigates the window to
+`http://127.0.0.1:<alt>/` (`src-tauri/src/main.rs:216`) so the port travels in
+the origin. That is a non-app origin, and `src-tauri/gen/schemas/capabilities.json`
+is `{}` — no capability grants the window IPC there — so `__TAURI__` is absent,
+`shareAvailable()` is false, and the whole GDTF Share panel plus the local
+fixture library silently disappear. The port dialog meanwhile promises "the
+window will work normally".
 
-**Operator / UI**
-- Delete-look blast-radius scan reads only stored deck copies, so a look used
-  only in the *current* song deletes with no warning — `LookEditor.tsx:562`;
-  include `layers[].cells`.
-- Deck stepping wraps at both ends (`App.tsx:100` + both engines' `deck_step`);
-  consoles clamp. Bank ▶ past the last song silently lands on song 1.
-- `bump` in `OutputView.tsx:237` uses mouse events, so press-and-hold is dead on
-  the tablet; column rename is right-click-only, unreachable on touch.
-- Column tooltips promise `key N` for every N but only 1–9 are mapped
-  (`LookGrid.tsx:424`); user guide says 1–8.
-- `AddressInput` / `BeatsInput` / fixture-name input lack the focused-edit guard
-  the other inputs have (`PatchView.tsx:95`) — a project echo can clobber
-  mid-typing.
-- `var(--bad)` is referenced in `ShareFixtures.tsx:356` but defined nowhere, so
-  Share errors render in default grey; use `--hot`.
-- Deleting a structure strands `parentId` on fixtures rigged to it
-  (`PatchView.tsx:1104`) — the Rigged-on column silently blanks.
-- "Along the bar" scrub edits one fixture despite the multi-edit promise in the
-  table legend (`PatchView.tsx:333`).
-- Layer heads and column headers scroll out of view on wide grids; no
-  `position: sticky` (`theme.css:296`).
+**Why still parked:** verifying either the failure or a fix needs a full
+`tauri build` plus a contrived port conflict, and a wrong capability file breaks
+IPC for *every* launch, not just the moved-port one. That is a bad trade to make
+blind for a feature that is hidden (not broken) on a rare path.
 
-**Engine / shell**
-- No cap on client connections; one OS thread per socket, and half-open sockets
-  hold a thread through the 600 ms peek loop (`core/src/server.rs:153`).
-- Unbounded work from wire commands: a thread spawned per import with no
-  in-flight cap, and an unbounded engine mpsc (`engine.rs:553`, `:151`).
-  Partially mitigated by the depth guard, not by a bound.
-- Five Tauri commands are synchronous on the main thread; `share_search`
-  re-reads and re-parses the 6.4 MB catalogue per keystroke
-  (`src-tauri/src/share.rs:393`) — declare them `async`, cache the parse.
-- Catalogue cache written with a bare `fs::write` — no tmp+rename, unlike the
-  project persist path (`share.rs:212`).
-- `share_login` persists the username before the password, so a Keychain failure
-  strands a half-saved sign-in (`share.rs:346`).
-- `listProjects` parses every saved project on every client connect, on the tick
-  thread (`engine/persist.ts:86`).
-- `flushPending` splices the offline queue before checking `readyState`
-  (`store.ts:365`) — a disconnect race can drop queued edits.
-- Browser APC LED attach never clears note 81, leaving a stale "blackout armed"
-  blink (`apcFeedback.ts:91`); Rust clears 81–86.
-- On a moved port the window is navigated to `http://127.0.0.1:<alt>` — a
-  non-app origin with no IPC capability configured — so GDTF Share and the local
-  fixture library silently vanish (`src-tauri/src/main.rs:216`). Needs a
-  capability for `http://127.0.0.1:*`, or deliver the port without navigating.
+**Two candidate fixes, in preference order:**
+1. Do not navigate at all. `wsUrl()` still honours a `window.__LIGHT_PORT__`
+   escape hatch (`ui/src/store.ts:481`), so delivering the port via Tauri 2's
+   *initialization script* API keeps the window on `tauri://` and Share keeps
+   working. Note the code comment at `main.rs:200` — a previous attempt used
+   `eval()`, which fails because a variable set during setup is discarded when
+   the page loads its own context; an initialization script is the API that
+   runs before page scripts on every navigation, and is a different thing.
+   Setting one means building the window in Rust rather than from
+   `tauri.conf.json`.
+2. Add `src-tauri/capabilities/*.json` granting the main window IPC on
+   `http://127.0.0.1:*`, and keep the navigation.
 
-**Rust tick-path hygiene** (measured safe today — tick is 7.9–9.8 µs against a
-25 ms budget — but worth doing before per-head work grows)
-- Per-tick `Layer` clones and String-keyed head maps (`renderer.rs:260`).
-- `Broadcaster` copies the whole snapshot string per client inside the clients
-  mutex; `Arc<str>` would make it one allocation (`server.rs:56`).
-- Native previz clones the whole snapshot per frame and never prunes its
-  smoothed map (`previz/src/update.rs:90`).
-- Every UI edit `structuredClone`s the whole project twice (`store.ts:250`).
+Either way: test by holding 9900 with a second engine, launching the app, and
+confirming the Share panel is present.
 
----
+## 4. Low-severity findings — DONE (`37c00cd`, `91df1d5`)
+
+The UI sweep (delete-look blast radius, deck-step wrapping in all four places,
+touch `bump`, stranded `parentId`, along-the-bar multi-edit, focused-edit guards,
+`var(--bad)`, column tooltips, sticky grid headers) and the engine/shell sweep
+(bounded import queue, connection cap, mtime-keyed project-name and Share
+catalogue caches, async Tauri commands, atomic catalogue write, Keychain write
+order, APC LED 81, offline-queue disconnect race).
+
+Deliberately not done — Rust tick-path hygiene, measured safe today (the tick is
+7.9–9.8 µs against a 25 ms budget) and worth doing only before per-head work
+grows: per-tick `Layer` clones and String-keyed head maps (`renderer.rs:260`),
+the Broadcaster's per-client string copy (`server.rs:56`, `Arc<str>` would fix
+it), the native previz's per-frame snapshot clone (`previz/src/update.rs:90`),
+and `structuredClone`-ing the whole project twice per UI edit (`store.ts:250`).
 
 ## 4. Stage 3 — done
 
