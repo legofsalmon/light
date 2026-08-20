@@ -220,6 +220,17 @@ pub struct Effect {
     pub spread: f64,
     pub width: f64,
     pub phase: f64,
+    /// Parked: the effect is retained but contributes nothing this tick.
+    #[serde(default)]
+    pub bypass: bool,
+    /// Wet/dry 0..1 (1 = full effect, the pre-A2 behaviour). Defaults to 1 so
+    /// every save written before this field existed renders unchanged.
+    #[serde(default = "default_mix")]
+    pub mix: f64,
+}
+
+fn default_mix() -> f64 {
+    1.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -292,6 +303,9 @@ fn de_effects<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Effect>, D::
                 spread: fin(obj, "spread", 0.0),
                 width: fin(obj, "width", 0.5),
                 phase: fin(obj, "phase", 0.0),
+                bypass: obj.get("bypass").and_then(|x| x.as_bool()).unwrap_or(false),
+                // clamp to 0..1; a missing or non-finite mix means full wet
+                mix: fin(obj, "mix", 1.0).clamp(0.0, 1.0),
             })
         })
         .collect();
@@ -727,5 +741,27 @@ mod effect_repair_tests {
             r#"[{"id":"e","target":"dimmer","wave":"sine","rate":1,"size":1,"spread":0,"width":0.5,"phase":0,"distribute":"x","fold":"mirror"}]"#,
         );
         assert_eq!(p.effects.len(), 1);
+    }
+
+    #[test]
+    fn a2_bypass_and_mix_default_to_active_full_wet() {
+        // a pre-A2 save has neither field: it must load as an active, full-wet
+        // effect so it renders exactly as it did before the fields existed
+        let p = part_with_effects(
+            r#"[{"id":"e","target":"dimmer","wave":"sine","rate":1,"size":1,"spread":0,"width":0.5,"phase":0}]"#,
+        );
+        assert_eq!(p.effects.len(), 1);
+        assert!(!p.effects[0].bypass, "missing bypass defaults off");
+        assert_eq!(p.effects[0].mix, 1.0, "missing mix defaults to full wet");
+    }
+
+    #[test]
+    fn a2_mix_is_clamped_and_bypass_coerced() {
+        let p = part_with_effects(
+            r#"[{"id":"e","target":"dimmer","wave":"sine","rate":1,"size":1,"spread":0,"width":0.5,"phase":0,"bypass":true,"mix":1.7}]"#,
+        );
+        assert_eq!(p.effects.len(), 1);
+        assert!(p.effects[0].bypass, "explicit bypass kept");
+        assert_eq!(p.effects[0].mix, 1.0, "out-of-range mix clamped to 1");
     }
 }

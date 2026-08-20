@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import WebSocket from 'ws';
 import { defaultProject } from '../defaultProject.ts';
-import type { Command, Project, Snapshot } from '../../shared/types.ts';
+import type { Command, Effect, Project, Snapshot } from '../../shared/types.ts';
 
 const ROOT = process.cwd();
 const TMP = path.join(ROOT, '.parity-tmp');
@@ -227,6 +227,27 @@ async function main(): Promise<void> {
   const both = (cmd: Command) => {
     node.send(cmd);
     rust.send(cmd);
+  };
+
+  // Put a named look live on layer-wash col 6 with the effect clock pinned.
+  // Earlier scenarios rewrite the grid (the cue-list block parks its test looks
+  // on cols 6/7), so the cell is reset first and the live look is asserted -
+  // triggering a stale column silently fires the wrong look, which is exactly
+  // how the rate/mix checks below could have passed against nothing.
+  const armWash = async (lookId: string, beat: number): Promise<void> => {
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
+    const p = structuredClone(await currentProject(node));
+    const wash = p.layers.find((l) => l.id === 'layer-wash');
+    if (wash) wash.cells[6] = lookId;
+    both({ type: 'updateProject', project: p });
+    await sleep(400);
+    both({ type: '_pinClock', effBeat: beat });
+    both({ type: 'trigger', layerId: 'layer-wash', col: 6 });
+    await settle(node, rust);
+    const live = node.snap?.layers.find((l) => l.id === 'layer-wash')?.lookId;
+    check(`arm: ${lookId} live on layer-wash (col 6)`, live === lookId, `live=${live}`);
   };
 
   await sleep(400);
@@ -727,57 +748,100 @@ async function main(): Promise<void> {
 
   // --- P4 phase-continuous rate: editing an effect's rate on a LIVE look must
   // not jump its waveform (the old code set phase = beat/rate, which snapped),
-  // and both engines must apply the identical correction. Pinned at a nonzero
-  // beat so beat/rate is nonzero and a naive rate edit WOULD move the frame.
+  // and both engines must apply the identical correction.
+  //
+  // wash-rainbow (hue sawUp, rate 16, over a lit red part) is used because its
+  // value reaches the RGB bytes — so "frame unchanged" is a real assertion, not
+  // a comparison of two dark frames. The clock is pinned, so the write must be
+  // given time to land (settle would return the frozen pre-write frame).
   {
-    both({ type: 'allStop' });
-    both({ type: 'setBlackout', v: false });
-    await settle(node, rust);
-
-    // fx-swell is a dimmer sine at rate 8. At beat 4 its phase is 4/8 = 0.5, the
-    // crest of the sine, so the correction target (full dimmer) is easy to see.
-    both({ type: '_pinClock', effBeat: 4 });
-    both({ type: 'trigger', layerId: 'layer-fx', col: 3 }); // fx-swell: dimmer sine, rate 8
-    await settle(node, rust);
-    compareDmx('rate-cont: baseline (rate 8) parity', node, rust);
+    await armWash('wash-rainbow', 4);
+    compareDmx('rate-cont: baseline (rate 16) parity', node, rust);
     const baseline = frameOf(node);
 
-    // rewrite fx-swell's one effect rate on the live project and push to both
-    const setSwellRate = async (rate: number): Promise<void> => {
+    const setRate = async (rate: number): Promise<void> => {
       const p = structuredClone(await currentProject(node));
-      p.looks['fx-swell'].parts[0].effects[0].rate = rate; // effect fx36
+      p.looks['wash-rainbow'].parts[0].effects[0].rate = rate;
       both({ type: 'updateProject', project: p });
+      await sleep(400);
     };
 
-    // 8 -> 2: the old code would drop dimmer from full to 0.2 here. Continuous:
-    // corr = 4*(1/8 - 1/2) = -1.5, so phase = 4/2 - 1.5 = 0.5 — frame unchanged.
-    await setSwellRate(2);
-    await settle(node, rust);
+    // 16 -> 8 at beat 4: corr = 4*(1/16 - 1/8) = -0.25, so phase = 4/8 - 0.25
+    // = 0.25, exactly where it was — every head's hue is unchanged.
+    await setRate(8);
     check(
-      'rate-cont: frame unchanged after 8->2 (no phase jump)',
+      'rate-cont: frame unchanged after 16->8 (no phase jump)',
       frameOf(node) === baseline,
       'the rate edit moved the waveform — phase was not corrected',
     );
-    compareDmx('rate-cont: rate 8->2 parity', node, rust);
+    compareDmx('rate-cont: rate 16->8 parity', node, rust);
 
-    // 2 -> 5: the correction must COMPOSE across successive edits, not reset.
-    // corr += 4*(1/2 - 1/5) = +1.2 -> -0.3, phase = 4/5 - 0.3 = 0.5 — unchanged.
-    await setSwellRate(5);
-    await settle(node, rust);
+    // 8 -> 4: the correction must COMPOSE. corr += 4*(1/8 - 1/4) = -0.5 ->
+    // -0.75, phase = 4/4 - 0.75 = 0.25 — still unchanged.
+    await setRate(4);
     check(
-      'rate-cont: frame unchanged after 2->5 (correction accumulates)',
+      'rate-cont: frame unchanged after 8->4 (correction accumulates)',
       frameOf(node) === baseline,
       'a second rate edit moved the waveform — correction did not accumulate',
     );
-    compareDmx('rate-cont: rate 2->5 parity', node, rust);
+    compareDmx('rate-cont: rate 8->4 parity', node, rust);
 
-    // control: at beat 0 there is nothing to correct (beat/rate == 0 either way),
-    // but the two engines must still agree byte-for-byte through the edit.
-    both({ type: '_pinClock', effBeat: 0 });
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
     await settle(node, rust);
-    await setSwellRate(3);
-    await settle(node, rust);
-    compareDmx('rate-cont: rate edit at beat 0 parity', node, rust);
+  }
+
+  // --- A2: per-effect bypass + wet/dry mix. The defaults (bypass off, mix 1)
+  // render byte-identically to pre-A2 — every test above already proves that.
+  // Here we exercise the blend and the park and prove both engines agree.
+  //
+  // wash-rainbow is the look to test on: hue sawUp over a LIT part (dimmer 1,
+  // saturated red base), so the effect's value actually reaches the RGB bytes.
+  // (fx-swell drives dimmer on a colourless part — nothing to scale, so
+  // mix/bypass would be invisible there.)
+  {
+    // beat 4, rate 16 -> phase 0.25 -> hue rotates 90°; a partial mix lands the
+    // base red somewhere short of that, a bypass leaves it at the base hue.
+    await armWash('wash-rainbow', 4);
+    const wet = frameOf(node);
+    compareDmx('fx mix/bypass: full-wet baseline parity', node, rust);
+
+    // the clock is pinned so nothing moves; a fixed sleep lets the write land
+    // (settle() would return the still-frozen pre-write frame as "stable").
+    const setRainbowFx = async (patch: Partial<Effect>): Promise<void> => {
+      const p = structuredClone(await currentProject(node));
+      Object.assign(p.looks['wash-rainbow'].parts[0].effects[0], patch);
+      both({ type: 'updateProject', project: p });
+      await sleep(400);
+    };
+
+    // half wet eases the hue back toward the dry base; identical on both.
+    await setRainbowFx({ mix: 0.5 });
+    compareDmx('fx mix/bypass: mix 0.5 parity', node, rust);
+    check(
+      'fx mix/bypass: mix 0.5 moves the frame off full-wet',
+      frameOf(node) !== wet,
+      'mix 0.5 produced the same bytes as full wet',
+    );
+
+    // park: the effect contributes nothing, so the part shows its base hue.
+    await setRainbowFx({ mix: 1, bypass: true });
+    const dry = frameOf(node);
+    compareDmx('fx mix/bypass: bypassed parity', node, rust);
+    check(
+      'fx mix/bypass: bypass differs from full-wet',
+      dry !== wet,
+      'a bypassed effect still changed the output',
+    );
+
+    // mix 0 is the same fully-dry state as bypass, reached the other way.
+    await setRainbowFx({ bypass: false, mix: 0 });
+    compareDmx('fx mix/bypass: mix 0 parity', node, rust);
+    check(
+      'fx mix/bypass: mix 0 equals bypass (both fully dry)',
+      frameOf(node) === dry,
+      'mix 0 and bypass produced different frames',
+    );
 
     both({ type: 'allStop' });
     both({ type: 'setBlackout', v: false });

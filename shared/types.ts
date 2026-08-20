@@ -180,6 +180,10 @@ export type Effect = {
   width: number;
   /** phase offset 0..1 */
   phase: number;
+  /** parked: retained but contributes nothing this tick */
+  bypass: boolean;
+  /** wet/dry 0..1 (1 = full effect, the pre-A2 behaviour) */
+  mix: number;
 };
 
 export type LookPart = {
@@ -559,6 +563,10 @@ export function sanitizeProject(p: Project): Project | null {
               spread: Number.isFinite(e.spread) ? e.spread : 0,
               width: Number.isFinite(e.width) ? e.width : 0.5,
               phase: Number.isFinite(e.phase) ? e.phase : 0,
+              // A2: absent on pre-A2 saves — default to an active, full-wet
+              // effect so those shows render byte-identically to before.
+              bypass: e.bypass === true,
+              mix: Number.isFinite(e.mix) ? clamp(e.mix, 0, 1) : 1,
             }))
         : [];
     }

@@ -36,6 +36,14 @@ function isCentred(e: Effect): boolean {
   return e.wave === 'sine' || e.wave === 'triangle' || e.wave === 'square' || e.wave === 'random';
 }
 
+/** Wet/dry blend of one target. At mix 1 this returns `wet` verbatim (byte-for-
+ *  byte the pre-mix behaviour); below 1 it eases back toward the dry value the
+ *  target held going into this effect. mix <= 0 is handled by skipping the whole
+ *  effect, so the target keeps whatever it had — including staying undriven. */
+function applyMix(dry: number, wet: number, mix: number): number {
+  return mix >= 1 ? wet : dry + (wet - dry) * mix;
+}
+
 /**
  * Apply a part's effects to its resolved params for one head.
  * `beat` is the musical position (already includes the global speed master).
@@ -56,7 +64,11 @@ export function applyEffects(
   const out: PartParams = { ...params, color: params.color ? { ...params.color } : undefined };
   for (let i = 0; i < effects.length; i++) {
     const e = effects[i];
-    if (e.size <= 0 || e.rate <= 0) continue;
+    // bypass parks the effect entirely; mix 0 is fully dry — both leave every
+    // target exactly as it was, including undriven ones (so a bypassed dimmer
+    // effect does not force the group to full).
+    if (e.bypass || e.mix <= 0 || e.size <= 0 || e.rate <= 0) continue;
+    const mix = e.mix;
     const spread = e.wave === 'chase' ? 1 : e.spread;
     const corr = phaseCorr[i] ?? 0;
     const phase = beat / e.rate + corr + e.phase + (headCount > 1 ? (headIdx / headCount) * spread : 0);
@@ -64,27 +76,35 @@ export function applyEffects(
     switch (e.target) {
       case 'dimmer': {
         const base = out.dimmer ?? 1;
-        out.dimmer = clamp(base * (1 - e.size * (1 - v)));
+        out.dimmer = applyMix(base, clamp(base * (1 - e.size * (1 - v))), mix);
         break;
       }
       case 'hue': {
         if (!out.color) out.color = { h: 0, s: 1 };
-        const delta = (isCentred(e) ? v - 0.5 : v) * e.size * 360;
+        const delta = (isCentred(e) ? v - 0.5 : v) * e.size * 360 * mix;
         out.color.h = ((out.color.h + delta) % 360 + 360) % 360;
         break;
       }
-      case 'white':
-        out.white = clamp(Math.max(out.white ?? 0, v * e.size));
+      case 'white': {
+        const dry = out.white ?? 0;
+        out.white = applyMix(dry, clamp(Math.max(dry, v * e.size)), mix);
         break;
-      case 'strobe':
-        out.strobe = clamp(Math.max(out.strobe ?? 0, v * e.size));
+      }
+      case 'strobe': {
+        const dry = out.strobe ?? 0;
+        out.strobe = applyMix(dry, clamp(Math.max(dry, v * e.size)), mix);
         break;
-      case 'pan':
-        out.pan = clamp((out.pan ?? 0.5) + (v - 0.5) * e.size);
+      }
+      case 'pan': {
+        const dry = out.pan ?? 0.5;
+        out.pan = applyMix(dry, clamp(dry + (v - 0.5) * e.size), mix);
         break;
-      case 'tilt':
-        out.tilt = clamp((out.tilt ?? 0.5) + (v - 0.5) * e.size);
+      }
+      case 'tilt': {
+        const dry = out.tilt ?? 0.5;
+        out.tilt = applyMix(dry, clamp(dry + (v - 0.5) * e.size), mix);
         break;
+      }
       // Beam parameters swing about their set value, like pan and tilt. Adding
       // the effect at all is the operator saying they want this parameter
       // driven, so an unset one starts from the middle of its travel rather
@@ -93,9 +113,11 @@ export function applyEffects(
       case 'focus':
       case 'iris':
       case 'frost':
-      case 'cto':
-        out[e.target] = clamp((out[e.target] ?? 0.5) + (v - 0.5) * e.size);
+      case 'cto': {
+        const dry = out[e.target] ?? 0.5;
+        out[e.target] = applyMix(dry, clamp(dry + (v - 0.5) * e.size), mix);
         break;
+      }
     }
   }
   return out;

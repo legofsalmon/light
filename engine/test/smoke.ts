@@ -61,7 +61,7 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
 
 // ---------- merge → DMX ----------
 {
-  const st = new EngineState(demoProject());
+  const st = new EngineState(sanitizeProject(demoProject())!);
   const r = new Renderer(st);
   const t0 = 1000;
   r.tick(t0); // prime dt integration
@@ -186,7 +186,7 @@ await new Promise<void>((resolve) => {
     done(okId && okOp && okUni && okLen && okData, `id=${okId} op=${okOp} uni=${okUni} len=${okLen} data=${okData}`);
   });
   rx.bind(6454, '127.0.0.1', () => {
-    const st = new EngineState(demoProject());
+    const st = new EngineState(sanitizeProject(demoProject())!);
     const r = new Renderer(st);
     r.tick(0);
     st.trigger('layer-wash', 1, 0);

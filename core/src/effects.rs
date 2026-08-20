@@ -55,9 +55,13 @@ pub fn apply_effects(
     }
     let mut out = params.clone();
     for (i, e) in effects.iter().enumerate() {
-        if e.size <= 0.0 || e.rate <= 0.0 {
+        // bypass parks the effect entirely; mix 0 is fully dry - both leave
+        // every target exactly as it was, including undriven ones (so a
+        // bypassed dimmer effect does not force the group to full).
+        if e.bypass || e.mix <= 0.0 || e.size <= 0.0 || e.rate <= 0.0 {
             continue;
         }
+        let mix = e.mix;
         let spread = if e.wave == Wave::Chase { 1.0 } else { e.spread };
         let corr = phase_corr.get(i).copied().unwrap_or(0.0);
         let phase = beat / e.rate
@@ -72,46 +76,67 @@ pub fn apply_effects(
         match e.target {
             EffectTarget::Dimmer => {
                 let base = out.dimmer.unwrap_or(1.0);
-                out.dimmer = Some(clamp01(base * (1.0 - e.size * (1.0 - v))));
+                out.dimmer = Some(apply_mix(base, clamp01(base * (1.0 - e.size * (1.0 - v))), mix));
             }
             EffectTarget::Hue => {
                 let mut c = out.color.unwrap_or(crate::types::ColorHS { h: 0.0, s: 1.0 });
-                let delta = (if is_centred(e) { v - 0.5 } else { v }) * e.size * 360.0;
+                let delta = (if is_centred(e) { v - 0.5 } else { v }) * e.size * 360.0 * mix;
                 c.h = ((c.h + delta) % 360.0 + 360.0) % 360.0;
                 out.color = Some(c);
             }
             EffectTarget::White => {
-                out.white = Some(clamp01(out.white.unwrap_or(0.0).max(v * e.size)));
+                let dry = out.white.unwrap_or(0.0);
+                out.white = Some(apply_mix(dry, clamp01(dry.max(v * e.size)), mix));
             }
             EffectTarget::Strobe => {
-                out.strobe = Some(clamp01(out.strobe.unwrap_or(0.0).max(v * e.size)));
+                let dry = out.strobe.unwrap_or(0.0);
+                out.strobe = Some(apply_mix(dry, clamp01(dry.max(v * e.size)), mix));
             }
             EffectTarget::Pan => {
-                out.pan = Some(clamp01(out.pan.unwrap_or(0.5) + (v - 0.5) * e.size));
+                let dry = out.pan.unwrap_or(0.5);
+                out.pan = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
             }
             EffectTarget::Tilt => {
-                out.tilt = Some(clamp01(out.tilt.unwrap_or(0.5) + (v - 0.5) * e.size));
+                let dry = out.tilt.unwrap_or(0.5);
+                out.tilt = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
             }
             // Beam parameters swing about their set value, like pan and tilt.
             // Adding the effect at all is the operator saying they want this
             // parameter driven, so an unset one starts from the middle of its
             // travel rather than staying parked.
             EffectTarget::Zoom => {
-                out.zoom = Some(clamp01(out.zoom.unwrap_or(0.5) + (v - 0.5) * e.size));
+                let dry = out.zoom.unwrap_or(0.5);
+                out.zoom = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
             }
             EffectTarget::Focus => {
-                out.focus = Some(clamp01(out.focus.unwrap_or(0.5) + (v - 0.5) * e.size));
+                let dry = out.focus.unwrap_or(0.5);
+                out.focus = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
             }
             EffectTarget::Iris => {
-                out.iris = Some(clamp01(out.iris.unwrap_or(0.5) + (v - 0.5) * e.size));
+                let dry = out.iris.unwrap_or(0.5);
+                out.iris = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
             }
             EffectTarget::Frost => {
-                out.frost = Some(clamp01(out.frost.unwrap_or(0.5) + (v - 0.5) * e.size));
+                let dry = out.frost.unwrap_or(0.5);
+                out.frost = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
             }
             EffectTarget::Cto => {
-                out.cto = Some(clamp01(out.cto.unwrap_or(0.5) + (v - 0.5) * e.size));
+                let dry = out.cto.unwrap_or(0.5);
+                out.cto = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
             }
         }
     }
     out
+}
+
+/// Wet/dry blend of one target. At mix 1 this returns `wet` verbatim (byte-for-
+/// byte the pre-mix behaviour); below 1 it eases back toward the dry value the
+/// target held going into this effect. mix <= 0 is handled by skipping the whole
+/// effect, so the target keeps whatever it had - including staying undriven.
+fn apply_mix(dry: f64, wet: f64, mix: f64) -> f64 {
+    if mix >= 1.0 {
+        wet
+    } else {
+        dry + (wet - dry) * mix
+    }
 }
