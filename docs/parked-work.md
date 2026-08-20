@@ -204,7 +204,25 @@ Agreed build order (each step shippable, parity-green):
    Semantics note: spatial bases are INCLUSIVE (t ∈ [0,1]; spread 1 = one
    wavelength across the rig, ends in phase) except under chase; index stays
    exclusive j/n as ever.
-7. B1 GDTF geometry parser + per-profile layout editor + offsetY
+7. B1 GDTF geometry parser + per-profile layout editor + offsetY — DONE.
+   Six commits: (a) schema+geometry — CHead offsetY/row/col (serde-defaulted,
+   zero-skipped; pre-B1 saves byte-stable), geometry twins place heads at
+   Ry·Rx·Rz·(offset, offsetY, 0) and carry rowT/colT normalized per-fixture,
+   flat-fallback (all heads (0,0) → col=index), Row/Col fan bases ("every
+   strobe is the same" by construction) (`a1a1ab4`); (b) the Geometries
+   parser — per-pixel Position matrices composed through ancestors, Z-up→Y-up,
+   translation = 4th brace group, centred layouts, mm-vs-metres by CENTRED
+   extent >5, synthesized fallback for flat/zeroed/absurd files (`e19b384`,
+   hardened `91ee69c`); (c) previz offsetY in all three paths (`9f1d6ea`) +
+   rebuild signatures sign offsets (`48af934`); (d) the parametric layout
+   editor — Strip/Grid(serpentine)/Ring on the PROFILE, SVG preview,
+   browser-verified end-to-end (`6a70b1a`); (e) adversarial-review fixes —
+   re-import PRESERVES operator-authored layouts (flat incoming inherits
+   stored non-flat; real geometry stays authoritative and now warns via the
+   extended layout_sig), per-row x-sorted cols, single-linkage row
+   clustering, tolerant CHead spatial loading in both engines (`91ee69c`).
+   NOTE: every GDTF embedded in the mainstage MVR is a flat single-Base
+   console export — rich geometry lives on GDTF Share (fetch is parked, §2).
 8. B3 auto-groups slice 1 (per-type, per-truss ordered along the bar)
 9. P1 soft overrides (SoftAddr layer, engine-side commit, Store/Discard)
 10. P3 Named Controls (the macro replacement — typed faders, per-link ranges)
