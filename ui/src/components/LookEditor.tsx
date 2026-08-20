@@ -4,7 +4,7 @@ import { uid } from '../../../shared/types.ts';
 import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
 import { type HeadKind } from '../../../shared/profiles.ts';
 import { TextField } from './inputs.tsx';
-import { profileMeta } from '../profileInfo.ts';
+import { BEAM_LABELS, BEAM_PARAMS, type BeamCaps, profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 import { askConfirm } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
@@ -61,14 +61,34 @@ function groupCanAim(project: Project, groupId: string): boolean {
   });
 }
 
+/** Which beam parameters any fixture in this group can actually take.
+ *
+ *  Same test as groupCanAim and for the same reason: ask the CHANNELS, not the
+ *  head kind. A fixture only gets a zoom fader if something in the group has a
+ *  zoom channel — an editor full of controls that go nowhere is worse than one
+ *  that is honest about the rig. */
+function groupBeamCaps(project: Project, groupId: string): BeamCaps {
+  const out: BeamCaps = { zoom: false, focus: false, iris: false, frost: false, cto: false };
+  const group = project.groups.find((g) => g.id === groupId);
+  if (!group) return out;
+  for (const ref of group.heads) {
+    const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
+    const meta = fixture ? profileMeta(project, fixture.profileId) : null;
+    if (!meta) continue;
+    for (const k of BEAM_PARAMS) if (meta.beam[k]) out[k] = true;
+  }
+  return out;
+}
+
 function Enable({ on, toggle }: { on: boolean; toggle: () => void }) {
   return <div className={`enable ${on ? 'on' : ''}`} onClick={toggle} />;
 }
 
-function EffectRow({ fx, kinds, canAim, onEdit, onRemove }: {
+function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove }: {
   fx: Effect;
   kinds: Set<HeadKind>;
   canAim: boolean;
+  beamCaps: BeamCaps;
   onEdit: (fn: (e: Effect) => void) => void;
   onRemove: () => void;
 }) {
@@ -76,6 +96,8 @@ function EffectRow({ fx, kinds, canAim, onEdit, onRemove }: {
   if (kinds.has('rgb') || kinds.has('derby') || kinds.has('mover')) targets.push('hue', 'strobe');
   if (kinds.has('derby')) targets.push('white');
   if (canAim) targets.push('pan', 'tilt');
+  // only offer to ramp a parameter the rig can actually take
+  for (const k of BEAM_PARAMS) if (beamCaps[k]) targets.push(k);
 
   return (
     <div className="fxrow">
@@ -114,6 +136,7 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
   const mutate = useStore((s) => s.mutate);
   const kinds = groupKinds(project, part.groupId);
   const canAim = groupCanAim(project, part.groupId);
+  const beamCaps = groupBeamCaps(project, part.groupId);
 
   const edit = (fn: (pt: LookPart) => void) =>
     mutate((p) => {
@@ -293,6 +316,26 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
           </div>
         )}
 
+        {BEAM_PARAMS.filter((k) => beamCaps[k]).map((k) => (
+          <div className="paramrow" key={k}>
+            <Enable
+              on={prm[k] !== undefined}
+              toggle={() => edit((pt) => (pt.params[k] = pt.params[k] === undefined ? 0.5 : undefined))}
+            />
+            <span className="label">{BEAM_LABELS[k]}</span>
+            <div className={`grow paramrow ${prm[k] === undefined ? 'off' : ''}`}>
+              <Fader
+                value={prm[k] ?? 0.5}
+                def={0.5}
+                onChange={(v) => edit((pt) => (pt.params[k] = v))}
+                fmt={pct}
+                width={180}
+                variant="dim"
+              />
+            </div>
+          </div>
+        ))}
+
         {kinds.has('hazer') && (
           <div className="paramrow">
             <Enable on={prm.haze !== undefined} toggle={() => edit((pt) => {
@@ -318,6 +361,7 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
             fx={fx}
             kinds={kinds}
             canAim={canAim}
+            beamCaps={beamCaps}
             onEdit={(fn) => edit((pt) => {
               const e = pt.effects.find((x) => x.id === fx.id);
               if (e) fn(e);

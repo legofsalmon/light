@@ -63,7 +63,7 @@ fn renders_expected_bytes() {
     assert_eq!(buf[4], 255, "dimmer");
     assert_eq!(buf[5], 8, "shutter holds its open default when not strobing");
     assert_eq!([buf[6], buf[7], buf[8]], [255, 0, 0], "rgb");
-    assert_eq!(buf[9], 128, "unmapped zoom holds its GDTF default");
+    assert_eq!(buf[9], 128, "a look that says nothing about zoom leaves it parked");
     // colour wheel: red look → Red band (16..31), midpoint 23
     assert_eq!(buf[10], 23, "wheel quantises to the red slot");
 
@@ -145,4 +145,35 @@ fn pixel_bar_synthesizes_heads() {
     assert_eq!([out[0], out[1], out[2]], [255, 0, 0], "pixel 1 red");
     assert_eq!([out[3], out[4], out[5]], [0, 0, 255], "pixel 2 blue");
     assert_eq!([out[21], out[22], out[23]], [0, 0, 255], "pixel 8 blue");
+}
+
+
+/// Zoom is optional, and the distinction matters on load: a saved show whose
+/// looks predate the parameter must not slam every moving head to its narrowest
+/// beam the moment it opens. So an absent value holds the fixture's own default
+/// and a present one drives the channel.
+#[test]
+fn zoom_is_parked_until_a_look_asks_for_it() {
+    let profiles = parse_gdtf(&synthetic_gdtf()).expect("parses");
+    let p = &profiles[0];
+    let mut buf = [0u8; 16];
+
+    let parked = params();
+    assert!(parked.beam.zoom.is_none(), "the fixture starts with no zoom asked for");
+    render_compiled(p, &[&parked], &mut buf, 0);
+    assert_eq!(buf[9], 128, "unset zoom holds the GDTF default of 128");
+
+    let mut wide = params();
+    wide.beam.zoom = Some(1.0);
+    render_compiled(p, &[&wide], &mut buf, 0);
+    assert_eq!(buf[9], 255, "zoom 1.0 drives the channel to the top");
+
+    let mut narrow = params();
+    narrow.beam.zoom = Some(0.0);
+    render_compiled(p, &[&narrow], &mut buf, 0);
+    assert_eq!(buf[9], 0, "zoom 0.0 drives the channel to the bottom");
+
+    // and the channels around it are untouched either way
+    assert_eq!(buf[4], 255, "dimmer unaffected by zoom");
+    assert_eq!(buf[10], 23, "colour wheel unaffected by zoom");
 }

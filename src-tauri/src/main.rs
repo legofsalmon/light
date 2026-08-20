@@ -158,6 +158,8 @@ fn main() {
             share::share_search,
             share::share_cached_count,
             share::share_download,
+            share::library_list,
+            share::library_read,
         ])
         .setup(move |app| {
             // The bundled UI is served over HTTP by the engine as well as

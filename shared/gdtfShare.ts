@@ -176,3 +176,34 @@ export function isPlaceholderProfile(p: {
   // a stub declares no structure either — a real multi-head fixture would
   return (p.heads ?? []).every((h) => h.kind === 'dimmer');
 }
+
+/** GDTF attributes LIGHT compiles into a beam parameter. Kept beside the
+ *  staleness check so the two cannot drift: if the compiler learns a new
+ *  attribute and this list is not updated, the check simply stops offering to
+ *  rebuild — it never claims a profile is fine when it is not. */
+const BEAM_ATTRIBUTES = new Set([
+  'Zoom',
+  'Focus1', 'Focus',
+  'Iris',
+  'Frost1', 'Frost2', 'Frost',
+  'CTO', 'CTB', 'CTC',
+]);
+
+/** Does this compiled profile carry beam channels that nothing drives?
+ *
+ *  A project stores compiled profiles rather than the .gdtf they came from,
+ *  which is what lets a show open on a machine that has never seen the fixture.
+ *  The cost is that a profile keeps whatever the compiler understood the day it
+ *  was imported: every Spiider patched before LIGHT could drive zoom still has
+ *  a Zoom channel with an empty case list, so the fader would do nothing.
+ *
+ *  An empty `cases` is the exact signal — it is what the compiler emits for an
+ *  attribute it has no mapping for, and a driven channel always has at least
+ *  one case. */
+export function hasUndrivenBeamChannels(p: {
+  channels?: { name?: string; cases?: unknown[] }[];
+}): boolean {
+  return (p.channels ?? []).some(
+    (c) => BEAM_ATTRIBUTES.has(c.name ?? '') && (c.cases?.length ?? 0) === 0,
+  );
+}

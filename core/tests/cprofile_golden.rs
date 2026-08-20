@@ -3,7 +3,7 @@
 //! space — edges, band boundaries, and a large seeded sweep.
 
 use light_core::cprofile::{compiled_builtins, render_compiled, CompiledProfile};
-use light_core::profiles::{profile_of, ResolvedParams};
+use light_core::profiles::{profile_of, BeamParams, ResolvedParams};
 use light_core::types::MotorMode;
 
 fn lcg(seed: &mut u64) -> f64 {
@@ -23,6 +23,9 @@ fn gen_params(seed: &mut u64, case: usize) -> ResolvedParams {
         } else {
             lcg(seed)
         }
+    };
+    let maybe = |seed: &mut u64, case: usize, salt: usize| -> Option<f64> {
+        if (case + salt) % 4 == 0 { None } else { Some(pick(seed, case, salt)) }
     };
     let motor_mode = match case % 3 {
         0 => MotorMode::Off,
@@ -49,6 +52,18 @@ fn gen_params(seed: &mut u64, case: usize) -> ResolvedParams {
         tilt: pick(seed, case, 9),
         haze: pick(seed, case, 10),
         fan: pick(seed, case, 11),
+        // Beam parameters are swept here even though no built-in has a zoom,
+        // focus, iris, frost or CTO channel — that is the point. A built-in
+        // fixture's output must not shift because a look happened to set a
+        // parameter its hardware does not have. Both branches are exercised:
+        // Some(v) and the absent case that leaves a channel parked.
+        beam: BeamParams {
+            zoom: maybe(seed, case, 12),
+            focus: maybe(seed, case, 13),
+            iris: maybe(seed, case, 14),
+            frost: maybe(seed, case, 15),
+            cto: maybe(seed, case, 16),
+        },
     }
 }
 

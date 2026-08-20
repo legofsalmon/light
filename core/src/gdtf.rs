@@ -157,6 +157,28 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
                 func: Func::Linear { source: src },
             };
 
+            // A beam parameter the operator has not touched must sit where the
+            // fixture's own definition parks it — a Spiider opens at DMX 128,
+            // and driving its zoom to 0 the moment a show loads would narrow
+            // every head in the rig. So: hold the default while unset, sweep
+            // the channel once a look sets it.
+            let optional = |src: Source| {
+                vec![
+                    FuncCase {
+                        cond: Cond::SourceUnset { source: src },
+                        dmx_from: default,
+                        dmx_to: default,
+                        func: Func::Fixed { value: default },
+                    },
+                    FuncCase {
+                        cond: Cond::Always,
+                        dmx_from: 0,
+                        dmx_to: max_dmx,
+                        func: Func::Linear { source: src },
+                    },
+                ]
+            };
+
             match attr_name.as_str() {
                 "Dimmer" => {
                     has_dimmer = true;
@@ -213,6 +235,16 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
                         });
                     }
                 }
+                // Beam shaping. All continuous and monotonic on every fixture
+                // that has them, which is what makes them safe to expose as a
+                // plain 0..1 fader and to ramp from an effect.
+                "Zoom" => cases.extend(optional(Source::Zoom)),
+                "Focus1" | "Focus" => cases.extend(optional(Source::Focus)),
+                "Iris" => cases.extend(optional(Source::Iris)),
+                "Frost1" | "Frost2" | "Frost" => cases.extend(optional(Source::Frost)),
+                // CTO warms a white; CTB is the same axis the other way, so it
+                // rides the same parameter rather than earning its own fader.
+                "CTO" | "CTB" | "CTC" => cases.extend(optional(Source::Cto)),
                 a if a.starts_with("Color") && !a.contains("Add") && !a.contains("RGB") => {
                     // colour wheel: match by wheel name from the function, else first wheel
                     let wheel = functions

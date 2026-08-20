@@ -74,3 +74,17 @@ export const shareDownload = (entry: ShareEntry): Promise<string> =>
     rid: entry.rid,
     name: `${entry.manufacturer}-${entry.fixture}`,
   });
+
+// --- the local fixture library ---------------------------------------------
+// A project stores compiled profiles, so a show opened on a machine that has
+// never seen the fixture still works. The cost is that a profile compiled by an
+// older build keeps whatever the compiler understood then — a Spiider patched
+// before LIGHT could drive zoom has a zoom channel with nothing behind it. The
+// source .gdtf is still in the library, so recompiling is just importing again.
+
+/** The `.gdtf` files kept in the local library, newest first. */
+export const libraryList = (): Promise<string[]> => call<string[]>('library_list');
+
+/** One library file as base64, ready for the engine's importGdtf. */
+export const libraryRead = (name: string): Promise<string> =>
+  call<string>('library_read', { name });

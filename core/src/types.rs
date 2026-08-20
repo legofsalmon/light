@@ -168,6 +168,18 @@ pub struct PartParams {
     pub haze: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fan: Option<f64>,
+    // Beam shaping. Absent means the look says nothing about this parameter and
+    // the fixture keeps its parked value — not that the parameter is zero.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zoom: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focus: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iris: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frost: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cto: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -179,6 +191,11 @@ pub enum EffectTarget {
     Strobe,
     Pan,
     Tilt,
+    Zoom,
+    Focus,
+    Iris,
+    Frost,
+    Cto,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

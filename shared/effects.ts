@@ -78,6 +78,17 @@ export function applyEffects(
       case 'tilt':
         out.tilt = clamp((out.tilt ?? 0.5) + (v - 0.5) * e.size);
         break;
+      // Beam parameters swing about their set value, like pan and tilt. Adding
+      // the effect at all is the operator saying they want this parameter
+      // driven, so an unset one starts from the middle of its travel rather
+      // than staying parked.
+      case 'zoom':
+      case 'focus':
+      case 'iris':
+      case 'frost':
+      case 'cto':
+        out[e.target] = clamp((out[e.target] ?? 0.5) + (v - 0.5) * e.size);
+        break;
     }
   }
   return out;

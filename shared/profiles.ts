@@ -28,6 +28,13 @@ export type ResolvedParams = {
   tilt: number;
   haze: number;
   fan: number;
+  /** Beam parameters, null until a look sets one. Null means "nobody asked",
+   *  and the channel holds whatever the fixture's profile parks it at. */
+  zoom: number | null;
+  focus: number | null;
+  iris: number | null;
+  frost: number | null;
+  cto: number | null;
 };
 
 export function defaultResolved(): ResolvedParams {
@@ -35,6 +42,7 @@ export function defaultResolved(): ResolvedParams {
     dimmer: 0, r: 1, g: 1, b: 1, white: 0, ringFx: 0, strobe: 0,
     motorMode: 'off', motorValue: 0, macro: null, pan: 0.5, tilt: 0.5,
     haze: 0, fan: 0,
+    zoom: null, focus: null, iris: null, frost: null, cto: null,
   };
 }
 

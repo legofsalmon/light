@@ -18,13 +18,15 @@
 
 import React, { useEffect, useState } from 'react';
 import type { ShareEntry } from '../../../shared/types.ts';
-import { isPlaceholderProfile, parseGdtfSpec, rankMatches } from '../../../shared/gdtfShare.ts';
+import { hasUndrivenBeamChannels, isPlaceholderProfile, parseGdtfSpec, rankMatches } from '../../../shared/gdtfShare.ts';
 import { useStore } from '../store.ts';
 import {
   shareAvailable,
   shareCachedCount,
   shareDownload,
   shareForget,
+  libraryList,
+  libraryRead,
   shareLogin,
   shareLoginSaved,
   shareRefresh,
@@ -88,6 +90,15 @@ export function ShareFixtures(): React.ReactElement | null {
 
   const available = shareAvailable();
   const signedIn = !!status?.user;
+
+  // Profiles compiled by an older build keep whatever the compiler understood
+  // then — a Spiider patched before LIGHT could drive zoom has a Zoom channel
+  // with nothing behind it, and the fader would silently do nothing. The source
+  // .gdtf is still in the library, so this is offered as a rebuild rather than
+  // asking the operator to hunt the file down and import it again.
+  const stale = Object.entries(project.profiles ?? {})
+    .filter(([, pr]) => hasUndrivenBeamChannels(pr))
+    .map(([id]) => id);
 
   // Sign in from the Keychain without being asked. "Remember me" that still
   // makes you press a button every launch is barely remembering anything — and
@@ -236,6 +247,40 @@ export function ShareFixtures(): React.ReactElement | null {
   return (
     <div className="patchsec">
       <div className="sechead">GDTF SHARE</div>
+
+      {stale.length > 0 && (
+        <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+          <span className="label">
+            {stale.length} profile{stale.length === 1 ? '' : 's'} predate the beam
+            parameters — zoom, focus, iris and frost are patched but not driven
+          </span>
+          <button
+            className="btn small"
+            disabled={!!busy}
+            title="re-import every .gdtf in the local fixture library"
+            onClick={() =>
+              void run('rebuilding profiles', async () => {
+                const files = await libraryList();
+                if (files.length === 0) {
+                  setNote('the local fixture library is empty — re-download the fixture from Share');
+                  return;
+                }
+                // the same import the app already runs after a Share download,
+                // so this adds nothing to the wire protocol
+                for (const name of files) {
+                  send({ type: 'importGdtf', name, data: await libraryRead(name) });
+                }
+                setNote(
+                  `rebuilt from ${files.length} library file${files.length === 1 ? '' : 's'} — ` +
+                    'fixtures using them can now take the beam parameters',
+                );
+              })
+            }
+          >
+            rebuild from library
+          </button>
+        </div>
+      )}
 
       {!signedIn ? (
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>

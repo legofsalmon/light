@@ -11,10 +11,10 @@ use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
 use light_core::cprofile::{render_compiled, CompiledProfile};
-use light_core::profiles::ResolvedParams;
+use light_core::profiles::{BeamParams, ResolvedParams};
 use light_core::types::MotorMode;
 
-pub const PARAMS_PER_HEAD: usize = 15;
+pub const PARAMS_PER_HEAD: usize = 20;
 
 thread_local! {
     static REGISTRY: RefCell<HashMap<u32, CompiledProfile>> = RefCell::new(HashMap::new());
@@ -57,6 +57,11 @@ pub fn unregister_profile(handle: u32) {
     REGISTRY.with(|r| r.borrow_mut().remove(&handle));
 }
 
+/// A finite value is set; NaN means the look never mentioned this parameter.
+fn opt(v: f64) -> Option<f64> {
+    if v.is_finite() { Some(v) } else { None }
+}
+
 fn unflatten(flat: &[f64]) -> Vec<ResolvedParams> {
     flat.chunks_exact(PARAMS_PER_HEAD)
         .map(|c| ResolvedParams {
@@ -78,12 +83,22 @@ fn unflatten(flat: &[f64]) -> Vec<ResolvedParams> {
             tilt: c[12],
             haze: c[13],
             fan: c[14],
+            // NaN carries "unset" across the boundary: a beam parameter no look
+            // has touched must leave its channel parked, and every real value
+            // here is finite, so the sentinel cannot collide with one.
+            beam: BeamParams {
+                zoom: opt(c[15]),
+                focus: opt(c[16]),
+                iris: opt(c[17]),
+                frost: opt(c[18]),
+                cto: opt(c[19]),
+            },
         })
         .collect()
 }
 
 /// Render one fixture's heads through a registered profile.
-/// `params` is heads × 15 f64 (layout above). Returns the footprint bytes.
+/// `params` is heads × 20 f64 (layout above). Returns the footprint bytes.
 #[wasm_bindgen]
 pub fn render(handle: u32, params: &[f64]) -> Result<Vec<u8>, JsError> {
     REGISTRY.with(|r| {

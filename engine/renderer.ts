@@ -14,8 +14,18 @@ const brokenFixtures = new Set<string>();
 type NumField = 'dimmer' | 'white' | 'ringFx' | 'strobe' | 'pan' | 'tilt' | 'haze' | 'fan' | 'motorValue';
 const NUM_FIELDS: NumField[] = ['dimmer', 'white', 'ringFx', 'strobe', 'pan', 'tilt', 'haze', 'fan', 'motorValue'];
 
+// Beam parameters ride a parallel track to the fields above because they are
+// OPTIONAL: a look that never mentions zoom must leave zoom alone, so there is
+// no neutral value to merge from. Keeping them separate also leaves the
+// existing merge untouched, so a saved show still renders byte for byte.
+// Mirrors BeamField/ALL_BEAM in core/src/renderer.rs — order is not load
+// bearing here, but keeping the two lists identical is how they stay in step.
+type BeamField = 'zoom' | 'focus' | 'iris' | 'frost' | 'cto';
+const BEAM_FIELDS: BeamField[] = ['zoom', 'focus', 'iris', 'frost', 'cto'];
+
 type Acc = {
   num: Partial<Record<NumField, { v: number; w: number }>>;
+  beam: Partial<Record<BeamField, { v: number; w: number }>>;
   col: { r: number; g: number; b: number; w: number } | null;
   motorMode: MotorMode | null;
   macro: number | undefined;
@@ -160,7 +170,7 @@ export class Renderer {
             const prm = applyEffects(part.params, part.effects, this.effBeat, j, n);
             let a = acc.get(key);
             if (!a) {
-              a = { num: {}, col: null, motorMode: null, macro: undefined };
+              a = { num: {}, beam: {}, col: null, motorMode: null, macro: undefined };
               acc.set(key, a);
             }
             const addNum = (field: NumField, v: number | undefined) => {
@@ -178,6 +188,14 @@ export class Renderer {
             addNum('haze', prm.haze);
             addNum('fan', prm.fan);
             addNum('motorValue', prm.motorValue);
+            const acr = a;
+            const addBeam = (field: BeamField, v: number | undefined) => {
+              if (v === undefined) return;
+              const c = acr.beam[field] ?? (acr.beam[field] = { v: 0, w: 0 });
+              c.v += v * src.w;
+              c.w += src.w;
+            };
+            for (const f of BEAM_FIELDS) addBeam(f, prm[f]);
             if (prm.color) {
               const [r, g, b] = hsvToRgb(prm.color.h, prm.color.s, 1);
               const c = a.col ?? (a.col = { r: 0, g: 0, b: 0, w: 0 });
@@ -211,6 +229,17 @@ export class Renderer {
           } else {
             out[f] = clamp(lerp(out[f], isIntensity ? val * m : val, sw));
           }
+        }
+        for (const f of BEAM_FIELDS) {
+          const c = a.beam[f];
+          if (!c || c.w <= 0) continue;
+          const val = clamp(c.v / c.w);
+          const sw = Math.min(1, c.w);
+          // A beam parameter is never an intensity, so layer master and blend
+          // mode do not scale it — half master must not mean half zoom. The
+          // first layer to speak sets it; later ones crossfade from there.
+          const cur = out[f];
+          out[f] = cur === null ? val : clamp(lerp(cur, val, sw));
         }
         if (a.col && a.col.w > 0) {
           const sw = Math.min(1, a.col.w);

@@ -422,6 +422,47 @@ async function main(): Promise<void> {
     compareDmx('focus: cleared parity', node.snap, rust.snap);
   }
 
+  // --- beam parameters: a look that never mentions zoom must leave the zoom
+  // --- channel exactly where the fixture's own GDTF parks it. The golden bytes
+  // --- above already pin that (offset 10 = 128); this drives it and back.
+  {
+    const setZoom = (p: Project, zoom: number | undefined) => {
+      const part = p.looks['look-spot'].parts[0];
+      if (zoom === undefined) delete part.params.zoom;
+      else part.params.zoom = zoom;
+      return p;
+    };
+
+    both({ type: 'updateProject', project: setZoom(structuredClone(await currentProject(node)), 1) });
+    await sleep(400);
+    compareDmx('zoom: driven parity', node.snap, rust.snap);
+    check(
+      'zoom: a look driving zoom to 1 opens the channel fully',
+      node.snap?.dmx['u1']?.[208] === 255,
+      `zoom byte ${node.snap?.dmx['u1']?.[208]} (expected 255)`,
+    );
+
+    both({ type: 'updateProject', project: setZoom(structuredClone(await currentProject(node)), 0.25) });
+    await sleep(400);
+    compareDmx('zoom: quarter parity', node.snap, rust.snap);
+    check(
+      'zoom: 0.25 lands a quarter up the channel',
+      Math.abs((node.snap?.dmx['u1']?.[208] ?? -1) - 64) <= 1,
+      `zoom byte ${node.snap?.dmx['u1']?.[208]} (expected ~64)`,
+    );
+
+    // and releasing it returns the channel to the fixture's parked value,
+    // rather than to zero — the whole reason these params are optional
+    both({ type: 'updateProject', project: setZoom(structuredClone(await currentProject(node)), undefined) });
+    await sleep(400);
+    compareDmx('zoom: released parity', node.snap, rust.snap);
+    check(
+      'zoom: releasing it parks the channel again, it does not fall to 0',
+      node.snap?.dmx['u1']?.[208] === 128,
+      `zoom byte ${node.snap?.dmx['u1']?.[208]} (expected 128, the GDTF default)`,
+    );
+  }
+
   // --- cue lists: trigger-anchored steps must advance identically ---
   {
     const p = structuredClone(await currentProject(node));

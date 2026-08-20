@@ -29,6 +29,14 @@ pub enum Source {
     Tilt,
     Haze,
     Fan,
+    // Beam parameters. Unlike the sources above these can be *unset*: a look
+    // that says nothing about zoom must leave the zoom channel parked at the
+    // value the fixture's own GDTF nominates, not drive it to zero.
+    Zoom,
+    Focus,
+    Iris,
+    Frost,
+    Cto,
 }
 
 /// Case guard — the first matching case in a channel wins.
@@ -43,6 +51,8 @@ pub enum Cond {
     /// source <= value
     SourceBelow { source: Source, value: f64 },
     MotorModeIs { mode: MotorMode },
+    /// the source carries no value — the look never touched this parameter
+    SourceUnset { source: Source },
 }
 
 /// One slot on a banded/wheel channel (colour wheels, macro tables, gobos).
@@ -147,6 +157,26 @@ fn source_value(p: &ResolvedParams, s: Source, virtual_dimmer: bool) -> f64 {
         Source::Tilt => p.tilt,
         Source::Haze => p.haze,
         Source::Fan => p.fan,
+        // 0.0 is never reached for a set parameter: a channel driven by an
+        // optional source is guarded by Cond::SourceUnset, which takes the
+        // fixed-default branch first.
+        Source::Zoom => p.beam.zoom.unwrap_or(0.0),
+        Source::Focus => p.beam.focus.unwrap_or(0.0),
+        Source::Iris => p.beam.iris.unwrap_or(0.0),
+        Source::Frost => p.beam.frost.unwrap_or(0.0),
+        Source::Cto => p.beam.cto.unwrap_or(0.0),
+    }
+}
+
+/// Whether an optional source currently carries a value.
+fn source_is_set(p: &ResolvedParams, s: Source) -> bool {
+    match s {
+        Source::Zoom => p.beam.zoom.is_some(),
+        Source::Focus => p.beam.focus.is_some(),
+        Source::Iris => p.beam.iris.is_some(),
+        Source::Frost => p.beam.frost.is_some(),
+        Source::Cto => p.beam.cto.is_some(),
+        _ => true,
     }
 }
 
@@ -157,6 +187,7 @@ fn cond_matches(c: &Cond, p: &ResolvedParams, virtual_dimmer: bool) -> bool {
         Cond::SourceAbove { source, value } => source_value(p, *source, virtual_dimmer) > *value,
         Cond::SourceBelow { source, value } => source_value(p, *source, virtual_dimmer) <= *value,
         Cond::MotorModeIs { mode } => p.motor_mode == *mode,
+        Cond::SourceUnset { source } => !source_is_set(p, *source),
     }
 }
 

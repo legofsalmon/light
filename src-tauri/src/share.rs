@@ -475,3 +475,57 @@ fn remember_user(user: &str) -> Result<(), String> {
     std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {dir:?}: {e}"))?;
     std::fs::write(user_path(), user).map_err(|e| format!("cannot save the username: {e}"))
 }
+
+// ---------------------------------------------------------------------------
+// The local fixture library
+//
+// A project stores COMPILED profiles, not the .gdtf they came from — which is
+// what lets a show travel to a machine that has never seen the fixture. The
+// cost is that a profile compiled by an older build keeps whatever the compiler
+// understood at the time: when LIGHT learned to drive zoom, every Spiider
+// already in a saved show still had a zoom channel with nothing behind it.
+//
+// The source files are still here, though, so the fix is to compile them again.
+// Deliberately no new engine command: the shell hands the bytes back and the UI
+// replays the importGdtf it already sends after a Share download, so this adds
+// nothing to the wire protocol and nothing to the parity surface.
+// ---------------------------------------------------------------------------
+
+/// The `.gdtf` files in the local library, newest first.
+#[tauri::command]
+pub fn library_list() -> Result<Vec<String>, String> {
+    let dir = fixture_dir();
+    let Ok(entries) = std::fs::read_dir(&dir) else { return Ok(Vec::new()) };
+    let mut files: Vec<(std::time::SystemTime, String)> = entries
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if !name.to_lowercase().ends_with(".gdtf") {
+                return None;
+            }
+            let when = e.metadata().and_then(|m| m.modified()).ok()?;
+            Some((when, name))
+        })
+        .collect();
+    files.sort_by(|a, b| b.0.cmp(&a.0));
+    Ok(files.into_iter().map(|(_, n)| n).collect())
+}
+
+/// One library file as base64, ready for the engine's importGdtf.
+#[tauri::command]
+pub fn library_read(name: String) -> Result<String, String> {
+    // The name comes back from library_list, but it arrives over an IPC bridge
+    // and is a filesystem path either way: refuse anything with a separator or
+    // a parent segment rather than trusting the round trip.
+    if name.is_empty()
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains("..")
+        || !name.to_lowercase().ends_with(".gdtf")
+    {
+        return Err(format!("not a library fixture: {name}"));
+    }
+    let path = fixture_dir().join(&name);
+    let bytes = std::fs::read(&path).map_err(|e| format!("cannot read {name}: {e}"))?;
+    Ok(base64_encode(&bytes))
+}

@@ -65,6 +65,41 @@ const ALL_FIELDS: [Field; N_FIELDS] = [
     Field::Tilt, Field::Haze, Field::Fan, Field::MotorValue,
 ];
 
+/// Beam parameters ride a parallel track to the nine fields above because they
+/// are *optional*: a look that never mentions zoom must leave zoom alone, so
+/// there is no neutral f64 to merge from. Keeping them separate also means the
+/// existing merge is untouched and a saved show still renders byte for byte.
+const N_BEAM: usize = 5;
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BeamField {
+    Zoom = 0,
+    Focus,
+    Iris,
+    Frost,
+    Cto,
+}
+const ALL_BEAM: [BeamField; N_BEAM] =
+    [BeamField::Zoom, BeamField::Focus, BeamField::Iris, BeamField::Frost, BeamField::Cto];
+
+fn get_beam(p: &ResolvedParams, f: BeamField) -> Option<f64> {
+    match f {
+        BeamField::Zoom => p.beam.zoom,
+        BeamField::Focus => p.beam.focus,
+        BeamField::Iris => p.beam.iris,
+        BeamField::Frost => p.beam.frost,
+        BeamField::Cto => p.beam.cto,
+    }
+}
+fn set_beam(p: &mut ResolvedParams, f: BeamField, v: f64) {
+    match f {
+        BeamField::Zoom => p.beam.zoom = Some(v),
+        BeamField::Focus => p.beam.focus = Some(v),
+        BeamField::Iris => p.beam.iris = Some(v),
+        BeamField::Frost => p.beam.frost = Some(v),
+        BeamField::Cto => p.beam.cto = Some(v),
+    }
+}
+
 fn get_field(p: &ResolvedParams, f: Field) -> f64 {
     match f {
         Field::Dimmer => p.dimmer,
@@ -95,6 +130,7 @@ fn set_field(p: &mut ResolvedParams, f: Field, v: f64) {
 #[derive(Default)]
 struct Acc {
     num: [Option<(f64, f64)>; N_FIELDS], // (weighted sum, weight)
+    beam: [Option<(f64, f64)>; N_BEAM],  // as above, for the optional params
     col: Option<(f64, f64, f64, f64)>,   // (r,g,b, weight)
     motor_mode: Option<MotorMode>,
     macro_: Option<f64>,
@@ -288,6 +324,18 @@ impl Renderer {
                         add_num(Field::Haze, prm.haze);
                         add_num(Field::Fan, prm.fan);
                         add_num(Field::MotorValue, prm.motor_value);
+                        let mut add_beam = |field: BeamField, v: Option<f64>| {
+                            if let Some(v) = v {
+                                let c = a.beam[field as usize].get_or_insert((0.0, 0.0));
+                                c.0 += v * w;
+                                c.1 += w;
+                            }
+                        };
+                        add_beam(BeamField::Zoom, prm.zoom);
+                        add_beam(BeamField::Focus, prm.focus);
+                        add_beam(BeamField::Iris, prm.iris);
+                        add_beam(BeamField::Frost, prm.frost);
+                        add_beam(BeamField::Cto, prm.cto);
                         if let Some(c) = prm.color {
                             let (r, g, b) = hsv_to_rgb(c.h, c.s, 1.0);
                             let col = a.col.get_or_insert((0.0, 0.0, 0.0, 0.0));
@@ -329,6 +377,23 @@ impl Renderer {
                         clamp01(lerp(cur, if is_intensity { val * m } else { val }, sw))
                     };
                     set_field(out, f, next);
+                }
+                for f in ALL_BEAM {
+                    let Some((sum, w)) = a.beam[f as usize] else { continue };
+                    if w <= 0.0 {
+                        continue;
+                    }
+                    let val = clamp01(sum / w);
+                    let sw = w.min(1.0);
+                    // A beam parameter is never an intensity, so layer master
+                    // and blend mode do not scale it — half master must not
+                    // mean half zoom. The first layer to speak sets the value
+                    // outright; later ones crossfade from it.
+                    let next = match get_beam(out, f) {
+                        Some(cur) => clamp01(lerp(cur, val, sw)),
+                        None => val,
+                    };
+                    set_beam(out, f, next);
                 }
                 if let Some((r, g, b, w)) = a.col {
                     if w > 0.0 {

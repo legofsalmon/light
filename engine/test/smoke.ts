@@ -11,7 +11,7 @@ import path from 'node:path';
 import type { Project } from '../../shared/types.ts';
 import { sanitizeProject } from '../../shared/types.ts';
 import type { ShareList } from '../../shared/gdtfShare.ts';
-import { isAcceptableList, isPlaceholderProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
+import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
 
 /** The demo show these tests were written against — five fixtures at known
  *  addresses, looks with known ids. Deliberately NOT the shipped default: that
@@ -366,6 +366,37 @@ await new Promise<void>((resolve) => {
     'occluders: performers are not occluders',
     buildOccluders({ ...demoProject(), props: [{ id: 'v', kind: 'vocalist', pos: { x: 0, z: 0 } }] } as Project).length === 0,
   );
+}
+
+// --- stale compiled profiles ------------------------------------------------
+{
+  const spiiderBefore = {
+    channels: [
+      { name: 'Pan', cases: [{}] },
+      { name: 'Tilt', cases: [{}] },
+      { name: 'Zoom', cases: [] },
+    ],
+  };
+  check(
+    'stale: a profile compiled before zoom existed is offered a rebuild',
+    hasUndrivenBeamChannels(spiiderBefore),
+  );
+  const spiiderAfter = {
+    channels: [
+      { name: 'Pan', cases: [{}] },
+      { name: 'Tilt', cases: [{}] },
+      { name: 'Zoom', cases: [{}, {}] },
+    ],
+  };
+  check(
+    'stale: a freshly compiled profile is NOT offered a rebuild',
+    !hasUndrivenBeamChannels(spiiderAfter),
+  );
+  check(
+    'stale: an undriven channel LIGHT has no parameter for is not staleness',
+    !hasUndrivenBeamChannels({ channels: [{ name: 'Effects2Rate', cases: [] }] }),
+  );
+  check('stale: a profile with no channels is not stale', !hasUndrivenBeamChannels({}));
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

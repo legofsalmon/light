@@ -85,6 +85,25 @@ pub fn apply_effects(
             EffectTarget::Tilt => {
                 out.tilt = Some(clamp01(out.tilt.unwrap_or(0.5) + (v - 0.5) * e.size));
             }
+            // Beam parameters swing about their set value, like pan and tilt.
+            // Adding the effect at all is the operator saying they want this
+            // parameter driven, so an unset one starts from the middle of its
+            // travel rather than staying parked.
+            EffectTarget::Zoom => {
+                out.zoom = Some(clamp01(out.zoom.unwrap_or(0.5) + (v - 0.5) * e.size));
+            }
+            EffectTarget::Focus => {
+                out.focus = Some(clamp01(out.focus.unwrap_or(0.5) + (v - 0.5) * e.size));
+            }
+            EffectTarget::Iris => {
+                out.iris = Some(clamp01(out.iris.unwrap_or(0.5) + (v - 0.5) * e.size));
+            }
+            EffectTarget::Frost => {
+                out.frost = Some(clamp01(out.frost.unwrap_or(0.5) + (v - 0.5) * e.size));
+            }
+            EffectTarget::Cto => {
+                out.cto = Some(clamp01(out.cto.unwrap_or(0.5) + (v - 0.5) * e.size));
+            }
         }
     }
     out

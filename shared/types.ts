@@ -135,9 +135,25 @@ export type PartParams = {
   tilt?: number;
   haze?: number;
   fan?: number;
+  // Beam shaping. Absent means the look says nothing about this parameter and
+  // the fixture keeps whatever its own profile parks it at — NOT that the
+  // parameter is zero. A saved show opened after this landed must not find
+  // every moving head snapped to its narrowest beam.
+  /** beam angle, 0 = narrowest the fixture offers .. 1 = widest */
+  zoom?: number;
+  /** 0..1 across the fixture's focus travel */
+  focus?: number;
+  /** 0 = closed .. 1 = fully open */
+  iris?: number;
+  /** 0 = none .. 1 = full diffusion */
+  frost?: number;
+  /** colour temperature correction, 0..1 across the fixture's range */
+  cto?: number;
 };
 
-export type EffectTarget = 'dimmer' | 'hue' | 'white' | 'strobe' | 'pan' | 'tilt';
+export type EffectTarget =
+  | 'dimmer' | 'hue' | 'white' | 'strobe' | 'pan' | 'tilt'
+  | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto';
 export type Wave = 'sine' | 'triangle' | 'sawUp' | 'sawDown' | 'square' | 'chase' | 'random';
 
 export type Effect = {
