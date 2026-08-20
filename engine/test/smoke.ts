@@ -503,6 +503,29 @@ await new Promise<void>((resolve) => {
     ![...geom.keys()].some((k) => k.startsWith('ghost:')),
   );
 
+  // group extents: same cross-language contract, Python-computed over the
+  // quantized golden heads in group.heads order, asserted f64-exact
+  {
+    const { buildGroupExtents } = await import('../../shared/geometry.ts');
+    const ext = buildGroupExtents(golden.project, geom);
+    const want = (golden as unknown as { expectedExtents: Record<string, Record<string, number>> }).expectedExtents;
+    let bad = '';
+    for (const [gid, w] of Object.entries(want)) {
+      const e = ext.get(gid);
+      if (!e) { bad = `${gid} missing`; break; }
+      for (const k of ['minX', 'maxX', 'minY', 'maxY', 'minZ', 'maxZ', 'cx', 'cy', 'cz', 'maxR'] as const) {
+        if (e[k] !== w[k]) { bad = `${gid}.${k}: got ${e[k]}, want ${w[k]}`; break; }
+      }
+      if (bad) break;
+    }
+    check('geometry: group extents match the golden vectors exactly', bad === '', bad);
+    check(
+      'geometry: a dangling ref does not stretch its group extents',
+      ext.get('g-dangling')?.maxR === 0,
+      `maxR=${ext.get('g-dangling')?.maxR}`,
+    );
+  }
+
   // compiled-profile offsets are consumed, not re-derived — same literals as
   // the Rust twin test (compiled_profile_offsets_are_consumed_not_rederived)
   const strip = {
@@ -520,6 +543,41 @@ await new Promise<void>((resolve) => {
     'geometry: compiled offsets consumed verbatim',
     g2.size === 4 && g2.get('s:0')?.x === -0.5 && g2.get('s:1')?.x === -0.1667 && g2.get('s:3')?.x === 0.5 && g2.get('s:2')?.along === 0.1667,
     JSON.stringify([...g2.entries()]),
+  );
+}
+
+// --- spatial fan (A1): twin of core/src/effects.rs fan_tests -----------------
+// Identical inputs, identical expected values, asserted f64-exact in BOTH
+// engines — the cross-language contract for the fan maths.
+{
+  const { applyEffects } = await import('../../shared/effects.ts');
+  const ext = { minX: 0, maxX: 3, minY: 2, maxY: 2, minZ: 0, maxZ: 0, cx: 1.5, cy: 2, cz: 0, maxR: 1.5 };
+  const gAt = (x: number) => ({ x, y: 2, z: 0, along: 0, row: 0, col: 0 });
+  const base = {
+    id: 'e', target: 'dimmer', wave: 'sawUp', rate: 1, size: 1, spread: 1, width: 0.5, phase: 0,
+    bypass: false, mix: 1, distribute: 'x', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0,
+  } as import('../../shared/types.ts').Effect;
+  const dims = (e: import('../../shared/types.ts').Effect) =>
+    [0, 1, 2, 3].map((x, j) => applyEffects({ dimmer: 1 }, [e], 0, [0], j, 4, gAt(x), ext).dimmer);
+  const eq = (a: (number | undefined)[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+  check('fan: x sweep wraps at a full wavelength', eq(dims(base), [0, 0.33333333333333326, 0.6666666666666665, 0]));
+  check('fan: mirror folds ends in phase toward centre', eq(dims({ ...base, fold: 'mirror' }), [0, 0.6666666666666665, 0.6666666666666667, 0]));
+  check('fan: centre fold leads from the middle', eq(dims({ ...base, fold: 'centre' }), [0, 0.3333333333333335, 0.33333333333333326, 0]));
+  check('fan: buddy clumps adjacent heads', eq(dims({ ...base, buddy: 2 }), [0, 0, 0.5, 0.5]));
+  check('fan: parts tiles the fan', eq(dims({ ...base, parts: 2 }), [0, 0.6666666666666665, 0.33333333333333326, 0]));
+  check('fan: reverse index keeps grid spacing', eq(dims({ ...base, distribute: 'index', reverse: true }), [0.75, 0.5, 0.25, 0]));
+  check('fan: radial ripples from the centroid', eq(dims({ ...base, distribute: 'radial' }), [0, 0.33333333333333326, 0.33333333333333326, 0]));
+  check(
+    'fan: shuffle is seeded and reproducible',
+    eq(dims({ ...base, distribute: 'shuffle', seed: 42 }), [0.9707432389259338, 0.6836519397329539, 0.5080116945318878, 0.5004639013204724]),
+  );
+  const panE = { ...base, target: 'pan', wave: 'sine', size: 0.5, spread: 0, fold: 'mirror' } as import('../../shared/types.ts').Effect;
+  const pans = [0, 1, 2, 3].map((x, j) => applyEffects({}, [panE], 0.125, [0], j, 4, gAt(x), ext).pan);
+  check(
+    'fan: mirrored half counter-rotates pan',
+    eq(pans, [0.32322330470336313, 0.32322330470336313, 0.6767766952966369, 0.6767766952966369]),
+    `got ${pans.join(',')}`,
   );
 }
 

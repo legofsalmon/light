@@ -39,6 +39,76 @@ function q(v: number): number {
 }
 
 /**
+ * Spatial extent of one group's heads, for normalizing spatial effect fans.
+ * Derived from QUANTIZED HeadGeom values in group.heads order, so both engines
+ * compute bit-identical extents (sums and sqrt are IEEE-deterministic).
+ * Twin of GroupExtents in core/src/geometry.rs.
+ */
+export type GroupExtents = {
+  minX: number; maxX: number;
+  minY: number; maxY: number;
+  minZ: number; maxZ: number;
+  /** centroid of the placed heads */
+  cx: number; cy: number; cz: number;
+  /** largest head distance from the centroid */
+  maxR: number;
+};
+
+/** Extents for a group with no placed heads — everything degenerate, so every
+ *  spatial basis normalizes to 0 and the fan collapses to "all in phase". */
+export const NO_EXTENTS: GroupExtents = {
+  minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0, cx: 0, cy: 0, cz: 0, maxR: 0,
+};
+
+/**
+ * Per-group spatial extents over the heads that HAVE geometry (a dangling ref
+ * renders nothing, so it must not stretch the fan either). Gen-gated by the
+ * caller alongside buildGeometry — same rebuild discipline.
+ */
+export function buildGroupExtents(
+  p: Project,
+  geom: Map<string, HeadGeom>
+): Map<string, GroupExtents> {
+  const out = new Map<string, GroupExtents>();
+  for (const g of p.groups) {
+    let n = 0;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    let sx = 0, sy = 0, sz = 0;
+    for (const ref of g.heads) {
+      const hg = geom.get(`${ref.fixtureId}:${ref.head}`);
+      if (!hg) continue;
+      n++;
+      if (hg.x < minX) minX = hg.x;
+      if (hg.x > maxX) maxX = hg.x;
+      if (hg.y < minY) minY = hg.y;
+      if (hg.y > maxY) maxY = hg.y;
+      if (hg.z < minZ) minZ = hg.z;
+      if (hg.z > maxZ) maxZ = hg.z;
+      sx += hg.x;
+      sy += hg.y;
+      sz += hg.z;
+    }
+    if (n === 0) {
+      out.set(g.id, NO_EXTENTS);
+      continue;
+    }
+    const cx = sx / n, cy = sy / n, cz = sz / n;
+    let maxR = 0;
+    for (const ref of g.heads) {
+      const hg = geom.get(`${ref.fixtureId}:${ref.head}`);
+      if (!hg) continue;
+      const dx = hg.x - cx, dy = hg.y - cy, dz = hg.z - cz;
+      // sqrt is correctly rounded per IEEE-754 in both languages, so this is
+      // deterministic given the quantized inputs — no re-quantization needed
+      const r = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (r > maxR) maxR = r;
+    }
+    out.set(g.id, { minX, maxX, minY, maxY, minZ, maxZ, cx, cy, cz, maxR });
+  }
+  return out;
+}
+
+/**
  * World direction of a fixture's local +X axis (where its head fan points),
  * under the same Ry·Rx·Rz composition as buildGeometry. For VISUAL consumers —
  * bar outlines, handles, projections. Head positions must come from

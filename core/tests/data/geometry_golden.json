@@ -86,7 +86,69 @@
     "rotY": 0.0
    }
   ],
-  "groups": [],
+  "groups": [
+   {
+    "id": "g-span",
+    "name": "Span",
+    "heads": [
+     {
+      "fixtureId": "bar-yaw90",
+      "head": 0
+     },
+     {
+      "fixtureId": "bar-yaw90",
+      "head": 1
+     },
+     {
+      "fixtureId": "bar-yaw90",
+      "head": 2
+     },
+     {
+      "fixtureId": "bar-yaw90",
+      "head": 3
+     },
+     {
+      "fixtureId": "bar-full",
+      "head": 0
+     },
+     {
+      "fixtureId": "bar-full",
+      "head": 1
+     },
+     {
+      "fixtureId": "bar-full",
+      "head": 2
+     },
+     {
+      "fixtureId": "bar-full",
+      "head": 3
+     }
+    ]
+   },
+   {
+    "id": "g-dangling",
+    "name": "Dangling",
+    "heads": [
+     {
+      "fixtureId": "bar-flat",
+      "head": 0
+     },
+     {
+      "fixtureId": "no-such-fixture",
+      "head": 3
+     },
+     {
+      "fixtureId": "ghost",
+      "head": 0
+     }
+    ]
+   },
+   {
+    "id": "g-empty",
+    "name": "Empty",
+    "heads": []
+   }
+  ],
   "looks": {},
   "layers": [],
   "columns": []
@@ -227,6 +289,44 @@
    "along": 0.0,
    "row": 0,
    "col": 0
+  }
+ },
+ "expectedExtents": {
+  "g-span": {
+   "minX": -2.277592,
+   "maxX": 0.0,
+   "minY": 4.0,
+   "maxY": 5.07402,
+   "minZ": 0.61,
+   "maxZ": 2.263749,
+   "cx": -0.9999999999999999,
+   "cy": 4.5,
+   "cz": 1.4999999999999998,
+   "maxR": 1.5953221661673855
+  },
+  "g-dangling": {
+   "minX": 1.11,
+   "maxX": 1.11,
+   "minY": 3.0,
+   "maxY": 3.0,
+   "minZ": -0.5,
+   "maxZ": -0.5,
+   "cx": 1.11,
+   "cy": 3.0,
+   "cz": -0.5,
+   "maxR": 0.0
+  },
+  "g-empty": {
+   "minX": 0,
+   "maxX": 0,
+   "minY": 0,
+   "maxY": 0,
+   "minZ": 0,
+   "maxZ": 0,
+   "cx": 0,
+   "cy": 0,
+   "cz": 0,
+   "maxR": 0
   }
  }
 }

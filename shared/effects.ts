@@ -1,5 +1,5 @@
 import type { Effect, PartParams } from './types.ts';
-import type { HeadGeom } from './geometry.ts';
+import type { GroupExtents, HeadGeom } from './geometry.ts';
 import { clamp } from './types.ts';
 
 /** Deterministic 0..1 hash for sample-and-hold randomness. */
@@ -37,6 +37,67 @@ function isCentred(e: Effect): boolean {
   return e.wave === 'sine' || e.wave === 'triangle' || e.wave === 'square' || e.wave === 'random';
 }
 
+/** 0..1 normalisation with a degenerate-extent guard: a single head (or a
+ *  perfectly stacked group) has no sweep axis, so everything lands in phase. */
+function norm(v: number, lo: number, hi: number): number {
+  return hi - lo > 1e-9 ? (v - lo) / (hi - lo) : 0;
+}
+
+/**
+ * Fan position 0..1 for one head under an effect's spatial config (A1), plus
+ * whether the head sits on the mirrored half (pan counter-rotates there).
+ * Pipeline: basis (+reverse) → buddy clump → fold → parts tile. Only called on
+ * the general path — the all-defaults fan is the verbatim legacy expression in
+ * applyEffects, gated by the golden byte suites.
+ */
+function fanPos(
+  e: Effect,
+  j: number,
+  n: number,
+  g: HeadGeom,
+  ext: GroupExtents
+): { t: number; mirrored: boolean } {
+  let t: number;
+  switch (e.distribute) {
+    case 'x':
+      t = norm(g.x, ext.minX, ext.maxX);
+      break;
+    case 'y':
+      t = norm(g.y, ext.minY, ext.maxY);
+      break;
+    case 'z':
+      t = norm(g.z, ext.minZ, ext.maxZ);
+      break;
+    case 'radial': {
+      const dx = g.x - ext.cx, dy = g.y - ext.cy, dz = g.z - ext.cz;
+      t = ext.maxR > 1e-9 ? Math.sqrt(dx * dx + dy * dy + dz * dz) / ext.maxR : 0;
+      break;
+    }
+    case 'shuffle':
+      // seeded, reproducible scatter — the same bit-exact hash the random
+      // wave uses, so busking-safe randomness you can get back
+      t = hash01(j, e.seed);
+      break;
+    default:
+      t = n > 1 ? j / n : 0; // index
+  }
+  if (e.reverse) {
+    // index keeps its grid spacing ((n−1−j)/n); continuous bases just flip
+    t = e.distribute === 'index' ? (n > 1 ? (n - 1 - j) / n : 0) : 1 - t;
+  }
+  if (e.buddy > 1 && n > 1) {
+    // clump adjacent-in-fan heads onto ceil(n/buddy) equal steps
+    const m = Math.ceil(n / e.buddy);
+    t = Math.min(Math.floor(t * m), m - 1) / m;
+  }
+  const mirrored = e.fold === 'mirror' && t > 0.5;
+  if (e.fold === 'mirror') t = t <= 0.5 ? 2 * t : 2 * (1 - t);
+  else if (e.fold === 'centre') t = Math.abs(2 * t - 1);
+  // tile k repeats across the group — phase is circular, so the mod is safe
+  if (e.parts > 1) t = (t * e.parts) % 1;
+  return { t, mirrored };
+}
+
 /** Wet/dry blend of one target. At mix 1 this returns `wet` verbatim (byte-for-
  *  byte the pre-mix behaviour); below 1 it eases back toward the dry value the
  *  target held going into this effect. mix <= 0 is handled by skipping the whole
@@ -53,11 +114,11 @@ function applyMix(dry: number, wet: number, mix: number): number {
  * renderer's rate-correction map). It is 0 for every effect of an untouched
  * show, so the output is byte-identical to passing nothing.
  *
- * (headIdx, headCount, _g) together are the HeadCtx — flattened into three
- * arguments so the hot loop allocates nothing: _g is the renderer's cached
- * HeadGeom, passed by reference. Carried since B2, consumed from A1 (spatial
- * fan); until then it must not influence output, which the golden byte suites
- * gate.
+ * (headIdx, headCount, g, ext) together are the HeadCtx — flattened into four
+ * arguments so the hot loop allocates nothing: g is the renderer's cached
+ * HeadGeom and ext the group's cached extents, both passed by reference. The
+ * legacy fan (all A1 fields at defaults) runs the pre-A1 expression VERBATIM,
+ * gated by the golden byte suites.
  */
 export function applyEffects(
   params: PartParams,
@@ -66,7 +127,8 @@ export function applyEffects(
   phaseCorr: readonly number[],
   headIdx: number,
   headCount: number,
-  _g: HeadGeom
+  g: HeadGeom,
+  ext: GroupExtents
 ): PartParams {
   if (effects.length === 0) return params;
   const out: PartParams = { ...params, color: params.color ? { ...params.color } : undefined };
@@ -79,7 +141,18 @@ export function applyEffects(
     const mix = e.mix;
     const spread = e.wave === 'chase' ? 1 : e.spread;
     const corr = phaseCorr[i] ?? 0;
-    const phase = beat / e.rate + corr + e.phase + (headCount > 1 ? (headIdx / headCount) * spread : 0);
+    const legacyFan =
+      e.distribute === 'index' && e.fold === 'none' && !e.reverse && e.parts <= 1 && e.buddy <= 1;
+    let mirrored = false;
+    let phase: number;
+    if (legacyFan) {
+      // the pre-A1 expression, byte-for-byte
+      phase = beat / e.rate + corr + e.phase + (headCount > 1 ? (headIdx / headCount) * spread : 0);
+    } else {
+      const f = fanPos(e, headIdx, headCount, g, ext);
+      mirrored = f.mirrored;
+      phase = beat / e.rate + corr + e.phase + f.t * spread;
+    }
     const v = waveValue(e, phase, headIdx);
     switch (e.target) {
       case 'dimmer': {
@@ -105,7 +178,10 @@ export function applyEffects(
       }
       case 'pan': {
         const dry = out.pan ?? 0.5;
-        out.pan = applyMix(dry, clamp(dry + (v - 0.5) * e.size), mix);
+        // value-sign mirror: the mirrored half counter-rotates, so a folded
+        // pan sweep opens and closes symmetrically instead of shearing
+        const dir = mirrored ? -1 : 1;
+        out.pan = applyMix(dry, clamp(dry + (v - 0.5) * e.size * dir), mix);
         break;
       }
       case 'tilt': {

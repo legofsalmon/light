@@ -99,6 +99,90 @@ pub fn build_geometry(p: &Project) -> HashMap<(String, usize), HeadGeom> {
     out
 }
 
+/// Spatial extent of one group's heads, for normalizing spatial effect fans.
+/// Derived from QUANTIZED HeadGeom values in group.heads order, so both engines
+/// compute bit-identical extents (sums and sqrt are IEEE-deterministic).
+/// Twin of GroupExtents in shared/geometry.ts.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GroupExtents {
+    pub min_x: f64,
+    pub max_x: f64,
+    pub min_y: f64,
+    pub max_y: f64,
+    pub min_z: f64,
+    pub max_z: f64,
+    /// centroid of the placed heads
+    pub cx: f64,
+    pub cy: f64,
+    pub cz: f64,
+    /// largest head distance from the centroid
+    pub max_r: f64,
+}
+
+/// Extents for a group with no placed heads — everything degenerate, so every
+/// spatial basis normalizes to 0 and the fan collapses to "all in phase".
+pub const NO_EXTENTS: GroupExtents = GroupExtents {
+    min_x: 0.0,
+    max_x: 0.0,
+    min_y: 0.0,
+    max_y: 0.0,
+    min_z: 0.0,
+    max_z: 0.0,
+    cx: 0.0,
+    cy: 0.0,
+    cz: 0.0,
+    max_r: 0.0,
+};
+
+/// Per-group spatial extents over the heads that HAVE geometry (a dangling ref
+/// renders nothing, so it must not stretch the fan either). Gen-gated by the
+/// caller alongside build_geometry — same rebuild discipline.
+pub fn build_group_extents(
+    p: &Project,
+    geom: &HashMap<(String, usize), HeadGeom>,
+) -> HashMap<String, GroupExtents> {
+    let mut out = HashMap::new();
+    for g in &p.groups {
+        let mut n = 0usize;
+        let (mut min_x, mut max_x) = (f64::INFINITY, f64::NEG_INFINITY);
+        let (mut min_y, mut max_y) = (f64::INFINITY, f64::NEG_INFINITY);
+        let (mut min_z, mut max_z) = (f64::INFINITY, f64::NEG_INFINITY);
+        let (mut sx, mut sy, mut sz) = (0.0f64, 0.0f64, 0.0f64);
+        for r in &g.heads {
+            let Some(hg) = geom.get(&(r.fixture_id.clone(), r.head)) else { continue };
+            n += 1;
+            if hg.x < min_x { min_x = hg.x; }
+            if hg.x > max_x { max_x = hg.x; }
+            if hg.y < min_y { min_y = hg.y; }
+            if hg.y > max_y { max_y = hg.y; }
+            if hg.z < min_z { min_z = hg.z; }
+            if hg.z > max_z { max_z = hg.z; }
+            sx += hg.x;
+            sy += hg.y;
+            sz += hg.z;
+        }
+        if n == 0 {
+            out.insert(g.id.clone(), NO_EXTENTS);
+            continue;
+        }
+        let (cx, cy, cz) = (sx / n as f64, sy / n as f64, sz / n as f64);
+        let mut max_r = 0.0f64;
+        for r in &g.heads {
+            let Some(hg) = geom.get(&(r.fixture_id.clone(), r.head)) else { continue };
+            let (dx, dy, dz) = (hg.x - cx, hg.y - cy, hg.z - cz);
+            // sqrt is correctly rounded per IEEE-754 in both languages, so this
+            // is deterministic given the quantized inputs - no re-quantization
+            let rr = (dx * dx + dy * dy + dz * dz).sqrt();
+            if rr > max_r { max_r = rr; }
+        }
+        out.insert(
+            g.id.clone(),
+            GroupExtents { min_x, max_x, min_y, max_y, min_z, max_z, cx, cy, cz, max_r },
+        );
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,6 +263,34 @@ mod tests {
         assert_eq!(geom[&("s".to_string(), 1)].x, -0.1667);
         assert_eq!(geom[&("s".to_string(), 3)].x, 0.5);
         assert_eq!(geom[&("s".to_string(), 2)].along, 0.1667);
+    }
+
+    #[test]
+    fn group_extents_match_the_golden_vectors() {
+        // same cross-language contract as the head positions: the expected
+        // values are Python-computed over the QUANTIZED golden heads, in
+        // group.heads order, asserted f64-exact in both engines' suites.
+        let golden: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/data/geometry_golden.json")).unwrap();
+        let project: Project = serde_json::from_value(golden["project"].clone()).unwrap();
+        let geom = build_geometry(&project);
+        let ext = build_group_extents(&project, &geom);
+        let want = golden["expectedExtents"].as_object().expect("expectedExtents present");
+        assert_eq!(ext.len(), want.len(), "group count");
+        for (gid, w) in want {
+            let e = ext.get(gid).unwrap_or_else(|| panic!("missing extents for {gid}"));
+            let f = |k: &str| w[k].as_f64().unwrap();
+            assert_eq!(e.min_x, f("minX"), "{gid} minX");
+            assert_eq!(e.max_x, f("maxX"), "{gid} maxX");
+            assert_eq!(e.min_y, f("minY"), "{gid} minY");
+            assert_eq!(e.max_y, f("maxY"), "{gid} maxY");
+            assert_eq!(e.min_z, f("minZ"), "{gid} minZ");
+            assert_eq!(e.max_z, f("maxZ"), "{gid} maxZ");
+            assert_eq!(e.cx, f("cx"), "{gid} cx");
+            assert_eq!(e.cy, f("cy"), "{gid} cy");
+            assert_eq!(e.cz, f("cz"), "{gid} cz");
+            assert_eq!(e.max_r, f("maxR"), "{gid} maxR");
+        }
     }
 
     #[test]

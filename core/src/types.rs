@@ -245,6 +245,32 @@ pub enum Wave {
     Random,
 }
 
+/// How an effect's phase fans across the group: patch order (the legacy
+/// behaviour), a world-position sweep, a ripple from the group's centre, or a
+/// seeded scatter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum Distribute {
+    #[default]
+    Index,
+    X,
+    Y,
+    Z,
+    Radial,
+    Shuffle,
+}
+
+/// Symmetry fold on the fan: mirror = ends in phase sweeping toward the
+/// centre (MA "wings"); centre = centre leads, ends trail.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum Fold {
+    #[default]
+    None,
+    Mirror,
+    Centre,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Effect {
     pub id: String,
@@ -262,10 +288,33 @@ pub struct Effect {
     /// every save written before this field existed renders unchanged.
     #[serde(default = "default_mix")]
     pub mix: f64,
+    /// Fan basis (A1). Index with fold None, reverse off and parts/buddy 1 is
+    /// byte-identical to the pre-A1 fan.
+    #[serde(default)]
+    pub distribute: Distribute,
+    /// Symmetry fold on the fan.
+    #[serde(default)]
+    pub fold: Fold,
+    /// Run the fan backwards.
+    #[serde(default)]
+    pub reverse: bool,
+    /// Tile the fan into k repeats across the group (1 = off).
+    #[serde(default = "default_one")]
+    pub parts: u32,
+    /// Clump size: adjacent heads (in fan order) share a phase (1 = off).
+    #[serde(default = "default_one")]
+    pub buddy: u32,
+    /// Seed for the shuffle basis.
+    #[serde(default)]
+    pub seed: i32,
 }
 
 fn default_mix() -> f64 {
     1.0
+}
+
+fn default_one() -> u32 {
+    1
 }
 
 /// A named entry in the FX pool: a reusable effect template that references no
@@ -358,6 +407,23 @@ fn repair_effect(obj: &serde_json::Map<String, serde_json::Value>) -> Option<Eff
     let id = obj.get("id")?.as_str()?.to_string();
     let target = serde_json::from_value::<EffectTarget>(obj.get("target")?.clone()).ok()?;
     let wave = serde_json::from_value::<Wave>(obj.get("wave")?.clone()).ok()?;
+    // A1: an UNKNOWN distribute or fold degrades to the default rather than
+    // dropping the effect — a show authored on a newer build should still run
+    // here, just unfanned, which beats going dark.
+    let distribute = obj
+        .get("distribute")
+        .and_then(|x| serde_json::from_value::<Distribute>(x.clone()).ok())
+        .unwrap_or_default();
+    let fold = obj
+        .get("fold")
+        .and_then(|x| serde_json::from_value::<Fold>(x.clone()).ok())
+        .unwrap_or_default();
+    let count = |k: &str| -> u32 {
+        match obj.get(k).and_then(|x| x.as_f64()) {
+            Some(n) if n.is_finite() && n >= 1.0 => (n.floor() as u32).min(64),
+            _ => 1,
+        }
+    };
     Some(Effect {
         id,
         target,
@@ -370,6 +436,17 @@ fn repair_effect(obj: &serde_json::Map<String, serde_json::Value>) -> Option<Eff
         bypass: obj.get("bypass").and_then(|x| x.as_bool()).unwrap_or(false),
         // clamp to 0..1; a missing or non-finite mix means full wet
         mix: fin("mix", 1.0).clamp(0.0, 1.0),
+        distribute,
+        fold,
+        reverse: obj.get("reverse").and_then(|x| x.as_bool()).unwrap_or(false),
+        parts: count("parts"),
+        buddy: count("buddy"),
+        // clamped, not wrapped: JS ToInt32 and Rust saturating casts disagree
+        // on absurd magnitudes, so both engines clamp to i32 range instead
+        seed: match obj.get("seed").and_then(|x| x.as_f64()) {
+            Some(n) if n.is_finite() => n.floor().clamp(-2147483648.0, 2147483647.0) as i32,
+            _ => 0,
+        },
     })
 }
 

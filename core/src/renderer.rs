@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::color::{derby_macro_for_value, derby_quantize, hsv_to_rgb, rgb_to_hsv, DERBY_MACROS};
 use crate::cprofile::{render_compiled, CompiledProfile};
 use crate::effects::apply_effects;
-use crate::geometry::{build_geometry, HeadGeom, NO_GEOM};
+use crate::geometry::{build_geometry, build_group_extents, GroupExtents, HeadGeom, NO_EXTENTS, NO_GEOM};
 use crate::profiles::{profile_of, HeadKind, Profile, ResolvedParams};
 use crate::state::EngineState;
 use crate::types::{clamp01, lerp, HeadSnap, LayerBlend, LayerSnap, MotorMode, Project};
@@ -178,6 +178,8 @@ pub struct Renderer {
     /// gen-keyed cache in either renderer, so the discipline is set here:
     /// compare by INEQUALITY (gen wraps), rebuild whole, never patch.
     geom: HashMap<(String, usize), HeadGeom>,
+    /// Per-group spatial extents for the fan bases - same gen gate as geom.
+    extents: HashMap<String, GroupExtents>,
     geom_gen: Option<u64>,
 }
 
@@ -241,6 +243,7 @@ impl Renderer {
             cue_anchors: HashMap::new(),
             rate_corr: HashMap::new(),
             geom: HashMap::new(),
+            extents: HashMap::new(),
             geom_gen: None,
         }
     }
@@ -312,6 +315,7 @@ impl Renderer {
         // world geometry rebuilds only when the project changed - never per tick
         if self.geom_gen != Some(st.gen) {
             self.geom = build_geometry(&st.project);
+            self.extents = build_group_extents(&st.project, &self.geom);
             self.geom_gen = Some(st.gen);
         }
 
@@ -381,6 +385,7 @@ impl Renderer {
                     let n = group.heads.len();
                     // one lookup per part per tick, shared by every head
                     let corr = self.effect_corr(layer_id, &look_id, part);
+                    let ext = self.extents.get(&part.group_id).unwrap_or(&NO_EXTENTS);
                     for (j, r) in group.heads.iter().enumerate() {
                         let key = (r.fixture_id.clone(), r.head);
                         if !heads.contains_key(&key) {
@@ -390,7 +395,7 @@ impl Renderer {
                         // built both); NO_GEOM is defence in depth, not an
                         // expected path
                         let g = self.geom.get(&key).unwrap_or(&NO_GEOM);
-                        let prm = apply_effects(&part.params, &part.effects, self.eff_beat, &corr, j, n, g);
+                        let prm = apply_effects(&part.params, &part.effects, self.eff_beat, &corr, j, n, g, ext);
                         let a = acc.entry(key).or_default();
                         let mut add_num = |field: Field, v: Option<f64>| {
                             if let Some(v) = v {

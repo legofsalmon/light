@@ -848,6 +848,66 @@ async function main(): Promise<void> {
     await settle(node, rust);
   }
 
+  // --- A1 spatial fan: the fan fields must produce byte-identical output on
+  // both engines. The demo's wash-rainbow (hue sawUp over g-pars' 8 heads,
+  // spread across two bars in x) gives the spatial bases real geometry to
+  // sweep; the pinned clock makes every config a static frame.
+  {
+    await armWash('wash-rainbow', 1.35); // non-round beat: phase off easy points
+
+    const setFan = async (patch: Partial<Effect>): Promise<void> => {
+      const p = structuredClone(await currentProject(node));
+      // reset EVERYTHING a previous scenario may have left on this effect —
+      // the A2 block above parks it at mix 0, and a matrix running against a
+      // parked effect compares dry frames against dry frames and proves
+      // nothing (the P4 lesson, again). Then apply the case.
+      Object.assign(p.looks['wash-rainbow'].parts[0].effects[0], {
+        bypass: false, mix: 1,
+        distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0,
+        ...patch,
+      });
+      both({ type: 'updateProject', project: p });
+      await sleep(400);
+    };
+
+    await setFan({}); // normalized legacy state
+    const legacy = frameOf(node);
+    compareDmx('fan: legacy baseline parity', node, rust);
+
+    const cases: [string, Partial<Effect>][] = [
+      ['x', { distribute: 'x' }],
+      ['x+mirror', { distribute: 'x', fold: 'mirror' }],
+      ['x+centre', { distribute: 'x', fold: 'centre' }],
+      ['x+reverse', { distribute: 'x', reverse: true }],
+      ['radial', { distribute: 'radial' }],
+      ['radial+mirror', { distribute: 'radial', fold: 'mirror' }],
+      ['shuffle seed 7', { distribute: 'shuffle', seed: 7 }],
+      ['index+parts2+buddy2', { parts: 2, buddy: 2 }],
+      ['x+mirror+parts2+reverse', { distribute: 'x', fold: 'mirror', parts: 2, reverse: true }],
+    ];
+    for (const [name, patch] of cases) {
+      await setFan(patch);
+      compareDmx(`fan: ${name} parity`, node, rust);
+      both({ type: '_pinClock', effBeat: 3.7 });
+      await sleep(300);
+      compareDmx(`fan: ${name} parity at beat 3.7`, node, rust);
+      both({ type: '_pinClock', effBeat: 1.35 });
+      await sleep(300);
+    }
+
+    // and the spatial fan genuinely moves the frame off the legacy fan
+    await setFan({ distribute: 'x' });
+    check(
+      'fan: x-distribute produces different bytes than the legacy fan',
+      frameOf(node) !== legacy,
+      'spatial fan rendered identically to patch-order fan',
+    );
+
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
+  }
+
   // --- A2 pool: the FX pool is data the engine never renders from, but it must
   // survive the save/broadcast round-trip identically on both engines, and both
   // must repair it the same way (drop a malformed preset, clamp an out-of-range
@@ -855,7 +915,8 @@ async function main(): Promise<void> {
   {
     const mkEffect = (over: Partial<Effect>): Effect => ({
       id: 'tpl', target: 'hue', wave: 'sawUp', rate: 8, size: 1, spread: 0.5,
-      width: 0.5, phase: 0, bypass: false, mix: 1, ...over,
+      width: 0.5, phase: 0, bypass: false, mix: 1,
+      distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0, ...over,
     });
     const p = structuredClone(await currentProject(node));
     p.fxPool = [

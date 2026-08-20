@@ -159,6 +159,13 @@ export type EffectTarget =
   | 'dimmer' | 'hue' | 'white' | 'strobe' | 'pan' | 'tilt'
   | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto';
 export type Wave = 'sine' | 'triangle' | 'sawUp' | 'sawDown' | 'square' | 'chase' | 'random';
+/** How an effect's phase fans across the group: patch order (the legacy
+ *  behaviour), a world-position sweep, a ripple from the group's centre, or a
+ *  seeded scatter. */
+export type Distribute = 'index' | 'x' | 'y' | 'z' | 'radial' | 'shuffle';
+/** Symmetry fold on the fan: mirror = ends in phase sweeping toward the
+ *  centre (MA "wings"); centre = centre leads, ends trail. */
+export type Fold = 'none' | 'mirror' | 'centre';
 
 /** Runtime membership sets for sanitize/repair — the string unions above have
  *  no runtime form, so these are the single source both the type and the
@@ -169,6 +176,10 @@ export const EFFECT_TARGETS: ReadonlySet<EffectTarget> = new Set<EffectTarget>([
 export const WAVES: ReadonlySet<Wave> = new Set<Wave>([
   'sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random',
 ]);
+export const DISTRIBUTES: ReadonlySet<Distribute> = new Set<Distribute>([
+  'index', 'x', 'y', 'z', 'radial', 'shuffle',
+]);
+export const FOLDS: ReadonlySet<Fold> = new Set<Fold>(['none', 'mirror', 'centre']);
 
 export type Effect = {
   id: string;
@@ -188,6 +199,19 @@ export type Effect = {
   bypass: boolean;
   /** wet/dry 0..1 (1 = full effect, the pre-A2 behaviour) */
   mix: number;
+  /** fan basis (A1). 'index' with fold 'none', reverse off and parts/buddy 1
+   *  is byte-identical to the pre-A1 fan. */
+  distribute: Distribute;
+  /** symmetry fold on the fan */
+  fold: Fold;
+  /** run the fan backwards */
+  reverse: boolean;
+  /** tile the fan into k repeats across the group (1 = off) */
+  parts: number;
+  /** clump size: adjacent heads (in fan order) share a phase (1 = off) */
+  buddy: number;
+  /** seed for the shuffle basis — re-roll for a different reproducible scatter */
+  seed: number;
 };
 
 export type LookPart = {
@@ -540,6 +564,18 @@ export function repairEffect(e: unknown): Effect | null {
     // those shows render byte-identically to before.
     bypass: x.bypass === true,
     mix: Number.isFinite(x.mix) ? clamp(x.mix, 0, 1) : 1,
+    // A1: the fan fields default to the legacy fan. An UNKNOWN distribute or
+    // fold degrades to the default rather than dropping the effect — a show
+    // authored on a newer build should still run here, just unfanned, which
+    // beats going dark.
+    distribute: DISTRIBUTES.has(x.distribute) ? x.distribute : 'index',
+    fold: FOLDS.has(x.fold) ? x.fold : 'none',
+    reverse: x.reverse === true,
+    parts: Number.isFinite(x.parts) && x.parts >= 1 ? Math.min(Math.floor(x.parts), 64) : 1,
+    buddy: Number.isFinite(x.buddy) && x.buddy >= 1 ? Math.min(Math.floor(x.buddy), 64) : 1,
+    // clamped, not wrapped: JS ToInt32 and Rust saturating casts disagree on
+    // absurd magnitudes, so both engines clamp to i32 range instead
+    seed: Number.isFinite(x.seed) ? clamp(Math.floor(x.seed), -2147483648, 2147483647) : 0,
   };
 }
 

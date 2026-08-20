@@ -410,7 +410,7 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
         <div className="row">
           <button
             className="btn small ghost"
-            onClick={() => edit((pt) => pt.effects.push({ id: uid('fx'), target: 'dimmer', wave: 'sine', rate: 4, size: 1, spread: 0, width: 0.5, phase: 0, bypass: false, mix: 1 }))}
+            onClick={() => edit((pt) => pt.effects.push({ id: uid('fx'), target: 'dimmer', wave: 'sine', rate: 4, size: 1, spread: 0, width: 0.5, phase: 0, bypass: false, mix: 1, distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0 }))}
           >
             + effect
           </button>

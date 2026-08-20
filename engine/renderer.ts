@@ -4,7 +4,7 @@ import type { HeadKind, ResolvedParams } from '../shared/profiles.ts';
 import { PROFILES, defaultResolved } from '../shared/profiles.ts';
 import { renderImported } from './wasmProfiles.ts';
 import { applyEffects } from '../shared/effects.ts';
-import { NO_GEOM, buildGeometry, type HeadGeom } from '../shared/geometry.ts';
+import { NO_EXTENTS, NO_GEOM, buildGeometry, buildGroupExtents, type GroupExtents, type HeadGeom } from '../shared/geometry.ts';
 import { DERBY_MACROS, derbyMacroForValue, derbyQuantize, hsvToRgb, rgbToHsv } from '../shared/color.ts';
 import type { EngineState } from './state.ts';
 
@@ -64,6 +64,8 @@ export class Renderer {
    *  gen-keyed cache in either renderer, so the discipline is set here: compare
    *  by INEQUALITY (gen wraps), rebuild whole, never patch. */
   private geom: Map<string, HeadGeom> = new Map();
+  /** Per-group spatial extents for the fan bases — same gen gate as geom. */
+  private extents: Map<string, GroupExtents> = new Map();
   private geomGen = -1; // st.gen starts at 1 and wraps at 32 bits; never -1
 
   constructor(st: EngineState) {
@@ -183,6 +185,7 @@ export class Renderer {
     // world geometry rebuilds only when the project changed — never per tick
     if (this.geomGen !== st.gen) {
       this.geom = buildGeometry(p);
+      this.extents = buildGroupExtents(p, this.geom);
       this.geomGen = st.gen;
     }
 
@@ -224,6 +227,7 @@ export class Renderer {
           const n = refs.length;
           // one lookup per part per tick, shared by every head
           const corr = this.effectCorr(layer.id, src.lookId, part);
+          const ext = this.extents.get(part.groupId) ?? NO_EXTENTS;
           for (let j = 0; j < n; j++) {
             const ref = refs[j];
             const key = `${ref.fixtureId}:${ref.head}`;
@@ -231,7 +235,7 @@ export class Renderer {
             // present in `heads` ⇒ present in geom (same enumeration built
             // both); NO_GEOM is defence in depth, not an expected path
             const g = this.geom.get(key) ?? NO_GEOM;
-            const prm = applyEffects(part.params, part.effects, this.effBeat, corr, j, n, g);
+            const prm = applyEffects(part.params, part.effects, this.effBeat, corr, j, n, g, ext);
             let a = acc.get(key);
             if (!a) {
               a = { num: {}, beam: {}, col: null, motorMode: null, macro: undefined };
