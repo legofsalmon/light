@@ -353,7 +353,7 @@ export function ShareFixtures(): React.ReactElement | null {
 
       {busy && <div className="label">{busy}…</div>}
       {error && (
-        <div className="label" style={{ color: 'var(--bad)' }}>
+        <div className="label" style={{ color: 'var(--hot)' }}>
           {error}
         </div>
       )}

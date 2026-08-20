@@ -387,7 +387,12 @@ function PartEditor({ lookId, part }: { lookId: string; part: LookPart }) {
  *  unclearable. */
 function BeatsInput({ value, onCommit }: { value: number; onCommit: (v: number) => void }) {
   const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
+  const ref = React.useRef<HTMLInputElement>(null);
+  // never clobber a draft mid-edit — a project echo must not erase what is
+  // being typed; blur re-syncs (same guard as the other live-routing inputs)
+  useEffect(() => {
+    if (document.activeElement !== ref.current) setDraft(String(value));
+  }, [value]);
   const commit = () => {
     const v = Number(draft);
     const clean = Number.isFinite(v) && v > 0 ? Math.min(v, 512) : 1;
@@ -396,6 +401,7 @@ function BeatsInput({ value, onCommit }: { value: number; onCommit: (v: number) 
   };
   return (
     <input
+      ref={ref}
       className="num"
       type="number"
       min={0.25}
@@ -572,8 +578,21 @@ export function LookEditor() {
                   n + Object.values(d.cells).reduce((m, cells) => m + cells.filter((c) => c === lookId).length, 0),
                 0,
               );
-              if (refs.length > 0 || decksHit.length > 0) {
+              // The CURRENT song's cells live in project.layers, not in the
+              // deck's stored copy — that only syncs on a deck switch. A look
+              // placed in this song since the last switch was invisible to the
+              // scan above, so deleting it emptied cells with no warning at all.
+              const liveCells = project.layers.reduce(
+                (n, ly) => n + ly.cells.filter((c) => c === lookId).length,
+                0,
+              );
+              if (refs.length > 0 || decksHit.length > 0 || liveCells > 0) {
                 const parts: string[] = [];
+                if (liveCells > 0) {
+                  parts.push(
+                    `It is in ${liveCells} cell(s) of the song you are on. Those cells will be emptied.`,
+                  );
+                }
                 if (decksHit.length > 0) {
                   parts.push(
                     `It is used in ${cellCount} cell(s) across ${decksHit.length} song(s): ${decksHit

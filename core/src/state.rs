@@ -334,7 +334,15 @@ impl EngineState {
             .position(|d| Some(&d.id) == self.project.active_deck_id.as_ref())
             .unwrap_or(0) as i32;
         let n = self.project.decks.len() as i32;
-        let j = ((i + dir) % n + n) % n;
+        // CLAMP, do not wrap. The APC bank arrows are an eyes-off control: one
+        // press too many at the last song used to land silently on song 1, and
+        // with Resolume follow-columns armed the next column launch fires the
+        // opener's looks. Every console clamps here. Mirrored in
+        // engine/state.ts and in the UI's [ / ] handler.
+        let j = (i + dir).clamp(0, n - 1);
+        if j == i {
+            return false; // already at the end — nothing moved
+        }
         let id = self.project.decks[j as usize].id.clone();
         self.switch_deck(&id, t)
     }

@@ -96,9 +96,9 @@ export function App() {
         const decks = st.project?.decks ?? [];
         if (decks.length > 1) {
           const i = decks.findIndex((d) => d.id === st.project?.activeDeckId);
-          const n = decks.length;
-          const next = decks[((i < 0 ? 0 : i) + (e.key === ']' ? 1 : -1) + n) % n];
-          st.send({ type: 'switchDeck', deckId: next.id });
+          // clamp, don't wrap — matches deck_step in both engines
+          const j = Math.max(0, Math.min(decks.length - 1, (i < 0 ? 0 : i) + (e.key === ']' ? 1 : -1)));
+          if (j !== i) st.send({ type: 'switchDeck', deckId: decks[j].id });
         }
         return;
       }

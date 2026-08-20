@@ -329,6 +329,14 @@ input.num,
 .colhead:hover { color: var(--text); border-color: var(--line2); background: var(--raise); }
 .colhead.learn-armed { outline: 2px solid var(--warn); outline-offset: -1px; }
 
+/* Keep the two things you steer by on screen while the grid scrolls. With 12+
+   columns (or 8 on the tablet) scrolling right to reach a later cue used to
+   hide every layer master and the ✕ that stops a layer, and scrolling down hid
+   the column names — exactly what you need to see mid-show. Opaque backgrounds
+   are already set above, which is what makes sticky safe here. */
+.layerhead { position: sticky; left: 0; z-index: 2; }
+.colhead { position: sticky; top: 0; z-index: 1; }
+
 .layerhead {
   width: 168px;
   padding: 6px 8px;

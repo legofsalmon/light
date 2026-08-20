@@ -229,7 +229,9 @@ function DeckBar() {
         onClick={() => {
           const i = decks.findIndex((x) => x.id === project.activeDeckId);
           const n = decks.length;
-          send({ type: 'switchDeck', deckId: decks[((i < 0 ? 0 : i) - 1 + n) % n].id });
+          // clamp, don't wrap — matches deck_step in both engines
+          const j = Math.max(0, (i < 0 ? 0 : i) - 1);
+          if (j !== i) send({ type: 'switchDeck', deckId: decks[j].id });
         }}
       >
         ◀
@@ -241,7 +243,8 @@ function DeckBar() {
         onClick={() => {
           const i = decks.findIndex((x) => x.id === project.activeDeckId);
           const n = decks.length;
-          send({ type: 'switchDeck', deckId: decks[((i < 0 ? 0 : i) + 1) % n].id });
+          const j = Math.min(n - 1, (i < 0 ? 0 : i) + 1);
+          if (j !== i) send({ type: 'switchDeck', deckId: decks[j].id });
         }}
       >
         ▶
@@ -336,10 +339,13 @@ function DeckBar() {
       ))}
       {decks.length > 1 && (() => {
         const i = decks.findIndex((x) => x.id === project.activeDeckId);
-        const next = decks[((i < 0 ? 0 : i) + 1) % decks.length];
+        const j = Math.min(decks.length - 1, (i < 0 ? 0 : i) + 1);
+        // at the last song there is no next — stepping clamps, so saying
+        // "next: <song 1>" would promise a wrap that no longer happens
+        if (j === i) return null;
         return (
           <span className="decknext" title="what ] / the APC bank ▶ will select next">
-            next: {next.name}
+            next: {decks[j].name}
           </span>
         );
       })()}
@@ -470,7 +476,7 @@ export function LookGrid() {
         <div
           key={col}
           className={`colhead ${learnTarget?.kind === 'column' && learnTarget.col === col ? 'learn-armed' : ''}`}
-          title={`trigger column ${col + 1} (key ${col + 1}) · right-click to rename, insert or delete`}
+          title={`trigger column ${col + 1}${col < 9 ? ` (key ${col + 1})` : ''} · right-click to rename, insert or delete`}
           onClick={() => {
             if (!useStore.getState().armLearn({ kind: 'column', col })) send({ type: 'column', col });
           }}

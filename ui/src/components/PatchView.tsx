@@ -92,7 +92,14 @@ function AddressInput({ value, conflict, onCommit }: {
   onCommit: (v: number) => void;
 }) {
   const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    // Never clobber a draft mid-edit: a project echo (a second window, MIDI,
+    // OSC, an autosave round-trip) must not erase a half-typed address. Blur
+    // re-syncs. The other live-routing inputs have had this guard; this one and
+    // BeatsInput were missed.
+    if (document.activeElement !== ref.current) setDraft(String(value));
+  }, [value]);
   const commit = () => {
     const v = Math.max(1, Math.min(512, Number(draft) || 1));
     setDraft(String(v));
@@ -100,6 +107,7 @@ function AddressInput({ value, conflict, onCommit }: {
   };
   return (
     <input
+      ref={ref}
       className={`num ${conflict ? 'conflict' : ''}`}
       type="number"
       min={1}
@@ -355,17 +363,29 @@ export function PatchView() {
   const structures = (project.props ?? [])
     .filter((pr) => isStructure(pr.kind))
     .sort((a, b) => a.pos.x - b.pos.x);
-  /** Slide a fixture along its parent, keeping its across/height offsets. */
+  /** Slide a fixture along its parent, keeping its across/height offsets.
+   *
+   *  Applies to the whole selection, like every other edit in this table — the
+   *  legend promises "edits apply to every selected row" and this was the one
+   *  control that quietly moved a single fixture. Each selected fixture is
+   *  moved by the same DELTA against its own offset, so a row of heads slides
+   *  along the bar together instead of collapsing onto one point. */
   const moveAlongParent = (fid: string, along: number) =>
     mutate((p) => {
-      const f = p.fixtures.find((y) => y.id === fid);
-      const parent = (p.props ?? []).find((pr) => pr.id === f?.parentId);
-      if (!f || !parent) return;
-      const o = offsetOnParent(f, parent);
-      const np = posFromOffset({ ...o, along }, parent);
-      f.pos.x = round2(np.x);
-      f.pos.y = round2(np.y);
-      f.pos.z = round2(np.z);
+      const lead = p.fixtures.find((y) => y.id === fid);
+      const leadParent = (p.props ?? []).find((pr) => pr.id === lead?.parentId);
+      if (!lead || !leadParent) return;
+      const delta = along - offsetOnParent(lead, leadParent).along;
+      for (const id of editTargets(fid)) {
+        const f = p.fixtures.find((y) => y.id === id);
+        const parent = (p.props ?? []).find((pr) => pr.id === f?.parentId);
+        if (!f || !parent) continue; // unrigged rows in the selection sit still
+        const o = offsetOnParent(f, parent);
+        const np = posFromOffset({ ...o, along: o.along + delta }, parent);
+        f.pos.x = round2(np.x);
+        f.pos.y = round2(np.y);
+        f.pos.z = round2(np.z);
+      }
     });
   const setRot = (fid: string, key: 'rotY' | 'rotX' | 'rotZ', deg: number) =>
     eachTarget(fid, (x) => {
@@ -1127,6 +1147,15 @@ function StageTable() {
                       mutate((p) => {
                         p.props = (p.props ?? []).filter((x) => x.id !== pr.id);
                         if (p.props.length === 0) delete p.props;
+                        // Anything rigged on it is no longer rigged on
+                        // anything: a stale parentId renders the Rigged-on
+                        // select blank (no matching option) and takes the
+                        // along-the-bar scrub with it. Positions are in room
+                        // coordinates, so the fixtures stay exactly where they
+                        // are — they simply stop having a parent.
+                        for (const f of p.fixtures) {
+                          if (f.parentId === pr.id) delete f.parentId;
+                        }
                       })
                     }
                   >

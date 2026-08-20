@@ -234,12 +234,22 @@ function ChannelCheck({
         <button
           className="btn small ghost"
           title="flash the channel to full while held down"
-          onMouseDown={() => send({ type: 'setChannel', universeId, channel, value: 255 })}
-          onMouseUp={() => {
+          // Pointer events, not mouse events. Touch browsers synthesise the
+          // mouse pair as a burst AFTER the tap, so on the FOH tablet the flash
+          // came and went inside one frame and the channel never visibly moved
+          // — reading as a dead fixture during a channel check, which is the
+          // one job this control exists for. Every other press-and-hold in the
+          // app (flash pads, faders) is already pointer-based.
+          style={{ touchAction: 'none' }}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            send({ type: 'setChannel', universeId, channel, value: 255 });
+          }}
+          onPointerUp={() => {
             const held = overrides[channel];
             send({ type: 'setChannel', universeId, channel, value: held ?? null });
           }}
-          onMouseLeave={() => {
+          onPointerCancel={() => {
             const held = overrides[channel];
             send({ type: 'setChannel', universeId, channel, value: held ?? null });
           }}

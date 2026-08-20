@@ -150,7 +150,11 @@ export class EngineState {
     const decks = this.project.decks ?? [];
     if (decks.length < 2) return;
     const i = decks.findIndex((d) => d.id === this.project.activeDeckId);
-    this.switchDeck(decks[(i + dir + decks.length) % decks.length].id);
+    // CLAMP, do not wrap — see deck_step in core/src/state.rs. The bank arrows
+    // are eyes-off, and wrapping past the last song lands on the opener.
+    const j = Math.max(0, Math.min(decks.length - 1, (i < 0 ? 0 : i) + dir));
+    if (j === i) return; // already at the end
+    this.switchDeck(decks[j].id);
   }
 
   /** Gig safety: if the client holding a momentary flash look vanishes, its
