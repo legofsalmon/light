@@ -5,6 +5,7 @@ import type { HeadSnap, Project } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 import { isStructure } from '../../../shared/types.ts';
+import { buildOccluders, throwDistance, type Occluder } from '../../../shared/beamThrow.ts';
 
 type HeadHandle = {
   key: string;
@@ -23,6 +24,8 @@ function makeBeam(deg: number, len: number): THREE.Mesh<THREE.CylinderGeometry, 
   const rad = (deg * Math.PI) / 180;
   const geo = new THREE.CylinderGeometry(0.012, Math.tan(rad / 2) * len + 0.02, len, 18, 1, true);
   geo.translate(0, -len / 2, 0);
+  // fitBeam scales against this, so the cone can be re-cut without rebuilding
+  // geometry every time a mover turns
   const mat = new THREE.MeshBasicMaterial({
     color: 0xffffff,
     transparent: true,
@@ -31,7 +34,28 @@ function makeBeam(deg: number, len: number): THREE.Mesh<THREE.CylinderGeometry, 
     side: THREE.DoubleSide,
     depthWrite: false,
   });
-  return new THREE.Mesh(geo, mat);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.baseLen = len;
+  return mesh;
+}
+
+// Beam cones are cut at the first opaque surface; the geometry lives in
+// shared/beamThrow.ts so it can be tested against numbers.
+
+const _o = new THREE.Vector3();
+const _d = new THREE.Vector3();
+
+/** Scale one beam so its cone ends where the light lands. The cone is built
+ *  along local -Y, and its spread is proportional to its length, so a uniform
+ *  scale keeps the beam angle honest. */
+function fitBeam(beam: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>, occ: Occluder[]): void {
+  const base = (beam.userData.baseLen as number) || 1;
+  const m = beam.matrixWorld.elements;
+  _o.set(m[12], m[13], m[14]);
+  // -Y column, normalised out of the parent's scale
+  _d.set(-m[4], -m[5], -m[6]).normalize();
+  const k = throwDistance(_o, _d, occ) / base;
+  beam.scale.set(k, k, k);
 }
 
 function basicBox(w: number, h: number, d: number, color: number): THREE.Mesh {
@@ -47,7 +71,11 @@ function fixtureSignature(p: Project): string {
   ]);
 }
 
-function buildRig(project: Project): { group: THREE.Group; handles: HeadHandle[] } {
+function buildRig(project: Project): {
+  group: THREE.Group;
+  handles: HeadHandle[];
+  occ: Occluder[];
+} {
   const group = new THREE.Group();
   const handles: HeadHandle[] = [];
 
@@ -144,7 +172,13 @@ function buildRig(project: Project): { group: THREE.Group; handles: HeadHandle[]
 
     group.add(fg);
   }
-  return { group, handles };
+  // Static heads are cut once, here; movers and derbies are re-cut as they turn.
+  const occ = buildOccluders(project);
+  group.updateMatrixWorld(true);
+  for (const h of handles) {
+    for (const b of h.beams) fitBeam(b, occ);
+  }
+  return { group, handles, occ };
 }
 
 function disposeDeep(obj: THREE.Object3D): void {
@@ -426,7 +460,7 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
     const bandLight = new THREE.HemisphereLight(0x9aa4c0, 0x1a1a20, 1.1);
     scene.add(bandLight);
 
-    let rig: { group: THREE.Group; handles: HeadHandle[] } | null = null;
+    let rig: ReturnType<typeof buildRig> | null = null;
     let lastProject: Project | null = null;
     let lastSig = '';
 
@@ -538,6 +572,8 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             if (hs.mm === 'rotate') h.spin += dt * (0.4 + hs.mv * 5.2);
             else if (hs.mm === 'aim') h.spin += (hs.mv * Math.PI - h.spin) * 0.2;
             h.fan.rotation.y = h.spin;
+            h.fan.updateMatrixWorld(true);
+            for (const b of h.beams) fitBeam(b, rig.occ);
           }
 
           if (h.ring && hs) {
@@ -548,6 +584,10 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
           if (h.pan && h.tilt && hs) {
             h.pan.rotation.y = (0.5 - hs.pan) * Math.PI * 3; // 540°
             h.tilt.rotation.x = (hs.tilt - 0.5) * Math.PI * 1.5; // 270°
+            // the cone has to follow the aim, or a head pointed at the floor
+            // draws the same length as one pointed at the back wall
+            h.tilt.updateMatrixWorld(true);
+            for (const b of h.beams) fitBeam(b, rig.occ);
           }
         }
       }

@@ -104,6 +104,57 @@ pub struct RingMesh;
 #[derive(Component)]
 pub struct BandRoot;
 
+/// The stock 7 m goalpost from the demo scene — hidden once a project draws
+/// its own truss.
+#[derive(Component)]
+pub struct LegacyTruss;
+
+/// The light-catching back wall, repositioned behind the deepest geometry.
+#[derive(Component)]
+pub struct Backdrop;
+
+/// The stage floor, grown to cover whatever the plot actually spans.
+#[derive(Component)]
+pub struct Floor;
+
+/// The haze volume, grown to enclose the rig — beams outside it do not scatter.
+#[derive(Component)]
+pub struct HazeVolume;
+
+/// The demo scene is sized for a club stage: a 16 x 12 m floor, a wall 2 m
+/// upstage, and haze around head height. A real plot can be an order of
+/// magnitude bigger — a festival MVR loaded here spans 37 m across and hangs at
+/// 10 m — and against that the fixed scenery reads as a wall dropped through the
+/// middle of the stage, with the haze sitting below every fixture. So the
+/// backdrop is fitted to the rig on every rebuild.
+#[derive(Clone, Copy)]
+struct Bounds {
+    min: Vec3,
+    max: Vec3,
+}
+
+impl Bounds {
+    fn of(project: &crate::protocol::ProjectLite) -> Option<Bounds> {
+        let mut min = Vec3::splat(f32::INFINITY);
+        let mut max = Vec3::splat(f32::NEG_INFINITY);
+        let mut any = false;
+        for f in &project.fixtures {
+            min = min.min(Vec3::new(f.pos.x, f.pos.y, f.pos.z));
+            max = max.max(Vec3::new(f.pos.x, f.pos.y, f.pos.z));
+            any = true;
+        }
+        for pr in &project.props {
+            // a rotated prop can reach further than its centre in either axis
+            let reach = pr.size.map_or(0.5, |s| s.w.max(s.d) * 0.5);
+            let top = pr.y.unwrap_or(0.0) + pr.size.map_or(1.8, |s| s.h);
+            min = min.min(Vec3::new(pr.pos.x - reach, 0.0, pr.pos.z - reach));
+            max = max.max(Vec3::new(pr.pos.x + reach, top, pr.pos.z + reach));
+            any = true;
+        }
+        any.then_some(Bounds { min, max })
+    }
+}
+
 #[derive(Component)]
 pub struct DerbyFan;
 
@@ -125,6 +176,7 @@ pub fn setup_stage(
 ) {
     // stage floor — glossy dark so beams throw specular pools
     commands.spawn((
+        Floor,
         Mesh3d(meshes.add(Plane3d::default().mesh().size(16.0, 12.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.055, 0.055, 0.065),
@@ -136,8 +188,11 @@ pub fn setup_stage(
         Transform::from_xyz(0.0, 0.0, 1.0),
     ));
 
-    // back wall to catch light
+    // Back wall to catch light. It is a lighting aid, not part of the plot, so
+    // it gets pushed behind whatever the project actually places — a fixed wall
+    // at z = -2 sits in the middle of any stage deeper than the demo one.
     commands.spawn((
+        Backdrop,
         Mesh3d(meshes.add(Plane3d::default().mesh().size(16.0, 7.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.05, 0.05, 0.06),
@@ -154,13 +209,17 @@ pub fn setup_stage(
         metallic: 0.9,
         ..default()
     });
+    // The stock goalpost, kept only for projects that draw no structure of
+    // their own — otherwise it doubles up on the operator's real truss.
     commands.spawn((
+        LegacyTruss,
         Mesh3d(meshes.add(Cuboid::new(7.0, 0.09, 0.09))),
         MeshMaterial3d(truss_mat.clone()),
         Transform::from_xyz(0.0, 3.05, 0.0),
     ));
     for lx in [-3.5f32, 3.5] {
         commands.spawn((
+            LegacyTruss,
             Mesh3d(meshes.add(Cuboid::new(0.09, 3.05, 0.09))),
             MeshMaterial3d(truss_mat.clone()),
             Transform::from_xyz(lx, 3.05 / 2.0, 0.0),
@@ -171,6 +230,7 @@ pub fn setup_stage(
     // Stage haze scatters close to isotropically: the default forward-biased
     // asymmetry (0.5) makes side-on beams nearly invisible from FOH.
     commands.spawn((
+        HazeVolume,
         FogVolume {
             density_factor: 0.08,
             scattering: 0.65,
@@ -180,6 +240,54 @@ pub fn setup_stage(
         },
         Transform::from_xyz(0.0, 3.0, 1.0).with_scale(Vec3::new(16.0, 7.0, 13.0)),
     ));
+}
+
+/// Grow the floor, the back wall and the haze volume to enclose the rig.
+///
+/// Everything is scaled rather than re-meshed: the floor and wall are unit-ish
+/// planes and the haze is a scaled cube, so this costs three transform writes
+/// per rebuild instead of three mesh uploads.
+fn fit_backdrop(
+    project: &crate::protocol::ProjectLite,
+    backdrop: &mut Query<&mut Transform, (With<Backdrop>, Without<Floor>, Without<HazeVolume>)>,
+    floor: &mut Query<&mut Transform, (With<Floor>, Without<Backdrop>, Without<HazeVolume>)>,
+    haze: &mut Query<&mut Transform, (With<HazeVolume>, Without<Backdrop>, Without<Floor>)>,
+) {
+    // An empty project keeps the demo scene exactly as it was.
+    let Some(b) = Bounds::of(project) else { return };
+
+    // Never shrink below the demo scene — a two-fixture test rig in a 16 m room
+    // still wants a room.
+    const MARGIN: f32 = 3.0;
+    let width = (b.max.x - b.min.x + MARGIN * 2.0).max(16.0);
+    let depth = (b.max.z - b.min.z + MARGIN * 2.0).max(12.0);
+    let height = (b.max.y + MARGIN).max(7.0);
+    let cx = (b.min.x + b.max.x) * 0.5;
+    let cz = (b.min.z + b.max.z) * 0.5;
+
+    // floor: the base mesh is 16 x 12 in XZ
+    if let Ok(mut t) = floor.single_mut() {
+        t.scale.x = width / 16.0;
+        t.scale.z = depth / 12.0;
+        t.translation.x = cx;
+        t.translation.z = cz;
+    }
+
+    // wall: base mesh 16 x 7, rotated upright, so local z is world height
+    if let Ok(mut t) = backdrop.single_mut() {
+        t.scale.x = width / 16.0;
+        t.scale.z = height / 7.0;
+        t.translation.x = cx;
+        t.translation.y = height * 0.5;
+        t.translation.z = b.min.z - MARGIN;
+    }
+
+    // haze: a beam only scatters inside the volume, so it has to reach the
+    // fixtures — on an arena plot they hang three times higher than the demo
+    if let Ok(mut t) = haze.single_mut() {
+        t.scale = Vec3::new(width, height, depth);
+        t.translation = Vec3::new(cx, height * 0.5, cz);
+    }
 }
 
 /// Dummy musicians: capsule-and-sphere figures at real human scale
@@ -218,6 +326,25 @@ fn spawn_props(
         base_color: Color::srgb(0.71, 0.58, 0.28),
         metallic: 0.9,
         perceptual_roughness: 0.3,
+        ..default()
+    });
+
+    // structure reads as aluminium and stage deck, matching the in-window previz
+    let truss_struct = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.22, 0.22, 0.25),
+        perceptual_roughness: 0.5,
+        metallic: 0.9,
+        ..default()
+    });
+    let deck = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.10, 0.10, 0.12),
+        perceptual_roughness: 0.85,
+        ..default()
+    });
+    let panel = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.03, 0.03, 0.04),
+        perceptual_roughness: 0.35,
+        metallic: 0.1,
         ..default()
     });
 
@@ -308,9 +435,47 @@ fn spawn_props(
                         ));
                     }
                 }
+                // ---- structure ------------------------------------------
+                // Boxes, not detailed trussing: these exist so a beam has
+                // something to land on and so the operator can judge blocking.
+                // Sized from the project, so this view and the in-window previz
+                // describe the same stage.
+                "trussBar" | "trussLeg" => {
+                    let (w, h, d) = size_of(pr, 7.0, 0.3, 0.3);
+                    p.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(w, h, d))),
+                        MeshMaterial3d(truss_struct.clone()),
+                        Transform::from_xyz(0.0, pr.y.unwrap_or(0.0) + h / 2.0, 0.0),
+                    ));
+                }
+                "riser" => {
+                    let (w, h, d) = size_of(pr, 2.0, 0.4, 1.5);
+                    p.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(w, h, d))),
+                        MeshMaterial3d(deck.clone()),
+                        Transform::from_xyz(0.0, pr.y.unwrap_or(0.0) + h / 2.0, 0.0),
+                    ));
+                }
+                "screen" => {
+                    let (w, h, d) = size_of(pr, 4.0, 2.25, 0.12);
+                    p.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(w, h, d))),
+                        MeshMaterial3d(panel.clone()),
+                        Transform::from_xyz(0.0, pr.y.unwrap_or(0.5) + h / 2.0, 0.0),
+                    ));
+                }
                 _ => standing(p),
             }
         });
+    }
+}
+
+/// A structural prop's dimensions, falling back to the same defaults the shared
+/// types use when a project predates the size field.
+fn size_of(pr: &crate::protocol::PropLite, w: f32, h: f32, d: f32) -> (f32, f32, f32) {
+    match pr.size {
+        Some(s) if s.w > 0.0 && s.h > 0.0 && s.d > 0.0 => (s.w, s.h, s.d),
+        _ => (w, h, d),
     }
 }
 
@@ -338,6 +503,10 @@ pub fn rebuild_fixtures(
     mut materials: ResMut<Assets<StandardMaterial>>,
     existing: Query<Entity, With<FixtureRoot>>,
     existing_props: Query<Entity, With<BandRoot>>,
+    mut legacy: Query<&mut Visibility, With<LegacyTruss>>,
+    mut backdrop: Query<&mut Transform, (With<Backdrop>, Without<Floor>, Without<HazeVolume>)>,
+    mut floor: Query<&mut Transform, (With<Floor>, Without<Backdrop>, Without<HazeVolume>)>,
+    mut haze: Query<&mut Transform, (With<HazeVolume>, Without<Backdrop>, Without<Floor>)>,
 ) {
     if live.project_rev == live.built_rev {
         return;
@@ -351,6 +520,19 @@ pub fn rebuild_fixtures(
         commands.entity(e).despawn();
     }
     let Some(project) = live.project.clone() else { return };
+
+    // A project that draws its own structure replaces the demo goalpost rather
+    // than being shown on top of it.
+    let draws_structure = project
+        .props
+        .iter()
+        .any(|pr| matches!(pr.kind.as_str(), "trussBar" | "trussLeg" | "riser" | "screen"));
+    for mut v in &mut legacy {
+        *v = if draws_structure { Visibility::Hidden } else { Visibility::Inherited };
+    }
+
+    fit_backdrop(&project, &mut backdrop, &mut floor, &mut haze);
+
     spawn_props(&mut commands, &mut meshes, &mut materials, &project.props);
 
     let body_mat = materials.add(StandardMaterial {
@@ -553,5 +735,57 @@ pub fn rebuild_fixtures(
                 });
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::ProjectLite;
+
+    fn project(json: &str) -> ProjectLite {
+        serde_json::from_str(json).expect("ProjectLite should parse")
+    }
+
+    #[test]
+    fn bounds_cover_an_arena_plot() {
+        // The shape that exposed the bug: a festival MVR 37 m across, hung at
+        // 10 m and running 7.5 m upstage — against which a wall fixed at z = -2
+        // lands in the middle of the stage.
+        let p = project(
+            r#"{"fixtures":[
+                {"id":"a","profileId":"x","pos":{"x":-18.37,"y":7.15,"z":-7.48}},
+                {"id":"b","profileId":"x","pos":{"x":18.39,"y":9.93,"z":0.49}}
+            ],"props":[],"profiles":{}}"#,
+        );
+        let b = Bounds::of(&p).expect("two fixtures make bounds");
+        assert!((b.min.x - -18.37).abs() < 1e-4);
+        assert!((b.max.x - 18.39).abs() < 1e-4);
+        assert!((b.max.y - 9.93).abs() < 1e-4);
+        assert!((b.min.z - -7.48).abs() < 1e-4);
+        // the wall goes behind the deepest fixture, not through the stage
+        assert!(b.min.z - 3.0 < -10.0, "backdrop would sit at {}", b.min.z - 3.0);
+    }
+
+    #[test]
+    fn structural_props_contribute_their_size() {
+        let p = project(
+            r#"{"fixtures":[],"props":[
+                {"id":"s","kind":"screen","pos":{"x":0,"z":-4},"size":{"w":6,"h":3.5,"d":0.2},"y":0.5}
+            ],"profiles":{}}"#,
+        );
+        let b = Bounds::of(&p).expect("a prop alone makes bounds");
+        // half of the largest horizontal dimension reaches out from the centre
+        assert!((b.min.x - -3.0).abs() < 1e-4, "min.x was {}", b.min.x);
+        // base height plus the piece's own height
+        assert!((b.max.y - 4.0).abs() < 1e-4, "max.y was {}", b.max.y);
+    }
+
+    #[test]
+    fn an_empty_project_has_no_bounds() {
+        // nothing placed yet must leave the demo scene alone rather than
+        // collapsing the floor to a point
+        let p = project(r#"{"fixtures":[],"props":[],"profiles":{}}"#);
+        assert!(Bounds::of(&p).is_none());
     }
 }

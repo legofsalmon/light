@@ -19,6 +19,7 @@ import { isAcceptableList, isPlaceholderProfile, parseGdtfSpec, rankMatches } fr
  *  content means editing a song looks like an engine regression. */
 const demoProject = (): Project =>
   JSON.parse(fs.readFileSync(path.join(process.cwd(), 'core/tests/data/demo_project.json'), 'utf8'));
+import { MAX_THROW, buildOccluders, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
 import { parseOsc } from '../osc.ts';
 import { ArtnetOut } from '../artnet.ts';
 import { BeatClock } from '../clock.ts';
@@ -295,6 +296,76 @@ await new Promise<void>((resolve) => {
     heads: [{ kind: 'rgb' }, { kind: 'rgb' }],
   };
   check('placeholder: an rgb strip is NOT a stub', !isPlaceholderProfile(strip));
+}
+
+// --- beam throw ------------------------------------------------------------
+// A previz cone is only informative if its length is the real throw, so the
+// distances are asserted as numbers rather than judged by eye in a 3D view.
+{
+  const down = { x: 0, y: -1, z: 0 };
+  const at = (y: number) => ({ x: 0, y, z: 0 });
+
+  check(
+    'throw: a fixture 6 m up lands on the floor at 6 m',
+    Math.abs(throwDistance(at(6), down, []) - 6) < 1e-9,
+  );
+  check(
+    'throw: nothing underneath is capped, not infinite',
+    throwDistance({ x: 0, y: 2, z: 0 }, { x: 0, y: 0, z: -1 }, []) === MAX_THROW,
+  );
+  check(
+    'throw: a beam climbing away from the floor is capped',
+    throwDistance(at(1), { x: 0, y: 1, z: 0 }, []) === MAX_THROW,
+  );
+
+  // a riser under the fixture shortens the throw to the riser's top
+  const riser: Occluder = { min: { x: -1, y: 0, z: -1 }, max: { x: 1, y: 0.4, z: 1 } };
+  check(
+    'throw: a 0.4 m riser under a 6 m fixture cuts the beam to 5.6 m',
+    Math.abs(throwDistance(at(6), down, [riser]) - 5.6) < 1e-9,
+  );
+  check(
+    'throw: a riser off to the side does not shorten the beam',
+    Math.abs(
+      throwDistance({ x: 5, y: 6, z: 0 }, down, [riser]) - 6,
+    ) < 1e-9,
+  );
+
+  // the nearest of several surfaces wins, whatever order they arrive in
+  const screen: Occluder = { min: { x: -2, y: 0.5, z: -3 }, max: { x: 2, y: 2.75, z: -2.9 } };
+  const far: Occluder = { min: { x: -9, y: 0, z: -9 }, max: { x: 9, y: 9, z: -8.9 } };
+  const back = { x: 0, y: 0, z: -1 };
+  check(
+    'throw: the nearest surface wins regardless of list order',
+    Math.abs(throwDistance({ x: 0, y: 1.5, z: 0 }, back, [screen, far]) - 2.9) < 1e-9 &&
+      Math.abs(throwDistance({ x: 0, y: 1.5, z: 0 }, back, [far, screen]) - 2.9) < 1e-9,
+  );
+
+  // a fixture clamped ON the truss it hangs from must not clip itself to zero
+  const truss: Occluder = { min: { x: -3.5, y: 3.0, z: -0.15 }, max: { x: 3.5, y: 3.3, z: 0.15 } };
+  check(
+    'throw: a fixture inside its own truss still throws to the floor',
+    Math.abs(throwDistance(at(3.15), down, [truss]) - 3.15) < 1e-9,
+  );
+
+  // rotation is taken into account when boxing a prop
+  const rotated: Project = {
+    ...demoProject(),
+    props: [
+      { id: 'p1', kind: 'screen', pos: { x: 0, z: -3 }, rotY: Math.PI / 2, size: { w: 4, h: 3, d: 0.1 }, y: 0 },
+    ],
+  } as Project;
+  const occ = buildOccluders(rotated);
+  check(
+    'occluders: a screen turned 90° is boxed across z, not x',
+    occ.length === 1 && Math.abs(occ[0].max.z - occ[0].min.z - 4) < 1e-6 &&
+      Math.abs(occ[0].max.x - occ[0].min.x - 0.1) < 1e-6,
+    occ.length ? `got x=${(occ[0].max.x - occ[0].min.x).toFixed(3)} z=${(occ[0].max.z - occ[0].min.z).toFixed(3)}` : 'no occluder',
+  );
+  check(
+    'occluders: performers are not occluders',
+    buildOccluders({ ...demoProject(), props: [{ id: 'v', kind: 'vocalist', pos: { x: 0, z: 0 } }] } as Project).length === 0,
+  );
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

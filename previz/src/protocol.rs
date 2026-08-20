@@ -42,6 +42,19 @@ pub struct PropLite {
     pub pos: PropPosLite,
     #[serde(default)]
     pub rot_y: Option<f32>,
+    /// structural kinds only, metres — w across, h tall, d deep (before rotY)
+    #[serde(default)]
+    pub size: Option<PropSizeLite>,
+    /// structural kinds only — height of the base off the floor
+    #[serde(default)]
+    pub y: Option<f32>,
+}
+
+#[derive(Deserialize, Clone, Copy, Debug)]
+pub struct PropSizeLite {
+    pub w: f32,
+    pub h: f32,
+    pub d: f32,
 }
 
 #[derive(Deserialize, Clone, Copy, Debug)]
