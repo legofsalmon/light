@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { Effect, EffectTarget, Look, LookPart, Project, Wave } from '../../../shared/types.ts';
+import type { Distribute, Effect, EffectTarget, Look, LookPart, Project, Wave } from '../../../shared/types.ts';
 import { EFFECT_TARGETS, uid } from '../../../shared/types.ts';
 import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
 import { type HeadKind } from '../../../shared/profiles.ts';
@@ -23,6 +23,16 @@ const RATES: { v: number; label: string }[] = [
 ];
 
 const WAVES: Wave[] = ['sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random'];
+
+/** Fan bases in display order, with the labels the operators know. */
+const DISTRIBUTE_LABELS: { v: Distribute; label: string; title: string }[] = [
+  { v: 'index', label: 'idx', title: 'patch order — the classic fan' },
+  { v: 'x', label: 'X', title: 'sweep stage left → right (world position)' },
+  { v: 'y', label: 'Y', title: 'sweep bottom → top' },
+  { v: 'z', label: 'Z', title: 'sweep upstage → downstage' },
+  { v: 'radial', label: '◎', title: 'ripple out from the group centre' },
+  { v: 'shuffle', label: '⤨', title: 'seeded scatter — re-roll with ↻, same seed = same look' },
+];
 
 const SWATCHES: { h: number; s: number }[] = [
   { h: 0, s: 1 }, { h: 30, s: 1 }, { h: 52, s: 1 }, { h: 120, s: 1 },
@@ -107,6 +117,7 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
   const targetInactive = !capableSet.has(fx.target);
 
   return (
+    <>
     <div className="fxrow" style={fx.bypass ? { opacity: 0.5 } : undefined}>
       <button
         className={`btn small ${fx.bypass ? 'on' : 'ghost'}`}
@@ -160,6 +171,74 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
       <button className="btn small ghost" title="save this effect to the FX pool as a reusable preset" onClick={onSaveToPool}>☆</button>
       <button className="btn small ghost" onClick={onRemove}>✕</button>
     </div>
+    <div className="fxrow" style={{ ...(fx.bypass ? { opacity: 0.5 } : {}), paddingLeft: 34 }}>
+      <span className="label">fan</span>
+      <div className="seg">
+        {DISTRIBUTE_LABELS.map((d) => (
+          <button
+            key={d.v}
+            className={fx.distribute === d.v ? 'on' : ''}
+            title={d.title}
+            onClick={() => onEdit((x) => (x.distribute = d.v))}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
+      <button
+        className={`btn small ${fx.fold === 'mirror' ? 'on' : 'ghost'}`}
+        title="mirror — ends in phase, sweeping toward the centre; a folded pan sweep counter-rotates"
+        onClick={() => onEdit((x) => (x.fold = x.fold === 'mirror' ? 'none' : 'mirror'))}
+      >
+        ⟷
+      </button>
+      <button
+        className={`btn small ${fx.fold === 'centre' ? 'on' : 'ghost'}`}
+        title="centre — the middle leads, the ends trail"
+        onClick={() => onEdit((x) => (x.fold = x.fold === 'centre' ? 'none' : 'centre'))}
+      >
+        ◇
+      </button>
+      <button
+        className={`btn small ${fx.reverse ? 'on' : 'ghost'}`}
+        title="run the fan backwards"
+        onClick={() => onEdit((x) => (x.reverse = !x.reverse))}
+      >
+        ⇄
+      </button>
+      <span className="label">parts</span>
+      <input
+        className="num"
+        type="number"
+        min={1}
+        max={64}
+        style={{ width: 44 }}
+        value={fx.parts}
+        title="tile the fan into k repeats across the group"
+        onChange={(e) => onEdit((x) => (x.parts = Math.min(Math.max(1, Math.floor(Number(e.target.value) || 1)), 64)))}
+      />
+      <span className="label">buddy</span>
+      <input
+        className="num"
+        type="number"
+        min={1}
+        max={64}
+        style={{ width: 44 }}
+        value={fx.buddy}
+        title="clump size — adjacent heads share a phase"
+        onChange={(e) => onEdit((x) => (x.buddy = Math.min(Math.max(1, Math.floor(Number(e.target.value) || 1)), 64)))}
+      />
+      {fx.distribute === 'shuffle' && (
+        <button
+          className="btn small ghost"
+          title={`re-roll the scatter (seed ${fx.seed})`}
+          onClick={() => onEdit((x) => (x.seed = Math.floor(Math.random() * 0x7fffffff)))}
+        >
+          ↻
+        </button>
+      )}
+    </div>
+    </>
   );
 }
 
