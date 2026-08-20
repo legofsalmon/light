@@ -198,6 +198,12 @@ pub struct EngineState {
     /// universe id -> channel(0-511) -> value. Raw override, applied last.
     pub overrides: HashMap<String, HashMap<usize, u8>>,
     pub learn_target: Option<MidiAction>,
+    /// Monotonic project generation. Bumped on every change to the project, and
+    /// echoed to clients, which quote it back as updateProject.base_gen so a
+    /// stale full-project write (composed before a deck switch, a project open,
+    /// or another client's edit) can be rejected instead of clobbering the newer
+    /// state. Runtime-only — never saved, never reset on load.
+    pub gen: u64,
 }
 
 impl EngineState {
@@ -214,10 +220,18 @@ impl EngineState {
             preview_look: None,
             overrides: HashMap::new(),
             learn_target: None,
+            gen: 1,
         };
         st.ensure_decks();
         st.reconcile();
         st
+    }
+
+    /// Advance the project generation. Called wherever the project content
+    /// changes, so the value clients quote back always reflects the latest
+    /// authoritative state.
+    pub fn bump_gen(&mut self) {
+        self.gen = self.gen.wrapping_add(1);
     }
 
     /// Older projects have no pages — the current grid becomes deck 1, and
@@ -640,6 +654,10 @@ impl EngineState {
         self.preview_look = None;
         self.project.settings.haze = 0.0;
         self.project.settings.haze_fan = 0.0;
+        // A wholesale swap is the biggest project change there is — advance the
+        // generation so any in-flight edit composed against the old show is seen
+        // as stale and rejected rather than written over the new one.
+        self.bump_gen();
     }
 
     /// Returns true if the engine CHANGED what it was given — in which case the
@@ -881,9 +899,11 @@ impl EngineState {
                 self.project.settings.haze_fan = clamp01(v);
                 out.project_changed = true;
             }
-            Command::UpdateProject { project } => {
-                // If the engine repaired what arrived, the sender is the one
-                // client that must NOT be spared the echo.
+            Command::UpdateProject { project, base_gen: _ } => {
+                // base_gen is a transport-layer concern (staleness rejection in
+                // engine.rs); by the time a command reaches the state machine it
+                // has been accepted. If the engine repaired what arrived, the
+                // sender is the one client that must NOT be spared the echo.
                 out.repaired_submission = self.update_project(*project);
                 out.project_changed = true;
             }

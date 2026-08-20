@@ -405,7 +405,12 @@ export type Command =
   | { type: 'setBlackout'; v: boolean }
   | { type: 'setHaze'; v: number }
   | { type: 'setHazeFan'; v: number }
-  | { type: 'updateProject'; project: Project }
+  // baseGen: the project generation this edit was composed against. The engine
+  // rejects (and re-syncs) a write whose baseGen is stale — i.e. the project
+  // changed underneath it via another client, an APC deck switch, or an
+  // openProject — instead of letting last-write-wins clobber the newer state.
+  // Optional so a non-UI writer (a test, a script) can still submit blind.
+  | { type: 'updateProject'; project: Project; baseGen?: number }
   | { type: 'midi'; status: number; d1: number; d2: number }
   /** arm (or cancel with null) engine-side MIDI learn — next note/cc maps to the action */
   | { type: 'learn'; action: MidiAction | null }
@@ -430,7 +435,10 @@ export type Command =
 // ---------- events (engine → ui) ----------
 
 export type ServerEvent =
-  | { type: 'project'; project: Project }
+  // gen: a monotonic counter the engine bumps on every project change. A client
+  // echoes the last gen it saw back as updateProject.baseGen, which is how the
+  // engine detects and rejects a stale write.
+  | { type: 'project'; project: Project; gen: number }
   | Snapshot
   | { type: 'osc'; entry: OscLogEntry }
   | { type: 'saved'; path: string }

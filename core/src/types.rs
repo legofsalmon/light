@@ -595,7 +595,14 @@ pub enum Command {
     SetBlackout { v: bool },
     SetHaze { v: f64 },
     SetHazeFan { v: f64 },
-    UpdateProject { project: Box<Project> },
+    UpdateProject {
+        project: Box<Project>,
+        /// The project generation this edit was composed against; the engine
+        /// rejects and re-syncs a write whose base is stale. Absent for blind
+        /// submitters (tests, scripts) — then no staleness check runs.
+        #[serde(default)]
+        base_gen: Option<u64>,
+    },
     Midi { status: u8, d1: u8, d2: u8 },
     Learn { action: Option<MidiAction> },
     ImportGdtf {

@@ -139,6 +139,24 @@ let lastPushAt = 0;
 /** current project slug per the engine's `projects` events; null until known */
 let currentSlug: string | null = null;
 
+/** The last project generation the engine told us about. Every updateProject we
+ *  send quotes this as its base, and we advance it optimistically on send: the
+ *  engine bumps its own generation by one per accepted write, so a lone editor
+ *  stays in lockstep. Any change from elsewhere (another client, an APC deck
+ *  switch, an openProject) arrives as a project echo that resets this to the
+ *  authoritative value, and an edit composed against a base that no longer
+ *  matches is rejected and re-synced rather than clobbering the newer state. */
+let lastGen = 0;
+
+/** Send a full-project write stamped with the base it was composed against, and
+ *  optimistically advance the local generation. All updateProject sends go
+ *  through here so the base is never forgotten. */
+function sendProjectUpdate(send: (cmd: Command) => void, project: Project): void {
+  const base = lastGen;
+  lastGen = (base + 1) >>> 0;
+  send({ type: 'updateProject', project, baseGen: base });
+}
+
 function clearHistory(): void {
   undoStack.length = 0;
   redoStack.length = 0;
@@ -274,7 +292,7 @@ export const useStore = create<Store>()((set, get) => ({
     const slugAtEdit = currentSlug;
     queueProjectWrite(() => {
       if (currentSlug !== slugAtEdit) return; // a different show is open now
-      get().send({ type: 'updateProject', project: get().project! });
+      sendProjectUpdate(get().send, get().project!);
     });
   },
 
@@ -283,7 +301,7 @@ export const useStore = create<Store>()((set, get) => ({
     // NOW, so a follow-up command (switchDeck onto a just-created deck) can't
     // outrun it on the wire and be dropped by the engine as an unknown target.
     if (!cancelProjectWrite()) return;
-    get().send({ type: 'updateProject', project: get().project! });
+    sendProjectUpdate(get().send, get().project!);
   },
 
   undo: () => {
@@ -471,6 +489,11 @@ function connect(): void {
       return;
     }
     if (ev.type === 'project') {
+      // Adopt the authoritative generation. This is what re-syncs us after a
+      // rejected write, another client's edit, or an APC deck switch: the next
+      // edit we send will quote this base, not the stale one we optimistically
+      // advanced to.
+      lastGen = ev.gen;
       // authoritative patch may have dropped fixtures (delete elsewhere, MVR
       // replace) — a selection of dangling ids would lie about its count
       const ids = new Set(ev.project.fixtures.map((f) => f.id));

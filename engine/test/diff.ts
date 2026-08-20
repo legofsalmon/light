@@ -28,6 +28,7 @@ class Client {
   ws!: WebSocket;
   snap: Snapshot | null = null;
   project: Project | null = null;
+  gen = 0;
 
   async connect(port: number): Promise<void> {
     for (let i = 0; i < 50; i++) {
@@ -43,7 +44,10 @@ class Client {
         this.ws.on('message', (d) => {
           const ev = JSON.parse(String(d));
           if (ev.type === 'snap') this.snap = ev;
-          if (ev.type === 'project') this.project = ev.project;
+          if (ev.type === 'project') {
+            this.project = ev.project;
+            this.gen = ev.gen;
+          }
         });
         return;
       } catch {
@@ -610,6 +614,59 @@ async function main(): Promise<void> {
 
     both({ type: 'setBlackout', v: false });
     await sleep(400);
+  }
+
+  // --- project-generation staleness: both engines must reject a write whose
+  // --- base generation is stale, and their generation counters must agree.
+  {
+    await settle(node, rust);
+    await sleep(300); // let the last coalesced project echo reach the observers
+    // The OBSERVER clients never send, so they are never skipped by the
+    // sender-suppressed echo and their gen tracks the engine exactly. This is
+    // the strongest single parity check in the suite: the counters only match
+    // if both engines bumped identically through every command above.
+    check(
+      'gen: the two engines agree on the project generation',
+      nodeObs.gen === rustObs.gen && nodeObs.gen > 0,
+      `node=${nodeObs.gen} rust=${rustObs.gen}`,
+    );
+
+    // send a rename to each engine with a given base, over the raw socket (so
+    // the client's optimistic-project shortcut does not mask the engine's answer)
+    const rename = async (name: string, baseGen: number): Promise<void> => {
+      for (const c of [node, rust]) {
+        const p = structuredClone(await currentProject(c));
+        p.name = name;
+        c.ws.send(JSON.stringify({ type: 'updateProject', project: p, baseGen }));
+      }
+    };
+
+    // a FRESH write (correct base, from the observers' accurate gen) is accepted
+    await rename('Gen Fresh', nodeObs.gen);
+    await sleep(400);
+    check(
+      'gen: a write with the current base is applied by both',
+      (await currentProject(nodeObs)).name === 'Gen Fresh' &&
+        (await currentProject(rustObs)).name === 'Gen Fresh',
+      `node="${(await currentProject(nodeObs)).name}" rust="${(await currentProject(rustObs)).name}"`,
+    );
+
+    // a STALE write (base 0, long superseded) is rejected by both — the name
+    // stays what the fresh write set, not what the stale write tried
+    await rename('Gen Stale SHOULD NOT STICK', 0);
+    await sleep(400);
+    check(
+      'gen: a write with a stale base is rejected by both',
+      (await currentProject(nodeObs)).name === 'Gen Fresh' &&
+        (await currentProject(rustObs)).name === 'Gen Fresh',
+      `node="${(await currentProject(nodeObs)).name}" rust="${(await currentProject(rustObs)).name}"`,
+    );
+    // and the engines are still in lockstep after the rejection
+    check(
+      'gen: still in agreement after a rejected write',
+      nodeObs.gen === rustObs.gen,
+      `node=${nodeObs.gen} rust=${rustObs.gen}`,
+    );
   }
 
   // --- MVR import parity: both engines apply the same scene identically.

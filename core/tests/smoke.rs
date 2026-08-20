@@ -534,13 +534,13 @@ fn the_engine_says_when_it_repaired_what_it_was_given() {
 
     // untouched: the project already has decks and a resolvable active deck
     let clean = st.project.clone();
-    let out = st.handle_command(Command::UpdateProject { project: Box::new(clean) }, t0, None);
+    let out = st.handle_command(Command::UpdateProject { project: Box::new(clean), base_gen: None }, t0, None);
     assert!(!out.repaired_submission, "a well-formed project must not report a repair");
 
     // rewritten: an activeDeckId that resolves to nothing gets repointed
     let mut bad = st.project.clone();
     bad.active_deck_id = Some("deck-that-does-not-exist".into());
-    let out = st.handle_command(Command::UpdateProject { project: Box::new(bad) }, t0, None);
+    let out = st.handle_command(Command::UpdateProject { project: Box::new(bad), base_gen: None }, t0, None);
     assert!(out.repaired_submission, "repointing activeDeckId is a repair the sender must hear about");
     assert_ne!(st.project.active_deck_id.as_deref(), Some("deck-that-does-not-exist"));
 }

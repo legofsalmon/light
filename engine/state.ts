@@ -40,8 +40,17 @@ export class EngineState {
   speed = 1;
   blackout = false;
   learnTarget: MidiAction | null = null;
+  /** Monotonic project generation. Bumped once per project-changing command by
+   *  the transport layer (engine/index.ts) — matching the per-command bump in
+   *  core/src/engine.rs — and echoed to clients, which quote it back as
+   *  updateProject.baseGen so a stale write can be rejected. Runtime-only. */
+  gen = 1;
   onChange: (() => void) | null = null; // structural project change → broadcast
   onLearned: ((mapping: MidiMapping) => void) | null = null;
+
+  bumpGen(): void {
+    this.gen = (this.gen + 1) >>> 0; // wrap like the Rust u64 counter (32-bit is plenty)
+  }
 
   constructor(project: Project) {
     this.project = project;

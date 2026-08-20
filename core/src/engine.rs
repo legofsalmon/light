@@ -463,7 +463,7 @@ fn spawn_previz() -> (bool, String) {
 }
 
 fn project_event(state: &EngineState) -> String {
-    json!({ "type": "project", "project": state.project }).to_string()
+    json!({ "type": "project", "project": state.project, "gen": state.gen }).to_string()
 }
 
 fn broadcast_projects(bc: &Broadcaster, dir: &PathBuf) {
@@ -494,6 +494,9 @@ fn apply_outcome(
     owner: Option<ClientId>,
 ) {
     if out.project_changed {
+        // Every project change advances the generation so a client's next edit
+        // carries a base the engine can check for staleness.
+        state.bump_gen();
         // Continuous controls (faders, MIDI CC) land here per input event and
         // each echo is the WHOLE project — coalesce to one per tick instead of
         // flooding every client mid fader-ride.
@@ -638,6 +641,7 @@ fn handle_msg(
                         return false;
                     }
                     persist::set_current_slug(dir, &slug);
+                    state.bump_gen(); // the name changed — new authoritative gen
                     bc.broadcast(&project_event(state));
                     bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("saved as \"{name}\"")}).to_string());
                     broadcast_projects(bc, dir);
@@ -653,6 +657,19 @@ fn handle_msg(
             // else. The parity harness caught this: it imported a fixture and
             // then could not see the fixture it had just created.
             let is_update = matches!(cmd, Command::UpdateProject { .. });
+            // Staleness gate: a full-project write composed against an older
+            // generation must not clobber whatever changed underneath it (a
+            // deck switch, an openProject, another client's edit). Reject it and
+            // re-sync the sender, rather than applying last-write-wins. A write
+            // with no base (a blind submitter) skips the check.
+            if let Command::UpdateProject { base_gen: Some(base), .. } = &cmd {
+                if *base != state.gen {
+                    if let Some(id) = owner {
+                        bc.send_to(id, project_event(state));
+                    }
+                    return false;
+                }
+            }
             let out = state.handle_command(cmd, t, owner);
             let align = out.align_phase;
             // Withhold the echo from the sender only if the engine left its

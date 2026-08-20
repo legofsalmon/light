@@ -8,6 +8,7 @@ import { ArtnetOut } from './artnet.ts';
 import { SacnOut } from './sacn.ts';
 import { OscIn, type OscMessage } from './osc.ts';
 import { Server } from './server.ts';
+import type { WebSocket } from 'ws';
 import { defaultProject } from './defaultProject.ts';
 import * as persist from './persist.ts';
 import { parseGdtfBase64, parseMvrBase64 } from './wasmProfiles.ts';
@@ -251,10 +252,21 @@ let projectDirty = false;
 let echoSkip: unknown = null;
 /** The socket whose command we are inside, if any. */
 let currentCommandWs: unknown = null;
+/** Whether the command currently executing changed the project — drives one
+ *  gen bump per command, matching the Rust engine. */
+let changedThisCommand = false;
 
 state.onChange = () => {
+  changedThisCommand = true;
   if (!projectDirty) echoSkip = currentCommandWs;
   else if (echoSkip !== currentCommandWs) echoSkip = null;
+  // A repaired submission must reach its sender — it holds the unrepaired copy
+  // and would re-send it forever otherwise. Fold that in HERE, at change time,
+  // not in flushProject: repairedSubmission is reset per command, and by the
+  // time the coalesced flush runs (up to 100 ms later) any command in the
+  // window could have cleared it. core/src/engine.rs bakes the decision in at
+  // command time the same way.
+  if (state.repairedSubmission) echoSkip = null;
   projectDirty = true;
   persist.saveProjectDebounced(() => state.project);
   osc.listen(state.project.sync.oscPort, state.project.sync.oscEnabled);
@@ -271,19 +283,18 @@ function flushProject(): void {
   if (now - lastEcho < 100) return;
   projectDirty = false;
   lastEcho = now;
-  // Withhold from the sender only if the engine left its submission alone. The
-  // sanitiser can rewrite a great deal — it strips unknown prop kinds, repairs
-  // non-finite numbers, nulls dangling cell references — and the sender is the
-  // one client that would otherwise never learn.
-  server.broadcastExcept(state.repairedSubmission ? null : echoSkip, {
+  // echoSkip already accounts for a repaired submission (folded in at onChange
+  // time), so the sender that needs its repair is not among those skipped.
+  server.broadcastExcept(echoSkip, {
     type: 'project',
     project: state.project,
+    gen: state.gen,
   });
   echoSkip = null;
 }
 
 server.onConnect = (ws) => {
-  server.send(ws, { type: 'project', project: state.project });
+  server.send(ws, { type: 'project', project: state.project, gen: state.gen });
   if (bootWarning) server.send(ws, { type: 'toast', ok: false, message: bootWarning });
   server.send(ws, { type: 'midiInputs', names: [] }); // Node dev engine has no native MIDI
 };
@@ -303,6 +314,14 @@ state.onLearned = (mapping) => {
 };
 
 function handleCommand(cmd: Command, _ws?: unknown, clientId: number = LOCAL_CLIENT): void {
+  // Staleness gate (mirrors core/src/engine.rs): a full-project write composed
+  // against an older generation must not clobber whatever changed underneath it
+  // — a deck switch, an openProject, another client's edit. Reject it and
+  // re-sync the sender. A write with no base (a blind submitter) skips this.
+  if (cmd.type === 'updateProject' && cmd.baseGen !== undefined && cmd.baseGen !== state.gen) {
+    if (_ws) server.send(_ws as WebSocket, { type: 'project', project: state.project, gen: state.gen });
+    return;
+  }
   // Only an updateProject echo may be withheld from its sender: that client
   // composed the exact state. Any other command can change the project in ways
   // the sender did not compute (an import adding fixtures, sanitize repairing
@@ -310,9 +329,13 @@ function handleCommand(cmd: Command, _ws?: unknown, clientId: number = LOCAL_CLI
   currentCommandWs = cmd.type === 'updateProject' ? (_ws ?? null) : null;
   // Reset per command; updateProject sets it if the sanitiser changed anything.
   state.repairedSubmission = false;
+  changedThisCommand = false;
   try {
     handleCommandInner(cmd, clientId);
   } finally {
+    // One bump per project-changing command, matching the Rust engine's
+    // per-command bump so the two engines' generation counters stay in step.
+    if (changedThisCommand) state.bumpGen();
     currentCommandWs = null;
   }
 }
