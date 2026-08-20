@@ -194,6 +194,14 @@ export type SoftField =
   | 'haze' | 'fan' | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'hue' | 'sat'
   | 'rate' | 'size' | 'spread' | 'width' | 'phase' | 'mix';
 
+/** Runtime membership set — the Node engine must reject an unknown field the
+ *  same way Rust's typed SoftField deserialization drops the whole frame. */
+export const SOFT_FIELDS: ReadonlySet<SoftField> = new Set<SoftField>([
+  'dimmer', 'white', 'ringFx', 'strobe', 'motorValue', 'pan', 'tilt',
+  'haze', 'fan', 'zoom', 'focus', 'iris', 'frost', 'cto', 'hue', 'sat',
+  'rate', 'size', 'spread', 'width', 'phase', 'mix',
+]);
+
 /** Per-field clamp for soft values — the engine validates at the door, so the
  *  renderer never meets an out-of-range ride. Mirrors soft_clamp in
  *  core/src/state.rs. */

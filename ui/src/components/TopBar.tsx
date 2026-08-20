@@ -323,6 +323,29 @@ export function TopBar() {
           ◎ identify: {project.fixtures.find((f) => f.id === snap.identify)?.name ?? 'fixture'}
         </span>
       )}
+      {(snap?.soft?.length ?? 0) > 0 && (
+        <span
+          className="chip"
+          style={{ background: 'rgba(240,166,62,0.18)', border: '1px solid var(--amber, #f0a63e)', color: 'var(--amber, #f0a63e)', fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
+          title="live soft overrides are driving the rig — Store writes them into the show, Discard drops them. Always visible here, whatever panel is open."
+        >
+          RIDING {snap!.soft!.length}
+          <button
+            className="btn small"
+            onClick={() => {
+              // capture undo locally FIRST: the commit arrives as an engine
+              // echo, which undo deliberately does not infer from
+              useStore.getState().captureUndo();
+              send({ type: 'softCommit' });
+            }}
+          >
+            Store
+          </button>
+          <button className="btn small ghost" onClick={() => send({ type: 'softClear' })}>
+            Discard
+          </button>
+        </span>
+      )}
       <button
         className="btn allstop"
         title="ALL STOP — blackout, clear every layer, release holds, haze and motors off"
@@ -332,7 +355,12 @@ export function TopBar() {
             confirmLabel: 'ALL STOP',
             danger: true,
           }).then((ok) => {
-            if (ok) send({ type: 'allStop' });
+            if (ok) {
+              send({ type: 'allStop' });
+              // panic also disarms ride and drops in-flight fader events, so a
+              // drag mid-gesture cannot re-create the rides just cleared
+              useStore.setState({ ride: false, rideCutAt: Date.now() });
+            }
           });
         }}
       >

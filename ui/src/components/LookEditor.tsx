@@ -305,15 +305,21 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
       (e) => e.lookId === lookId && e.partId === part.id && e.effectId === effectId && e.field === field,
     )?.value;
 
-  /** Route a numeric edit: in RIDE mode it becomes a ~40-byte soft command
-   *  (no project write, no undo entry, Store/Discard later); otherwise the
-   *  usual project mutation. */
+  /** Route a numeric edit. Soft when RIDE is armed — or when a soft value
+   *  ALREADY exists for the address: a ridden control stays live until Store
+   *  or Discard, otherwise the fader would display the soft value while
+   *  silently rewriting the stored show underneath it. A brief window after
+   *  ALL STOP disarms ride drops events entirely, so an in-flight drag can
+   *  neither re-create the rides the panic cleared nor mutate the show. */
+  const rideCutAt = useStore((s) => s.rideCutAt);
   const setP = (field: SoftField, v: number, fallback: (pt: LookPart) => void): void => {
-    if (ride) send({ type: 'soft', lookId, partId: part.id, field, value: v });
+    if (Date.now() - rideCutAt < 800) return;
+    if (ride || softFor(field) !== undefined) send({ type: 'soft', lookId, partId: part.id, field, value: v });
     else edit(fallback);
   };
   const setE = (effectId: string, field: SoftField, v: number, fallback: (e: Effect) => void): void => {
-    if (ride) send({ type: 'soft', lookId, partId: part.id, effectId, field, value: v });
+    if (Date.now() - rideCutAt < 800) return;
+    if (ride || softFor(field, effectId) !== undefined) send({ type: 'soft', lookId, partId: part.id, effectId, field, value: v });
     else
       edit((pt) => {
         const e = pt.effects.find((x) => x.id === effectId);
@@ -390,7 +396,16 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
                     <i
                       key={i}
                       style={{ background: rgbHex(r, g, b) }}
-                      onClick={() => edit((pt) => (pt.params.color = { ...sw }))}
+                      onClick={() => {
+                        // a swatch IS a hue+sat pair: with ride armed or the
+                        // colour already ridden it must go through the soft
+                        // layer, or the click looks dead (soft wins on the
+                        // rig) while silently rewriting the stored show
+                        if (ride || softFor('hue') !== undefined || softFor('sat') !== undefined) {
+                          send({ type: 'soft', lookId, partId: part.id, field: 'hue', value: sw.h });
+                          send({ type: 'soft', lookId, partId: part.id, field: 'sat', value: sw.s });
+                        } else edit((pt) => (pt.params.color = { ...sw }));
+                      }}
                     />
                   );
                 })}
@@ -626,8 +641,8 @@ export function LookEditor() {
   const sel = useStore((s) => s.sel);
   const mutate = useStore((s) => s.mutate);
   const send = useStore((s) => s.send);
-  const softCount = useStore((s) => s.snap?.soft?.length ?? 0);
-  const [ride, setRide] = useState(false);
+  const ride = useStore((s) => s.ride);
+  const setRide = useStore((s) => s.setRide);
 
   if (!sel) return <div className="hint">Select a cell in the grid to edit its look — click an empty cell to start a new one (it won't fire the layer).</div>;
 
@@ -931,23 +946,6 @@ export function LookEditor() {
         </div>
       ) : (
         <>
-          {softCount > 0 && (
-            <div
-              className="row"
-              style={{ background: 'rgba(240,166,62,0.14)', border: '1px solid var(--amber, #f0a63e)', borderRadius: 4, padding: '4px 8px', margin: '8px 0' }}
-            >
-              <span style={{ color: 'var(--amber, #f0a63e)', fontWeight: 600 }}>
-                RIDING · {softCount} value{softCount === 1 ? '' : 's'}
-              </span>
-              <div className="grow" />
-              <button className="btn small" title="write every ridden value into the show (one undoable change)" onClick={() => send({ type: 'softCommit' })}>
-                Store
-              </button>
-              <button className="btn small ghost" title="drop every ride — the stored show is untouched" onClick={() => send({ type: 'softClear' })}>
-                Discard
-              </button>
-            </div>
-          )}
           {look.parts.map((part) => (
             <PartEditor key={part.id} lookId={lookId} part={part} ride={ride} />
           ))}

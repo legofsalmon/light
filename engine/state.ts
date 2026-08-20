@@ -1,5 +1,5 @@
 import type { MidiAction, MidiMapping, Project, SoftField } from '../shared/types.ts';
-import { clamp, sanitizeProject, softClamp, uid } from '../shared/types.ts';
+import { SOFT_FIELDS, clamp, sanitizeProject, softClamp, uid } from '../shared/types.ts';
 import { BeatClock } from './clock.ts';
 
 export type LayerLive = {
@@ -69,10 +69,13 @@ export class EngineState {
   /** universeId -> channel(0-511) -> value. Raw override applied last. */
   overrides = new Map<string, Map<number, number>>();
   /** P1 soft overrides: live rides over stored look data, keyed
-   *  "lookId partId" and grouped per part so the renderer resolves a
+   *  JSON.stringify([lookId, partId]) — unambiguous for ANY id content, unlike
+   *  a delimiter join — and carrying the ids in the VALUE so nothing ever
+   *  parses a key back (the Rust twin keys a tuple; both engines must agree
+   *  on every accepted input). Grouped per part so the renderer resolves a
    *  whole part with ONE lookup. Runtime-only — Store (softCommit) writes
    *  them into the project, Discard/ALL STOP/project switch drops them. */
-  soft = new Map<string, { params: Map<SoftField, number>; effects: Map<string, Map<SoftField, number>> }>();
+  soft = new Map<string, { lookId: string; partId: string; params: Map<SoftField, number>; effects: Map<string, Map<SoftField, number>> }>();
   clock = new BeatClock();
   master = 1;
   speed = 1;
@@ -349,11 +352,14 @@ export class EngineState {
    *  project and clamps the value at the door, so the renderer never meets a
    *  dangling or out-of-range ride. value null clears the single entry. */
   setSoft(lookId: string, partId: string, effectId: string | undefined, field: SoftField, value: number | null): boolean {
+    // an unknown field must be REJECTED, exactly as Rust's typed SoftField
+    // deserialization drops the whole frame — not clamped into a phantom ride
+    if (!SOFT_FIELDS.has(field)) return false;
     const look = Object.hasOwn(this.project.looks, lookId) ? this.project.looks[lookId] : undefined;
     const part = look?.parts.find((pt) => pt.id === partId);
     if (!part) return false;
     if (effectId !== undefined && !part.effects.some((e) => e.id === effectId)) return false;
-    const key = `${lookId} ${partId}`;
+    const key = JSON.stringify([lookId, partId]);
     if (value === null) {
       const patch = this.soft.get(key);
       if (!patch) return false;
@@ -371,7 +377,7 @@ export class EngineState {
     if (v === null) return false;
     let patch = this.soft.get(key);
     if (!patch) {
-      patch = { params: new Map(), effects: new Map() };
+      patch = { lookId, partId, params: new Map(), effects: new Map() };
       this.soft.set(key, patch);
     }
     if (effectId !== undefined) {
@@ -390,8 +396,8 @@ export class EngineState {
   /** Flat view of the live rides, for the snapshot. */
   softEntries(): { lookId: string; partId: string; effectId?: string; field: SoftField; value: number }[] {
     const out: { lookId: string; partId: string; effectId?: string; field: SoftField; value: number }[] = [];
-    for (const [key, patch] of this.soft) {
-      const [lookId, partId] = key.split(' ');
+    for (const patch of this.soft.values()) {
+      const { lookId, partId } = patch;
       for (const [field, value] of patch.params) out.push({ lookId, partId, field, value });
       for (const [effectId, fields] of patch.effects) {
         for (const [field, value] of fields) out.push({ lookId, partId, effectId, field, value });
@@ -406,8 +412,8 @@ export class EngineState {
    *  identical field routing or their stored shows diverge. */
   softCommit(): boolean {
     let changed = false;
-    for (const [key, patch] of this.soft) {
-      const [lookId, partId] = key.split(' ');
+    for (const patch of this.soft.values()) {
+      const { lookId, partId } = patch;
       const look = Object.hasOwn(this.project.looks, lookId) ? this.project.looks[lookId] : undefined;
       const part = look?.parts.find((pt) => pt.id === partId);
       if (!part) continue; // swept-away address — nothing to store
@@ -435,7 +441,7 @@ export class EngineState {
   sweepSoft(): void {
     if (this.soft.size === 0) return;
     for (const [key, patch] of this.soft) {
-      const [lookId, partId] = key.split(' ');
+      const { lookId, partId } = patch;
       const look = Object.hasOwn(this.project.looks, lookId) ? this.project.looks[lookId] : undefined;
       const part = look?.parts.find((pt) => pt.id === partId);
       if (!part) {

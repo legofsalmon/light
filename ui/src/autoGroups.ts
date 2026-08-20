@@ -61,9 +61,9 @@ export function desiredAutoGroups(p: Project): Group[] {
 
 export type AutoGroupPlan = {
   create: Group[];
-  /** tagged groups whose membership changed — heads are rewritten, the name
-   *  (possibly still the generated one) is left alone */
-  update: { existing: Group; heads: Group['heads'] }[];
+  /** tagged groups whose membership or generated name changed — both are
+   *  machine-owned (renaming untags), so both are rewritten */
+  update: { existing: Group; heads: Group['heads']; name: string }[];
   /** tagged groups whose source is gone (type unpatched, truss deleted) */
   remove: Group[];
 };
@@ -73,17 +73,24 @@ const sameHeads = (a: Group['heads'], b: Group['heads']): boolean =>
 
 /** What a regenerate would do. Groups WITHOUT the auto tag are never touched —
  *  renaming or editing a derived group promotes it to authored, and authored
- *  groups are the operator's. */
+ *  groups are the operator's. A PROMOTED group also blocks re-creation under
+ *  its old id: the operator took it over, and a duplicate id would make the
+ *  two engines resolve different memberships (Map last-wins vs find
+ *  first-wins). */
 export function planAutoGroups(p: Project): AutoGroupPlan {
   const desired = desiredAutoGroups(p);
   const tagged = p.groups.filter((g) => g.auto !== undefined);
+  const allIds = new Set(p.groups.map((g) => g.id));
   const desiredById = new Map(desired.map((g) => [g.id, g]));
   const existingById = new Map(tagged.map((g) => [g.id, g]));
 
-  const create = desired.filter((g) => !existingById.has(g.id));
+  const create = desired.filter((g) => !allIds.has(g.id));
   const update = desired
-    .filter((g) => existingById.has(g.id) && !sameHeads(existingById.get(g.id)!.heads, g.heads))
-    .map((g) => ({ existing: existingById.get(g.id)!, heads: g.heads }));
+    .filter((g) => {
+      const ex = existingById.get(g.id);
+      return !!ex && (!sameHeads(ex.heads, g.heads) || ex.name !== g.name);
+    })
+    .map((g) => ({ existing: existingById.get(g.id)!, heads: g.heads, name: g.name }));
   const remove = tagged.filter((g) => !desiredById.has(g.id));
   return { create, update, remove };
 }
@@ -91,9 +98,12 @@ export function planAutoGroups(p: Project): AutoGroupPlan {
 export function applyAutoGroups(p: Project, plan: AutoGroupPlan): void {
   const removeIds = new Set(plan.remove.map((g) => g.id));
   p.groups = p.groups.filter((g) => !removeIds.has(g.id));
-  for (const { existing, heads } of plan.update) {
+  for (const { existing, heads, name } of plan.update) {
     const g = p.groups.find((x) => x.id === existing.id);
-    if (g) g.heads = heads;
+    if (g) {
+      g.heads = heads;
+      g.name = name;
+    }
   }
   for (const g of plan.create) p.groups.push(g);
 }

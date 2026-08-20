@@ -70,6 +70,18 @@ type Store = {
   /** undo depth available (for button/menu state) */
   undoDepth: number;
   redoDepth: number;
+  /** P1 ride mode: numeric look-editor controls send soft overrides instead of
+   *  project writes. Global so ALL STOP can disarm it from the top bar. */
+  ride: boolean;
+  setRide: (on: boolean) => void;
+  /** set when ALL STOP disarms ride: look-editor writes are dropped for a
+   *  moment so a fader drag in flight cannot re-create the rides the panic
+   *  just cleared, NOR silently rewrite the stored show mid-gesture */
+  rideCutAt: number;
+  /** Snapshot the current project into undo history — for engine-side commits
+   *  the UI initiates (Store on a ride), which arrive as echoes that undo
+   *  deliberately does not capture. Bypasses the drag-coalescing window. */
+  captureUndo: () => void;
 
   send: (cmd: Command) => void;
   /** Clone-mutate-commit a project edit; optimistic locally, authoritative echo follows. */
@@ -169,12 +181,13 @@ function clearHistory(): void {
   lastPushAt = 0;
 }
 
-function pushUndo(p: Project): void {
+function pushUndo(p: Project, force = false): void {
   const now = Date.now();
   // pushes within 800 ms coalesce into the earlier snapshot — a continuous
   // drag lands as one step (rapid distinct edits may merge too; the cap on
-  // surprise is the 800 ms window)
-  if (now - lastPushAt < 800) return;
+  // surprise is the 800 ms window). `force` is for deliberate one-shot
+  // captures (Store on a ride) that must never be swallowed by the window.
+  if (!force && now - lastPushAt < 800) return;
   lastPushAt = now;
   undoStack.push({ slug: currentSlug, project: structuredClone(p) });
   if (undoStack.length > UNDO_CAP) undoStack.shift();
@@ -282,6 +295,16 @@ export const useStore = create<Store>()((set, get) => ({
   redoDepth: 0,
 
   send: (cmd) => wsSend(JSON.stringify(cmd)),
+
+  ride: false,
+  rideCutAt: 0,
+  setRide: (on) => set({ ride: on }),
+  captureUndo: () => {
+    const p = get().project;
+    if (!p) return;
+    pushUndo(p, true);
+    set({ undoDepth: undoStack.length, redoDepth: redoStack.length });
+  },
 
   mutate: (fn) => {
     const cur = get().project;

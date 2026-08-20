@@ -1010,6 +1010,75 @@ async function main(): Promise<void> {
     await armWash('wash-rainbow', 1.35);
     compareDmx('soft: post-allStop parity (ride dropped)', node, rust);
 
+    // --- wire-shape equivalence: the Rust engine deserializes with serde
+    // (Option fields read null AND absent as None; an unknown field drops the
+    // whole frame). The Node engine must behave identically on the same BYTES,
+    // or scripted clients drive the two engines apart.
+    const raw = (obj: object): void => {
+      node.ws.send(JSON.stringify(obj));
+      rust.ws.send(JSON.stringify(obj));
+    };
+    await armWash('wash-rainbow', 1.35);
+    const base2 = frameOf(node);
+    // effectId: null must mean "part-level ride" on both (serde: None)
+    // 0.6, NOT the 0.25 the commit above stored — riding the stored value
+    // would leave the frame identical and prove nothing
+    raw({ type: 'soft', lookId: 'wash-rainbow', partId, effectId: null, field: 'sat', value: 0.6 });
+    await sleep(400);
+    compareDmx('soft-wire: effectId null rides the part on both', node, rust);
+    check('soft-wire: the null-effectId ride landed', frameOf(node) !== base2, 'node ignored effectId:null');
+    // value ABSENT must clear on both (serde: missing Option -> None -> clear)
+    raw({ type: 'soft', lookId: 'wash-rainbow', partId, field: 'sat' });
+    await sleep(400);
+    compareDmx('soft-wire: absent value clears on both', node, rust);
+    check('soft-wire: the clear restored stored bytes', frameOf(node) === base2, 'absent-value clear did not restore');
+    // an unknown field must be ignored by both — no ride, no phantom commit
+    raw({ type: 'soft', lookId: 'wash-rainbow', partId, field: 'lasers', value: 0.5 });
+    await sleep(300);
+    const genBeforePhantom = nodeObs.gen;
+    both({ type: 'softCommit' });
+    await sleep(400);
+    compareDmx('soft-wire: unknown field ignored on both', node, rust);
+    check(
+      'soft-wire: no phantom gen bump from an unknown-field commit',
+      nodeObs.gen === genBeforePhantom && nodeObs.gen === rustObs.gen,
+      `node=${nodeObs.gen} rust=${rustObs.gen} before=${genBeforePhantom}`,
+    );
+
+    // --- ids containing spaces: legal in a hand-edited show; the two engines
+    // must ride, sweep and commit them identically (the Node store used to
+    // re-parse a space-joined key)
+    {
+      const p = structuredClone(await currentProject(node));
+      p.looks['sp aced'] = {
+        id: 'sp aced',
+        name: 'Spaced',
+        parts: [{ id: 'pa rt', groupId: 'g-pars', params: { dimmer: 1, color: { h: 200, s: 1 } }, effects: [] }],
+      };
+      const wash = p.layers.find((l) => l.id === 'layer-wash');
+      if (wash) wash.cells[6] = 'sp aced';
+      both({ type: 'updateProject', project: p });
+      await sleep(400);
+      both({ type: '_pinClock', effBeat: 1.35 });
+      both({ type: 'trigger', layerId: 'layer-wash', col: 6 });
+      await settle(node, rust);
+      both({ type: 'soft', lookId: 'sp aced', partId: 'pa rt', field: 'sat', value: 0.3 });
+      await sleep(400);
+      compareDmx('soft-ids: spaced-id ride parity', node, rust);
+      both({ type: 'softCommit' });
+      await sleep(400);
+      const nS = (await currentProject(nodeObs)).looks['sp aced']?.parts[0].params.color?.s;
+      const rS = (await currentProject(rustObs)).looks['sp aced']?.parts[0].params.color?.s;
+      check('soft-ids: spaced-id commit stores identically', nS === 0.3 && rS === 0.3, `node=${nS} rust=${rS}`);
+      // clean up: remove the test look, restore the cell
+      const q = structuredClone(await currentProject(node));
+      delete q.looks['sp aced'];
+      const w2 = q.layers.find((l) => l.id === 'layer-wash');
+      if (w2) w2.cells[6] = 'wash-rainbow';
+      both({ type: 'updateProject', project: q });
+      await sleep(300);
+    }
+
     // restore the stored sat for later scenarios
     {
       const p = structuredClone(await currentProject(node));

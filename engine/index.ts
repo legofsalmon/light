@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { Command, CompiledProfile, HeadSnap, ServerEvent, Snapshot } from '../shared/types.ts';
+import type { Command, CompiledProfile, HeadSnap, ServerEvent, Snapshot, SoftField } from '../shared/types.ts';
 import { WS_PORT, clamp, sanitizeProject } from '../shared/types.ts';
 import { PROFILES } from '../shared/profiles.ts';
 import { EngineState, LOCAL_CLIENT } from './state.ts';
@@ -492,9 +492,17 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       state.onChange?.();
       break;
     }
-    case 'soft':
-      state.setSoft(cmd.lookId, cmd.partId, cmd.effectId, cmd.field, cmd.value);
+    case 'soft': {
+      // serde equivalence with the Rust engine: its Option fields read null
+      // AND absent as None, and a frame with wrong-typed fields never
+      // deserializes at all — the same bytes must produce the same state
+      const c = cmd as { lookId?: unknown; partId?: unknown; effectId?: unknown; field: SoftField; value?: unknown };
+      if (typeof c.lookId !== 'string' || typeof c.partId !== 'string') break;
+      if (c.effectId !== undefined && c.effectId !== null && typeof c.effectId !== 'string') break;
+      if (c.value !== undefined && c.value !== null && typeof c.value !== 'number') break;
+      state.setSoft(c.lookId, c.partId, c.effectId ?? undefined, c.field, (c.value as number | null | undefined) ?? null);
       break;
+    }
     case 'softCommit':
       state.softCommit(); // onChange fires inside when anything was written
       break;

@@ -242,7 +242,7 @@ export class Renderer {
           // EFFECTIVE effects, so a soft rate ride stays phase-continuous.
           // keyed by the RESOLVED look (a cue list renders its step's look,
           // and the ride addresses the look being edited — the step)
-          const patch = st.soft.size > 0 ? st.soft.get(`${look.id} ${part.id}`) : undefined;
+          const patch = st.soft.size > 0 ? st.soft.get(JSON.stringify([look.id, part.id])) : undefined;
           let effParams = part.params;
           if (patch && patch.params.size > 0) {
             effParams = { ...part.params, color: part.params.color ? { ...part.params.color } : undefined };

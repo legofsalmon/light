@@ -700,6 +700,30 @@ await new Promise<void>((resolve) => {
   // sanitize: a non-string tag is dropped, matching Rust's de_opt_string
   const bad = sanitizeProject({ ...demoProject(), groups: [{ id: 'g', name: 'G', heads: [], auto: 7 }] } as unknown as Project)!;
   check('auto-groups: sanitize drops a non-string tag', bad.groups[0].auto === undefined);
+
+  // review regression: a PROMOTED group must also block re-creation under its
+  // old id — a duplicate group id makes the two engines resolve different
+  // memberships (Map last-wins vs iter().find() first-wins)
+  const p6 = structuredClone(p2);
+  applyAutoGroups(p6, planAutoGroups(p6));
+  const promoted = p6.groups.find((x) => x.id === 'auto-truss-t1')!;
+  delete promoted.auto;
+  const plan6 = planAutoGroups(p6);
+  check(
+    'auto-groups: a promoted id is never re-created (no duplicate ids)',
+    !plan6.create.some((g) => g.id === 'auto-truss-t1'),
+  );
+
+  // review regression: tagged names are machine-owned — a regenerate refreshes
+  // a stale generated name (renaming untags, so no operator name is at risk)
+  const p7 = structuredClone(p2);
+  applyAutoGroups(p7, planAutoGroups(p7));
+  p7.groups.find((x) => x.id === 'auto-truss-t1')!.name = 'Truss 9'; // stale
+  const plan7 = planAutoGroups(p7);
+  check(
+    'auto-groups: a stale generated name is refreshed on regenerate',
+    plan7.update.some((u) => u.existing.id === 'auto-truss-t1' && u.name === 'Truss 1'),
+  );
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
