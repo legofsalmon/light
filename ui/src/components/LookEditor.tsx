@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { Effect, EffectTarget, Look, LookPart, Project, Wave } from '../../../shared/types.ts';
-import { uid } from '../../../shared/types.ts';
+import { EFFECT_TARGETS, uid } from '../../../shared/types.ts';
 import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
 import { type HeadKind } from '../../../shared/profiles.ts';
 import { TextField } from './inputs.tsx';
@@ -92,20 +92,48 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove }: {
   onEdit: (fn: (e: Effect) => void) => void;
   onRemove: () => void;
 }) {
-  const targets: EffectTarget[] = ['dimmer'];
-  if (kinds.has('rgb') || kinds.has('derby') || kinds.has('mover')) targets.push('hue', 'strobe');
-  if (kinds.has('derby')) targets.push('white');
-  if (canAim) targets.push('pan', 'tilt');
-  // only offer to ramp a parameter the rig can actually take
-  for (const k of BEAM_PARAMS) if (beamCaps[k]) targets.push(k);
+  // Which targets the rig in this group can actually take.
+  const capable: EffectTarget[] = ['dimmer'];
+  if (kinds.has('rgb') || kinds.has('derby') || kinds.has('mover')) capable.push('hue', 'strobe');
+  if (kinds.has('derby')) capable.push('white');
+  if (canAim) capable.push('pan', 'tilt');
+  for (const k of BEAM_PARAMS) if (beamCaps[k]) capable.push(k);
+  // inform, don't forbid: every target stays assignable (an effect is
+  // interchangeable across groups), the ones this group can't take are just
+  // grouped apart and the current target is flagged if it lands there.
+  const capableSet = new Set(capable);
+  const others = [...EFFECT_TARGETS].filter((t) => !capableSet.has(t));
+  const targetInactive = !capableSet.has(fx.target);
 
   return (
-    <div className="fxrow">
+    <div className="fxrow" style={fx.bypass ? { opacity: 0.5 } : undefined}>
+      <button
+        className={`btn small ${fx.bypass ? 'on' : 'ghost'}`}
+        style={{ width: 30 }}
+        title={fx.bypass ? 'parked — click to enable' : 'park this effect (keeps it, stops its output)'}
+        onClick={() => onEdit((x) => (x.bypass = !x.bypass))}
+      >
+        {fx.bypass ? '▷' : '❙❙'}
+      </button>
       <select className="sel" value={fx.target} onChange={(e) => onEdit((x) => (x.target = e.target.value as EffectTarget))}>
-        {targets.map((t) => (
-          <option key={t} value={t}>{t}</option>
-        ))}
+        <optgroup label="drives this group">
+          {capable.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </optgroup>
+        {others.length > 0 && (
+          <optgroup label="no fixtures here (still assignable)">
+            {others.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </optgroup>
+        )}
       </select>
+      {targetInactive && (
+        <span className="label" title="nothing in this group takes this parameter — it does nothing here until the effect is retargeted or dropped on a group that has it" style={{ color: 'var(--amber, #f0a63e)' }}>
+          ⚠
+        </span>
+      )}
       <select className="sel" value={fx.wave} onChange={(e) => onEdit((x) => (x.wave = e.target.value as Wave))}>
         {WAVES.map((w) => (
           <option key={w} value={w}>{w}</option>
@@ -126,6 +154,8 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove }: {
         <Fader label="width" width={90} value={fx.width} def={0.5} onChange={(v) => onEdit((x) => (x.width = v))} fmt={pct} variant="dim" />
       )}
       <Fader label="phase" width={80} value={fx.phase} def={0} onChange={(v) => onEdit((x) => (x.phase = v))} fmt={pct} variant="dim" />
+      {/* wet/dry: how much of the effect lands. 100% is full effect. */}
+      <Fader label="mix" width={80} value={fx.mix} def={1} onChange={(v) => onEdit((x) => (x.mix = v))} fmt={pct} variant="dim" />
       <button className="btn small ghost" onClick={onRemove}>✕</button>
     </div>
   );
