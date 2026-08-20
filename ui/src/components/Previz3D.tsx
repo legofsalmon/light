@@ -88,8 +88,14 @@ function fixtureSignature(p: Project): string {
   return JSON.stringify([
     p.fixtures.map((f) => [f.id, f.profileId, f.pos, f.rotY, f.rotX ?? 0, f.rotZ ?? 0]),
     // imported profiles can change shape (e.g. pixel-head upgrades) without
-    // any fixture field changing
-    Object.entries(p.profiles ?? {}).map(([id, cp]) => [id, cp.heads.length, cp.beamDeg]),
+    // any fixture field changing — and since B1's layout editor, the OFFSETS
+    // can change without the head count changing, so they sign too
+    Object.entries(p.profiles ?? {}).map(([id, cp]) => [
+      id,
+      cp.heads.length,
+      cp.beamDeg,
+      cp.heads.map((h) => [h.offset, h.offsetY ?? 0]),
+    ]),
   ]);
 }
 

@@ -56,8 +56,14 @@ pub fn drain_ws(rx: Res<WsReceiver>, mut live: ResMut<Live>) {
                 prof_ids.sort_by(|a, b| a.0.cmp(b.0));
                 for (id, cp) in prof_ids {
                     // head count alone missed a re-imported profile whose beam
-                    // angle changed — the cones would keep the old spread
-                    sig.push_str(&format!("{}#{}#{:.2};", id, cp.heads.len(), cp.beam_deg));
+                    // angle changed — the cones would keep the old spread; and
+                    // since B1's layout editor, the OFFSETS can change without
+                    // the count changing, so they sign too
+                    sig.push_str(&format!("{}#{}#{:.2}", id, cp.heads.len(), cp.beam_deg));
+                    for h in &cp.heads {
+                        sig.push_str(&format!("|{:.3},{:.3}", h.offset, h.offset_y));
+                    }
+                    sig.push(';');
                 }
                 if sig != live.fixture_sig {
                     live.fixture_sig = sig;
