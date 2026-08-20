@@ -26,7 +26,8 @@ export function waveValue(e: Effect, phase: number, headIdx: number): number {
     case 'chase':
       return p < Math.max(0.02, e.width) ? 1 : 0;
     case 'random':
-      return hash01(Math.floor(phase), headIdx * 7919 + 13);
+      // clamped for the same wrap-vs-saturate reason as modWave
+      return hash01(clamp(Math.floor(phase), -2147483648, 2147483647), headIdx * 7919 + 13);
     default:
       return 0;
   }
@@ -51,7 +52,9 @@ export function modWave(wave: Wave, phase: number, seedIdx: number): number {
     case 'chase':
       return p < 0.5 ? 1 : 0;
     case 'random':
-      return hash01(Math.floor(phase), seedIdx * 7919 + 13);
+      // clamp before the 32-bit hash: JS ToInt32 wraps where Rust's cast
+      // saturates, so beyond ±2^31 the engines would hash different keys
+      return hash01(clamp(Math.floor(phase), -2147483648, 2147483647), seedIdx * 7919 + 13);
     default:
       return 0;
   }

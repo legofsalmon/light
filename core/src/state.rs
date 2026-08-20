@@ -615,7 +615,7 @@ impl EngineState {
             let continuous = matches!(
                 action,
                 MidiAction::LayerMaster { .. } | MidiAction::Grand | MidiAction::Speed | MidiAction::Haze
-            );
+             | MidiAction::Control { .. });
             if kind == MidiType::Note && continuous && !is_note_on {
                 continue;
             }
@@ -910,6 +910,11 @@ impl EngineState {
     /// renderer's gen-gated rebuild, so every project change sweeps exactly
     /// once, in both engines, with the same discipline as the geometry cache.
     pub fn sweep_soft(&mut self) {
+        // deleted controls must not stream stale live positions in snapshots
+        if !self.control_live.is_empty() {
+            let controls = &self.project.controls;
+            self.control_live.retain(|id, _| controls.iter().any(|c| c.id == *id));
+        }
         if self.soft.is_empty() {
             return;
         }
@@ -1158,9 +1163,11 @@ impl EngineState {
                 if self.soft_commit() {
                     out.project_changed = true;
                 }
+                self.control_live.clear(); // the fan-out is baked; position spent
             }
             Command::SoftClear => {
                 self.soft.clear();
+                self.control_live.clear(); // a discarded fan-out has no live position
             }
             Command::SetControl { control_id, value } => {
                 self.set_control(&control_id, value);

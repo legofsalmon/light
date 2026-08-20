@@ -874,13 +874,15 @@ export function sanitizeProject(p: Project): Project | null {
                     (l): l is ControlLink =>
                       !!l && typeof l === 'object' && typeof l.lookId === 'string' &&
                       typeof l.partId === 'string' &&
-                      (l.effectId === undefined || typeof l.effectId === 'string') &&
                       SOFT_FIELDS.has(l.field),
                   )
                   .map((l) => ({
                     lookId: l.lookId,
                     partId: l.partId,
-                    ...(l.effectId !== undefined ? { effectId: l.effectId } : {}),
+                    // null/non-string effectId ≡ absent (a part-level link),
+                    // matching Rust's as_str() — the serde convention 3236809
+                    // established for the soft command applies to stored data
+                    ...(typeof l.effectId === 'string' ? { effectId: l.effectId } : {}),
                     field: l.field,
                     min: Number.isFinite(l.min) ? l.min : 0,
                     max: Number.isFinite(l.max) ? l.max : 1,
@@ -909,13 +911,17 @@ export function sanitizeProject(p: Project): Project | null {
                     (b): b is ModBinding =>
                       !!b && typeof b === 'object' && typeof b.lookId === 'string' &&
                       typeof b.partId === 'string' &&
-                      (b.effectId === undefined || typeof b.effectId === 'string') &&
+                      // rate is NOT modulatable: a per-tick rate change turns
+                      // the P4 phase-continuity map into a tick-schedule-
+                      // dependent integrator (ride rate by hand or a Control)
+                      b.field !== 'rate' &&
                       SOFT_FIELDS.has(b.field),
                   )
                   .map((b) => ({
                     lookId: b.lookId,
                     partId: b.partId,
-                    ...(b.effectId !== undefined ? { effectId: b.effectId } : {}),
+                    // null/non-string effectId ≡ absent, matching Rust
+                    ...(typeof b.effectId === 'string' ? { effectId: b.effectId } : {}),
                     field: b.field,
                     depth: Number.isFinite(b.depth) ? clamp(b.depth, -1, 1) : 0,
                   }))

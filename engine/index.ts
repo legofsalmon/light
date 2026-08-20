@@ -506,9 +506,11 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
     }
     case 'softCommit':
       state.softCommit(); // onChange fires inside when anything was written
+      state.controlLive.clear(); // the fan-out is baked; the position is spent
       break;
     case 'softClear':
       state.soft.clear();
+      state.controlLive.clear(); // a discarded fan-out has no live position
       break;
     case 'setControl':
       if (typeof cmd.controlId === 'string' && typeof cmd.value === 'number') {

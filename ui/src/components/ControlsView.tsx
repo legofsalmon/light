@@ -17,6 +17,39 @@ const PART_FIELDS: SoftField[] = [
 ];
 const EFFECT_FIELDS: SoftField[] = ['rate', 'size', 'spread', 'width', 'phase', 'mix'];
 
+/** Float editor that commits on blur/Enter — the BeatsInput discipline: a
+ *  per-keystroke commit makes the field unclearable (Number('') is 0), eats a
+ *  leading minus, and floods a project write per keypress. */
+function NumInput({ value, title, onCommit }: { value: number; title?: string; onCommit: (v: number) => void }) {
+  const [draft, setDraft] = React.useState(String(value));
+  const ref = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => {
+    if (document.activeElement !== ref.current) setDraft(String(value));
+  }, [value]);
+  const commit = () => {
+    const v = Number(draft);
+    const clean = draft.trim() !== '' && Number.isFinite(v) ? v : value;
+    setDraft(String(clean));
+    if (clean !== value) onCommit(clean);
+  };
+  return (
+    <input
+      ref={ref}
+      className="num"
+      type="number"
+      step={0.05}
+      style={{ width: 64 }}
+      title={title}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+    />
+  );
+}
+
 function LinkRow({ link, onEdit, onRemove }: {
   link: ControlLink;
   onEdit: (fn: (l: ControlLink) => void) => void;
@@ -25,22 +58,10 @@ function LinkRow({ link, onEdit, onRemove }: {
   const project = useStore((s) => s.project)!;
   const look = Object.hasOwn(project.looks, link.lookId) ? project.looks[link.lookId] : undefined;
   const part = look?.parts.find((pt) => pt.id === link.partId);
-  const dangling = !part || (link.effectId !== undefined && !part.effects.some((e) => e.id === link.effectId));
-
-  const num = (v: number, set: (x: number) => void, title: string) => (
-    <input
-      className="num"
-      type="number"
-      step={0.05}
-      style={{ width: 64 }}
-      title={title}
-      value={v}
-      onChange={(e) => {
-        const x = Number(e.target.value);
-        if (Number.isFinite(x)) set(x);
-      }}
-    />
-  );
+  // [K] a look converted to a cue list keeps its parts but never renders them,
+  // so a link onto it fans onto nothing — dangling in every way that matters
+  const dangling = !part || !!look?.steps?.length ||
+    (link.effectId !== undefined && !part.effects.some((e) => e.id === link.effectId));
 
   return (
     <div className="row" style={{ marginBottom: 4, paddingLeft: 16 }}>
@@ -60,6 +81,9 @@ function LinkRow({ link, onEdit, onRemove }: {
         })}
       >
         {!look && <option value={link.lookId}>(missing look)</option>}
+        {look && !!look.steps?.length && (
+          <option value={link.lookId}>{look.name} (cue list — fans nothing)</option>
+        )}
         {Object.values(project.looks)
           .filter((l) => !l.steps?.length)
           .sort((a, b) => a.name.localeCompare(b.name))
@@ -113,9 +137,9 @@ function LinkRow({ link, onEdit, onRemove }: {
         ))}
       </select>
       <span className="label">min</span>
-      {num(link.min, (x) => onEdit((l) => (l.min = x)), 'value at fader 0 — set min above max to invert')}
+      <NumInput value={link.min} title="value at fader 0 — set min above max to invert" onCommit={(x) => onEdit((l) => (l.min = x))} />
       <span className="label">max</span>
-      {num(link.max, (x) => onEdit((l) => (l.max = x)), 'value at fader 1')}
+      <NumInput value={link.max} title="value at fader 1" onCommit={(x) => onEdit((l) => (l.max = x))} />
       <button className="btn small ghost" onClick={onRemove}>✕</button>
     </div>
   );
@@ -128,6 +152,10 @@ const MOD_RATES: { v: number; label: string }[] = [
   { v: 0.5, label: '1/2' }, { v: 0.25, label: '1/4' },
 ];
 
+/** rate is deliberately absent: modulating it per tick would turn the P4
+ *  phase-continuity map into a tick-schedule-dependent integrator. */
+const MOD_EFFECT_FIELDS: SoftField[] = ['size', 'spread', 'width', 'phase', 'mix'];
+
 function BindingRow({ b, onEdit, onRemove }: {
   b: ModBinding;
   onEdit: (fn: (x: ModBinding) => void) => void;
@@ -136,7 +164,8 @@ function BindingRow({ b, onEdit, onRemove }: {
   const project = useStore((s) => s.project)!;
   const look = Object.hasOwn(project.looks, b.lookId) ? project.looks[b.lookId] : undefined;
   const part = look?.parts.find((pt) => pt.id === b.partId);
-  const dangling = !part || (b.effectId !== undefined && !part.effects.some((e) => e.id === b.effectId));
+  const dangling = !part || !!look?.steps?.length ||
+    (b.effectId !== undefined && !part.effects.some((e) => e.id === b.effectId));
   return (
     <div className="row" style={{ marginBottom: 4, paddingLeft: 16 }}>
       {dangling && (
@@ -155,6 +184,9 @@ function BindingRow({ b, onEdit, onRemove }: {
         })}
       >
         {!look && <option value={b.lookId}>(missing look)</option>}
+        {look && !!look.steps?.length && (
+          <option value={b.lookId}>{look.name} (cue list — fans nothing)</option>
+        )}
         {Object.values(project.looks)
           .filter((l) => !l.steps?.length)
           .sort((a2, b2) => a2.name.localeCompare(b2.name))
@@ -198,7 +230,7 @@ function BindingRow({ b, onEdit, onRemove }: {
         </optgroup>
         {(part?.effects ?? []).map((e, i) => (
           <optgroup key={e.id} label={`effect ${i + 1} · ${e.target} ${e.wave}`}>
-            {EFFECT_FIELDS.map((f) => (
+            {MOD_EFFECT_FIELDS.map((f) => (
               <option key={f} value={`fx:${e.id}:${f}`}>{f}</option>
             ))}
           </optgroup>
@@ -326,10 +358,12 @@ export function ControlsView(): React.ReactElement {
           <div className="row" style={{ marginBottom: 4 }}>
             <button
               className={`btn small ${m.on ? 'on' : 'ghost'}`}
-              title={m.on ? 'running — click to freeze' : 'frozen'}
+              title={m.on
+                ? 'running — click to stop (bound parameters return to their base value)'
+                : 'stopped — parameters sit at their base'}
               onClick={() => editMod(m.id, (x) => (x.on = !x.on))}
             >
-              {m.on ? '▶' : '❙❙'}
+              {m.on ? '▶' : '◼'}
             </button>
             <TextField
               className="text"

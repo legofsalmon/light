@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import WebSocket from 'ws';
 import { defaultProject } from '../defaultProject.ts';
-import type { Command, Effect, FxPreset, Project, Snapshot } from '../../shared/types.ts';
+import type { Command, ControlLink, Effect, FxPreset, Project, Snapshot } from '../../shared/types.ts';
 
 const ROOT = process.cwd();
 const TMP = path.join(ROOT, '.parity-tmp');
@@ -1145,11 +1145,58 @@ async function main(): Promise<void> {
     compareDmx('controls: discard parity', node, rust);
     check('controls: discard restores stored bytes', frameOf(node) === stored, 'discard did not restore');
 
+    // review regressions:
+    // (a) effectId:null in a STORED link ≡ absent (part-level) on BOTH engines
+    //     — TS sanitize used to drop the whole link while Rust kept it;
+    // (b) a NOTE-mapped control ignores the release on both — the Rust
+    //     continuous gate used to slam the fan to 0 on note-off;
+    // (c) a 'rate' modulator binding is dropped by both sanitizers.
+    {
+      const p = structuredClone(await currentProject(node));
+      p.controls = [{
+        id: 'ctl-null', name: 'NullFx', value: 0,
+        links: [
+          { lookId: 'wash-rainbow', partId, effectId: null, field: 'sat', min: 1, max: 0.2 } as unknown as ControlLink,
+        ],
+      }];
+      p.midi = [...p.midi.filter((m) => m.id !== 'm-ctl'),
+        { id: 'm-note', type: 'note', channel: 0, number: 60, action: { kind: 'control', controlId: 'ctl-null' } }];
+      p.modulators = [{ id: 'lfo-r', name: 'R', wave: 'sine', rate: 4, phase: 0, on: true,
+        bindings: [{ lookId: 'wash-rainbow', partId, effectId, field: 'rate', depth: 0.5 }] }];
+      both({ type: 'updateProject', project: p });
+      await sleep(400);
+      const nCtl = (await currentProject(nodeObs)).controls?.[0];
+      const rCtl = (await currentProject(rustObs)).controls?.[0];
+      check(
+        'controls-regr: effectId null loads as a part-level link on BOTH',
+        nCtl?.links.length === 1 && rCtl?.links.length === 1 &&
+          nCtl?.links[0].effectId === undefined && rCtl?.links[0].effectId === undefined,
+        `node=${JSON.stringify(nCtl?.links)} rust=${JSON.stringify(rCtl?.links)}`,
+      );
+      check(
+        'controls-regr: a rate modulator binding is dropped by both sanitizers',
+        (await currentProject(nodeObs)).modulators?.[0]?.bindings.length === 0 &&
+          (await currentProject(rustObs)).modulators?.[0]?.bindings.length === 0,
+      );
+      // note-on drives the fan; note-off must NOT slam it
+      both({ type: 'midi', status: 0x90, d1: 60, d2: 100 });
+      await sleep(400);
+      compareDmx('controls-regr: note-on fan parity', node, rust);
+      const held = frameOf(node);
+      both({ type: 'midi', status: 0x80, d1: 60, d2: 0 });
+      await sleep(400);
+      compareDmx('controls-regr: note-off parity', node, rust);
+      check('controls-regr: the release does not slam the control', frameOf(node) === held, 'note-off moved the fan');
+      both({ type: 'softClear' });
+      await sleep(300);
+    }
+
     // clean up the control + mapping
     {
       const p = structuredClone(await currentProject(node));
       delete p.controls;
-      p.midi = p.midi.filter((m) => m.id !== 'm-ctl');
+      delete p.modulators;
+      p.midi = p.midi.filter((m) => m.id !== 'm-ctl' && m.id !== 'm-note');
       both({ type: 'updateProject', project: p });
       await sleep(300);
     }

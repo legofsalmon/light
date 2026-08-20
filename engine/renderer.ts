@@ -289,10 +289,12 @@ export class Renderer {
           // per-field. Copies are forced only for parts actually bound.
           const modBinds = modValues ? this.modIndex.get(JSON.stringify([look.id, part.id])) : undefined;
           if (modBinds && modValues) {
-            if (effParams === part.params) {
-              effParams = { ...part.params, color: part.params.color ? { ...part.params.color } : undefined };
-            }
-            if (effEffects === part.effects) effEffects = part.effects.map((e) => ({ ...e }));
+            // copy EVERY entry unconditionally: after a soft-effect patch,
+            // effEffects is a new ARRAY whose un-ridden entries are still the
+            // STORED Effect objects — an identity guard on the array missed
+            // that and applySoftEffect corrupted the show in place
+            effParams = { ...effParams, color: effParams.color ? { ...effParams.color } : undefined };
+            effEffects = effEffects.map((e) => ({ ...e }));
             for (const b of modBinds) {
               const w = modValues[b.modIdx];
               const offset = (w - 0.5) * b.depth * (b.field === 'hue' ? 360 : 1);

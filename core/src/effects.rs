@@ -29,7 +29,7 @@ pub fn wave_value(e: &Effect, phase: f64, head_idx: usize) -> f64 {
                 0.0
             }
         }
-        Wave::Random => hash01(phase.floor() as i32, head_idx as i32 * 7919 + 13),
+        Wave::Random => hash01(phase.floor().clamp(-2147483648.0, 2147483647.0) as i32, head_idx as i32 * 7919 + 13),
     }
 }
 
@@ -57,7 +57,7 @@ pub fn mod_wave(wave: Wave, phase: f64, seed_idx: usize) -> f64 {
                 0.0
             }
         }
-        Wave::Random => hash01(phase.floor() as i32, seed_idx as i32 * 7919 + 13),
+        Wave::Random => hash01(phase.floor().clamp(-2147483648.0, 2147483647.0) as i32, seed_idx as i32 * 7919 + 13),
     }
 }
 

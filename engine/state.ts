@@ -473,6 +473,12 @@ export class EngineState {
    *  renderer's gen-gated rebuild, so every project change sweeps exactly
    *  once, in both engines, with the same discipline as the geometry cache. */
   sweepSoft(): void {
+    // deleted controls must not stream stale live positions in every snapshot
+    if (this.controlLive.size > 0) {
+      for (const id of this.controlLive.keys()) {
+        if (!this.project.controls?.some((c) => c.id === id)) this.controlLive.delete(id);
+      }
+    }
     if (this.soft.size === 0) return;
     for (const [key, patch] of this.soft) {
       const { lookId, partId } = patch;

@@ -516,6 +516,12 @@ fn de_modulators<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Modulator
                         .filter_map(|b| {
                             let bo = b.as_object()?;
                             let field = serde_json::from_value::<SoftField>(bo.get("field")?.clone()).ok()?;
+                            // rate is NOT modulatable: a per-tick rate change
+                            // turns the P4 phase-continuity map into a tick-
+                            // schedule-dependent integrator
+                            if field == SoftField::Rate {
+                                return None;
+                            }
                             Some(ModBinding {
                                 look_id: bo.get("lookId")?.as_str()?.to_string(),
                                 part_id: bo.get("partId")?.as_str()?.to_string(),
