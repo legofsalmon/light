@@ -168,7 +168,22 @@ Agreed build order (each step shippable, parity-green):
    inform-not-forbid target optgroups on the effect row (`9f5468e`), and the
    copy-on-apply pool: ☆ save, "apply from pool" copy-in, rename/delete manager
    (`c81ca81`). Browser-verified against a scratch outputs-off engine.
-5. B2 geometry builder (HeadCtx at the seam, zero behaviour change)
+5. B2 geometry builder (HeadCtx at the seam, zero behaviour change) — DONE.
+   Four commits: (a) groundwork — fixture pos repaired per-COMPONENT in TS
+   sanitize, tolerant de_vec3/de_rot_y/de_opt_finite in Rust (`fdb7682`);
+   (b) the twins shared/geometry.ts + core/src/geometry.rs — canonical
+   world = pos + Ry·Rx·Rz·(offset,0,0), quantized 1e-6 m via floor(v·1e6+0.5)
+   in BOTH languages, gen-keyed cache per renderer (the first), one new
+   applyEffects arg `g: &HeadGeom` (unused until A1; goldens gate), 17-head
+   Python-generated golden vectors asserted f64-exact in both suites,
+   rebuild cost 1.4–38 µs in docs/benchmarks.md (`701abda`); (c) Previz2D
+   head dots/bar line/rotate gesture moved to the canonical yaw (`9ed68b3`);
+   (d) adversarial-review fixes — serde_json float_roundtrip (1-ulp V8 parse
+   divergence, bit-pinned test) and the structure layer (truss rect, 
+   hitsPropFootprint, offsetOnParent/posFromOffset) completing the canonical
+   migration, with sign-discriminating 30° tests (`2bd0b99`).
+   NOTE for A1: HeadGeom carries {x,y,z,along,row,col}; row/col are single-row
+   (0, headIdx) until B1 parses real pixel grids.
 6. A1 spatial fan (distribute x/y/z/radial/shuffle, fold mirror/centre, parts,
    segments, seed; value-sign mirror for pan)
 7. B1 GDTF geometry parser + per-profile layout editor + offsetY
