@@ -231,7 +231,19 @@ Agreed build order (each step shippable, parity-green):
    deterministic ids make regenerate idempotent. Browser-verified: dialog
    plan correct, engine holds tagged groups, truss ordered along the bar.
    Halves/pairs/odd-even linked groups stay deferred until wanted.
-9. P1 soft overrides (SoftAddr layer, engine-side commit, Store/Discard)
+9. P1 soft overrides (SoftAddr layer, engine-side commit, Store/Discard) —
+   DONE (`2b12857` engine, `8528bbf` UI). SoftField vocabulary (16 part fields
+   incl. hue/sat + 6 effect knobs) — the binding surface P3/P2 plug into.
+   Commands: soft (per-value, validated+clamped at the door, storage-shaped
+   address (look, part[, effect], field)), softCommit (one gen bump, shared
+   field-routing twins), softClear. Resolution stored→soft folded into an
+   effective view before the applyEffects seam (renderer keys by the RESOLVED
+   look, so cue steps ride correctly); P4 rate-corr reads effective effects so
+   soft rate rides stay continuous. Cleared on ALL STOP + project switch;
+   dangling addresses sweep in the gen-gated block. Snapshot carries live
+   rides. 12 pinned parity assertions. UI: RIDE toggle, dual-state faders,
+   amber RIDING banner with Store/Discard, browser-verified. APC-knob focus
+   follows in P3.
 10. P3 Named Controls (the macro replacement — typed faders, per-link ranges)
 11. P2 modulators (LFO slice, then ADSR slice)
 12. B4 pixel-map canvas stays deferred (projection, not canvas)
