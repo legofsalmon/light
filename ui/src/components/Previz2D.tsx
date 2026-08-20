@@ -329,7 +329,10 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             const d = s.d * m.scale;
             ctx.save();
             ctx.translate(px, py);
-            ctx.rotate(pr.rotY ?? 0);
+            // canonical yaw: local +X → world (cos θ, 0, −sin θ); plan canvas
+            // y is +z, so the screen rotation is −θ — same frame as the head
+            // fan, the 3D previz, and hitsPropFootprint
+            ctx.rotate(-(pr.rotY ?? 0));
             const selected = propSel.includes(pr.id);
             ctx.fillStyle = selected
               ? 'rgba(89,194,232,0.26)'
@@ -354,7 +357,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
           const rad = 0.24 * m.scale;
           // shoulders + head silhouette
           ctx.beginPath();
-          ctx.ellipse(px, py, rad, rad * 0.62, pr.rotY ?? 0, 0, Math.PI * 2);
+          ctx.ellipse(px, py, rad, rad * 0.62, -(pr.rotY ?? 0), 0, Math.PI * 2);
           ctx.fillStyle = 'rgba(214,188,150,0.28)';
           ctx.fill();
           ctx.strokeStyle = 'rgba(214,188,150,0.75)';

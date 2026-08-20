@@ -117,9 +117,12 @@ export function hitsPropFootprint(
 ): boolean {
   const dx = click.x - prop.pos.x;
   const dz = click.z - prop.pos.z;
+  // canonical yaw (local +X → (cos θ, 0, −sin θ)): rotate the click into the
+  // prop's frame with the inverse rotation, matching how the plan view now
+  // paints the rectangle
   const ry = prop.rotY ?? 0;
-  const c = Math.cos(-ry);
-  const s = Math.sin(-ry);
+  const c = Math.cos(ry);
+  const s = Math.sin(ry);
   const lx = dx * c - dz * s;
   const lz = dx * s + dz * c;
   return Math.abs(lx) <= prop.size.w / 2 + margin && Math.abs(lz) <= prop.size.d / 2 + margin;

@@ -519,6 +519,33 @@ fn repair_defaults_match_the_node_sanitizer() {
     assert_eq!(l.fade, 0.5);
 }
 
+/// JSON floats must parse to the BIT-IDENTICAL f64 both engines see. serde_json
+/// without the float_roundtrip feature is best-effort and lands 1 ulp off V8's
+/// correctly-rounded JSON.parse on ~10 % of 17-digit decimals — the shortest-
+/// round-trip forms JSON.stringify writes into project files. Geometry consumes
+/// fixture pos/rotY, so a 1-ulp input skew can bucket a quantized world
+/// coordinate differently in the two engines. The expected bits are the
+/// correctly-rounded values (verified against Python and V8).
+#[test]
+fn json_floats_parse_bit_identical_to_v8() {
+    let cases: [(&str, u64); 3] = [
+        ("10.000000499999999", 0x4024000010c6f7a0), // straddles a q() boundary
+        ("123.45678901234567", 0x405edd3c07fb4c98),
+        ("1.7976931348623157", 0x3ffcc359e067a348),
+    ];
+    for (s, bits) in cases {
+        let v: f64 = serde_json::from_str(s).expect("parses");
+        assert_eq!(v.to_bits(), bits, "direct parse of {s}");
+    }
+    // and through the actual fixture door (de_vec3 goes via Value::as_f64)
+    let f: light_core::types::Fixture = serde_json::from_str(
+        r#"{"id":"f","name":"F","profileId":"p","universeId":"u","address":1,"pos":{"x":10.000000499999999,"y":2,"z":0},"rotY":123.45678901234567}"#,
+    )
+    .unwrap();
+    assert_eq!(f.pos.x.to_bits(), 0x4024000010c6f7a0, "pos through de_vec3");
+    assert_eq!(f.rot_y.to_bits(), 0x405edd3c07fb4c98, "rotY through de_rot_y");
+}
+
 /// A repaired submission has to be echoed back to whoever sent it.
 ///
 /// The echo is withheld from the sender on the grounds that it already holds

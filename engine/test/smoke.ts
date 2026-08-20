@@ -433,6 +433,43 @@ await new Promise<void>((resolve) => {
     !hitsPropFootprint({ x: 3, z: 0 }, turned),
     'rotation ignored — the old circle could not tell these apart',
   );
+  // SIGN-discriminating case — every test above is 90° or axis-aligned, which
+  // is exactly how a mirrored (+sin) frame passed unnoticed for so long. Under
+  // the canonical yaw (local +X → (cos θ, 0, −sin θ)) a bar at +30° has its +X
+  // end at NEGATIVE z; the mirrored frame puts it at positive z.
+  const tilted = { pos: { x: 0, z: 0 }, rotY: Math.PI / 6, size: { w: 7, d: 0.3 } };
+  check(
+    'hit-test: a bar at +30° is hit on the canonical (−z) side',
+    hitsPropFootprint({ x: 1.732, z: -1.0 }, tilted),
+    'the +X end of a +30° bar sits at −z under the canonical convention',
+  );
+  check(
+    'hit-test: a bar at +30° is NOT hit on the mirrored (+z) side',
+    !hitsPropFootprint({ x: 1.732, z: 1.0 }, tilted),
+    'the old +sin frame would have hit here',
+  );
+}
+
+// --- truss offsets: canonical frame + round-trip -----------------------------
+// offsetOnParent/posFromOffset must (a) be exact inverses, and (b) agree with
+// the canonical yaw the whole plan view now uses — a fixture at positive
+// `along` on a +30° truss sits at NEGATIVE z, matching the drawn rectangle,
+// the head fans, and the 3D previz.
+{
+  const { offsetOnParent, posFromOffset } = await import('../../shared/types.ts');
+  const truss = { pos: { x: 0, z: 0 }, rotY: Math.PI / 6, y: 3 };
+  const p = posFromOffset({ along: 2, across: 0, drop: 0 }, truss);
+  check(
+    'truss offsets: +along on a +30° truss lands at −z (canonical)',
+    Math.abs(p.x - 1.7320508075688774) < 1e-12 && Math.abs(p.z - -1.0) < 1e-12,
+    `got (${p.x}, ${p.z})`,
+  );
+  const o = offsetOnParent({ pos: { x: p.x, y: 3.4, z: p.z } }, truss);
+  check(
+    'truss offsets: round-trip is the identity',
+    Math.abs(o.along - 2) < 1e-12 && Math.abs(o.across) < 1e-12 && Math.abs(o.drop - 0.4) < 1e-12,
+    `got along=${o.along} across=${o.across} drop=${o.drop}`,
+  );
 }
 
 // --- geometry: the cross-language golden contract ---------------------------

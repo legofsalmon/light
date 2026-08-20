@@ -12,7 +12,12 @@ engine = ["dep:tungstenite", "dep:midir", "dep:dirs", "dep:getrandom", "dep:rust
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# float_roundtrip: serde_json's default float parse is best-effort and lands
+# 1 ulp off V8's correctly-rounded JSON.parse on ~10 % of 17-digit decimals —
+# the exact shortest-round-trip forms JSON.stringify writes into project files.
+# Geometry consumes fixture pos/rotY now, so both engines must parse the same
+# bytes to the same f64 or world positions diverge at quantization boundaries.
+serde_json = { version = "1", features = ["float_roundtrip"] }
 tungstenite = { version = "0.24", optional = true }
 midir = { version = "0.10", optional = true }
 dirs = { version = "5", optional = true }

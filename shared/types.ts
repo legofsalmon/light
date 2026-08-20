@@ -49,14 +49,18 @@ export type Fixture = {
 
 /** Where a fixture sits on its parent: along the bar, across it, and above or
  *  below it — all in metres, in the parent's own rotated frame. Derived, never
- *  stored. */
+ *  stored.
+ *
+ *  Canonical yaw convention (shared/geometry.ts, both 3D previzes, mvr.rs):
+ *  the parent's local +X ("along") points at world (cos θ, 0, −sin θ). These
+ *  two functions are exact inverses of each other under it. */
 export function offsetOnParent(
   f: { pos: Vec3 },
   parent: { pos: { x: number; z: number }; rotY?: number; y?: number },
 ): { along: number; across: number; drop: number } {
   const dx = f.pos.x - parent.pos.x;
   const dz = f.pos.z - parent.pos.z;
-  const a = -(parent.rotY ?? 0);
+  const a = parent.rotY ?? 0;
   return {
     along: dx * Math.cos(a) - dz * Math.sin(a),
     across: dx * Math.sin(a) + dz * Math.cos(a),
@@ -69,7 +73,7 @@ export function posFromOffset(
   o: { along: number; across: number; drop: number },
   parent: { pos: { x: number; z: number }; rotY?: number; y?: number },
 ): Vec3 {
-  const a = parent.rotY ?? 0;
+  const a = -(parent.rotY ?? 0);
   return {
     x: parent.pos.x + o.along * Math.cos(a) - o.across * Math.sin(a),
     z: parent.pos.z + o.along * Math.sin(a) + o.across * Math.cos(a),
