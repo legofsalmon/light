@@ -9,6 +9,14 @@ export type HeadDef = {
   kind: HeadKind;
   /** metres along the fixture's local X axis (for multi-head bars) */
   offset: number;
+  /** metres along the fixture's local Y axis (up) — pixel layouts are 2D.
+   *  Absent on every built-in (they are flat bars); imported profiles carry
+   *  real values once B1 parses or the layout editor writes them. */
+  offsetY?: number;
+  /** grid coordinates within the fixture; when every head of a profile is
+   *  (0, 0) the geometry builder falls back to col = head index, one row */
+  row?: number;
+  col?: number;
 };
 
 /** Fully-resolved per-head parameters after the layer merge — profile input.

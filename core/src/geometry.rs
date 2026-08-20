@@ -21,17 +21,31 @@ pub struct HeadGeom {
     pub z: f64,
     /// the head's offset along the fixture's local X axis, metres
     pub along: f64,
-    /// grid coordinates. Every profile today is a single row along local X, so
-    /// row is 0 and col is the head index; B1 (GDTF geometry parsing) makes
-    /// these honest for real pixel grids.
+    /// grid coordinates within the fixture (B1: parsed from GDTF geometry or a
+    /// parametric layout; pre-B1 profiles fall back to a single row with
+    /// col = head index)
     pub row: usize,
     pub col: usize,
+    /// row/col normalized 0..1 over THIS fixture's grid (inclusive; 0 when the
+    /// axis is a single line) — the Row/Col distribute bases read these, so
+    /// every fixture of a type runs the same pixel wave by construction
+    pub row_t: f64,
+    pub col_t: f64,
 }
 
 /// Geometry for a head the builder could not place (unknown profile — the
 /// renderer's heads-map skip already excludes these from output). Matches the
 /// repaired-default fixture position so a defensive fallback is never NaN.
-pub const NO_GEOM: HeadGeom = HeadGeom { x: 0.0, y: 2.0, z: 0.0, along: 0.0, row: 0, col: 0 };
+pub const NO_GEOM: HeadGeom = HeadGeom {
+    x: 0.0,
+    y: 2.0,
+    z: 0.0,
+    along: 0.0,
+    row: 0,
+    col: 0,
+    row_t: 0.0,
+    col_t: 0.0,
+};
 
 /// floor(v·1e6 + 0.5) — written identically in both languages because
 /// Math.round and Rust's f64::round disagree on negative halves. Non-finite
@@ -59,39 +73,61 @@ fn q(v: f64) -> f64 {
 pub fn build_geometry(p: &Project) -> HashMap<(String, usize), HeadGeom> {
     let mut out = HashMap::new();
     for f in &p.fixtures {
-        // mirror Prof::resolve in renderer.rs: builtin first, then compiled
-        let offsets: Vec<f64> = if let Some(bp) = profile_of(&f.profile_id) {
-            bp.heads.iter().map(|h| h.offset).collect()
+        // mirror Prof::resolve in renderer.rs: builtin first, then compiled.
+        // (offset, offset_y, row, col) per head — built-ins carry no grid.
+        let heads: Vec<(f64, f64, usize, usize)> = if let Some(bp) = profile_of(&f.profile_id) {
+            bp.heads.iter().map(|h| (h.offset, 0.0, 0, 0)).collect()
         } else if let Some(cp) = p.profiles.get(&f.profile_id) {
-            cp.heads.iter().map(|h| h.offset).collect()
+            cp.heads.iter().map(|h| (h.offset, h.offset_y, h.row, h.col)).collect()
         } else {
             continue;
         };
+        // Pre-B1 profiles (and every built-in) carry no grid: when EVERY head
+        // is (row 0, col 0), fall back to a single row with col = head index —
+        // the exact layout those profiles always had.
+        let flat = heads.iter().all(|&(_, _, r, c)| r == 0 && c == 0);
+        let mut max_row = 0usize;
+        let mut max_col = 0usize;
+        for (i, &(_, _, r, c)) in heads.iter().enumerate() {
+            let r = if flat { 0 } else { r };
+            let c = if flat { i } else { c };
+            if r > max_row {
+                max_row = r;
+            }
+            if c > max_col {
+                max_col = c;
+            }
+        }
         let yaw = f.rot_y;
         let pitch = f.rot_x.unwrap_or(0.0);
         let roll = f.rot_z.unwrap_or(0.0);
         let (cy, sy) = (yaw.cos(), yaw.sin());
         let (cx, sx) = (pitch.cos(), pitch.sin());
         let (cz, sz) = (roll.cos(), roll.sin());
-        for (i, o) in offsets.into_iter().enumerate() {
-            // Rz then Rx then Ry applied to (o, 0, 0), each step written out so
-            // the operation ORDER is textually identical to the TS twin (IEEE
-            // ops are deterministic given the same inputs in the same order).
-            let ax = o * cz;
-            let ay = o * sz;
+        for (i, &(ox, oy, r, c)) in heads.iter().enumerate() {
+            // Rz then Rx then Ry applied to (ox, oy, 0), each step written out
+            // so the operation ORDER is textually identical to the TS twin
+            // (IEEE ops are deterministic given the same inputs in the same
+            // order).
+            let ax = ox * cz - oy * sz;
+            let ay = ox * sz + oy * cz;
             let by = ay * cx;
             let bz = ay * sx;
             let wx = ax * cy + bz * sy;
             let wz = -ax * sy + bz * cy;
+            let row = if flat { 0 } else { r };
+            let col = if flat { i } else { c };
             out.insert(
                 (f.id.clone(), i),
                 HeadGeom {
                     x: q(f.pos.x + wx),
                     y: q(f.pos.y + by),
                     z: q(f.pos.z + wz),
-                    along: q(o),
-                    row: 0,
-                    col: i,
+                    along: q(ox),
+                    row,
+                    col,
+                    row_t: q(if max_row > 0 { row as f64 / max_row as f64 } else { 0.0 }),
+                    col_t: q(if max_col > 0 { col as f64 / max_col as f64 } else { 0.0 }),
                 },
             );
         }
@@ -214,6 +250,8 @@ mod tests {
             assert_eq!(g.along, want["along"].as_f64().unwrap(), "{key} along");
             assert_eq!(g.row, want["row"].as_u64().unwrap() as usize, "{key} row");
             assert_eq!(g.col, want["col"].as_u64().unwrap() as usize, "{key} col");
+            assert_eq!(g.row_t, want["rowT"].as_f64().unwrap(), "{key} rowT");
+            assert_eq!(g.col_t, want["colT"].as_f64().unwrap(), "{key} colT");
         }
     }
 
@@ -239,7 +277,7 @@ mod tests {
         use crate::profiles::HeadKind;
         let heads: Vec<CHead> = [-0.5, -0.1667, 0.1667, 0.5]
             .iter()
-            .map(|&o| CHead { kind: HeadKind::Rgb, offset: o, label: String::new() })
+            .map(|&o| CHead::flat(HeadKind::Rgb, o, String::new()))
             .collect();
         let cp = CompiledProfile {
             id: "imported-strip".into(),

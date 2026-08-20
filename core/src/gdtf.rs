@@ -394,14 +394,16 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
         let heads: Vec<CHead> = if head_count > 1 {
             let width = if head_count >= 4 { 1.0 } else { 0.3 * head_count as f64 };
             (0..head_count)
-                .map(|i| CHead {
-                    kind: HeadKind::Rgb,
-                    offset: (i as f64 / (head_count - 1) as f64 - 0.5) * width,
-                    label: format!("Px {}", i + 1),
+                .map(|i| {
+                    CHead::flat(
+                        HeadKind::Rgb,
+                        (i as f64 / (head_count - 1) as f64 - 0.5) * width,
+                        format!("Px {}", i + 1),
+                    )
                 })
                 .collect()
         } else {
-            vec![CHead { kind, offset: 0.0, label: model.clone() }]
+            vec![CHead::flat(kind, 0.0, model.clone())]
         };
         let slug: String = format!("{manufacturer}-{model}-{mode_name}")
             .to_lowercase()

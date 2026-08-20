@@ -246,8 +246,9 @@ pub enum Wave {
 }
 
 /// How an effect's phase fans across the group: patch order (the legacy
-/// behaviour), a world-position sweep, a ripple from the group's centre, or a
-/// seeded scatter.
+/// behaviour), a world-position sweep, a ripple from the group's centre, a
+/// seeded scatter, or the fixture's own pixel grid (Row/Col fan WITHIN each
+/// fixture, so every strobe runs the same pixel wave by construction).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum Distribute {
@@ -258,6 +259,8 @@ pub enum Distribute {
     Z,
     Radial,
     Shuffle,
+    Row,
+    Col,
 }
 
 /// Symmetry fold on the fan: mirror = ends in phase sweeping toward the

@@ -78,6 +78,14 @@ function fanPos(
       // wave uses, so busking-safe randomness you can get back
       t = hash01(j, e.seed);
       break;
+    case 'row':
+      // normalized within the head's OWN fixture: every fixture of a type
+      // runs the same pixel wave — "grab one strobe, every strobe is the same"
+      t = g.rowT;
+      break;
+    case 'col':
+      t = g.colT;
+      break;
     default:
       t = n > 1 ? j / n : 0; // index
   }

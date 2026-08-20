@@ -884,6 +884,10 @@ async function main(): Promise<void> {
       ['shuffle seed 7', { distribute: 'shuffle', seed: 7 }],
       ['index+parts2+buddy2', { parts: 2, buddy: 2 }],
       ['x+mirror+parts2+reverse', { distribute: 'x', fold: 'mirror', parts: 2, reverse: true }],
+      // B1: col fans within each fixture (both demo bars run the same wave);
+      // row is degenerate on flat bars (single row) — the uniform path
+      ['col (per-fixture)', { distribute: 'col' }],
+      ['row (degenerate on flat bars)', { distribute: 'row' }],
     ];
     for (const [name, patch] of cases) {
       await setFan(patch);

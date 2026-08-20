@@ -19,17 +19,22 @@ export type HeadGeom = {
   z: number;
   /** the head's offset along the fixture's local X axis, metres */
   along: number;
-  /** grid coordinates. Every profile today is a single row along local X, so
-   *  row is 0 and col is the head index; B1 (GDTF geometry parsing) makes
-   *  these honest for real pixel grids. */
+  /** grid coordinates within the fixture (B1: parsed from GDTF geometry or a
+   *  parametric layout; pre-B1 profiles fall back to a single row with
+   *  col = head index) */
   row: number;
   col: number;
+  /** row/col normalized 0..1 over THIS fixture's grid (inclusive; 0 when the
+   *  axis is a single line) — the 'row'/'col' distribute bases read these, so
+   *  every fixture of a type runs the same pixel wave by construction */
+  rowT: number;
+  colT: number;
 };
 
 /** Geometry for a head the builder could not place (unknown profile — the
  *  renderer's heads-map skip already excludes these from output). Matches the
  *  repaired-default fixture position so a defensive fallback is never NaN. */
-export const NO_GEOM: HeadGeom = { x: 0, y: 2, z: 0, along: 0, row: 0, col: 0 };
+export const NO_GEOM: HeadGeom = { x: 0, y: 2, z: 0, along: 0, row: 0, col: 0, rowT: 0, colT: 0 };
 
 /** floor(v·1e6 + 0.5) — written identically in both languages because
  *  Math.round and Rust's f64::round disagree on negative halves. Non-finite
@@ -157,6 +162,18 @@ export function buildGeometry(p: Project): Map<string, HeadGeom> {
   for (const f of p.fixtures) {
     const profHeads = PROFILES[f.profileId]?.heads ?? p.profiles?.[f.profileId]?.heads;
     if (!profHeads) continue;
+    // Pre-B1 profiles (and every built-in) carry no grid: when EVERY head is
+    // (row 0, col 0), fall back to a single row with col = head index — the
+    // exact layout those profiles always had.
+    const flat = profHeads.every((hd) => !(hd.row ?? 0) && !(hd.col ?? 0));
+    let maxRow = 0;
+    let maxCol = 0;
+    profHeads.forEach((hd, i) => {
+      const r = flat ? 0 : hd.row ?? 0;
+      const c = flat ? i : hd.col ?? 0;
+      if (r > maxRow) maxRow = r;
+      if (c > maxCol) maxCol = c;
+    });
     const yaw = f.rotY;
     const pitch = f.rotX ?? 0;
     const roll = f.rotZ ?? 0;
@@ -164,23 +181,28 @@ export function buildGeometry(p: Project): Map<string, HeadGeom> {
     const cx = Math.cos(pitch), sx = Math.sin(pitch);
     const cz = Math.cos(roll), sz = Math.sin(roll);
     profHeads.forEach((hd, i) => {
-      const o = hd.offset;
-      // Rz then Rx then Ry applied to (o, 0, 0), each step written out so the
-      // operation ORDER is textually identical to the Rust twin (IEEE ops are
-      // deterministic given the same inputs in the same order).
-      const ax = o * cz;
-      const ay = o * sz;
+      const ox = hd.offset;
+      const oy = hd.offsetY ?? 0;
+      // Rz then Rx then Ry applied to (ox, oy, 0), each step written out so
+      // the operation ORDER is textually identical to the Rust twin (IEEE ops
+      // are deterministic given the same inputs in the same order).
+      const ax = ox * cz - oy * sz;
+      const ay = ox * sz + oy * cz;
       const by = ay * cx;
       const bz = ay * sx;
       const wx = ax * cy + bz * sy;
       const wz = -ax * sy + bz * cy;
+      const row = flat ? 0 : hd.row ?? 0;
+      const col = flat ? i : hd.col ?? 0;
       out.set(`${f.id}:${i}`, {
         x: q(f.pos.x + wx),
         y: q(f.pos.y + by),
         z: q(f.pos.z + wz),
-        along: q(o),
-        row: 0,
-        col: i,
+        along: q(ox),
+        row,
+        col,
+        rowT: q(maxRow > 0 ? row / maxRow : 0),
+        colT: q(maxCol > 0 ? col / maxCol : 0),
       });
     });
   }

@@ -32,6 +32,8 @@ const DISTRIBUTE_LABELS: { v: Distribute; label: string; title: string }[] = [
   { v: 'z', label: 'Z', title: 'sweep upstage → downstage' },
   { v: 'radial', label: '◎', title: 'ripple out from the group centre' },
   { v: 'shuffle', label: '⤨', title: 'seeded scatter — re-roll with ↻, same seed = same look' },
+  { v: 'row', label: 'row', title: 'sweep each fixture’s own pixel rows — every fixture runs the same wave' },
+  { v: 'col', label: 'col', title: 'sweep each fixture’s own pixel columns — every fixture runs the same wave' },
 ];
 
 const SWATCHES: { h: number; s: number }[] = [

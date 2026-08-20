@@ -71,6 +71,10 @@ fn fan_pos(
         // seeded, reproducible scatter - the same bit-exact hash the random
         // wave uses, so busking-safe randomness you can get back
         Distribute::Shuffle => hash01(j as i32, e.seed),
+        // normalized within the head's OWN fixture: every fixture of a type
+        // runs the same pixel wave - "grab one strobe, every strobe is the same"
+        Distribute::Row => g.row_t,
+        Distribute::Col => g.col_t,
         Distribute::Index => {
             if n > 1 {
                 j as f64 / n as f64
@@ -261,7 +265,7 @@ mod fan_tests {
     }
 
     fn g_at(x: f64) -> HeadGeom {
-        HeadGeom { x, y: 2.0, z: 0.0, along: 0.0, row: 0, col: 0 }
+        HeadGeom { x, y: 2.0, z: 0.0, along: 0.0, row: 0, col: 0, row_t: 0.0, col_t: 0.0 }
     }
 
     fn base() -> Effect {
@@ -359,7 +363,7 @@ mod fan_tests {
             cx: 1.5, cy: 3.5, cz: 1.5, max_r: 2.598076211353316,
         };
         let g = |i: usize| HeadGeom {
-            x: i as f64, y: 2.0 + i as f64, z: 3.0 - i as f64, along: 0.0, row: 0, col: 0,
+            x: i as f64, y: 2.0 + i as f64, z: 3.0 - i as f64, along: 0.0, row: 0, col: 0, row_t: 0.0, col_t: 0.0,
         };
         let params = PartParams { dimmer: Some(1.0), ..Default::default() };
         let run = |e: &Effect| -> Vec<f64> {
@@ -427,6 +431,36 @@ mod fan_tests {
             .collect();
         // one lit slot — before the fix the far head wrapped into it: [1,0,0,1]
         assert_eq!(got, vec![1.0, 0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn col_basis_fans_within_each_fixture() {
+        // two 4-pixel fixtures in one 8-head group: the col basis reads the
+        // per-fixture normalized colT and ignores the group index entirely, so
+        // both fixtures run the SAME wave — "grab one strobe, lay out the
+        // pixels, every strobe is the same".
+        let e = Effect { distribute: Distribute::Col, ..base() };
+        let params = PartParams { dimmer: Some(1.0), ..Default::default() };
+        let col_ts = [0.0, 0.333333, 0.666667, 1.0, 0.0, 0.333333, 0.666667, 1.0];
+        let got: Vec<f64> = (0..8)
+            .map(|j| {
+                let g = HeadGeom {
+                    x: j as f64, y: 2.0, z: 0.0, along: 0.0,
+                    row: 0, col: j % 4, row_t: 0.0, col_t: col_ts[j],
+                };
+                apply_effects(&params, std::slice::from_ref(&e), 0.0, &[0.0], j, 8, &g, &ext())
+                    .dimmer
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                0.0, 0.3333330000000001, 0.6666669999999999, 0.0,
+                0.0, 0.3333330000000001, 0.6666669999999999, 0.0
+            ]
+        );
+        assert_eq!(&got[0..4], &got[4..8], "both fixtures run the identical wave");
     }
 
     #[test]

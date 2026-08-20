@@ -482,7 +482,7 @@ await new Promise<void>((resolve) => {
   const { buildGeometry } = await import('../../shared/geometry.ts');
   const golden = JSON.parse(
     fs.readFileSync(path.join(process.cwd(), 'core/tests/data/geometry_golden.json'), 'utf8'),
-  ) as { project: Project; expected: Record<string, { x: number; y: number; z: number; along: number; row: number; col: number }> };
+  ) as { project: Project; expected: Record<string, { x: number; y: number; z: number; along: number; row: number; col: number; rowT: number; colT: number }> };
   const geom = buildGeometry(golden.project);
   const keys = Object.keys(golden.expected);
   check('geometry: golden head count', geom.size === keys.length, `got ${geom.size}, want ${keys.length}`);
@@ -492,7 +492,7 @@ await new Promise<void>((resolve) => {
     const want = golden.expected[key];
     if (!g) { bad = `${key} missing`; break; }
     // exact f64 equality — quantization is the tolerance
-    if (g.x !== want.x || g.y !== want.y || g.z !== want.z || g.along !== want.along || g.row !== want.row || g.col !== want.col) {
+    if (g.x !== want.x || g.y !== want.y || g.z !== want.z || g.along !== want.along || g.row !== want.row || g.col !== want.col || g.rowT !== want.rowT || g.colT !== want.colT) {
       bad = `${key}: got ${JSON.stringify(g)}, want ${JSON.stringify(want)}`;
       break;
     }
@@ -552,7 +552,7 @@ await new Promise<void>((resolve) => {
 {
   const { applyEffects } = await import('../../shared/effects.ts');
   const ext = { minX: 0, maxX: 3, minY: 2, maxY: 2, minZ: 0, maxZ: 0, cx: 1.5, cy: 2, cz: 0, maxR: 1.5 };
-  const gAt = (x: number) => ({ x, y: 2, z: 0, along: 0, row: 0, col: 0 });
+  const gAt = (x: number) => ({ x, y: 2, z: 0, along: 0, row: 0, col: 0, rowT: 0, colT: 0 });
   const base = {
     id: 'e', target: 'dimmer', wave: 'sawUp', rate: 1, size: 1, spread: 1, width: 0.5, phase: 0,
     bypass: false, mix: 1, distribute: 'x', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0,
@@ -598,11 +598,29 @@ await new Promise<void>((resolve) => {
   // y and z sweep their own axes — heads on a diagonal where y INCREASES with
   // index and z DECREASES, so a transposed-axis typo cannot pass
   const dExt = { minX: 0, maxX: 3, minY: 2, maxY: 5, minZ: 0, maxZ: 3, cx: 1.5, cy: 3.5, cz: 1.5, maxR: 2.598076211353316 };
-  const dAt = (i: number) => ({ x: i, y: 2 + i, z: 3 - i, along: 0, row: 0, col: 0 });
+  const dAt = (i: number) => ({ x: i, y: 2 + i, z: 3 - i, along: 0, row: 0, col: 0, rowT: 0, colT: 0 });
   const dRun = (distribute: 'y' | 'z') =>
     [0, 1, 2, 3].map((j) => applyEffects({ dimmer: 1 }, [{ ...base, distribute }], 0, [0], j, 4, dAt(j), dExt).dimmer);
   check('fan: y sweeps its own axis', eq(dRun('y'), [0, 0.33333333333333326, 0.6666666666666665, 0]));
   check('fan: z sweeps its own axis (reversed on this rig)', eq(dRun('z'), [0, 0.6666666666666665, 0.33333333333333326, 0]));
+
+  // col basis (B1): two 4-pixel fixtures in one 8-head group — the col basis
+  // reads the per-fixture normalized colT and ignores the group index, so both
+  // fixtures run the SAME wave ("grab one strobe, every strobe is the same")
+  const colTs = [0, 0.333333, 0.666667, 1, 0, 0.333333, 0.666667, 1];
+  const cAt = (j: number) => ({ x: j, y: 2, z: 0, along: 0, row: 0, col: j % 4, rowT: 0, colT: colTs[j] });
+  const cExt = { minX: 0, maxX: 7, minY: 2, maxY: 2, minZ: 0, maxZ: 0, cx: 3.5, cy: 2, cz: 0, maxR: 3.5 };
+  const colDims = [...Array(8).keys()].map((j) =>
+    applyEffects({ dimmer: 1 }, [{ ...base, distribute: 'col' }], 0, [0], j, 8, cAt(j), cExt).dimmer);
+  check(
+    'fan: col basis fans within each fixture',
+    eq(colDims, [0, 0.3333330000000001, 0.6666669999999999, 0, 0, 0.3333330000000001, 0.6666669999999999, 0]),
+    `got ${colDims.join(',')}`,
+  );
+  check(
+    'fan: col basis gives both fixtures the identical wave',
+    colDims.slice(0, 4).every((v, i) => v === colDims[4 + i]),
+  );
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

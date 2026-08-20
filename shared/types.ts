@@ -160,9 +160,10 @@ export type EffectTarget =
   | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto';
 export type Wave = 'sine' | 'triangle' | 'sawUp' | 'sawDown' | 'square' | 'chase' | 'random';
 /** How an effect's phase fans across the group: patch order (the legacy
- *  behaviour), a world-position sweep, a ripple from the group's centre, or a
- *  seeded scatter. */
-export type Distribute = 'index' | 'x' | 'y' | 'z' | 'radial' | 'shuffle';
+ *  behaviour), a world-position sweep, a ripple from the group's centre, a
+ *  seeded scatter, or the fixture's own pixel grid (row/col fan WITHIN each
+ *  fixture, so every strobe runs the same pixel wave by construction). */
+export type Distribute = 'index' | 'x' | 'y' | 'z' | 'radial' | 'shuffle' | 'row' | 'col';
 /** Symmetry fold on the fan: mirror = ends in phase sweeping toward the
  *  centre (MA "wings"); centre = centre leads, ends trail. */
 export type Fold = 'none' | 'mirror' | 'centre';
@@ -177,7 +178,7 @@ export const WAVES: ReadonlySet<Wave> = new Set<Wave>([
   'sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random',
 ]);
 export const DISTRIBUTES: ReadonlySet<Distribute> = new Set<Distribute>([
-  'index', 'x', 'y', 'z', 'radial', 'shuffle',
+  'index', 'x', 'y', 'z', 'radial', 'shuffle', 'row', 'col',
 ]);
 export const FOLDS: ReadonlySet<Fold> = new Set<Fold>(['none', 'mirror', 'centre']);
 
@@ -319,7 +320,11 @@ export type CompiledProfile = {
   model: string;
   mode: string;
   footprint: number;
-  heads: { kind: 'rgb' | 'derby' | 'hazer' | 'dimmer' | 'mover'; offset: number; label: string }[];
+  /** offsetY/row/col are B1 pixel-layout fields; absent on pre-B1 saves (and
+   *  Rust skips serializing zeros), so they are optional with 0 defaults.
+   *  When every head of a profile is (row 0, col 0), the geometry builder
+   *  falls back to col = head index, one row. */
+  heads: { kind: 'rgb' | 'derby' | 'hazer' | 'dimmer' | 'mover'; offset: number; offsetY?: number; row?: number; col?: number; label: string }[];
   channels: { offsets: number[]; head: number; name: string; default: number; cases: unknown[] }[];
   beamDeg: number;
   virtualDimmer: boolean;

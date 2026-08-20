@@ -109,8 +109,35 @@ pub struct CChannel {
 #[serde(rename_all = "camelCase")]
 pub struct CHead {
     pub kind: HeadKind,
+    /// metres along the fixture's local X axis
     pub offset: f64,
+    /// metres along the fixture's local Y axis (up) — B1: real pixel layouts
+    /// are 2D. Defaults keep every pre-B1 save loading as a flat bar.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub offset_y: f64,
+    /// grid coordinates within the fixture (row 0 = top). When EVERY head of a
+    /// profile is (0, 0) — pre-B1 saves, single-row imports — the geometry
+    /// builder falls back to col = head index, one row.
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub row: usize,
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub col: usize,
     pub label: String,
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+fn is_zero_usize(v: &usize) -> bool {
+    *v == 0
+}
+
+impl CHead {
+    /// A single-row head with no vertical offset — the pre-B1 shape.
+    pub fn flat(kind: HeadKind, offset: f64, label: String) -> CHead {
+        CHead { kind, offset, offset_y: 0.0, row: 0, col: 0, label }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -339,7 +366,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         model: "LED Derby ST".into(),
         mode: "4 Channel".into(),
         footprint: 4,
-        heads: vec![CHead { kind: HeadKind::Derby, offset: 0.0, label: "Derby".into() }],
+        heads: vec![CHead::flat(HeadKind::Derby, 0.0, "Derby".into())],
         beam_deg: 5.0,
         virtual_dimmer: false,
         credit: None,
@@ -419,11 +446,11 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
     let mut kam_heads = Vec::new();
     for i in 0..4 {
         let o = i * 5;
-        kam_heads.push(CHead {
-            kind: HeadKind::Rgb,
-            offset: [-0.39, -0.13, 0.13, 0.39][i],
-            label: format!("Par {}", i + 1),
-        });
+        kam_heads.push(CHead::flat(
+            HeadKind::Rgb,
+            [-0.39, -0.13, 0.13, 0.39][i],
+            format!("Par {}", i + 1),
+        ));
         kam_channels.push(lin(o, i, &format!("Par {} Red", i + 1), Source::ColorR, 0, 255));
         kam_channels.push(lin(o + 1, i, &format!("Par {} Green", i + 1), Source::ColorG, 0, 255));
         kam_channels.push(lin(o + 2, i, &format!("Par {} Blue", i + 1), Source::ColorB, 0, 255));
@@ -450,7 +477,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         model: "Hazer".into(),
         mode: "2 Channel".into(),
         footprint: 2,
-        heads: vec![CHead { kind: HeadKind::Hazer, offset: 0.0, label: "Hazer".into() }],
+        heads: vec![CHead::flat(HeadKind::Hazer, 0.0, "Hazer".into())],
         channels: vec![
             lin(0, 0, "Haze output", Source::Haze, 0, 255),
             lin(1, 0, "Fan speed", Source::Fan, 0, 255),
@@ -467,7 +494,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         model: "Dimmer".into(),
         mode: "1 Channel".into(),
         footprint: 1,
-        heads: vec![CHead { kind: HeadKind::Dimmer, offset: 0.0, label: "Dim".into() }],
+        heads: vec![CHead::flat(HeadKind::Dimmer, 0.0, "Dim".into())],
         channels: vec![lin(0, 0, "Dimmer", Source::Dimmer, 0, 255)],
         beam_deg: 25.0,
         virtual_dimmer: false,
@@ -481,7 +508,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         model: "RGB Par".into(),
         mode: "3 Channel".into(),
         footprint: 3,
-        heads: vec![CHead { kind: HeadKind::Rgb, offset: 0.0, label: "Par".into() }],
+        heads: vec![CHead::flat(HeadKind::Rgb, 0.0, "Par".into())],
         channels: vec![
             lin(0, 0, "Red", Source::ColorR, 0, 255),
             lin(1, 0, "Green", Source::ColorG, 0, 255),
@@ -499,7 +526,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         model: "RGBW Par".into(),
         mode: "4 Channel".into(),
         footprint: 4,
-        heads: vec![CHead { kind: HeadKind::Rgb, offset: 0.0, label: "Par".into() }],
+        heads: vec![CHead::flat(HeadKind::Rgb, 0.0, "Par".into())],
         channels: vec![
             lin(0, 0, "Red", Source::ColorR, 0, 255),
             lin(1, 0, "Green", Source::ColorG, 0, 255),
@@ -518,7 +545,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         model: "Moving Head RGBW".into(),
         mode: "10 Channel".into(),
         footprint: 10,
-        heads: vec![CHead { kind: HeadKind::Mover, offset: 0.0, label: "Head".into() }],
+        heads: vec![CHead::flat(HeadKind::Mover, 0.0, "Head".into())],
         channels: vec![
             lin16([0, 1], 0, "Pan", Source::Pan),
             lin16([2, 3], 0, "Tilt", Source::Tilt),
