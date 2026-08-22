@@ -73,11 +73,48 @@ The v0.4 roadmap milestone replaces this dance with data-driven GDTF profiles in
 
 **`"dragDropEnabled": false` in `tauri.conf.json` is load-bearing, and JSON cannot hold the comment that says so.** It defaults to *true*, which makes Tauri install its own OS drag-drop handler on the webview; wry's handler returns `true` without falling through to `super`, so WKWebView never processes the drag and no `dragenter`/`dragover`/`drop` ever reaches the page. That kills HTML5 drag-and-drop in the shipped app while leaving it working in a browser — which is where the UI is usually tested, so the failure is invisible until someone drags a look onto a pad in the real `.app`. Nothing here uses OS file-drop, so turning it off costs nothing. Anything drag-and-drop must be checked in the built app, not only at `:5173`.
 
+## Native previz
+
+`previz/` is a Bevy app and a plain WebSocket client of the engine — it observes
+and never commands, so nothing it does can reach DMX.
+
+Working on it:
+
+- `cargo build -p light-previz` then `./target/debug/light-previz`. The dev
+  profile optimises dependencies and not our code (`[profile.dev.package."*"]`),
+  so once Bevy is cached a rebuild is **about two seconds** against five minutes
+  for release. Do all iteration there.
+- **F12 saves a PNG**, and `LIGHT_PREVIZ_SHOT=<path>` saves two automatically a
+  few seconds in. Use these rather than the OS screen recorder: they need no
+  permission and they capture the window rather than the desktop.
+- `LIGHT_PREVIZ_DIAG=1` logs frame time plus a render-state line every two
+  seconds — fixture count, live spotlights, panel lights, fog density, haze —
+  so a dark window can be diagnosed from the terminal.
+- `previz/src/quality.rs` holds every knob that trades frame time for picture
+  (MSAA, fog steps, shadow budget, exposure, flux, haze floor, beam gain,
+  adaptation) as `LIGHT_PREVIZ_*` variables. They exist because a release build
+  is five minutes and a `const` is not a knob anybody turns twice.
+
+Debug it by bisecting with the shader, not by reasoning at it. Returning a flat
+colour early answers "does this rasterize at all", then "did the uniform
+arrive", and so on. That is how a placeholder `lumens: 0.0` was found after an
+hour of the beams simply not existing.
+
 ## Release checklist
 
 1. `npm test` · `cargo test -p light-core` · `npm run typecheck` · `npm run test:parity` — all green.
 2. `npm run build` then `npm run app:build`.
-3. Launch the `.app`, fire a column, watch the Art-Net counter and a real node.
+3. **`cargo build --release -p light-previz`.** The PREVIZ button launches a
+   PREBUILT binary (`spawn_previz` in `core/src/engine.rs`) and never compiles
+   anything, so a stale one just quietly opens old code. This cost a real
+   evening once: goalposts that had been deleted from the source were still on
+   screen, along with eight days of beam, camera and aiming fixes that had
+   never been seen. The engine now warns in its toast when the binary predates
+   `previz/src`, but only beside a source tree — a shipped app has no such
+   check, so the build has to happen here.
+4. Launch the `.app`, fire a column, watch the Art-Net counter and a real node.
    Drag a look from the library onto a pad while you are there — HTML5
    drag-and-drop is the one thing a browser check cannot vouch for (above).
-4. Tag, push, update `ROADMAP.md` checkboxes.
+5. Open the previz window and fire a beam cue. It is a separate binary with its
+   own renderer and none of the suites touch it.
+6. Tag, push, update `ROADMAP.md` checkboxes.
