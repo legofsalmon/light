@@ -111,6 +111,7 @@ pub fn apply_live(
     >,
     mut fogs: Query<&mut FogVolume>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    q: Res<crate::quality::Quality>,
 ) {
     let dt = time.delta_secs();
     let now_s = time.elapsed_secs();
@@ -193,7 +194,10 @@ pub fn apply_live(
     // re-uploads a second for a rig that is mostly holding still. Writing only
     // what actually moved is the difference between this renderer being usable
     // on an arena plot and not.
-    let haze_k = 0.10 + snap.haze * 0.60;
+    // See Quality::haze_floor — a show with no haze programmed has no visible
+    // beams, which is true and unhelpful in the window built to judge them.
+    let haze = snap.haze.max(q.haze_floor);
+    let haze_k = (0.10 + haze * 0.60) * q.beam_gain;
     let mut pending: Vec<((String, usize), Sent)> = Vec::new();
     for (tag, beam, mat) in &cones {
         let key = (tag.fixture.clone(), tag.head);
@@ -299,7 +303,7 @@ pub fn apply_live(
 
     // haze → participating-medium density
     for mut fog in &mut fogs {
-        fog.density_factor = 0.045 + snap.haze * 0.28;
+        fog.density_factor = 0.045 + snap.haze.max(q.haze_floor) * 0.28;
     }
 }
 

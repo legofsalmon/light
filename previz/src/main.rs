@@ -24,17 +24,18 @@ fn main() {
             bevy::diagnostic::LogDiagnosticsPlugin::default(),
         ));
     }
+    let quality = quality::Quality::from_env();
     app
         .insert_resource(ClearColor(Color::srgb(0.016, 0.016, 0.022)))
         // 0.19: AmbientLight became a per-camera Component; the scene-wide
         // default it used to be is GlobalAmbientLight.
         .insert_resource(GlobalAmbientLight {
             color: Color::srgb(0.65, 0.7, 0.9),
-            brightness: 35.0,
+            brightness: quality.ambient,
             ..default()
         })
         .insert_resource(protocol::WsReceiver(Mutex::new(rx)))
-        .insert_resource(quality::Quality::from_env())
+        .insert_resource(quality)
         .insert_resource(state::Live::default())
         .insert_resource(camera::Orbit::default())
         .add_plugins(DefaultPlugins.set(WindowPlugin {

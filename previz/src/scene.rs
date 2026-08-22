@@ -84,6 +84,32 @@ pub struct BeamLight {
 #[derive(Component)]
 pub struct SourceGlow;
 
+/// Luminous flux for a head, in lumens — real numbers for real fixtures.
+///
+/// A Robe Spiider is about 12,000 lm, an Ayrton profile about 22,000, an LED
+/// blinder tens of thousands across its whole face, one derby lens a couple of
+/// thousand. Nothing here is exact — the compiled profile does not carry flux
+/// yet, and GDTF's `LuminousFlux` is discarded at import — but they are the
+/// right ORDER, which the old hardcoded 8,000,000 was not by three of them.
+///
+/// When the importer starts keeping LuminousFlux this becomes the fallback for
+/// profiles that lack it, rather than the answer for every fixture.
+fn lumens_for(kind: Option<HeadKind>, heads: usize) -> f32 {
+    match kind {
+        // One lens of a derby's six.
+        Some(HeadKind::Derby) => 1_800.0,
+        Some(HeadKind::Hazer) => 0.0,
+        // A moving head: wash, spot or beam.
+        Some(HeadKind::Mover) => 16_000.0,
+        // A multi-cell bar or pixel strip divides its output between cells, so
+        // a 12-cell batten is not twelve washes.
+        _ if heads > 4 => 18_000.0 / heads as f32,
+        _ if heads > 1 => 24_000.0 / heads as f32,
+        // A par, a blinder, a single-cell wash.
+        _ => 9_000.0,
+    }
+}
+
 /// Additive translucent beam cone — the visible shaft. Volumetric light-shaft
 /// sampling is broken on this Bevy/Metal combination (ambient fog scattering
 /// renders, per-light shafts never do), so shafts are honest cone geometry,
@@ -698,7 +724,7 @@ pub fn rebuild_fixtures(
                                         ) * Quat::from_rotation_x(0.42);
                                         fan.spawn((
                                             tag.clone(),
-                                            BeamLight { idx: k, lumens: 2_500_000.0 },
+                                            BeamLight { idx: k, lumens: lumens_for(Some(HeadKind::Derby), 1) * q.lumen_scale },
                                             SpotLight {
                                                 color: Color::BLACK,
                                                 intensity: 0.0,
@@ -731,10 +757,11 @@ pub fn rebuild_fixtures(
                         _ => {
                             h.spawn((
                                 tag.clone(),
-                                // Bevy photometric scale: ~1e6 lm is a domestic
-                                // point light; stage beams need multi-megalumen
-                                // output to read at concert throw distances.
-                                BeamLight { idx: 0, lumens: 8_000_000.0 },
+                                BeamLight {
+                                    idx: 0,
+                                    lumens: lumens_for(prof.heads.get(hi).map(|h| h.0), prof.heads.len())
+                                        * q.lumen_scale,
+                                },
                                 SpotLight {
                                     color: Color::BLACK,
                                     intensity: 0.0,

@@ -38,6 +38,48 @@ pub struct Quality {
     /// Shadow-casting spotlights. Each costs its own depth pass, so this is the
     /// single biggest lever on a large rig.
     pub shadows: usize,
+
+    // --- photometrics -------------------------------------------------
+    //
+    // These are one system, not four knobs, and they only make sense
+    // together. Bevy is physically based: a SpotLight's `intensity` is
+    // LUMENS, it becomes candela, and what finally lands on screen is
+    // scaled by the camera's exposure, `2^-ev100 / 1.2`.
+    //
+    // Bevy's default EV100 is 9.7 — calibrated against Blender, and roughly
+    // an overcast afternoon. A dark venue is nowhere near that, and the
+    // previz had been compensating by inventing fixtures of EIGHT MILLION
+    // lumens (a real moving head is ten to twenty thousand) with a comment
+    // claiming 1e6 lm is "a domestic point light". It is about a thousand
+    // of them.
+    //
+    // Exposing the venue instead of the sun lets the fixtures carry
+    // plausible numbers, which matters beyond tidiness: once the profile
+    // knows a real flux, the beam shader can conserve it across a zoom, and
+    // "this fixture is brighter than that one" becomes a fact about the rig
+    // rather than a fudge.
+    /// Camera exposure. Lower is a brighter picture. ~3 is a dark venue.
+    pub ev100: f32,
+    /// Multiplies every fixture's luminous flux. The rig-wide trim.
+    pub lumen_scale: f32,
+    /// Ambient fill, in the same units as GlobalAmbientLight::brightness.
+    pub ambient: f32,
+    /// Multiplies the additive beam-cone brightness.
+    pub beam_gain: f32,
+
+    /// Floor under the stage haze value, for visualisation only.
+    ///
+    /// A beam is only visible because something in the air scatters it, so a
+    /// show with no haze programmed correctly renders almost no shafts — which
+    /// is honest and useless. The demo show runs haze 0.00, and that alone is
+    /// most of why this window has looked flat: 105 lit fixtures and nothing in
+    /// the air to catch them.
+    ///
+    /// The web previz solved this years ago with its "beam viz" fader, which is
+    /// a *preference* rather than the rig's haze value. This is the same idea:
+    /// the stage haze still drives the medium whenever it is higher, and
+    /// setting this to 0 gives the physically honest picture back.
+    pub haze_floor: f32,
 }
 
 impl Default for Quality {
@@ -50,17 +92,17 @@ impl Quality {
     /// Anything that still has to hold 60 fps on a laptop sharing itself with a
     /// live show.
     pub fn low() -> Self {
-        Quality { msaa: 1, fog_steps: 48, haze_oversize: 1.6, shadows: 4 }
+        Quality { msaa: 1, fog_steps: 48, haze_oversize: 1.6, shadows: 4, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, haze_floor: 0.35 }
     }
 
     /// The default: the measured budget, spent where it shows most.
     pub fn standard() -> Self {
-        Quality { msaa: 1, fog_steps: 64, haze_oversize: 1.6, shadows: 10 }
+        Quality { msaa: 1, fog_steps: 64, haze_oversize: 1.6, shadows: 10, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, haze_floor: 0.35 }
     }
 
     /// For a second machine, or a still.
     pub fn high() -> Self {
-        Quality { msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16 }
+        Quality { msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, haze_floor: 0.35 }
     }
 
     pub fn from_env() -> Self {
@@ -88,9 +130,28 @@ impl Quality {
         if let Some(v) = env_u32("LIGHT_PREVIZ_SHADOWS") {
             q.shadows = v as usize;
         }
+        if let Some(v) = env_f32("LIGHT_PREVIZ_EV100") {
+            q.ev100 = v.clamp(-4.0, 16.0);
+        }
+        if let Some(v) = env_f32("LIGHT_PREVIZ_LUMENS") {
+            q.lumen_scale = v.clamp(0.01, 100.0);
+        }
+        if let Some(v) = env_f32("LIGHT_PREVIZ_AMBIENT") {
+            q.ambient = v.clamp(0.0, 500.0);
+        }
+        if let Some(v) = env_f32("LIGHT_PREVIZ_BEAMGAIN") {
+            q.beam_gain = v.clamp(0.0, 20.0);
+        }
+        if let Some(v) = env_f32("LIGHT_PREVIZ_HAZE") {
+            q.haze_floor = v.clamp(0.0, 1.0);
+        }
         eprintln!(
             "[previz] quality: msaa x{} · fog {} steps · haze x{:.2} · {} shadow lights",
             q.msaa, q.fog_steps, q.haze_oversize, q.shadows
+        );
+        eprintln!(
+            "[previz] photometrics: EV100 {:.1} · lumens x{:.2} · ambient {:.0} · beam gain x{:.2} · haze floor {:.2}",
+            q.ev100, q.lumen_scale, q.ambient, q.beam_gain, q.haze_floor
         );
         q
     }

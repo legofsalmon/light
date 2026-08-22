@@ -2,7 +2,7 @@ use bevy::post_process::bloom::Bloom;
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
-use bevy::camera::Hdr;
+use bevy::camera::{Exposure, Hdr};
 use bevy::light::VolumetricFog;
 use bevy::prelude::*;
 
@@ -36,10 +36,18 @@ pub fn setup_camera(mut commands: Commands, q: Res<crate::quality::Quality>) {
         // moving beams, which is exactly what a temporal resolve smears.
         q.msaa_component(),
         DepthPrepass,
+        // Bevy's default is EV100 9.7 — Blender-calibrated, roughly an
+        // overcast afternoon. This is a blacked-out room with lamps in it.
+        Exposure { ev100: q.ev100 },
         Tonemapping::TonyMcMapface,
         Bloom::default(),
         VolumetricFog {
-            ambient_intensity: 0.06,
+            // Ambient scattering inside the medium. This is the knob that
+            // decides whether the room reads as a blacked-out venue or as fog
+            // under a streetlight: it lights the haze everywhere at once, so
+            // any of it that is not needed is pure veiling glare over the
+            // whole frame, and a stage's blacks have to be black.
+            ambient_intensity: 0.015,
             // 64 steps across a room-sized volume is ~15 cm per sample, and the
             // banding that produces swims as the camera moves. The cost is
             // per-pixel-per-step and this scene is not fill-bound, so buy the
