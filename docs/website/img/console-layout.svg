@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 470" width="980" height="470" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <style>
+    .bg { fill: #141415; }
+    .panel { fill: #1c1c1e; stroke: #2e2e33; }
+    .band { fill: #101012; stroke: #39c2ff; stroke-opacity: .5; }
+    .grid { fill: #17171a; stroke: #2e2e33; }
+    .side { fill: #1c1c1e; stroke: #3c3c44; }
+    .ctl { fill: #212124; stroke: #3c3c44; }
+    .t { fill: #d2d2d8; font-size: 12.5px; }
+    .s { fill: #8c8c96; font-size: 10px; }
+    .k { fill: #5c5c66; font-size: 9.5px; letter-spacing: .09em; }
+    .cap { fill: #8c8c96; font-size: 11px; }
+  </style>
+  <rect class="bg" width="980" height="470"/>
+
+  <text class="k" x="24" y="26">THE PADS VIEW — WHAT SITS WHERE</text>
+
+  <!-- top bar -->
+  <rect class="panel" x="24" y="42" width="932" height="30" rx="3"/>
+  <text class="s" x="36" y="62">project ▾   Pads · Previz · Patch · All   save ↺ ↻   120.0 BPM  TAP  SYNC  LINK   haze  master   ALL STOP  BLACKOUT</text>
+
+  <!-- previz band -->
+  <rect class="band" x="24" y="80" width="932" height="112" rx="3"/>
+  <text class="t" x="40" y="104">Previz band</text>
+  <text class="s" x="40" y="124">A wide band across the top of every view — stages are wider than they are tall.</text>
+  <text class="s" x="40" y="140">▴ collapses it, per view. 3D stage or 2D drafting plan.</text>
+  <rect class="ctl" x="700" y="94" width="240" height="84" rx="3"/>
+  <text class="t" x="714" y="116">Audition</text>
+  <text class="s" x="714" y="134">the selected look, rendered</text>
+  <text class="s" x="714" y="150">but never sent to the rig</text>
+
+  <!-- pad grid -->
+  <rect class="grid" x="24" y="200" width="536" height="200" rx="3"/>
+  <text class="t" x="40" y="224">Pad grid</text>
+  <text class="s" x="40" y="244">Rows are layers, columns are the song's sections.</text>
+  <text class="s" x="40" y="260">A column fired as one is a cue.</text>
+  <text class="s" x="40" y="284">Four layer rows…</text>
+  <rect class="ctl" x="40" y="298" width="504" height="34" rx="3"/>
+  <text class="s" x="52" y="320">STROBE · FX · BEAMS · WASH</text>
+  <text class="s" x="40" y="356">…and a fifth row, ruled off, for the controls:</text>
+  <rect class="ctl" x="40" y="366" width="504" height="26" rx="3"/>
+  <text class="s" x="52" y="384">CONTROLS — macros that reach into whatever is playing</text>
+
+  <!-- library -->
+  <rect class="side" x="572" y="200" width="176" height="200" rx="3"/>
+  <text class="t" x="586" y="224">Look library</text>
+  <text class="s" x="586" y="244">every look in the pool,</text>
+  <text class="s" x="586" y="260">searchable</text>
+  <text class="s" x="586" y="284">Drag a row onto a pad</text>
+  <text class="s" x="586" y="300">to point that pad at it.</text>
+  <text class="s" x="586" y="324">Pads share looks — one</text>
+  <text class="s" x="586" y="340">edit reaches them all.</text>
+
+  <!-- editor -->
+  <rect class="side" x="760" y="200" width="196" height="200" rx="3"/>
+  <text class="t" x="774" y="224">Look editor</text>
+  <text class="s" x="774" y="244">the same editor as the</text>
+  <text class="s" x="774" y="260">bottom panel's Look tab</text>
+  <text class="s" x="774" y="284">Build the next song</text>
+  <text class="s" x="774" y="300">without leaving the</text>
+  <text class="s" x="774" y="316">surface you perform on.</text>
+
+  <text class="cap" x="24" y="428">Every panel collapses to an 18 px strip, and the app remembers it per view. On a phone the side panels fold themselves away so the pads keep the width.</text>
+  <text class="cap" x="24" y="450">Patch view puts the 2D plan over the fixtures table; All view stacks previz, pads and the editor tabs.</text>
+</svg>
