@@ -6,6 +6,28 @@ use crate::protocol::{WsEvent, WsReceiver};
 use crate::scene::{BeamCone, BeamLight, DerbyFan, HeadTag, MoverHead, PanelLight, RingMesh, SourceGlow};
 use crate::state::{Live, Sent, Smoothed};
 
+/// One place that decides what a look's RGB triple MEANS.
+///
+/// The engine sends colour as three 0..1 numbers straight off the look editor's
+/// picker. They are display-referred: the operator chose them against an sRGB
+/// swatch and expects the light to look like the swatch. So they are sRGB and
+/// have to be linearised before anything renders with them.
+///
+/// This existed as a genuine disagreement rather than an oversight. The
+/// SpotLight was fed `Color::srgb(r, g, b)`, which linearises; the beam shaft
+/// and the source glow were fed the same numbers as though they were already
+/// linear. On a pale cyan cue — Lyras at (0.65, 0.94, 1.00) — that is (0.38,
+/// 0.87, 1.00) in the pool against (0.65, 0.94, 1.00) in the shaft: the floor
+/// was noticeably more saturated than the beam landing on it, which is
+/// backwards from how a real beam reads.
+///
+/// NOTE for whoever syncs the two previz views: the WEB one treats these as
+/// linear (three.js `setRGB` writes into the working colour space), so it is
+/// the one that now disagrees. It should adopt this.
+fn look_rgb_to_linear(r: f32, g: f32, b: f32) -> LinearRgba {
+    Color::srgb(r, g, b).to_linear()
+}
+
 /// Live zoom -> a multiplier on the profile's beam half-angle.
 ///
 /// `None` means no look is driving zoom, so the fixture sits at its profile
@@ -276,7 +298,8 @@ pub fn apply_live(
         let beam_half = (beam.base_outer * zk).clamp(0.5f32.to_radians(), 1.4);
         let field_half = (cone.base_field * zk).clamp(beam_half * 1.02, 1.5);
 
-        m.beam.color = Vec4::new(r, g, b, e);
+        let lin = look_rgb_to_linear(r, g, b);
+        m.beam.color = Vec4::new(lin.red, lin.green, lin.blue, e);
         m.beam.axial = crate::beam::axial_intensity(beam.lumens, field_half, cone.base_field);
         m.beam.one_minus_cos_b = (1.0 - beam_half.cos()).max(1e-6);
         // The shoulder brackets the field angle: fully lit a little inside it,
@@ -303,7 +326,8 @@ pub fn apply_live(
         }
         if let Some(mut m) = materials.get_mut(&mat.0) {
             let e = 1.5 + 55.0 * s.i;
-            m.emissive = LinearRgba::rgb(s.r * e, s.g * e, s.b * e);
+            let lin = look_rgb_to_linear(s.r, s.g, s.b);
+            m.emissive = LinearRgba::rgb(lin.red * e, lin.green * e, lin.blue * e);
         }
     }
 
