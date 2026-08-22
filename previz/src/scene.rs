@@ -132,7 +132,7 @@ pub struct BeamLight {
 #[derive(Component)]
 pub struct SourceGlow;
 
-/// The single area light standing in for a whole panel's face.
+/// The single light standing in for a whole panel's face.
 ///
 /// `heads` is how many cells the fixture has, so the update pass can average
 /// them into one colour; `lumens` is the fixture's total output, not one
@@ -141,6 +141,17 @@ pub struct SourceGlow;
 pub struct PanelLight {
     pub heads: usize,
     pub lumens: f32,
+    /// Converts `lumens` into whatever unit the primitive underneath actually
+    /// wants.
+    ///
+    /// Bevy is not consistent here, and the inconsistency is a factor of 4*pi.
+    /// A SpotLight's intensity is divided by 4*pi on its way to the GPU
+    /// (render/light.rs:666); a RectLight's is used RAW
+    /// (render/light.rs:1982). So the same number is 12.57x brighter as an
+    /// area light than as a spot — which is the entire reason the cheap panel
+    /// fallback looked so much dimmer, and nothing to do with cone shape as I
+    /// first assumed.
+    pub scale: f32,
 }
 
 /// Luminous flux for one head, in lumens — real numbers for real fixtures.
@@ -634,6 +645,8 @@ pub fn rebuild_fixtures(
     // heads. Derby sub-beams never get one: six narrow spinning beams per
     // fixture is where the cost explodes and where a shadow map buys nothing.
     let mut shadow_budget: usize = q.shadows;
+    // Bevy's hard limit; see the note at the panel spawn.
+    let mut rect_budget: usize = 8;
 
     // Beam reach, sized to the room rather than to the demo stage. The shaft
     // clamp used to be a hard 9 m and spotlight range a hard 11-12 m — fine for
@@ -708,22 +721,42 @@ pub fn rebuild_fixtures(
         if prof.form == FixtureForm::Panel {
             let (bw, bh) = (body.half_size.x * 2.0, body.half_size.y * 2.0);
             // A RectLight lies in its local XY plane and faces local -Z, so it
-            // needs aiming exactly like a spot does. Left at identity it faces
-            // whatever the fixture root faces, which for anything hung on a bar
-            // is not where the fixture is pointed.
+            // needs aiming exactly like a spot does.
             let face = if f.pos.y > 1.2 {
                 Vec3::new(0.0, -0.93, 0.37)
             } else {
                 Vec3::new(0.0, -0.26, 0.97)
             };
+            // Bevy holds rect lights in a FIXED array of 8
+            // (MAX_RECT_LIGHTS, render/light.rs:232), unclustered, iterated for
+            // every lit fragment (pbr_functions.wgsl:662). Two consequences,
+            // both of which bit:
+            //
+            //   - past eight they are silently dropped. This rig has 24 Neros
+            //     and bevy was warning "24 exceeding the supported limit of 8"
+            //     into a log nobody was reading, so SIXTEEN blinders were
+            //     emitting nothing. That is the same class of bug as the one
+            //     this whole panel path was written to fix.
+            //   - they cost the same whatever their range, because there is no
+            //     culling to respond to it: measured 0.65 ms each, and capping
+            //     range from 39 m to 8 m changed almost nothing.
+            //
+            // So they are budgeted, exactly like shadow-casting spots, and
+            // everything past the budget gets a wide spot instead.
+            let area = q.panel_area_lights && rect_budget > 0;
+            if area {
+                rect_budget -= 1;
+            }
             let tag = HeadTag { fixture: f.id.clone(), head: 0, kind: HeadKind::Rgb };
+            let lumens = lumens_for(&prof, false) * q.lumen_scale;
             let panel = PanelLight {
                 heads: prof.heads.len(),
-                lumens: lumens_for(&prof, false) * q.lumen_scale,
+                lumens,
+                scale: if area { 1.0 } else { 4.0 * std::f32::consts::PI },
             };
             let aim = Transform::default().looking_to(face, Vec3::Y);
             commands.entity(root).with_children(|p| {
-                if q.panel_area_lights {
+                if area {
                     p.spawn((
                         tag,
                         panel,
@@ -739,10 +772,9 @@ pub fn rebuild_fixtures(
                         Visibility::Hidden,
                     ));
                 } else {
-                    // The cheap tier: a very wide spot. Wrong shape — a hard
-                    // ellipse where a plate throws a soft square — but it puts
-                    // light in the room, which a panel did not do at all before
-                    // any of this.
+                    // Wrong shape — a hard ellipse where a plate throws a soft
+                    // square — but the right brightness, in the room, for every
+                    // fixture rather than the first eight.
                     let outer = (prof.beam_deg.max(2.0) as f32).to_radians() / 2.0;
                     p.spawn((
                         tag,
@@ -752,11 +784,8 @@ pub fn rebuild_fixtures(
                             intensity: 0.0,
                             range: light_range,
                             radius: bw.max(bh) * 0.5,
-                            // Nearly uniform across the cone. A plate throws an
-                            // even wash with a soft edge, not a spot's smooth
-                            // centre-to-rim rolloff — with the inner angle low
-                            // most of the cone sits in falloff and the pools
-                            // vanish, which is most of what a panel is for.
+                            // Nearly uniform: a plate washes evenly with a soft
+                            // edge rather than rolling off from a hot centre.
                             inner_angle: (outer * 0.88).min(1.30),
                             outer_angle: outer.min(1.35),
                             shadow_maps_enabled: false,

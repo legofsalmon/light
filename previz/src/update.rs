@@ -465,6 +465,7 @@ pub fn diag_state(
     >,
     fogs: Query<&FogVolume>,
     panels: Query<&RectLight, With<crate::scene::PanelLight>>,
+    panel_spots: Query<&SpotLight, With<crate::scene::PanelLight>>,
     mut last: Local<f32>,
     mut enabled: Local<Option<bool>>,
 ) {
@@ -483,6 +484,7 @@ pub fn diag_state(
     let fog = fogs.iter().next().map(|f| f.density_factor).unwrap_or(-1.0);
     let panel_n = panels.iter().count();
     let panel_lit = panels.iter().filter(|l| l.intensity > 1.0).count();
+    let panel_spot_n = panel_spots.iter().count();
     let (snap_heads, haze) = live
         .snap
         .as_ref()
@@ -490,7 +492,7 @@ pub fn diag_state(
         .unwrap_or((0, -1.0));
     let fixtures = live.project.as_ref().map(|p| p.fixtures.len()).unwrap_or(0);
     eprintln!(
-        "[previz-diag] connected={} fixtures={fixtures} spotlights={total} lit={lit} maxI={max_i:.0} panels={panel_n} panelsLit={panel_lit} fog={fog:.3} snapHeads={snap_heads} haze={haze:.2}",
+        "[previz-diag] connected={} fixtures={fixtures} spotlights={total} lit={lit} maxI={max_i:.0} panels={panel_n}(area)+{panel_spot_n}(spot) panelsLit={panel_lit} fog={fog:.3} snapHeads={snap_heads} haze={haze:.2}",
         live.connected
     );
     if let Some((tag, sl, inh, view, gt)) = lit_detail.iter().find(|(_, sl, ..)| sl.intensity > 1.0) {
@@ -596,7 +598,7 @@ pub fn apply_panel_lights(
         }
         sent.insert(tag.fixture.clone(), want);
         light.color = Color::srgb(want.r, want.g, want.b);
-        light.intensity = panel.lumens * want.e;
+        light.intensity = panel.lumens * panel.scale * want.e;
     }
 
     for (tag, panel, mut light, mut vis) in &mut panels_spot {
@@ -610,6 +612,6 @@ pub fn apply_panel_lights(
         }
         sent.insert(tag.fixture.clone(), want);
         light.color = Color::srgb(want.r, want.g, want.b);
-        light.intensity = panel.lumens * want.e;
+        light.intensity = panel.lumens * panel.scale * want.e;
     }
 }

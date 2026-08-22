@@ -85,13 +85,14 @@ pub struct Quality {
     /// each, and it is per-pixel shading rather than cluster assignment (range
     /// makes almost no difference).
     ///
-    /// So it is a tier — but it stays ON at standard, because the cheap
-    /// fallback is visibly worse: a panel gets a very wide SpotLight, which
-    /// still lights the room (the bug that started all this — a Nero used to
-    /// emit nothing at all) but puts noticeably less down on the floor even
-    /// with its inner angle pushed out to 0.88 of its outer. Correct at
-    /// standard, fast at low, rather than a default that looks wrong to save
-    /// eight milliseconds of a frame that is over budget either way.
+    /// Off by default at every tier below `high`, and the reason is
+    /// correctness before cost. Bevy holds rect lights in a fixed array of
+    /// EIGHT, unclustered, evaluated for every lit fragment; past eight they
+    /// are silently dropped. This rig has 24 Neros, so sixteen of them were
+    /// emitting nothing while bevy warned about it into a log nobody read.
+    /// Even switched on they are budgeted to eight, with wide spots for the
+    /// rest — consistency across identical fixtures beats a better edge on a
+    /// third of them.
     pub panel_area_lights: bool,
 
     /// Draw beam shafts at all.
