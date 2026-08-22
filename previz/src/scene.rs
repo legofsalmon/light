@@ -12,6 +12,10 @@ use crate::state::Live;
 struct ProfMeta {
     heads: Vec<(HeadKind, f64, f64)>,
     beam_deg: f64,
+    /// The 10 % field angle, in degrees — the edge of the usable light.
+    field_deg: f64,
+    /// Physical emitter radius in metres; keeps the 1/r^2 term finite.
+    beam_radius: f64,
     /// Total flux for the whole fixture, in lumens — what the GDTF declares
     /// where it declares one, otherwise a plausible figure for the form.
     lumens: f64,
@@ -57,6 +61,8 @@ fn prof_meta(project: &ProjectLite, id: &str) -> Option<ProfMeta> {
             beam_deg: p.beam_deg,
             // The built-ins are hand-written and predate the form idea; their
             // head kinds happen to say enough.
+            field_deg: p.beam_deg * 1.55,
+            beam_radius: 0.035,
             lumens: match p.heads.first().map(|h| h.kind) {
                 Some(HeadKind::Derby) => 10_000.0,
                 Some(HeadKind::Hazer) => 0.0,
@@ -78,6 +84,8 @@ fn prof_meta(project: &ProjectLite, id: &str) -> Option<ProfMeta> {
         heads: c.heads.iter().map(|h| (h.kind, h.offset, h.offset_y)).collect(),
         beam_deg: c.beam_deg,
         form: c.form(),
+        field_deg: c.field_deg(),
+        beam_radius: c.beam_radius.unwrap_or(0.035),
         lumens: c.lumens_or_guess(),
         // only when no head is a Mover already — those steer themselves
         aim_head: if c.heads.iter().any(|h| h.kind == HeadKind::Mover) {
@@ -169,52 +177,19 @@ fn lumens_for(prof: &ProfMeta, per_head: bool) -> f32 {
 /// makes real shafts work — they would simply add on top.
 #[derive(Component)]
 pub struct BeamCone {
-    /// The scale this cone was spawned with, at the profile's own beam angle.
+    /// The scale this hull was spawned with, at the profile's field angle.
     /// Zoom rescales laterally from here; a mover's length is recomputed each
     /// frame and multiplies in on top.
     pub base_scale: Vec3,
+    /// The profile's field half-angle, in radians — what zoom deflects from.
+    pub base_field: f32,
+    /// Emitter radius in metres: the term that keeps 1/r^2 finite when the
+    /// camera looks straight down the barrel.
+    pub r0: f32,
+    /// Shaft length in metres, so the shader knows where the beam stops.
+    pub length_m: f32,
 }
 
-/// Unit beam cone: apex at the origin, opening along -Z to radius 1 at z=-1,
-/// with vertex alpha fading apex→base so the shaft dissolves with distance.
-fn unit_cone_mesh() -> Mesh {
-    use bevy::render::mesh::{Indices, PrimitiveTopology};
-    use bevy::asset::RenderAssetUsages;
-
-    const SEGS: usize = 28;
-    let mut positions: Vec<[f32; 3]> = vec![[0.0, 0.0, 0.0]];
-    let mut colors: Vec<[f32; 4]> = vec![[1.0, 1.0, 1.0, 0.85]];
-    let mut normals: Vec<[f32; 3]> = vec![[0.0, 0.0, 1.0]];
-    for i in 0..=SEGS {
-        let a = i as f32 / SEGS as f32 * std::f32::consts::TAU;
-        positions.push([a.cos(), a.sin(), -1.0]);
-        colors.push([1.0, 1.0, 1.0, 0.0]);
-        normals.push([0.0, 0.0, 1.0]);
-    }
-    let mut indices: Vec<u32> = Vec::with_capacity(SEGS * 3);
-    for i in 0..SEGS as u32 {
-        indices.extend_from_slice(&[0, i + 1, i + 2]);
-    }
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD,
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colors)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-    .with_inserted_indices(Indices::U32(indices))
-}
-
-fn cone_material() -> StandardMaterial {
-    StandardMaterial {
-        base_color: Color::NONE,
-        unlit: true,
-        alpha_mode: AlphaMode::Add,
-        cull_mode: None,
-        double_sided: true,
-        ..default()
-    }
-}
 
 #[derive(Component)]
 pub struct RingMesh;
@@ -615,6 +590,7 @@ pub fn rebuild_fixtures(
     mut live: ResMut<Live>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut beam_mats: ResMut<Assets<crate::beam::BeamMaterial>>,
     existing: Query<Entity, With<FixtureRoot>>,
     existing_props: Query<Entity, With<BandRoot>>,
     mut backdrop: Query<&mut Transform, (With<Backdrop>, Without<Floor>, Without<HazeVolume>)>,
@@ -645,7 +621,11 @@ pub fn rebuild_fixtures(
         metallic: 0.4,
         ..default()
     });
-    let cone_mesh = meshes.add(unit_cone_mesh());
+    // The proxy hull the beam shader integrates inside. Cut at the FIELD
+    // angle, not the beam angle: the soft shoulder lives out there, and sizing
+    // the geometry to the core would clip it back to a hard silhouette — the
+    // exact defect the shader exists to remove.
+    let cone_mesh = meshes.add(crate::beam::unit_cone_hull());
 
     // Every shadow-casting spotlight costs its own depth pass, so cost grows
     // with rig size, not with what you can see: 10 bars + 4 derbies is 64 of
@@ -774,9 +754,14 @@ pub fn rebuild_fixtures(
                 _ => Vec3::new(0.0, -0.26, 0.97),
             };
             let outer = (prof.beam_deg.max(2.0) as f32).to_radians() / 2.0;
+            // Field half-angle, and a shoulder beyond it: f_r is non-zero out
+            // to roughly 1.15x the field, so the hull has to be at least that
+            // wide or a hard triangle edge cuts the soft edge off.
+            let field = (prof.field_deg.max(prof.beam_deg) as f32).to_radians() / 2.0 * 1.15;
             // shaft length: throw to the floor along the beam, clamped sane
             let throw = (f.pos.y.max(0.3) / beam_dir.y.abs().max(0.2)).clamp(1.0, max_throw);
-            let cone_scale = Vec3::new(throw * outer.tan().max(0.02), throw * outer.tan().max(0.02), throw);
+            let fr = (throw * field.tan()).max(0.03);
+            let field_scale = Vec3::new(fr, fr, throw);
 
             commands.entity(root).with_children(|p| {
                 let mut head = p.spawn((
@@ -855,11 +840,22 @@ pub fn rebuild_fixtures(
                                         .with_children(|c| {
                                             c.spawn((
                                                 tag.clone(),
-                                                BeamLight { idx: k, lumens: 0.0, base_outer: outer * 0.7 },
-                                                BeamCone { base_scale: cone_scale * Vec3::new(0.7, 0.7, 0.85) },
+                                                BeamLight {
+                                                    idx: k,
+                                                    lumens: lumens_for(&prof, false) / 6.0 * q.lumen_scale,
+                                                    base_outer: outer * 0.7,
+                                                },
+                                                BeamCone {
+                                                    base_scale: field_scale * Vec3::new(0.7, 0.7, 0.85),
+                                                    base_field: field * 0.7,
+                                                    r0: prof.beam_radius as f32 * 0.5,
+                                                    length_m: throw * 0.85,
+                                                },
                                                 Mesh3d(cone_mesh.clone()),
-                                                MeshMaterial3d(materials.add(cone_material())),
-                                                Transform::from_scale(cone_scale * Vec3::new(0.7, 0.7, 0.85)),
+                                                MeshMaterial3d(beam_mats.add(crate::beam::BeamMaterial {
+                                                    beam: crate::beam::BeamUniform::default(),
+                                                })),
+                                                Transform::from_scale(field_scale * Vec3::new(0.7, 0.7, 0.85)),
                                             ));
                                         });
                                     }
@@ -915,11 +911,22 @@ pub fn rebuild_fixtures(
                             .with_children(|c| {
                                 c.spawn((
                                     tag.clone(),
-                                    BeamLight { idx: 0, lumens: 0.0, base_outer: outer },
-                                    BeamCone { base_scale: cone_scale },
+                                    BeamLight {
+                                        idx: 0,
+                                        lumens: lumens_for(&prof, true) * q.lumen_scale,
+                                        base_outer: outer,
+                                    },
+                                    BeamCone {
+                                        base_scale: field_scale,
+                                        base_field: field,
+                                        r0: prof.beam_radius as f32,
+                                        length_m: throw,
+                                    },
                                     Mesh3d(cone_mesh.clone()),
-                                    MeshMaterial3d(materials.add(cone_material())),
-                                    Transform::from_scale(cone_scale),
+                                    MeshMaterial3d(beam_mats.add(crate::beam::BeamMaterial {
+                                        beam: crate::beam::BeamUniform::default(),
+                                    })),
+                                    Transform::from_scale(field_scale),
                                 ));
                             });
                         }

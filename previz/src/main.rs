@@ -2,6 +2,7 @@
 //! engine's WebSocket protocol. It observes, never controls: volumetric
 //! beams, haze-coupled fog, bloom, and a glossy stage floor.
 
+mod beam;
 mod camera;
 mod protocol;
 mod quality;
@@ -46,6 +47,7 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins(beam::BeamMaterialPlugin)
         // A rig is not a game level. Bevy sizes its GPU light-clustering lists
         // for a handful of lights; an arena plot is 153 spot lights, and on the
         // first frame that they all land in view Bevy logs "the scene lighting

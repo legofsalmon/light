@@ -137,7 +137,7 @@ pub fn apply_live(
     time: Res<Time>,
     mut live: ResMut<Live>,
     mut lights: Query<(&HeadTag, &BeamLight, &mut SpotLight, &mut Visibility), Without<RingMesh>>,
-    cones: Query<(&HeadTag, &BeamLight, &MeshMaterial3d<StandardMaterial>), With<BeamCone>>,
+    cones: Query<(&HeadTag, &BeamLight, &BeamCone, &MeshMaterial3d<crate::beam::BeamMaterial>)>,
     glows: Query<(&HeadTag, &MeshMaterial3d<StandardMaterial>), With<SourceGlow>>,
     mut rings: Query<(&HeadTag, &mut Visibility), With<RingMesh>>,
     mut fans: Query<(&HeadTag, &mut Transform), With<DerbyFan>>,
@@ -152,6 +152,7 @@ pub fn apply_live(
     >,
     mut fogs: Query<&mut FogVolume>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut beam_mats: ResMut<Assets<crate::beam::BeamMaterial>>,
     q: Res<crate::quality::Quality>,
 ) {
     let dt = time.delta_secs();
@@ -235,28 +236,22 @@ pub fn apply_live(
         light.intensity = beam.lumens * energy * flux_gain(beam.base_outer, outer);
     }
 
-    // Beam shafts: additive cones, energy scaled by live haze — no haze, no
-    // visible beam, exactly like the real thing.
+    // Beam shafts. The material carries only photometrics — the shader takes
+    // the apex and axis from the instance transform, which is a frame fresher
+    // than anything read from a GlobalTransform here.
     //
-    // Guarded by `Sent`. Every `materials.get_mut` here marks a material
-    // changed, and 150 heads x (cone + glow) x 60 fps is 18,000 material
-    // re-uploads a second for a rig that is mostly holding still. Writing only
-    // what actually moved is the difference between this renderer being usable
-    // on an arena plot and not.
-    // See Quality::haze_floor — a show with no haze programmed has no visible
-    // beams, which is true and unhelpful in the window built to judge them.
+    // Guarded by `Sent` for the same reason the old path was: touching a
+    // material marks it changed, and 150 of them a frame is the difference
+    // between this renderer being usable on an arena plot and not.
     let haze = snap.haze.max(q.haze_floor);
-    let haze_k = (0.10 + haze * 0.60) * q.beam_gain;
+    // One haze number drives both the medium and the beams, or they disagree
+    // about how thick the air is.
+    let sigma_t = 0.02 + haze * 0.22;
+    let sigma_s = sigma_t * 0.85;
     let mut pending: Vec<((String, usize), Sent)> = Vec::new();
-    for (tag, beam, mat) in &cones {
+    for (tag, beam, cone, mat) in &cones {
         let key = (tag.fixture.clone(), tag.head);
         let (Some(h), Some(s)) = (heads.get(&key), live.smoothed.get(&key)) else {
-            // Unknown head: park it dark, once.
-            if let Some(mut m) = materials.get_mut(&mat.0) {
-                if m.base_color != Color::NONE {
-                    m.base_color = Color::NONE;
-                }
-            }
             continue;
         };
         let (mut r, mut g, mut b) = (s.r, s.g, s.b);
@@ -268,21 +263,39 @@ pub fn apply_live(
                 b = c[2] as f32 / 255.0;
             }
         }
-        let e = s.i * gate(now_s, h.st) * haze_k;
+        let e = s.i * gate(now_s, h.st);
         let want = Sent { r, g, b, e };
         if s.sent.is_some_and(|p| !p.differs(&want)) {
             continue;
         }
         pending.push((key, want));
-        let Some(mut m) = materials.get_mut(&mat.0) else { continue };
-        m.base_color = Color::LinearRgba(LinearRgba::new(r * 1.6 * e, g * 1.6 * e, b * 1.6 * e, e.min(1.0)));
+        let Some(mut m) = beam_mats.get_mut(&mat.0) else { continue };
+
+        // Live angles: the profile's, deflected by zoom.
+        let zk = zoom_scale(h.zm);
+        let beam_half = (beam.base_outer * zk).clamp(0.5f32.to_radians(), 1.4);
+        let field_half = (cone.base_field * zk).clamp(beam_half * 1.02, 1.5);
+
+        m.beam.color = Vec4::new(r, g, b, e);
+        m.beam.axial = crate::beam::axial_intensity(beam.lumens, field_half, cone.base_field);
+        m.beam.one_minus_cos_b = (1.0 - beam_half.cos()).max(1e-6);
+        // The shoulder brackets the field angle: fully lit a little inside it,
+        // dark a little outside. Cosine is decreasing in angle, so in > out.
+        m.beam.cos_shoulder_in = (field_half * 0.85).cos();
+        m.beam.cos_shoulder_out = (field_half * 1.15).cos();
+        m.beam.sigma_t = sigma_t;
+        m.beam.sigma_s = sigma_s;
+        m.beam.g = 0.35;
+        m.beam.r0_sq = cone.r0 * cone.r0;
+        m.beam.length_m = cone.length_m;
+        m.beam.gain = q.beam_gain;
     }
 
     for (tag, mat) in &glows {
         let key = (tag.fixture.clone(), tag.head);
         let Some(s) = live.smoothed.get(&key) else { continue };
         // Same guard, keyed off the same record: the glow is driven by the same
-        // four numbers as the cone, so if the cone had nothing to say neither
+        // four numbers as the shaft, so if the shaft had nothing to say neither
         // does the glow.
         let want = Sent { r: s.r, g: s.g, b: s.b, e: s.i };
         if s.sent.is_some_and(|p| !p.differs(&want)) {
