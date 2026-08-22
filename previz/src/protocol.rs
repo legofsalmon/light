@@ -140,6 +140,16 @@ pub struct HeadLite {
     pub tilt: f32,
     #[serde(default)]
     pub mc: Option<Vec<[u8; 3]>>,
+    /// Live zoom, 0..1, present only while a look is actively driving it —
+    /// absent means "parked, keep the profile's own angle" (see
+    /// `core/src/renderer.rs`, which skip-serializes it).
+    ///
+    /// This window is the one the docs send people to for judging beam
+    /// geometry, and until now it was the one place zoom could not be seen:
+    /// the field was on the wire and simply never parsed, so both the shaft and
+    /// the floor pool stayed frozen at the profile angle.
+    #[serde(default)]
+    pub zm: Option<f32>,
 }
 
 fn default_mm() -> String {

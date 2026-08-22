@@ -6,6 +6,36 @@ use crate::protocol::{WsEvent, WsReceiver};
 use crate::scene::{BeamCone, BeamLight, DerbyFan, HeadTag, MoverHead, RingMesh, SourceGlow};
 use crate::state::{Live, Sent, Smoothed};
 
+/// Live zoom -> a multiplier on the profile's beam half-angle.
+///
+/// `None` means no look is driving zoom, so the fixture sits at its profile
+/// angle. Otherwise 0 narrows to half and 1 opens to double, matching the web
+/// previz's range — but applied to the ANGLE rather than to the cone radius.
+/// The web view scales `tan θ`, which is the same thing at par angles and about
+/// 4 % out at wide zoom; this is the version to copy back.
+fn zoom_scale(zm: Option<f32>) -> f32 {
+    match zm {
+        None => 1.0,
+        Some(z) => 0.5 + z.clamp(0.0, 1.0) * 1.5,
+    }
+}
+
+/// Flux conservation: the same lumens squeezed into a smaller cone is brighter.
+///
+/// Bevy converts a SpotLight's lumens to candela as `intensity / 4π`
+/// regardless of its cone angle, so narrowing a beam in Bevy leaves the pool it
+/// lands in exactly as bright — the one thing zoom most obviously does in the
+/// room does not happen. This restores it: relative axial intensity goes as
+/// 1/(1 − cos θ), so a 50° fixture zoomed to 10° gets ~24× the candela.
+fn flux_gain(base_outer: f32, outer: f32) -> f32 {
+    let d = 1.0 - outer.cos();
+    let b = 1.0 - base_outer.cos();
+    if d <= 1e-6 || b <= 1e-6 {
+        return 1.0;
+    }
+    (b / d).clamp(0.05, 64.0)
+}
+
 /// Pull everything the WS thread has queued into the Live resource.
 pub fn drain_ws(rx: Res<WsReceiver>, mut live: ResMut<Live>) {
     let rx = rx.0.lock().unwrap();
@@ -106,7 +136,7 @@ pub fn apply_live(
     // `fans` (Without<DerbyFan>), which is what lets Bevy accept three
     // simultaneous &mut Transform queries.
     mut mover_cones: Query<
-        (&HeadTag, &mut Transform),
+        (&HeadTag, &BeamCone, &BeamLight, &mut Transform),
         (With<BeamCone>, Without<MoverHead>, Without<DerbyFan>),
     >,
     mut fogs: Query<&mut FogVolume>,
@@ -183,7 +213,15 @@ pub fn apply_live(
         }
         vis.set_if_neq(Visibility::Inherited);
         light.color = Color::srgb(r, g, b);
-        light.intensity = beam.lumens * energy;
+
+        // Zoom, finally. Both halves of it: the cone the light throws, and how
+        // bright that cone is.
+        let outer = (beam.base_outer * zoom_scale(h.zm)).clamp(0.5f32.to_radians(), 1.4);
+        if (light.outer_angle - outer).abs() > 1e-4 {
+            light.outer_angle = outer;
+            light.inner_angle = outer * 0.7;
+        }
+        light.intensity = beam.lumens * energy * flux_gain(beam.base_outer, outer);
     }
 
     // Beam shafts: additive cones, energy scaled by live haze — no haze, no
@@ -295,9 +333,26 @@ pub fn apply_live(
         let r = (throw * mv.outer.tan()).max(0.02);
         cone_scales.insert(key, Vec3::new(r, r, throw));
     }
-    for (tag, mut tf) in &mut mover_cones {
-        if let Some(s) = cone_scales.get(&(tag.fixture.clone(), tag.head)) {
-            tf.scale = *s;
+    // Cone geometry: length from the mover pass above where there is one, and
+    // width from the live zoom. Every cone, not just the movers' — a zoomed par
+    // has to change shape too.
+    for (tag, cone, beam, mut tf) in &mut mover_cones {
+        let key = (tag.fixture.clone(), tag.head);
+        let base = cone_scales.get(&key).copied().unwrap_or(cone.base_scale);
+        let k = match heads.get(&key) {
+            // Widen in tan-space: the cone's radius at unit length IS tan θ.
+            // The cone entity carries a BeamLight too, so it knows the same
+            // profile half-angle its spotlight does.
+            Some(h) if h.zm.is_some() && beam.base_outer > 1e-4 => {
+                let base = beam.base_outer;
+                ((base * zoom_scale(h.zm)).clamp(0.5f32.to_radians(), 1.4).tan() / base.tan())
+                    .clamp(0.1, 8.0)
+            }
+            _ => 1.0,
+        };
+        let want = Vec3::new(base.x * k, base.y * k, base.z);
+        if tf.scale.distance_squared(want) > 1e-8 {
+            tf.scale = want;
         }
     }
 

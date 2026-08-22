@@ -79,6 +79,8 @@ pub struct HeadTag {
 pub struct BeamLight {
     pub idx: usize,
     pub lumens: f32,
+    /// The profile's own beam half-angle, in radians — what zoom deflects from.
+    pub base_outer: f32,
 }
 
 #[derive(Component)]
@@ -117,7 +119,12 @@ fn lumens_for(kind: Option<HeadKind>, heads: usize) -> f32 {
 /// haze bed, and VolumetricLight stays on the spots in case a future Bevy
 /// makes real shafts work — they would simply add on top.
 #[derive(Component)]
-pub struct BeamCone;
+pub struct BeamCone {
+    /// The scale this cone was spawned with, at the profile's own beam angle.
+    /// Zoom rescales laterally from here; a mover's length is recomputed each
+    /// frame and multiplies in on top.
+    pub base_scale: Vec3,
+}
 
 /// Unit beam cone: apex at the origin, opening along -Z to radius 1 at z=-1,
 /// with vertex alpha fading apex→base so the shaft dissolves with distance.
@@ -724,7 +731,11 @@ pub fn rebuild_fixtures(
                                         ) * Quat::from_rotation_x(0.42);
                                         fan.spawn((
                                             tag.clone(),
-                                            BeamLight { idx: k, lumens: lumens_for(Some(HeadKind::Derby), 1) * q.lumen_scale },
+                                            BeamLight {
+                                                idx: k,
+                                                lumens: lumens_for(Some(HeadKind::Derby), 1) * q.lumen_scale,
+                                                base_outer: outer * 0.7,
+                                            },
                                             SpotLight {
                                                 color: Color::BLACK,
                                                 intensity: 0.0,
@@ -741,8 +752,8 @@ pub fn rebuild_fixtures(
                                         .with_children(|c| {
                                             c.spawn((
                                                 tag.clone(),
-                                                BeamLight { idx: k, lumens: 0.0 },
-                                                BeamCone,
+                                                BeamLight { idx: k, lumens: 0.0, base_outer: outer * 0.7 },
+                                                BeamCone { base_scale: cone_scale * Vec3::new(0.7, 0.7, 0.85) },
                                                 Mesh3d(cone_mesh.clone()),
                                                 MeshMaterial3d(materials.add(cone_material())),
                                                 Transform::from_scale(cone_scale * Vec3::new(0.7, 0.7, 0.85)),
@@ -761,6 +772,7 @@ pub fn rebuild_fixtures(
                                     idx: 0,
                                     lumens: lumens_for(prof.heads.get(hi).map(|h| h.0), prof.heads.len())
                                         * q.lumen_scale,
+                                    base_outer: outer,
                                 },
                                 SpotLight {
                                     color: Color::BLACK,
@@ -797,8 +809,8 @@ pub fn rebuild_fixtures(
                             .with_children(|c| {
                                 c.spawn((
                                     tag.clone(),
-                                    BeamLight { idx: 0, lumens: 0.0 },
-                                    BeamCone,
+                                    BeamLight { idx: 0, lumens: 0.0, base_outer: outer },
+                                    BeamCone { base_scale: cone_scale },
                                     Mesh3d(cone_mesh.clone()),
                                     MeshMaterial3d(materials.add(cone_material())),
                                     Transform::from_scale(cone_scale),
