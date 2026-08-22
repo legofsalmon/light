@@ -1,10 +1,10 @@
-use bevy::pbr::FogVolume;
+use bevy::light::FogVolume;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::protocol::{WsEvent, WsReceiver};
 use crate::scene::{BeamCone, BeamLight, DerbyFan, HeadTag, MoverHead, RingMesh, SourceGlow};
-use crate::state::{Live, Smoothed};
+use crate::state::{Live, Sent, Smoothed};
 
 /// Pull everything the WS thread has queued into the Live resource.
 pub fn drain_ws(rx: Res<WsReceiver>, mut live: ResMut<Live>) {
@@ -95,7 +95,7 @@ fn gate(now_s: f32, st: f32) -> f32 {
 pub fn apply_live(
     time: Res<Time>,
     mut live: ResMut<Live>,
-    mut lights: Query<(&HeadTag, &BeamLight, &mut SpotLight)>,
+    mut lights: Query<(&HeadTag, &BeamLight, &mut SpotLight, &mut Visibility), Without<RingMesh>>,
     cones: Query<(&HeadTag, &BeamLight, &MeshMaterial3d<StandardMaterial>), With<BeamCone>>,
     glows: Query<(&HeadTag, &MeshMaterial3d<StandardMaterial>), With<SourceGlow>>,
     mut rings: Query<(&HeadTag, &mut Visibility), With<RingMesh>>,
@@ -148,10 +148,22 @@ pub fn apply_live(
         }
     }
 
-    for (tag, beam, mut light) in &mut lights {
+    // A dark light is not a free light. Every visible SpotLight is assigned to
+    // clusters each frame and, if it casts shadows, gets its own depth pass —
+    // whether or not its intensity is zero. On this rig that is 153 lights
+    // being clustered to render a blackout. Hiding the dark ones takes them out
+    // of both, and a cue lights a few dozen heads, not all of them.
+    //
+    // `set_if_neq` matters as much as the test: writing Visibility every frame
+    // dirties it and re-runs propagation for the whole subtree.
+    const LIGHT_ON: f32 = 0.0015;
+    for (tag, beam, mut light, mut vis) in &mut lights {
         let key = (tag.fixture.clone(), tag.head);
         let (Some(h), Some(s)) = (heads.get(&key), live.smoothed.get(&key)) else {
-            light.intensity = 0.0;
+            if light.intensity != 0.0 {
+                light.intensity = 0.0;
+            }
+            vis.set_if_neq(Visibility::Hidden);
             continue;
         };
         let (mut r, mut g, mut b) = (s.r, s.g, s.b);
@@ -163,18 +175,35 @@ pub fn apply_live(
                 b = c[2] as f32 / 255.0;
             }
         }
+        let energy = s.i * gate(now_s, h.st);
+        if energy < LIGHT_ON {
+            vis.set_if_neq(Visibility::Hidden);
+            continue;
+        }
+        vis.set_if_neq(Visibility::Inherited);
         light.color = Color::srgb(r, g, b);
-        light.intensity = beam.lumens * s.i * gate(now_s, h.st);
+        light.intensity = beam.lumens * energy;
     }
 
-    // beam shafts: additive cones, energy scaled by live haze — no haze, no
-    // visible beam, exactly like the real thing
+    // Beam shafts: additive cones, energy scaled by live haze — no haze, no
+    // visible beam, exactly like the real thing.
+    //
+    // Guarded by `Sent`. Every `materials.get_mut` here marks a material
+    // changed, and 150 heads x (cone + glow) x 60 fps is 18,000 material
+    // re-uploads a second for a rig that is mostly holding still. Writing only
+    // what actually moved is the difference between this renderer being usable
+    // on an arena plot and not.
     let haze_k = 0.10 + snap.haze * 0.60;
+    let mut pending: Vec<((String, usize), Sent)> = Vec::new();
     for (tag, beam, mat) in &cones {
         let key = (tag.fixture.clone(), tag.head);
-        let Some(m) = materials.get_mut(&mat.0) else { continue };
         let (Some(h), Some(s)) = (heads.get(&key), live.smoothed.get(&key)) else {
-            m.base_color = Color::NONE;
+            // Unknown head: park it dark, once.
+            if let Some(mut m) = materials.get_mut(&mat.0) {
+                if m.base_color != Color::NONE {
+                    m.base_color = Color::NONE;
+                }
+            }
             continue;
         };
         let (mut r, mut g, mut b) = (s.r, s.g, s.b);
@@ -187,15 +216,34 @@ pub fn apply_live(
             }
         }
         let e = s.i * gate(now_s, h.st) * haze_k;
+        let want = Sent { r, g, b, e };
+        if s.sent.is_some_and(|p| !p.differs(&want)) {
+            continue;
+        }
+        pending.push((key, want));
+        let Some(mut m) = materials.get_mut(&mat.0) else { continue };
         m.base_color = Color::LinearRgba(LinearRgba::new(r * 1.6 * e, g * 1.6 * e, b * 1.6 * e, e.min(1.0)));
     }
 
     for (tag, mat) in &glows {
         let key = (tag.fixture.clone(), tag.head);
         let Some(s) = live.smoothed.get(&key) else { continue };
-        if let Some(m) = materials.get_mut(&mat.0) {
+        // Same guard, keyed off the same record: the glow is driven by the same
+        // four numbers as the cone, so if the cone had nothing to say neither
+        // does the glow.
+        let want = Sent { r: s.r, g: s.g, b: s.b, e: s.i };
+        if s.sent.is_some_and(|p| !p.differs(&want)) {
+            continue;
+        }
+        if let Some(mut m) = materials.get_mut(&mat.0) {
             let e = 1.5 + 55.0 * s.i;
             m.emissive = LinearRgba::rgb(s.r * e, s.g * e, s.b * e);
+        }
+    }
+
+    for (key, want) in pending {
+        if let Some(s) = live.smoothed.get_mut(&key) {
+            s.sent = Some(want);
         }
     }
 

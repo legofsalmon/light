@@ -1,8 +1,9 @@
-use bevy::core_pipeline::bloom::Bloom;
+use bevy::post_process::bloom::Bloom;
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
-use bevy::pbr::VolumetricFog;
+use bevy::camera::Hdr;
+use bevy::light::VolumetricFog;
 use bevy::prelude::*;
 
 #[derive(Resource)]
@@ -23,7 +24,8 @@ impl Default for Orbit {
 pub fn setup_camera(mut commands: Commands, q: Res<crate::quality::Quality>) {
     commands.spawn((
         Camera3d::default(),
-        Camera { hdr: true, ..default() },
+        Camera::default(),
+        Hdr,
         // A previz is mostly thin bright geometry — truss chords, fixture
         // bodies, the rim of every beam — against near-black, with bloom on
         // top. With no anti-aliasing at all those edges crawl and sparkle the
@@ -53,8 +55,8 @@ pub fn orbit_camera(
     mut orbit: ResMut<Orbit>,
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
-    mut motion: EventReader<MouseMotion>,
-    mut wheel: EventReader<MouseWheel>,
+    mut motion: MessageReader<MouseMotion>,
+    mut wheel: MessageReader<MouseWheel>,
     mut camera: Query<&mut Transform, With<Camera3d>>,
     live: Res<crate::state::Live>,
 ) {

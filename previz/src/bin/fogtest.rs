@@ -2,9 +2,10 @@
 //! volumetric scattering on this machine? Mirrors bevy's fog_volumes example
 //! with our exact camera stack. Saves a screenshot to $LIGHT_PREVIZ_SHOT.
 
-use bevy::core_pipeline::bloom::Bloom;
+use bevy::camera::Hdr;
+use bevy::post_process::bloom::Bloom;
 use bevy::core_pipeline::tonemapping::Tonemapping;
-use bevy::pbr::{FogVolume, VolumetricFog, VolumetricLight};
+use bevy::light::{FogVolume, VolumetricFog, VolumetricLight};
 use bevy::prelude::*;
 
 fn main() {
@@ -46,7 +47,7 @@ fn setup(
     commands.spawn((
         DirectionalLight {
             illuminance: 32_000.0,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             ..default()
         },
         VolumetricLight,
@@ -61,7 +62,7 @@ fn setup(
             color: Color::srgb(0.3, 0.9, 1.0),
             inner_angle: 0.2,
             outer_angle: 0.35,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             ..default()
         },
         VolumetricLight,
@@ -72,7 +73,8 @@ fn setup(
     // canonical example stack: NO DepthPrepass, NO Msaa::Off
     commands.spawn((
         Camera3d::default(),
-        Camera { hdr: true, ..default() },
+        Camera::default(),
+        Hdr,
         Tonemapping::TonyMcMapface,
         Bloom::default(),
         VolumetricFog { ambient_intensity: 0.1, ..default() },

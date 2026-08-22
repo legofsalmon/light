@@ -1,4 +1,4 @@
-use bevy::pbr::{FogVolume, VolumetricLight};
+use bevy::light::{FogVolume, VolumetricLight};
 use bevy::prelude::*;
 use light_core::profiles::{profile_of, HeadKind};
 
@@ -97,7 +97,7 @@ pub struct BeamCone;
 /// with vertex alpha fading apex→base so the shaft dissolves with distance.
 fn unit_cone_mesh() -> Mesh {
     use bevy::render::mesh::{Indices, PrimitiveTopology};
-    use bevy::render::render_asset::RenderAssetUsages;
+    use bevy::asset::RenderAssetUsages;
 
     const SEGS: usize = 28;
     let mut positions: Vec<[f32; 3]> = vec![[0.0, 0.0, 0.0]];
@@ -706,7 +706,7 @@ pub fn rebuild_fixtures(
                                                 radius: 0.02,
                                                 inner_angle: outer * 0.6,
                                                 outer_angle: outer,
-                                                shadows_enabled: false,
+                                                shadow_maps_enabled: false,
                                                 ..default()
                                             },
                                             VolumetricLight,
@@ -742,7 +742,7 @@ pub fn rebuild_fixtures(
                                     radius: 0.04,
                                     inner_angle: outer * 0.7,
                                     outer_angle: outer,
-                                    shadows_enabled: {
+                                    shadow_maps_enabled: {
                                         let on = shadow_budget > 0;
                                         shadow_budget = shadow_budget.saturating_sub(1);
                                         on
