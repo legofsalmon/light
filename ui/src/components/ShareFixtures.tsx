@@ -55,7 +55,12 @@ function Result({
 }): React.ReactElement {
   return (
     <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-      <button className="btn small" disabled={busy} onClick={onGet}>
+      <button
+        className="btn small"
+        disabled={busy}
+        title="download this fixture definition and add it to the local library"
+        onClick={onGet}
+      >
         get
       </button>
       <span>
@@ -317,14 +322,16 @@ export function ShareFixtures(): React.ReactElement | null {
             className="btn small"
             disabled={!!busy || !user.trim() || !password}
             onClick={() => void signIn()}
-          >
+          
+            title="sign in to GDTF Share. Credentials go to the macOS Keychain, never into the project file.">
             sign in
           </button>
         </div>
       ) : (
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
           <span className="label">signed in as {status?.user}</span>
-          <button className="btn small ghost" disabled={!!busy} onClick={() => void refresh()}>
+          <button className="btn small ghost" disabled={!!busy} onClick={() => void refresh()}
+            title="re-download the GDTF Share index (~6 MB). Cached locally; only needed when a fixture is missing.">
             refresh catalogue
           </button>
           <span className="label">
@@ -373,7 +380,11 @@ export function ShareFixtures(): React.ReactElement | null {
               onChange={(e) => setQuery(e.target.value)}
             />
             {query.trim() && (
-              <button className="btn small ghost" onClick={() => setQuery('')}>
+              <button
+                className="btn small ghost"
+                title="clear the search and show the full catalogue again"
+                onClick={() => setQuery('')}
+              >
                 clear
               </button>
             )}

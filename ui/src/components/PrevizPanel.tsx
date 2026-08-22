@@ -87,8 +87,20 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
         )}
         <span className="label">previz</span>
         <div className="seg">
-          <button className={mode === '3d' ? 'on' : ''} onClick={() => setMode('3d')}>3D</button>
-          <button className={mode === '2d' ? 'on' : ''} onClick={() => setMode('2d')}>2D plan</button>
+          <button
+            className={mode === '3d' ? 'on' : ''}
+            title="3D stage view — what the rig looks like from the room, with beams and haze"
+            onClick={() => setMode('3d')}
+          >
+            3D
+          </button>
+          <button
+            className={mode === '2d' ? 'on' : ''}
+            title="2D plan — the drafting view: drag fixtures into place, snap them to truss, draw structure"
+            onClick={() => setMode('2d')}
+          >
+            2D plan
+          </button>
         </div>
         <div className="grow" />
         {/* Snap acts on 2D PLAN drags and measure drives the 2D grid, but both
@@ -174,8 +186,20 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
               <option value="screen">screen</option>
             </select>
             <div className="seg">
-              <button className={view2d === 'plan' ? 'on' : ''} onClick={() => setView2d('plan')}>Plan</button>
-              <button className={view2d === 'front' ? 'on' : ''} onClick={() => setView2d('front')}>Front</button>
+              <button
+                className={view2d === 'plan' ? 'on' : ''}
+                title="top-down: dragging a fixture sets where it stands on the floor"
+                onClick={() => setView2d('plan')}
+              >
+                Plan
+              </button>
+              <button
+                className={view2d === 'front' ? 'on' : ''}
+                title="front elevation: dragging a fixture sets its trim HEIGHT, not its position"
+                onClick={() => setView2d('front')}
+              >
+                Front
+              </button>
             </div>
             <span className="label">
               {view2d === 'plan'

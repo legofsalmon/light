@@ -685,6 +685,7 @@ export function PatchView() {
                   </td>
                   <td>
                     <button
+                      title="delete this group. The fixtures stay patched; looks pointing at it lose their target."
                       className="btn small ghost"
                       onClick={() => {
                         void (async () => {
@@ -727,7 +728,8 @@ export function PatchView() {
                 rotY: 0,
               });
             })}
-          >
+          
+            title="add one fixture at the next free address in the selected universe">
             + add fixture
           </button>
           <label className="btn small" style={{ cursor: 'pointer' }}>
@@ -1085,7 +1087,8 @@ export function PatchView() {
         <button
           className="btn small"
           onClick={() => mutate((p) => p.groups.push({ id: uid('g'), name: `Group ${p.groups.length + 1}`, heads: [] }))}
-        >
+        
+            title="a named set of heads. Groups are what looks point at, and their order is chase order.">
           + add group
         </button>
         <div className="label" style={{ marginTop: 6 }}>chip order = chase order (first chip runs first)</div>

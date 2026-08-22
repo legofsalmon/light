@@ -270,7 +270,8 @@ function ChannelCheck({
               send({ type: 'clearChannelOverrides' });
               setOverrides(() => ({}));
             }}
-          >
+          
+            title="drop every held flash look — the safety net if a held pad or note is stuck on">
             release all
           </button>
         </div>
@@ -374,7 +375,11 @@ export function OutputView() {
                     <TextField className="text" style={{ width: 140 }} entityId={u.id} value={u.label} onCommit={(v) => editU((x) => (x.label = v))} />
                   </td>
                   <td>
-                    <button className={`btn small ${u.artnet ? 'on' : ''}`} onClick={() => editU((x) => (x.artnet = !x.artnet))}>
+                    <button
+                      className={`btn small ${u.artnet ? 'on' : ''}`}
+                      title="send this universe over Art-Net. Off means the console runs normally and this universe reaches no fixtures."
+                      onClick={() => editU((x) => (x.artnet = !x.artnet))}
+                    >
                       {u.artnet ? 'on' : 'off'}
                     </button>
                   </td>
@@ -387,7 +392,11 @@ export function OutputView() {
                     />
                   </td>
                   <td>
-                    <button className={`btn small ${u.sacn ? 'on' : ''}`} onClick={() => editU((x) => (x.sacn = !x.sacn))}>
+                    <button
+                      className={`btn small ${u.sacn ? 'on' : ''}`}
+                      title="send this universe over sACN (E1.31). Art-Net and sACN can run at the same time."
+                      onClick={() => editU((x) => (x.sacn = !x.sacn))}
+                    >
                       {u.sacn ? 'on' : 'off'}
                     </button>
                   </td>
@@ -444,7 +453,8 @@ export function OutputView() {
               unicast: null,
             });
           })}
-        >
+        
+            title="another DMX universe: 512 channels with its own Art-Net/sACN destination">
           + add universe
         </button>
       </div>

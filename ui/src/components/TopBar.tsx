@@ -81,6 +81,7 @@ function ProjectMenu({ name }: { name: string }) {
               key={p.slug}
               className={`btn small ghost ${p.slug === projects?.current ? 'on' : ''}`}
               style={{ justifyContent: 'flex-start', textAlign: 'left' }}
+              title={`open “${p.name}” — the running show is saved first, and undo history does not cross projects`}
               onClick={() => openProject(p.slug, p.name)}
             >
               {p.slug === projects?.current ? '✓ ' : ''}{p.name}
@@ -90,6 +91,7 @@ function ProjectMenu({ name }: { name: string }) {
           <button
             className="btn small ghost"
             style={{ justifyContent: 'flex-start' }}
+            title="start an empty show — the default rig and a blank grid. The current show is saved first."
             onClick={() => {
               setOpen(false);
               void (async () => {
@@ -103,6 +105,7 @@ function ProjectMenu({ name }: { name: string }) {
           <button
             className="btn small ghost"
             style={{ justifyContent: 'flex-start' }}
+            title="save a copy under a new name and switch to it — the show you are on is left as it was"
             onClick={() => {
               setOpen(false);
               void (async () => {
@@ -190,7 +193,11 @@ export function TopBar() {
           </button>
         ))}
       </div>
-      <button className="btn small ghost" onClick={() => send({ type: 'save' })}>
+      <button
+        className="btn small ghost"
+        title="write the show to disk now (⌘S). Edits autosave about a second after you stop, so this is only for peace of mind."
+        onClick={() => send({ type: 'save' })}
+      >
         {justSaved ? 'saved ✓' : 'save'}
       </button>
       <button
@@ -235,6 +242,7 @@ export function TopBar() {
         <span className="label">bpm</span>
         <button
           className="btn small"
+          title="tap the beat — four taps sets the tempo, and every tap also lands the downbeat (keyboard: T)"
           onClick={() => {
             if (!useStore.getState().armLearn({ kind: 'tap' })) send({ type: 'tap' });
           }}
@@ -332,6 +340,7 @@ export function TopBar() {
           RIDING {snap!.soft!.length}
           <button
             className="btn small"
+            title="write these live positions into the show, so the looks keep them next time they fire (undoable)"
             onClick={() => {
               // capture undo locally FIRST: the commit arrives as an engine
               // echo, which undo deliberately does not infer from
@@ -341,7 +350,11 @@ export function TopBar() {
           >
             Store
           </button>
-          <button className="btn small ghost" onClick={() => send({ type: 'softClear' })}>
+          <button
+            className="btn small ghost"
+            title="throw the live positions away and snap back to what the looks have stored"
+            onClick={() => send({ type: 'softClear' })}
+          >
             Discard
           </button>
         </span>
@@ -368,6 +381,7 @@ export function TopBar() {
       </button>
       <button
         className={`btn blackout ${snap?.blackout ? 'hot' : ''}`}
+        title="blackout — zeroes intensity and strobe instantly and always wins, while layers keep running underneath. Press again to restore (keyboard: B)."
         onClick={() => {
           if (!useStore.getState().armLearn({ kind: 'blackout' })) send({ type: 'setBlackout', v: !snap?.blackout });
         }}

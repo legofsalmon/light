@@ -32,6 +32,7 @@ class Region extends React.Component<
           <span>{this.props.name} crashed</span>
           <button
             className="btn small ghost"
+            title="rebuild this panel — the rest of the console kept running, and nothing on stage changed"
             onClick={() => this.setState((s) => ({ failed: false, nonce: s.nonce + 1 }))}
           >
             remount

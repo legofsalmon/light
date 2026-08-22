@@ -249,7 +249,7 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
       {/* wet/dry: how much of the effect lands. 100% is full effect. */}
       <Fader label="mix" width={80} value={soft('mix') ?? fx.mix} def={1} onChange={(v) => onField('mix', v, (x) => (x.mix = v))} fmt={pct} variant="dim" />
       <button className="btn small ghost" title="save this effect to the FX pool as a reusable preset" onClick={onSaveToPool}>☆</button>
-      <button className="btn small ghost" onClick={onRemove}>✕</button>
+      <button title="remove this step from the cue list" className="btn small ghost" onClick={onRemove}>✕</button>
     </div>
     <div className="fxrow" style={{ ...(fx.bypass ? { opacity: 0.5 } : {}), paddingLeft: 34 }}>
       <span className="label">fan</span>
@@ -385,7 +385,8 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
             const look = p.looks[lookId];
             if (look) look.parts = look.parts.filter((x) => x.id !== part.id);
           })}
-        >
+        
+            title="remove this part from the look — the fixture group itself is untouched">
           remove part
         </button>
       </div>
@@ -516,7 +517,18 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
               <div className={`grow paramrow ${prm.motorMode === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
                 <div className="seg">
                   {(['off', 'aim', 'rotate'] as const).map((m) => (
-                    <button key={m} className={prm.motorMode === m ? 'on' : ''} onClick={() => edit((pt) => (pt.params.motorMode = m))}>
+                    <button
+                      key={m}
+                      className={prm.motorMode === m ? 'on' : ''}
+                      title={
+                        m === 'off'
+                          ? 'motor parked'
+                          : m === 'aim'
+                            ? 'hold a fixed position — the fader below picks it'
+                            : 'spin continuously — the fader below is speed, not position'
+                      }
+                      onClick={() => edit((pt) => (pt.params.motorMode = m))}
+                    >
                       {m}
                     </button>
                   ))}
@@ -642,7 +654,8 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
           <button
             className="btn small ghost"
             onClick={() => edit((pt) => pt.effects.push({ id: uid('fx'), target: 'dimmer', wave: 'sine', rate: 4, size: 1, spread: 0, width: 0.5, phase: 0, bypass: false, mix: 1, distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0 }))}
-          >
+          
+            title="add an effect to this part: a wave over one parameter, locked to the beat">
             + effect
           </button>
           {(project.fxPool?.length ?? 0) > 0 && (
@@ -749,7 +762,8 @@ export function LookEditor() {
                 if (ly) ly.cells[sel.col] = id;
               })
             }
-          >
+          
+            title="make a new look on this pad and open it for editing — nothing fires">
             + create look here
           </button>
           <select
@@ -817,7 +831,8 @@ export function LookEditor() {
           onChange={(e) => editLook((lk) => (lk.fade = e.target.value === '' ? undefined : Math.max(0, Number(e.target.value))))}
         />
         <span className="label">s</span>
-        <button className="btn small ghost" onClick={() => send({ type: 'trigger', layerId: layer.id, col: sel.col })}>
+        <button className="btn small ghost" onClick={() => send({ type: 'trigger', layerId: layer.id, col: sel.col })}
+            title="fire this look on its layer now, exactly as clicking the pad would">
           ▶ fire
         </button>
         <button
@@ -856,7 +871,8 @@ export function LookEditor() {
             const ly = p.layers.find((l) => l.id === sel.layerId);
             if (ly) ly.cells[sel.col] = null;
           })}
-        >
+        
+            title="empty this pad. The look stays in the library and on any other pad using it.">
           clear cell
         </button>
         <button
@@ -922,7 +938,8 @@ export function LookEditor() {
               });
             })();
           }}
-        >
+        
+            title="delete the look from the library and from every pad in every song that uses it">
           delete look
         </button>
       </div>
@@ -962,6 +979,7 @@ export function LookEditor() {
               />
               <span className="label">beats</span>
               <button
+                title="move this effect later — order matters, they stack in sequence"
                 className="btn small ghost"
                 disabled={i === 0}
                 onClick={() => editLook((lk) => {
@@ -972,6 +990,7 @@ export function LookEditor() {
                 ↑
               </button>
               <button
+                title="remove this effect from the part"
                 className="btn small ghost"
                 disabled={i === (look.steps?.length ?? 0) - 1}
                 onClick={() => editLook((lk) => {
@@ -983,6 +1002,7 @@ export function LookEditor() {
               </button>
               <button
                 className="btn small ghost"
+                title="remove this step from the cue list"
                 onClick={() => editLook((lk) => {
                   lk.steps?.splice(i, 1);
                   if (lk.steps?.length === 0) delete lk.steps;
@@ -1023,7 +1043,8 @@ export function LookEditor() {
             <button
               className="btn small ghost"
               onClick={() => editLook((lk) => lk.parts.push({ id: uid('part'), groupId: project.groups[0]?.id ?? '', params: { dimmer: 1 }, effects: [] }))}
-            >
+            
+            title="add another fixture group to this look, with its own colour, position and effects">
               + part (fixture group)
             </button>
             {(() => {

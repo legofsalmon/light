@@ -174,7 +174,11 @@ export function SyncView() {
       <div className="col grow" style={{ maxWidth: 520 }}>
         <div className="sectionhead">Resolume sync (OSC in)</div>
         <div className="row">
-          <button className={`btn small ${sync.oscEnabled ? 'on' : ''}`} onClick={() => editSync((s) => (s.oscEnabled = !s.oscEnabled))}>
+          <button
+            className={`btn small ${sync.oscEnabled ? 'on' : ''}`}
+            title="listen for OSC on the port beside this. Resolume drives tempo and cues through it; off means LIGHT ignores the network entirely."
+            onClick={() => editSync((s) => (s.oscEnabled = !s.oscEnabled))}
+          >
             {sync.oscEnabled ? 'listening' : 'off'}
           </button>
           <span className="label">port</span>
@@ -185,10 +189,12 @@ export function SyncView() {
             width={72}
             onCommit={(v) => editSync((s) => (s.oscPort = v))}
           />
-          <button className={`btn small ${sync.followColumns ? 'on' : ''}`} onClick={() => editSync((s) => (s.followColumns = !s.followColumns))}>
+          <button className={`btn small ${sync.followColumns ? 'on' : ''}`} onClick={() => editSync((s) => (s.followColumns = !s.followColumns))}
+            title="Resolume column launches fire the matching LIGHT cue">
             follow columns
           </button>
-          <button className={`btn small ${sync.bpmFromOsc ? 'on' : ''}`} onClick={() => editSync((s) => (s.bpmFromOsc = !s.bpmFromOsc))}>
+          <button className={`btn small ${sync.bpmFromOsc ? 'on' : ''}`} onClick={() => editSync((s) => (s.bpmFromOsc = !s.bpmFromOsc))}
+            title="take tempo and downbeat from Arena instead of the tap clock">
             bpm from resolume
           </button>
         </div>
@@ -277,6 +283,7 @@ export function SyncView() {
                 <td>{describeAction(project, m.action)}</td>
                 <td>
                   <button
+                    title="delete this MIDI mapping"
                     className="btn small ghost"
                     onClick={() => mutate((p) => {
                       p.midi = p.midi.filter((x) => x.id !== m.id);

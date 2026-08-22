@@ -140,7 +140,7 @@ function LinkRow({ link, onEdit, onRemove }: {
       <NumInput value={link.min} title="value at fader 0 — set min above max to invert" onCommit={(x) => onEdit((l) => (l.min = x))} />
       <span className="label">max</span>
       <NumInput value={link.max} title="value at fader 1" onCommit={(x) => onEdit((l) => (l.max = x))} />
-      <button className="btn small ghost" onClick={onRemove}>✕</button>
+      <button title="remove this link — the control stops driving that parameter" className="btn small ghost" onClick={onRemove}>✕</button>
     </div>
   );
 }
@@ -247,7 +247,7 @@ function BindingRow({ b, onEdit, onRemove }: {
         fmt={(v) => `${Math.round(v * 100)}%`}
         variant="dim"
       />
-      <button className="btn small ghost" onClick={onRemove}>✕</button>
+      <button title="remove this binding — the modulator stops driving that parameter" className="btn small ghost" onClick={onRemove}>✕</button>
     </div>
   );
 }
@@ -307,6 +307,7 @@ export function ControlsView(): React.ReactElement {
               </button>
               <div className="grow" />
               <button
+                title="delete this control, and any MIDI bound to it"
                 className="btn small ghost"
                 onClick={() => mutate((p) => {
                   p.controls = (p.controls ?? []).filter((x) => x.id !== c.id);
@@ -339,7 +340,8 @@ export function ControlsView(): React.ReactElement {
                   const first = Object.values(project.looks).find((l) => !l.steps?.length && l.parts.length > 0);
                   if (first) x.links.push({ lookId: first.id, partId: first.parts[0].id, field: 'dimmer', min: 0, max: 1 });
                 })}
-              >
+              
+            title="point this control at one more parameter, with its own min/max bracket">
                 + link
               </button>
             </div>
@@ -351,7 +353,8 @@ export function ControlsView(): React.ReactElement {
         onClick={() => mutate((p) => {
           p.controls = [...(p.controls ?? []), { id: uid('ctl'), name: `Control ${(p.controls?.length ?? 0) + 1}`, value: 0, links: [] }];
         })}
-      >
+      
+            title="a named macro fader: one knob driving many parameters at once, MIDI-mappable">
         + add control
       </button>
 
@@ -392,6 +395,7 @@ export function ControlsView(): React.ReactElement {
             <div className="grow" />
             <button
               className="btn small ghost"
+              title="delete this modulator and all of its bindings"
               onClick={() => mutate((p) => {
                 p.modulators = (p.modulators ?? []).filter((x) => x.id !== m.id);
                 if (p.modulators.length === 0) delete p.modulators;
@@ -416,7 +420,8 @@ export function ControlsView(): React.ReactElement {
                 const first = Object.values(project.looks).find((l) => !l.steps?.length && l.parts.length > 0);
                 if (first) x.bindings.push({ lookId: first.id, partId: first.parts[0].id, field: 'dimmer', depth: 0.5 });
               })}
-            >
+            
+            title="bind this modulator to one more parameter; depth sets how far it swings">
               + binding
             </button>
           </div>
@@ -427,7 +432,8 @@ export function ControlsView(): React.ReactElement {
         onClick={() => mutate((p) => {
           p.modulators = [...(p.modulators ?? []), { id: uid('lfo'), name: `LFO ${(p.modulators?.length ?? 0) + 1}`, wave: 'sine', rate: 4, phase: 0, on: true, bindings: [] }];
         })}
-      >
+      
+            title="a beat-locked LFO that rides parameters continuously — no pad press needed">
         + add modulator
       </button>
     </div>

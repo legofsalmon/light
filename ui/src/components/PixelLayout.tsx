@@ -73,7 +73,18 @@ export function PixelLayout(): React.ReactElement | null {
             {active && (
               <div className="seg">
                 {(['strip', 'grid', 'ring'] as const).map((k) => (
-                  <button key={k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>
+                  <button
+                    key={k}
+                    className={kind === k ? 'on' : ''}
+                    title={
+                      k === 'strip'
+                        ? 'one straight run of pixels'
+                        : k === 'grid'
+                          ? 'rows and columns, wired serpentine — what a matrix panel actually is'
+                          : 'pixels evenly around a circle, like a Spiider ring'
+                    }
+                    onClick={() => setKind(k)}
+                  >
                     {k}
                   </button>
                 ))}
@@ -115,6 +126,7 @@ export function PixelLayout(): React.ReactElement | null {
             <div className="row" style={{ marginTop: 6 }}>
               <button
                 className="btn small"
+                title="write this layout onto the profile — every fixture using it inherits the pixel positions, which is what row/col fans and the previz read"
                 onClick={() =>
                   mutate((p) => {
                     const prof = p.profiles?.[active[0]];
