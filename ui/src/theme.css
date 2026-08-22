@@ -43,33 +43,74 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 .app {
   display: grid;
   height: 100%;
-  /* splitter-adjustable tracks — React sets the variables from saved sizes */
-  grid-template-rows: auto 46px minmax(0, 1fr) 6px var(--bottom-h, 292px);
-  grid-template-columns: minmax(0, 1fr) 6px var(--previz-w, 27vw);
-  grid-template-areas:
-    'offline offline offline'
-    'top top top'
-    'grid vsplit previz'
-    'hsplit vsplit previz'
-    'bottom vsplit previz';
   gap: 1px;
   background: #000;
 }
 
 /* ---- layout modes -------------------------------------------------------
-   One panel full screen, or all three at once. Each mode is just a different
-   grid template, so nothing has to be repositioned; the panels that are not in
-   the template are not rendered at all (see App.tsx), which is what actually
-   frees the previz's WebGL context rather than merely hiding it. */
-.app.view-pads,
-.app.view-previz,
+   The previz is a band across the top of every view — rigs and stages are
+   wider than tall, so the wide aspect is the honest one — with the working
+   panel(s) below it. Each mode is just a different grid template; the panels
+   that are not in the template are not rendered at all (see App.tsx), which
+   is what actually frees the previz's WebGL context rather than merely
+   hiding it. `previz-off` swaps the band for an 18px reveal strip, per view.
+   Splitter-adjustable tracks — React sets the variables from saved sizes. */
+
+/* All: previz / pads / editor tabs */
+.app.view-split {
+  grid-template-rows: auto 46px var(--previz-h, 30vh) 6px minmax(0, 1fr) 6px var(--bottom-h, 292px);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'offline' 'top' 'previz' 'psplit' 'grid' 'hsplit' 'bottom';
+}
+.app.view-split.previz-off {
+  grid-template-rows: auto 46px 18px minmax(0, 1fr) 6px var(--bottom-h, 292px);
+  grid-template-areas: 'offline' 'top' 'pstrip' 'grid' 'hsplit' 'bottom';
+}
+
+/* Pads: the performance view. Three collapsible side panels would mean eight
+   hand-written templates, so the columns are variables React sets instead —
+   a collapsed panel becomes an 18px reveal strip occupying the same area, and
+   its splitter track goes to zero. One template, every combination. */
+.app.view-pads {
+  grid-template-rows: auto 46px var(--previz-h, 30vh) 6px minmax(0, 1fr);
+  grid-template-columns:
+    minmax(0, 1fr)
+    var(--lsplit-w, 6px) var(--library-w, 280px)
+    var(--esplit-w, 6px) var(--editor-w, 380px);
+  grid-template-areas:
+    'offline offline offline offline offline'
+    'top top top top top'
+    'previz previz previz previz previz'
+    'psplit psplit psplit psplit psplit'
+    'grid lsplit library esplit editor';
+}
+.app.view-pads.previz-off {
+  grid-template-rows: auto 46px 18px minmax(0, 1fr);
+  grid-template-areas:
+    'offline offline offline offline offline'
+    'top top top top top'
+    'pstrip pstrip pstrip pstrip pstrip'
+    'grid lsplit library esplit editor';
+}
+
+/* Patch: the 2D plan / the fixtures table — patching is drag-a-row-into-the-
+   plan, so the two must share a screen (no audition pane here) */
 .app.view-patch {
+  grid-template-rows: auto 46px var(--previz-h, 30vh) 6px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'offline' 'top' 'previz' 'psplit' 'bottom';
+}
+.app.view-patch.previz-off {
+  grid-template-rows: auto 46px 18px minmax(0, 1fr);
+  grid-template-areas: 'offline' 'top' 'pstrip' 'bottom';
+}
+
+/* Previz, full screen — the FOH big-screen view; never collapsed */
+.app.view-previz {
   grid-template-rows: auto 46px minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'offline' 'top' 'previz';
 }
-.app.view-pads   { grid-template-areas: 'offline' 'top' 'grid'; }
-.app.view-previz { grid-template-areas: 'offline' 'top' 'previz'; }
-.app.view-patch  { grid-template-areas: 'offline' 'top' 'bottom'; }
 
 /* the switcher sits next to the project menu; keep it from being squeezed */
 .viewseg { flex: 0 0 auto; margin-left: 2px; }
@@ -78,16 +119,21 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 .gridwrap { grid-area: grid; min-height: 0; }
 .bottom { grid-area: bottom; min-height: 0; }
 .previz { grid-area: previz; min-width: 0; }
+.library { grid-area: library; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.editorpane { grid-area: editor; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+/* a collapsed panel keeps its own grid area and shrinks to an 18px strip */
+.librarystrip { grid-area: library; }
+.editorstrip { grid-area: editor; }
 
-/* drag handles between panels */
+/* drag handles between panels — the grid track each occupies is set inline */
 .vsplit, .hsplit {
   background: #000;
   position: relative;
   z-index: 5;
   transition: background 0.15s;
 }
-.vsplit { grid-area: vsplit; cursor: col-resize; }
-.hsplit { grid-area: hsplit; cursor: row-resize; }
+.vsplit { cursor: col-resize; }
+.hsplit { cursor: row-resize; }
 .vsplit:hover, .vsplit.active, .hsplit:hover, .hsplit.active { background: var(--accent); }
 /* widen the hit area without widening the visual */
 .vsplit::after, .hsplit::after { content: ''; position: absolute; inset: -4px; }
@@ -443,6 +489,126 @@ tr.rowstub td:first-child { box-shadow: inset 2px 0 0 var(--warn, #e8a33d); }
   z-index: 2; /* above the colour block */
 }
 .cell.learn-armed { outline: 2px solid var(--warn); outline-offset: -1px; }
+/* a library look held over this pad — dropping points the pad at it */
+.cell.droptarget { outline: 2px dashed var(--accent); outline-offset: -1px; background: var(--accent-soft); }
+/* this column is what the layer is playing, but the look on the pad is not:
+   the engine keeps playing the look captured at trigger time, so the pad is
+   armed-but-not-live until it is fired again */
+.cell.stale { border-color: var(--warn); }
+.cell.stale::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px dashed var(--warn);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* ---------- the control row (grid row five) ----------------------------
+   Named Controls are not layers: they reach INTO whatever is playing rather
+   than playing anything themselves. So the row is ruled off with a hard gap
+   and a warmer key line — the eye should never read it as a fifth layer, even
+   though it lines up with the fifth row of pads on an APC40 mk2. */
+
+/* Spans every track and lays its own bank out, so the row never depends on how
+   many columns the song has. The widths match the pad tracks, so with the usual
+   eight columns it lines up under them exactly. */
+.controlrow {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 3px;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line2);
+}
+.controlrow .controlhead { flex: 0 0 168px; }
+.controlrow .ctlcell { flex: 0 0 108px; }
+.controlhead { background: var(--panel2); border-color: var(--line2); }
+.controlhead .name { color: var(--text-dim); letter-spacing: 0.14em; }
+
+.ctlcell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  cursor: default;
+  background: var(--panel2);
+  padding: 6px;
+}
+.ctlcell.riding { border-color: var(--warn); }
+.ctlcell .ctlname {
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ctlcell.riding .ctlname { color: var(--warn); }
+.ctlcell .ctlwarn { color: var(--warn); }
+.ctlcell .fader { width: 100%; }
+/* which knob is under your hand — read from the real mappings, so it is blank
+   until one exists rather than promising hardware that is not bound */
+.ctlcell .ctlmidi.partial { color: var(--warn); }
+.ctlcell .ctlmidi {
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Only the next free slot invites a control; the rest are the shape of the
+   hardware row, waiting. */
+.ctlcell.empty { align-items: center; background: rgba(255, 255, 255, 0.012); }
+.ctlcell.empty.addable { cursor: pointer; }
+.ctlcell.empty.addable:hover { background: var(--raise); }
+.ctlcell .ctladd { color: var(--text-faint); font-size: 15px; }
+.ctlcell.empty.addable:hover .ctladd { color: var(--accent); }
+
+/* ---------- look library (pads view, bottom right) ---------- */
+
+.librarylist {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.librow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--raise);
+  border: 1px solid var(--line2);
+  border-radius: 3px;
+  cursor: grab;
+  flex: 0 0 auto;
+}
+.librow:hover { background: var(--raise2); border-color: var(--line2); }
+.librow:active { cursor: grabbing; }
+.librow .name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.librow .chip { flex: 0 0 auto; }
+.libhint {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  color: var(--text-faint);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
 
 /* ---------- bottom panel ---------- */
 
@@ -582,7 +748,6 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
   background: #101012;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--line);
   min-height: 0;
 }
 .previzbar {
@@ -593,15 +758,68 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
-.previzview { flex: 1; position: relative; min-height: 0; }
+/* live view and (when a look is selected) the audition, side by side */
+.previzsplit { flex: 1; display: flex; min-height: 0; }
+.previzview { flex: 1; position: relative; min-height: 0; min-width: 0; }
 .previzview canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
+/* the 18px reveal strips a hidden band / library / editor leaves behind */
+.previzstrip, .librarystrip, .editorstrip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  cursor: pointer;
+}
+.previzstrip { grid-area: pstrip; }
+.librarystrip .label, .editorstrip .label { writing-mode: vertical-rl; letter-spacing: 0.14em; }
+.previzstrip:hover .label,
+.librarystrip:hover .label,
+.editorstrip:hover .label { color: var(--accent); }
+
+/* the look editor as a pads-view column: the bottom panel's tab body without
+   the tabs, so the same editor code scrolls the same way in both homes */
+.editorpane .editorbody { flex: 1; overflow: auto; padding: 10px; min-height: 0; }
+.editorpane .hint { padding: 14px 10px; }
+/* A column is a third the width the bottom panel had, so anything that assumed
+   a wide row has to fold rather than overflow: nothing here scrolls sideways. */
+.editorbody .lookeditor { gap: 10px; }
+.editorbody .row { row-gap: 6px; }
+.editorbody table.tbl { width: 100%; table-layout: fixed; }
+.editorbody table.tbl td, .editorbody table.tbl th { padding: 4px 5px; }
+.editorbody .fader { min-width: 0; }
+.editorbody input.text, .editorbody input.num, .editorbody select.sel { max-width: 100%; }
+
+/* A control pinned out of the previz bar's scrolling region — the bar overflows
+   in 2D on a narrow window, and hide must never be the thing that scrolls away.
+   Opaque, with a seam: a transparent pin lets scrolled controls slide visibly
+   underneath it while still swallowing the tap aimed at them. */
+.previzbar .btn.pin {
+  flex: 0 0 auto;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  padding: 4px 7px;
+  background: var(--panel);
+  box-shadow: 8px 0 8px -6px var(--panel), 1px 0 0 var(--line);
+}
+.previzbar .btn.pin:hover { background: var(--raise2); }
+
 /* ---- audition pane -------------------------------------------------------
-   Bottom of the previz column: the selected look as it WOULD look, resolved by
-   the engine's own renderer and never sent to the rig. Smaller than the live
-   view on purpose — the live rig is the thing you must not lose sight of. */
-.previewview { flex: 0 0 38%; border-top: 1px solid var(--line2); }
-.previewbar { border-top: 1px solid var(--line); }
+   Right edge of the previz band: the selected look as it WOULD look, resolved
+   by the engine's own renderer and never sent to the rig. Narrower than the
+   live view on purpose — the live rig is the thing you must not lose sight of. */
+.previewpane {
+  flex: 0 0 30%;
+  min-width: 230px;
+  max-width: 44%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--line2);
+}
+.previewview { flex: 1; }
+.previewbar { flex: 0 0 auto; }
 .previewbar .previewname {
   font-size: 10px;
   color: var(--text);
@@ -728,8 +946,9 @@ button:disabled:hover {
 .previzbar::-webkit-scrollbar { display: none; }
 .previzbar .seg, .previzbar .btn, .previzbar select { flex: 0 0 auto; }
 .previzbar .label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tabbody .row { flex-wrap: wrap; }
-.tabbody .row .btn, .tabbody .row .sel { flex: 0 0 auto; }
+.tabbody .row, .editorbody .row { flex-wrap: wrap; }
+.tabbody .row .btn, .tabbody .row .sel,
+.editorbody .row .btn, .editorbody .row .sel { flex: 0 0 auto; }
 
 /* ---------- contrast: --text-faint (2.6:1) is decoration, not content ------ */
 table.tbl th { color: var(--text-dim); }

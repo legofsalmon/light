@@ -1,8 +1,14 @@
-// APC40 mk2 LED feedback: the pad grid mirrors the look grid (bright = the
-// playing cell, dim = available cells, coloured by each look's swatch); all
-// five rows are layers, the scene LEDs light when their layer has something to
-// clear, and STOP ALL CLIPS (note 81) blinks while blackout is armed. (The
-// bottom row is a fifth layer now, not cue columns — see apc40Mk2Mappings.)
+// APC40 mk2 LED feedback: the pad grid mirrors the look grid (bright = what
+// the layer is playing, in the colour of what is playing; dim = available
+// cells, coloured by each look's swatch); the scene
+// LEDs light when their layer has something to clear, and STOP ALL CLIPS
+// (note 81) blinks while blackout is armed.
+//
+// The surface is 5 x 8 and the screen is laid out to match it exactly: FOUR
+// layer rows plus the control row underneath them. That is why the layer cap
+// below is 4 and not 5 — the fifth row belongs to the controls, and a fifth
+// layer would silently steal it. (An even earlier layout put cue columns on
+// the bottom row; don't "restore" either of those here.)
 //
 // Hardware notes (mk2, generic mode): only the 5×8 clip grid is RGB — pads
 // take a 128-entry palette index as note-on velocity (channel 0 = solid).
@@ -11,6 +17,16 @@
 import type { Project, Snapshot } from '../../shared/types.ts';
 import { useStore } from './store.ts';
 import { lookSwatch } from './lookColors.ts';
+
+/** The clip grid's shape, and the contract the on-screen grid keeps with it:
+ *  APC_ROWS = 4 layer rows + 1 control row. */
+export const APC_LAYER_ROWS = 4;
+export const APC_COLS = 8;
+export const APC_ROWS = APC_LAYER_ROWS + 1;
+/** Track-selection banks the DEVICE CONTROL knobs are spread across in generic
+ *  mode — the knobs send on a different MIDI channel per bank, so a binding is
+ *  only gig-proof if it covers all nine. */
+export const APC_KNOB_BANKS = 9;
 
 // Palette anchors (APC40 mk2 shares the Launchpad-style 128 palette):
 // {rgb → bright index, dim index}
@@ -56,7 +72,7 @@ function computeLeds(project: Project, snap: Snapshot | null): Map<number, [numb
   const visual = [...project.layers].reverse();
   const liveOf = (id: string) => snap?.layers.find((l) => l.id === id);
 
-  visual.slice(0, 5).forEach((layer, row) => {
+  visual.slice(0, APC_LAYER_ROWS).forEach((layer, row) => {
     const base = 32 - row * 8;
     const live = liveOf(layer.id);
     for (let col = 0; col < Math.min(8, project.columns.length); col++) {
@@ -66,7 +82,24 @@ function computeLeds(project: Project, snap: Snapshot | null): Map<number, [numb
       if (!look) continue;
       const pal = nearest(lookSwatch(look, project.looks)[0] ?? '#666666');
       const active = live?.lookId === lookId && live?.col === col;
-      leds.set(base + col, [0, active ? pal.bright : pal.dim]);
+      // The pad can hold a look the layer is NOT playing while still being the
+      // live column — a library drag onto a live pad, where the engine keeps
+      // playing what it captured at trigger time. Dim would report "idle" on a
+      // layer that is lighting the rig, and a fixed "stale" colour collides
+      // with any look that happens to use it (white looks land on the same
+      // index — a Rust test pins this). So the surface reports the STAGE:
+      // bright, in the colour of whatever is actually playing. The screen
+      // carries the nuance that the pad holds something else.
+      const stalePlaying =
+        !active && live?.col === col && live?.lookId
+          ? project.looks[live.lookId] ?? null
+          : null;
+      const vel = active
+        ? pal.bright
+        : stalePlaying
+          ? nearest(lookSwatch(stalePlaying, project.looks)[0] ?? '#666666').bright
+          : pal.dim;
+      leds.set(base + col, [0, vel]);
     }
     // scene LED (single-colour): on when the layer has something to clear
     if (live?.lookId) leds.set(82 + row, [0, 1]);

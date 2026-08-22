@@ -71,9 +71,13 @@ The v0.4 roadmap milestone replaces this dance with data-driven GDTF profiles in
 
 `src-tauri/` is a thin shell: `main.rs` spawns the engine thread and opens the window; the window is just a WS client like any browser. Icons regenerate with `npx tauri icon src-tauri/icons/icon-source.png` (source rendered from `icon.svg`). `npm run app:build` produces an ad-hoc-signed `.app`; distribution signing/notarisation is not set up yet.
 
+**`"dragDropEnabled": false` in `tauri.conf.json` is load-bearing, and JSON cannot hold the comment that says so.** It defaults to *true*, which makes Tauri install its own OS drag-drop handler on the webview; wry's handler returns `true` without falling through to `super`, so WKWebView never processes the drag and no `dragenter`/`dragover`/`drop` ever reaches the page. That kills HTML5 drag-and-drop in the shipped app while leaving it working in a browser — which is where the UI is usually tested, so the failure is invisible until someone drags a look onto a pad in the real `.app`. Nothing here uses OS file-drop, so turning it off costs nothing. Anything drag-and-drop must be checked in the built app, not only at `:5173`.
+
 ## Release checklist
 
 1. `npm test` · `cargo test -p light-core` · `npm run typecheck` · `npm run test:parity` — all green.
 2. `npm run build` then `npm run app:build`.
 3. Launch the `.app`, fire a column, watch the Art-Net counter and a real node.
+   Drag a look from the library onto a pad while you are there — HTML5
+   drag-and-drop is the one thing a browser check cannot vouch for (above).
 4. Tag, push, update `ROADMAP.md` checkboxes.

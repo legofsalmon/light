@@ -311,6 +311,13 @@ export function ControlsView(): React.ReactElement {
                 onClick={() => mutate((p) => {
                   p.controls = (p.controls ?? []).filter((x) => x.id !== c.id);
                   if (p.controls.length === 0) delete p.controls;
+                  // Take its hardware bindings with it. The APC preset binds a
+                  // knob on all nine track-selection banks, so a deleted
+                  // control otherwise leaves nine mappings pointing at nothing
+                  // — and the knob reads as occupied when it is really free.
+                  p.midi = p.midi.filter(
+                    (m) => !(m.action.kind === 'control' && m.action.controlId === c.id),
+                  );
                 })}
               >
                 ✕

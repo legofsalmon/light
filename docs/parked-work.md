@@ -88,6 +88,75 @@ blind for a feature that is hidden (not broken) on a rare path.
 Either way: test by holding 9900 with a second engine, launching the app, and
 confirming the Share panel is present.
 
+## 3b. Two checks the UI sweep could not make here *(needs the packaged app / the APC)*
+
+Both are shipped as source-verified, not observation-verified. Neither is
+speculative — the mechanism was read in the dependency sources — but both should
+be confirmed the next time the hardware and a build are in front of you.
+
+1. **HTML5 drag-and-drop in the packaged app.** `"dragDropEnabled": false` was
+   added to `tauri.conf.json` because Tauri's default (`true`) installs an OS
+   drag handler that returns `true` without falling through to `super`, so
+   WKWebView never delivers `dragenter`/`dragover`/`drop` to the page — which
+   would make the whole look-library drag a silent no-op in the `.app` while it
+   works perfectly at `:5173`. Read in `tauri-utils-2.9.3/src/config.rs:1946`
+   and `wry-0.55.1/src/wkwebview/drag_drop.rs:44,89`; the config parses (the
+   struct is `deny_unknown_fields`, so a wrong key fails the build). **Check:**
+   build the app, drag a library row onto a pad. See `docs/development.md`.
+2. **The stale pad's LED on the APC40.** A pad in the live column that no longer
+   holds the playing look keeps reporting the STAGE: lit bright in the colour of
+   whatever is actually playing. Dim would say "idle" on a layer that is lighting
+   the rig, and a dedicated "stale" colour is not available — a fixed white index
+   collides with any white look's own bright state, which
+   `a_live_column_holding_a_different_look_still_reports_the_stage` in
+   `core/src/apc.rs` pins. **Check:** fire a pad, drop a different library look
+   onto it, confirm the pad stays lit in the playing look's colour while the rig
+   stays lit. If a distinct stale signal is ever wanted it needs a *blink*, which
+   means the mk2's Launchpad-style behaviour channels — velocity 2 already blinks
+   the single-colour scene LEDs (note 81, blackout), but the RGB pads' behaviour
+   channels are unverified on this hardware and the LED map would have to carry a
+   channel through `core/src/apc.rs` (it currently sends channel 0 only).
+
+## 3c. APC40 mk2 LED rings for the control row *(deliberately not done)*
+
+The eight DEVICE CONTROL knobs now drive the eight Named Controls
+(`apc40Mk2Mappings`). Lighting their LED rings from LIGHT is the obvious next
+step and is **not** implemented, because the protocol says it does not work in
+the mode the app uses.
+
+From Akai's *APC40 Mk2 Communications Protocol v1.2* (verified against the PDF,
+not from memory):
+
+- Knob values are CC `0x10`–`0x17`; ring TYPE is CC `0x18`–`0x1F`, with
+  `0 = off, 1 = Single, 2 = Volume Style, 3 = Pan Style`. "The LED rings will
+  display its controller value with the LEDs based on the LED Ring Types."
+- Notes for **Generic Mode (Mode 0)** — the mode the unit boots into and the one
+  LIGHT drives: "LED rings are all set to SINGLE style." The line that promises
+  host control, "LED Rings around the knobs are controlled by the APC40 but can
+  be updated by the Host", sits under **Ableton Live Mode (Mode 1)** and
+  **Alternate Ableton Live Mode (Mode 2)**.
+- Generic mode also banks the knobs: "[TRACK SELECTION] buttons … dictate which
+  one of nine banks the DEVICE CONTROL knobs … belong to. These knobs and
+  switches will output on a different MIDI channel based on the current Track
+  Selection (track 1 = MIDI channel 0, track 8 = MIDI channel 7, MASTER = MIDI
+  channel 8)." The preset works around this by binding all nine banks to the
+  same eight controls.
+
+So a ring in generic mode follows the *knob's physical position*, which is not
+the same as the control's value: move a control from the screen, or have ALL STOP
+clear the rides, and the ring still shows where the knob is sitting. Fixing that
+properly means putting the unit into an Ableton Live mode by SysEx, which changes
+the behaviour of every other control on the surface (all buttons become
+momentary, all LEDs host-driven) and would invalidate the pad mapping and LED
+feedback that work today.
+
+**If it is ever wanted:** try sending ring type `2` (Volume Style) on CC `0x18+n`
+and the value on CC `0x10+n` while still in generic mode — the device may honour
+it — and if it does, the LED map in `core/src/apc.rs` has to carry a MIDI channel
+and a CC/note distinction (it is `HashMap<u8, u8>` of note→velocity today, sent
+on channel 0 only), with `ui/src/apcFeedback.ts` kept in lockstep. Needs the
+hardware in front of you; nothing about it can be verified from here.
+
 ## 4. Low-severity findings — DONE (`37c00cd`, `91df1d5`)
 
 The UI sweep (delete-look blast radius, deck-step wrapping in all four places,

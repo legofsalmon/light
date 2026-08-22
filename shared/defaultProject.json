@@ -6323,23 +6323,6 @@
     null
    ],
    "fade": 0.05
-  },
-  {
-   "id": "layer-5",
-   "name": "Layer 5",
-   "blend": "normal",
-   "master": 1,
-   "fade": 0.5,
-   "cells": [
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null
-   ]
   }
  ],
  "columns": [

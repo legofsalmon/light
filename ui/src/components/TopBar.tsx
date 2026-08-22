@@ -133,10 +133,10 @@ function ProjectMenu({ name }: { name: string }) {
 /** The four layouts, in the order they sit on the bar. Alt-1..4 matches the
  *  position, so the shortcut is readable off the screen. */
 const VIEWS: { id: ViewMode; label: string; title: string; key: string }[] = [
-  { id: 'pads', label: 'Pads', title: 'Look grid, full screen', key: '1' },
+  { id: 'pads', label: 'Pads', title: 'Perform — previz over the pads, look library at the right', key: '1' },
   { id: 'previz', label: 'Previz', title: 'Previz, full screen', key: '2' },
-  { id: 'patch', label: 'Patch', title: 'Fixtures and patch, full screen', key: '3' },
-  { id: 'split', label: 'All', title: 'All three panels at once', key: '4' },
+  { id: 'patch', label: 'Patch', title: 'Rig — the 2D plan over the patch: drag fixtures into place', key: '3' },
+  { id: 'split', label: 'All', title: 'Build — previz over the pads and the editor', key: '4' },
 ];
 
 export function TopBar() {

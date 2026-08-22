@@ -8,7 +8,11 @@ import { Fader } from './Fader.tsx';
 import { Previz2D } from './Previz2D.tsx';
 import { Previz3D } from './Previz3D.tsx';
 
-export function PrevizPanel() {
+export function PrevizPanel({ preview = true }: { preview?: boolean }) {
+  const view = useStore((s) => s.view);
+  const togglePreviz = useStore((s) => s.togglePreviz);
+  const previewPane = useStore((s) => s.previewPane);
+  const togglePreviewPane = useStore((s) => s.togglePreviewPane);
   const mode = useStore((s) => s.previzMode);
   const setMode = useStore((s) => s.setPrevizMode);
   const view2d = useStore((s) => s.previz2dView);
@@ -67,6 +71,20 @@ export function PrevizPanel() {
   return (
     <>
       <div className="previzbar">
+        {/* Leftmost, and pinned out of the scrolling region: this bar scrolls
+            horizontally with its scrollbar hidden, and in 2D on a narrow window
+            its contents overflow — an escape hatch you cannot reach is not an
+            escape hatch. Absent in the full-screen previz view, where hiding it
+            would leave nothing. */}
+        {view !== 'previz' && (
+          <button
+            className="btn small ghost pin"
+            title="hide the previz (this view only — the strip left behind brings it back)"
+            onClick={() => togglePreviz(view)}
+          >
+            ▴
+          </button>
+        )}
         <span className="label">previz</span>
         <div className="seg">
           <button className={mode === '3d' ? 'on' : ''} onClick={() => setMode('3d')}>3D</button>
@@ -92,6 +110,18 @@ export function PrevizPanel() {
         >
           measure
         </button>
+        {/* The audition is a second renderer, and it appears whenever a pad is
+            selected — which firing one does. Worth it while building; worth
+            switching off for a show run from the pads. */}
+        {preview && (
+          <button
+            className={`btn small ${previewPane ? 'on' : 'ghost'}`}
+            title="audition pane — shows the selected look without sending it to the rig; off gives the live view the whole band"
+            onClick={togglePreviewPane}
+          >
+            preview
+          </button>
+        )}
         {mode === '3d' && (
           <>
             <button
@@ -155,22 +185,25 @@ export function PrevizPanel() {
           </>
         )}
       </div>
-      <div className="previzview">{mode === '3d' ? <Previz3D /> : <Previz2D />}</div>
-      {/* The audition. Only present when something is selected, so the live view
-          keeps the whole column the rest of the time — and the second render
-          costs nothing when nobody is looking at a look. */}
-      {sel && (
-        <>
-          <div className="previzbar previewbar">
-            <span className="label">preview</span>
-            <span className="previewname">{selName ?? 'empty cell'}</span>
-            <span className="label dim">not on the rig</span>
+      <div className="previzsplit">
+        <div className="previzview">{mode === '3d' ? <Previz3D /> : <Previz2D />}</div>
+        {/* The audition, on the band's right edge. Only present when something
+            is selected, so the live view keeps the full width the rest of the
+            time — and the second render costs nothing when nobody is looking
+            at a look. */}
+        {preview && previewPane && sel && (
+          <div className="previewpane">
+            <div className="previzbar previewbar">
+              <span className="label">preview</span>
+              <span className="previewname">{selName ?? 'empty cell'}</span>
+              <span className="label dim">not on the rig</span>
+            </div>
+            <div className="previzview previewview">
+              {mode === '3d' ? <Previz3D source="preview" /> : <Previz2D source="preview" />}
+            </div>
           </div>
-          <div className="previzview previewview">
-            {mode === '3d' ? <Previz3D source="preview" /> : <Previz2D source="preview" />}
-          </div>
-        </>
-      )}
+        )}
+      </div>
     </>
   );
 }

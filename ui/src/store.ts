@@ -13,6 +13,10 @@ export type Tab = 'look' | 'patch' | 'controls' | 'output' | 'sync';
  *  the previz, you patch before doors. `split` is all three at once — the
  *  original layout, and still the default. */
 export type ViewMode = 'pads' | 'previz' | 'patch' | 'split';
+/** Views that carry the previz as a top band (all but the full-screen previz),
+ *  each with its own remembered hide state — hiding it on the pads to perform
+ *  full-height must not also hide the plan you patch against. */
+export type BandView = 'pads' | 'patch' | 'split';
 export type Sel = { layerId: string; col: number } | null;
 
 type Store = {
@@ -34,7 +38,26 @@ type Store = {
   sel: Sel;
   tab: Tab;
   view: ViewMode;
+  /** Per-view previz band collapse (default shown everywhere). */
+  previzHidden: Record<BandView, boolean>;
+  /** Look library collapse (pads view) — the performance grid gets its full
+   *  width back the same way the previz band does. */
+  libraryHidden: boolean;
+  /** Look-editor column collapse (pads view). Same bargain as the library:
+   *  the performance grid can always have its width back. */
+  editorHidden: boolean;
+  /** The audition pane at the band's right edge. On by default, but it is a
+   *  SECOND renderer that appears whenever a pad is selected — and firing a pad
+   *  selects it — so a show run from the pads can switch it off and give the
+   *  live rig the whole band. */
+  previewPane: boolean;
   previzMode: '3d' | '2d';
+  /** What the previz was showing before the patch view borrowed it for the
+   *  plan, so leaving patch gives back the view the operator was steering by.
+   *  Both fields: '2d' is two different screens, and the front elevation drags
+   *  fixture HEIGHT where the plan drags position. Cleared when they pick a
+   *  mode themselves — an explicit choice outranks a restore. */
+  prePatch: { mode: '3d' | '2d'; view2d: 'plan' | 'front' } | null;
   /** 2D sub-view: top-down plan or front elevation (drag sets height) */
   previz2dView: 'plan' | 'front';
   /** fixtures selected in the 2D previz (shift-click / marquee) for group building */
@@ -95,6 +118,13 @@ type Store = {
   setSel: (s: Sel) => void;
   setTab: (t: Tab) => void;
   setView: (v: ViewMode) => void;
+  togglePreviz: (v: BandView) => void;
+  /** Set rather than toggle: a panel can be folded by the WINDOW (too narrow
+   *  for it beside its neighbour) while its preference still says shown, and a
+   *  toggle in that state flips the wrong way — tapping "show me" hides it. */
+  setLibraryHidden: (v: boolean) => void;
+  setEditorHidden: (v: boolean) => void;
+  togglePreviewPane: () => void;
   setPrevizMode: (m: '3d' | '2d') => void;
   setPreviz2dView: (v: 'plan' | 'front') => void;
   setFxSel: (ids: string[]) => void;
@@ -117,6 +147,38 @@ function loadView(): ViewMode {
     if (v === 'pads' || v === 'previz' || v === 'patch' || v === 'split') return v;
   } catch { /* fall through */ }
   return 'split';
+}
+
+/** Remembered per view, like the view itself — a hidden previz that comes back
+ *  on every launch would be re-hidden every launch. */
+function loadPrevizHidden(): Record<BandView, boolean> {
+  try {
+    const s = JSON.parse(localStorage.getItem('previzHidden') ?? 'null');
+    if (s && typeof s === 'object') return { pads: !!s.pads, patch: !!s.patch, split: !!s.split };
+  } catch { /* fall through */ }
+  return { pads: false, patch: false, split: false };
+}
+
+const loadFlag = (key: string, def = false) => {
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? def : v === '1';
+  } catch { return def; }
+};
+
+const saveFlag = (key: string, v: boolean) => {
+  try { localStorage.setItem(key, v ? '1' : '0'); } catch { /* non-essential */ }
+};
+
+/** A local notice in the top bar's toast slot, with the expiry the engine's own
+ *  toasts get — one set without it sticks on screen forever. */
+export function notify(text: string, ok = false) {
+  const at = Date.now();
+  useStore.setState({ toast: { ok, text, at } });
+  setTimeout(() => {
+    const t = useStore.getState().toast;
+    if (t && t.at === at) useStore.setState({ toast: null });
+  }, 6000);
 }
 
 let ws: WebSocket | null = null;
@@ -273,7 +335,15 @@ export const useStore = create<Store>()((set, get) => ({
   sel: null,
   tab: 'look',
   view: loadView(),
-  previzMode: '3d',
+  previzHidden: loadPrevizHidden(),
+  libraryHidden: loadFlag('libraryHidden'),
+  editorHidden: loadFlag('editorHidden'),
+  previewPane: loadFlag('previewPane', true),
+  // Launching straight back into the patch view must give the plan the view
+  // exists for, the same way arriving there from anywhere else does — and must
+  // record the loan, or the borrowed 2D leaks into every other view on exit.
+  previzMode: loadView() === 'patch' ? '2d' : '3d',
+  prePatch: loadView() === 'patch' ? { mode: '3d' as const, view2d: 'plan' as const } : null,
   previz2dView: 'plan',
   fxSel: [],
   propSel: [],
@@ -350,7 +420,11 @@ export const useStore = create<Store>()((set, get) => ({
     lastPushAt = 0; // the next edit must not coalesce across a history apply
     const restored = keepCurrentPage(prev.project, cur);
     set({ project: restored, undoDepth: undoStack.length, redoDepth: redoStack.length });
-    get().send({ type: 'updateProject', project: restored });
+    // Through sendProjectUpdate, not a bare send: a write without baseGen is
+    // applied blind AND its echo is withheld from the sender, so the engine's
+    // generation runs one ahead of ours and the NEXT edit is rejected and
+    // silently reverted. An undo is an edit like any other — quote the base.
+    sendProjectUpdate(get().send, restored);
   },
 
   redo: () => {
@@ -368,7 +442,7 @@ export const useStore = create<Store>()((set, get) => ({
     lastPushAt = 0;
     const restored = keepCurrentPage(next.project, cur);
     set({ project: restored, undoDepth: undoStack.length, redoDepth: redoStack.length });
-    get().send({ type: 'updateProject', project: restored });
+    sendProjectUpdate(get().send, restored); // same reasoning as undo above
   },
 
   setSel: (sel) => {
@@ -386,12 +460,65 @@ export const useStore = create<Store>()((set, get) => ({
     // Remembered across launches: an operator who works full-screen on the pads
     // should not have to set that up again every time the app opens.
     try { localStorage.setItem('view', view); } catch { /* non-essential */ }
-    // Choosing "patch" means the fixtures table, not whichever editor tab
-    // happened to be open behind it.
-    set(view === 'patch' ? { view, tab: 'patch' } : { view });
+    const s = get();
+    if (view === 'patch') {
+      // Choosing "patch" means the fixtures table, not whichever editor tab
+      // happened to be open behind it — and the 2D PLAN above it, because the
+      // patch workflow is drag-a-row-into-the-plan. The front elevation is not
+      // that screen: dragging there sets trim height, not position.
+      //
+      // Only on ARRIVAL: re-picking Patch while already there must not undo a
+      // mode chosen inside it. The loan is recorded even when the band is
+      // collapsed — revealing it mid-patch must still show the plan — and is
+      // handed back on the way out, because the 3D rig is what an operator
+      // steers by and checking an address should not cost them that view.
+      const entering = s.view !== 'patch';
+      set({
+        view,
+        tab: 'patch',
+        ...(entering
+          ? {
+              previzMode: '2d' as const,
+              previz2dView: 'plan' as const,
+              prePatch: { mode: s.previzMode, view2d: s.previz2dView },
+            }
+          : {}),
+      });
+      return;
+    }
+    set({
+      view,
+      ...(s.view === 'patch' && s.prePatch
+        ? { previzMode: s.prePatch.mode, previz2dView: s.prePatch.view2d, prePatch: null }
+        : {}),
+    });
   },
-  setPrevizMode: (previzMode) => set({ previzMode }),
-  setPreviz2dView: (previz2dView) => set({ previz2dView }),
+  togglePreviz: (v) =>
+    set((s) => {
+      const previzHidden = { ...s.previzHidden, [v]: !s.previzHidden[v] };
+      try { localStorage.setItem('previzHidden', JSON.stringify(previzHidden)); } catch { /* non-essential */ }
+      return { previzHidden };
+    }),
+  setLibraryHidden: (libraryHidden) =>
+    set(() => {
+      saveFlag('libraryHidden', libraryHidden);
+      return { libraryHidden };
+    }),
+  setEditorHidden: (editorHidden) =>
+    set(() => {
+      saveFlag('editorHidden', editorHidden);
+      return { editorHidden };
+    }),
+  togglePreviewPane: () =>
+    set((s) => {
+      const previewPane = !s.previewPane;
+      saveFlag('previewPane', previewPane);
+      return { previewPane };
+    }),
+  // An explicit pick outranks the pending patch restore — otherwise leaving the
+  // view would overwrite the screen they just chose.
+  setPrevizMode: (previzMode) => set({ previzMode, prePatch: null }),
+  setPreviz2dView: (previz2dView) => set({ previz2dView, prePatch: null }),
   setFxSel: (fxSel) => set({ fxSel }),
   setPropSel: (propSel) => set({ propSel }),
   setHazeViz: (hazeViz) => set({ hazeViz }),
