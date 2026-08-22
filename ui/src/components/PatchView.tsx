@@ -8,7 +8,7 @@ import { ScrubNumInput } from './inputs.tsx';
 import { ShareFixtures } from './ShareFixtures.tsx';
 import { useStore } from '../store.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
-import { isPlaceholderProfile } from '../../../shared/gdtfShare.ts';
+import { hasUndrivenBeamChannels, isPlaceholderProfile } from '../../../shared/gdtfShare.ts';
 import { PixelLayout } from './PixelLayout.tsx';
 import { applyAutoGroups, planAutoGroups } from '../autoGroups.ts';
 import type { StageProp } from '../../../shared/types.ts';
@@ -149,6 +149,23 @@ export function PatchView() {
       new Set(
         Object.entries(project.profiles ?? {})
           .filter(([, pr]) => isPlaceholderProfile(pr))
+          .map(([id]) => id),
+      ),
+    [project],
+  );
+  /** Profiles carrying beam channels — Zoom, Focus, Iris, Frost, CTO — that
+   *  nothing drives. The fixture works, but those parameters are missing from
+   *  the look editor with no explanation, because the editor only offers a
+   *  control when something in the group actually has that channel. It happens
+   *  to profiles compiled by an older importer, or imported from an MVR's flat
+   *  console exports: the channel is there by name with no function behind it.
+   *  Re-importing the real GDTF fixes it. Until this was surfaced the only
+   *  symptom was "why can't I set zoom?". */
+  const beamlessProfiles = useMemo(
+    () =>
+      new Set(
+        Object.entries(project.profiles ?? {})
+          .filter(([, pr]) => hasUndrivenBeamChannels(pr))
           .map(([id]) => id),
       ),
     [project],
@@ -464,13 +481,15 @@ export function PatchView() {
                 <tr
                   key={f.id}
                   data-fxid={f.id}
-                  className={`${selected ? 'rowsel' : ''} ${unknownProfiles.includes(f.id) ? 'rowdark' : ''} ${stubProfiles.has(f.profileId) ? 'rowstub' : ''}`}
+                  className={`${selected ? 'rowsel' : ''} ${unknownProfiles.includes(f.id) ? 'rowdark' : ''} ${stubProfiles.has(f.profileId) ? 'rowstub' : ''} ${beamlessProfiles.has(f.profileId) ? 'rowbeamless' : ''}`}
                   title={
                     unknownProfiles.includes(f.id)
                       ? 'this fixture\'s profile is missing — it renders as nothing at all. Re-import the profile or pick another one.'
                       : stubProfiles.has(f.profileId)
                         ? 'placeholder profile: the MVR that brought this fixture in did not carry a real fixture definition, so it has a dimmer and nothing else. Fetch the real one in GDTF Share below, then set it here.'
-                        : undefined
+                        : beamlessProfiles.has(f.profileId)
+                          ? 'this profile lists beam channels (zoom, focus, iris, frost, CTO) that nothing drives, so the look editor cannot offer them. It was compiled from a thin GDTF or by an older importer — re-import the real GDTF for this fixture and the controls appear.'
+                          : undefined
                   }
                 >
                   <td>

@@ -424,6 +424,9 @@ th.sortable:hover { color: var(--text); }
 
 tr.rowstub td { background: rgba(232, 163, 61, 0.07); }
 tr.rowstub td:first-child { box-shadow: inset 2px 0 0 var(--warn, #e8a33d); }
+/* profile drives the fixture, but its beam channels go nowhere — quieter than
+   a stub, because the rig still works; it is the look editor that looks short */
+tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
 
 .cell.empty { background: rgba(255, 255, 255, 0.015); }
 .cell.selected { border-color: var(--text-dim); }

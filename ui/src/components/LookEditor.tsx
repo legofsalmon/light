@@ -5,6 +5,7 @@ import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
 import { type HeadKind } from '../../../shared/profiles.ts';
 import { TextField } from './inputs.tsx';
 import { BEAM_LABELS, BEAM_PARAMS, type BeamCaps, profileMeta } from '../profileInfo.ts';
+import { hasUndrivenBeamChannels } from '../../../shared/gdtfShare.ts';
 import { useStore } from '../store.ts';
 import { askConfirm } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
@@ -79,6 +80,20 @@ function groupCanAim(project: Project, groupId: string): boolean {
  *  head kind. A fixture only gets a zoom fader if something in the group has a
  *  zoom channel — an editor full of controls that go nowhere is worse than one
  *  that is honest about the rig. */
+/** Does anything in this group have beam channels with no function behind
+ *  them? Distinguishes "this fixture has no zoom" from "this fixture has a zoom
+ *  channel that the stored profile never wired up", which look identical in an
+ *  editor that only shows what it can drive. */
+function groupHasDeadBeamChannels(project: Project, groupId: string): boolean {
+  const group = project.groups.find((g) => g.id === groupId);
+  if (!group) return false;
+  return group.heads.some((ref) => {
+    const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
+    const compiled = fixture ? project.profiles?.[fixture.profileId] : undefined;
+    return !!compiled && hasUndrivenBeamChannels(compiled);
+  });
+}
+
 function groupBeamCaps(project: Project, groupId: string): BeamCaps {
   const out: BeamCaps = { zoom: false, focus: false, iris: false, frost: false, cto: false };
   const group = project.groups.find((g) => g.id === groupId);
@@ -508,6 +523,20 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
           </div>
         )}
 
+        {/* Nothing in the group takes a beam parameter, but something in it
+            HAS beam channels that are simply not driven — the profile came from
+            a thin GDTF or an older importer. Without this the editor just looks
+            like it forgot zoom, which is exactly how it was reported. */}
+        {BEAM_PARAMS.every((k) => !beamCaps[k]) && groupHasDeadBeamChannels(project, part.groupId) && (
+          <div className="row">
+            <span className="label" style={{ color: 'var(--warn)' }}>⚠</span>
+            <span className="label" style={{ whiteSpace: 'normal', lineHeight: 1.5 }}>
+              this group's fixtures list zoom/focus/iris/frost/cto channels that their
+              profile does not drive — re-import their GDTF in the Fixtures tab to get
+              the controls
+            </span>
+          </div>
+        )}
         {BEAM_PARAMS.filter((k) => beamCaps[k]).map((k) => (
           <div className="paramrow" key={k}>
             <Enable
