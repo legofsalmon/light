@@ -594,13 +594,52 @@ fn spawn_previz() -> (bool, String) {
             // falls back to 9900 — which, when the port dialog has moved this
             // engine, is the OTHER copy of LIGHT. Silent when it happens: previz
             // shows no connection state.
+            let stale = previz_is_stale(c);
             return match std::process::Command::new(c).env("LIGHT_PORT", port.to_string()).spawn() {
+                Ok(_) if stale => (
+                    true,
+                    "previz launched — but the binary is OLDER than previz/src.                      Rebuild: cargo build --release -p light-previz"
+                        .into(),
+                ),
                 Ok(_) => (true, "previz launched".into()),
                 Err(e) => (false, format!("previz failed to start: {e}")),
             };
         }
     }
     (false, "previz binary not found — build it with: cargo build --release -p light-previz".into())
+}
+
+/// True when we are in a repo checkout and the previz binary predates its own
+/// source.
+///
+/// This is not hypothetical tidiness. `spawn_previz` launches a PREBUILT
+/// binary and never compiles anything, so a checkout whose previz was last
+/// built weeks ago keeps opening weeks-old code with no indication whatsoever
+/// — the window comes up, connects, and renders a rig that is subtly wrong in
+/// every way that has been fixed since. That cost a real evening: goalposts
+/// that had been deleted from the source were still on screen, along with an
+/// eight-day-old set of beam ranges, camera clamps and aiming fixes.
+///
+/// Only meaningful beside a source tree; a packaged app has none, and a
+/// missing directory reads as "not stale" rather than nagging every launch.
+fn previz_is_stale(bin: &std::path::Path) -> bool {
+    let Ok(built) = bin.metadata().and_then(|m| m.modified()) else { return false };
+    let mut newest = None;
+    let mut stack = vec![std::path::PathBuf::from("previz/src")];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for e in entries.flatten() {
+            let path = e.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|x| x == "rs" || x == "wgsl") {
+                if let Ok(t) = e.metadata().and_then(|m| m.modified()) {
+                    newest = Some(newest.map_or(t, |n: std::time::SystemTime| n.max(t)));
+                }
+            }
+        }
+    }
+    newest.is_some_and(|src| src > built)
 }
 
 fn project_event(state: &EngineState) -> String {

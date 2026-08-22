@@ -270,6 +270,7 @@ pub fn setup_stage(
 /// planes and the haze is a scaled cube, so this costs three transform writes
 /// per rebuild instead of three mesh uploads.
 fn fit_backdrop(
+    oversize: f32,
     project: &crate::protocol::ProjectLite,
     backdrop: &mut Query<&mut Transform, (With<Backdrop>, Without<Floor>, Without<HazeVolume>)>,
     floor: &mut Query<&mut Transform, (With<Floor>, Without<Backdrop>, Without<HazeVolume>)>,
@@ -304,10 +305,19 @@ fn fit_backdrop(
         t.translation.z = b.min.z - MARGIN;
     }
 
-    // haze: a beam only scatters inside the volume, so it has to reach the
-    // fixtures — on an arena plot they hang three times higher than the demo
+    // Haze. A beam only scatters inside this volume, so it has to reach the
+    // fixtures — on an arena plot they hang three times higher than the demo.
+    //
+    // It is also deliberately BIGGER than the room. Sized exactly to the room,
+    // the box's six faces are a hard on/off boundary for scattering: beams
+    // brighten and dim as they cross it and the whole image shifts as the
+    // camera orbits through it, which reads as invisible walls in a room that
+    // only has one. Oversizing pushes those faces outside the shot. The cost is
+    // sampling density, not time — the raymarch is a fixed step count across
+    // whatever it spans — which is why the step count went up with it.
     if let Ok(mut t) = haze.single_mut() {
-        t.scale = Vec3::new(width, height, depth);
+        let k = oversize;
+        t.scale = Vec3::new(width * k, height * k, depth * k);
         t.translation = Vec3::new(cx, height * 0.5, cz);
     }
 }
@@ -528,6 +538,7 @@ pub fn rebuild_fixtures(
     mut backdrop: Query<&mut Transform, (With<Backdrop>, Without<Floor>, Without<HazeVolume>)>,
     mut floor: Query<&mut Transform, (With<Floor>, Without<Backdrop>, Without<HazeVolume>)>,
     mut haze: Query<&mut Transform, (With<HazeVolume>, Without<Backdrop>, Without<Floor>)>,
+    q: Res<crate::quality::Quality>,
 ) {
     if live.project_rev == live.built_rev {
         return;
@@ -542,7 +553,7 @@ pub fn rebuild_fixtures(
     }
     let Some(project) = live.project.clone() else { return };
 
-    fit_backdrop(&project, &mut backdrop, &mut floor, &mut haze);
+    fit_backdrop(q.haze_oversize, &project, &mut backdrop, &mut floor, &mut haze);
 
     spawn_props(&mut commands, &mut meshes, &mut materials, &project.props);
 
@@ -560,10 +571,7 @@ pub fn rebuild_fixtures(
     // landing on people, so keep them — but only for a fixed budget of main
     // heads. Derby sub-beams never get one: six narrow spinning beams per
     // fixture is where the cost explodes and where a shadow map buys nothing.
-    let mut shadow_budget: usize = std::env::var("LIGHT_PREVIZ_SHADOWS")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(10);
+    let mut shadow_budget: usize = q.shadows;
 
     // Beam reach, sized to the room rather than to the demo stage. The shaft
     // clamp used to be a hard 9 m and spotlight range a hard 11-12 m — fine for

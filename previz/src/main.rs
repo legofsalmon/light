@@ -4,6 +4,7 @@
 
 mod camera;
 mod protocol;
+mod quality;
 mod scene;
 mod state;
 mod update;
@@ -30,6 +31,7 @@ fn main() {
             ..default()
         })
         .insert_resource(protocol::WsReceiver(Mutex::new(rx)))
+        .insert_resource(quality::Quality::from_env())
         .insert_resource(state::Live::default())
         .insert_resource(camera::Orbit::default())
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -50,6 +52,7 @@ fn main() {
                 update::reflect_connection,
                 update::diag_state,
                 update::auto_screenshot,
+                update::key_screenshot,
                 scene::toggle_band,
                 camera::orbit_camera,
             )

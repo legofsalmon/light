@@ -20,15 +20,31 @@ impl Default for Orbit {
     }
 }
 
-pub fn setup_camera(mut commands: Commands) {
+pub fn setup_camera(mut commands: Commands, q: Res<crate::quality::Quality>) {
     commands.spawn((
         Camera3d::default(),
         Camera { hdr: true, ..default() },
-        Msaa::Off,
+        // A previz is mostly thin bright geometry — truss chords, fixture
+        // bodies, the rim of every beam — against near-black, with bloom on
+        // top. With no anti-aliasing at all those edges crawl and sparkle the
+        // moment the camera moves, which reads as the render being cheap. MSAA
+        // is the one that works here: bevy's volumetric fog carries a
+        // MULTISAMPLED bind-group path (volumetric_fog/render.rs:415), and TAA
+        // is the wrong trade for this subject — the thing on screen is fast
+        // moving beams, which is exactly what a temporal resolve smears.
+        q.msaa_component(),
         DepthPrepass,
         Tonemapping::TonyMcMapface,
         Bloom::default(),
-        VolumetricFog { ambient_intensity: 0.06, ..default() },
+        VolumetricFog {
+            ambient_intensity: 0.06,
+            // 64 steps across a room-sized volume is ~15 cm per sample, and the
+            // banding that produces swims as the camera moves. The cost is
+            // per-pixel-per-step and this scene is not fill-bound, so buy the
+            // steps.
+            step_count: q.fog_steps,
+            ..default()
+        },
         Transform::from_xyz(0.0, 4.0, 9.0).looking_at(Vec3::new(0.0, 1.5, 0.0), Vec3::Y),
     ));
 }

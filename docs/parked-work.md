@@ -189,6 +189,14 @@ Every confirmed previz-correctness defect is fixed (commits `d915a50`,
 - and zoom now reaches the previz (`HeadSnap.zm`), so the parameter whose point
   is beam geometry is finally visible in the beam view.
 
+**Correction (22 Aug):** that last line is true of the WEB view only. `zm` is
+not a field of `HeadLite` (`previz/src/protocol.rs`), nothing in `previz/src`
+reads it, and the native cone's half-angle is baked once at rebuild from
+`prof.beam_deg` (`scene.rs`), as are the SpotLight's inner/outer angles. So in
+the window the docs point people at to judge beam geometry, zoom is invisible
+— in the shaft and in the floor pool alike. Landing it there is a protocol
+change, not a renderer one.
+
 Low-severity previz items deliberately left (they are polish, not correctness):
 no selection/hover in the 3D view, mover bodies that do not articulate (only the
 beam moves), an invented 2–14 Hz strobe band rather than the profile's, frame-

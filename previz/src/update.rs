@@ -258,6 +258,27 @@ pub fn apply_live(
 /// LIGHT_PREVIZ_SHOT=<path.png>: save one screenshot of the rendered frame
 /// ~5s after launch — lets the rendered output be inspected headlessly
 /// (macOS screen-recording permission can't block an in-app capture).
+/// F12 saves a PNG of the window. Iterating on how this thing LOOKS needs a
+/// picture, and a picture of a native window otherwise means the OS screen
+/// recorder and its permission prompt. Writes beside the binary's working
+/// directory unless LIGHT_PREVIZ_SHOTDIR says otherwise.
+pub fn key_screenshot(
+    mut commands: Commands,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut n: Local<u32>,
+) {
+    if !keys.just_pressed(KeyCode::F12) {
+        return;
+    }
+    let dir = std::env::var("LIGHT_PREVIZ_SHOTDIR").unwrap_or_else(|_| ".".into());
+    let path = format!("{dir}/previz-{:03}.png", *n);
+    *n += 1;
+    eprintln!("[previz] screenshot -> {path}");
+    commands
+        .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+        .observe(bevy::render::view::screenshot::save_to_disk(path));
+}
+
 pub fn auto_screenshot(mut commands: Commands, time: Res<Time>, mut shots: Local<u32>) {
     if *shots >= 2 {
         return;
