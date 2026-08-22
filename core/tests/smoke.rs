@@ -572,3 +572,110 @@ fn the_engine_says_when_it_repaired_what_it_was_given() {
     assert!(out.repaired_submission, "repointing activeDeckId is a repair the sender must hear about");
     assert_ne!(st.project.active_deck_id.as_deref(), Some("deck-that-does-not-exist"));
 }
+
+/// The fixture-form inference, pinned against the cases that actually caused
+/// trouble.
+///
+/// The CLF Nero is why this exists: it TILTS, so an aim-first heuristic calls
+/// it a moving head, and it has 1, 7 or 14 cells depending on mode, so a
+/// head-count-first heuristic calls it a bar. It is a 41 x 32 cm blinder plate
+/// in all of them, and the 123 deg beam is what says so.
+#[test]
+fn fixture_form_inference() {
+    use light_core::cprofile::{CChannel, CHead, Cond, Func, FuncCase, Source};
+    use light_core::cprofile::{CompiledProfile, FixtureForm};
+    use light_core::profiles::HeadKind;
+
+    fn linear(name: &str, source: Source, head: usize) -> CChannel {
+        CChannel {
+            offsets: vec![0],
+            head,
+            name: name.into(),
+            default: 0,
+            cases: vec![FuncCase {
+                cond: Cond::Always,
+                dmx_from: 0,
+                dmx_to: 255,
+                func: Func::Linear { source },
+            }],
+        }
+    }
+    fn prof(beam_deg: f64, heads: Vec<CHead>, channels: Vec<CChannel>) -> CompiledProfile {
+        CompiledProfile {
+            id: "t".into(),
+            manufacturer: "m".into(),
+            model: "m".into(),
+            mode: "m".into(),
+            footprint: 1,
+            heads,
+            channels,
+            beam_deg,
+            virtual_dimmer: false,
+            credit: None,
+            form_override: None,
+        }
+    }
+    let cell = |off: f64| CHead::flat(HeadKind::Rgb, off, "c".into());
+
+    // A CLF Nero: tilt but no pan, 123 deg, in each of its cell counts.
+    for n in [1usize, 7, 14] {
+        let heads: Vec<CHead> = (0..n)
+            .map(|i| cell(-0.5 + i as f64 / n.max(2) as f64))
+            .collect();
+        let p = prof(123.0, heads, vec![
+            linear("Tilt", Source::Tilt, 0),
+            linear("Dimmer", Source::Dimmer, 0),
+            linear("R", Source::ColorR, 0),
+        ]);
+        assert_eq!(p.form(), FixtureForm::Panel, "Nero with {n} cells is a panel");
+    }
+
+    // A moving head steers in BOTH axes.
+    let mover = prof(50.0, vec![cell(0.0)], vec![
+        linear("Pan", Source::Pan, 0),
+        linear("Tilt", Source::Tilt, 0),
+        linear("R", Source::ColorR, 0),
+    ]);
+    assert_eq!(mover.form(), FixtureForm::Mover);
+
+    // A batten: cells along X, no rise, narrow lenses, nothing aims.
+    let bar = prof(25.0, (0..8).map(|i| cell(i as f64 * 0.12)).collect(), vec![
+        linear("Dimmer", Source::Dimmer, 0),
+        linear("R", Source::ColorR, 0),
+    ]);
+    assert_eq!(bar.form(), FixtureForm::Bar);
+
+    // Cells arranged as a plate are not a batten. 4 x 3 at even spacing is
+    // rise/span = 0.67, comfortably clear of the 0.35 line; a 2-row batten sits
+    // near it on purpose, and pinning a knife-edge case would only test the
+    // constant.
+    let mut plate_heads: Vec<CHead> = Vec::new();
+    for r in 0..3 {
+        for c in 0..4 {
+            let mut h = cell(c as f64 * 0.1);
+            h.offset_y = r as f64 * 0.1;
+            plate_heads.push(h);
+        }
+    }
+    let plate = prof(40.0, plate_heads, vec![linear("R", Source::ColorR, 0)]);
+    assert_eq!(plate.form(), FixtureForm::Panel);
+
+    // Head kinds win outright.
+    let hazer = prof(10.0, vec![CHead::flat(HeadKind::Hazer, 0.0, "h".into())], vec![]);
+    assert_eq!(hazer.form(), FixtureForm::Hazer);
+    let derby = prof(10.0, vec![CHead::flat(HeadKind::Derby, 0.0, "d".into())], vec![]);
+    assert_eq!(derby.form(), FixtureForm::Derby);
+
+    // An override beats every rule, which is the entire point of storing it.
+    let mut forced = mover.clone();
+    forced.form_override = Some(FixtureForm::Panel);
+    assert_eq!(forced.form(), FixtureForm::Panel);
+
+    // And it round-trips through the stored shape as camelCase, absent when unset.
+    let json = serde_json::to_string(&mover).unwrap();
+    assert!(!json.contains("formOverride"), "unset override must not be serialised");
+    let json = serde_json::to_string(&forced).unwrap();
+    assert!(json.contains("\"formOverride\":\"panel\""), "got {json}");
+    let back: CompiledProfile = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.form_override, Some(FixtureForm::Panel));
+}

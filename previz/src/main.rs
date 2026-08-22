@@ -58,6 +58,7 @@ fn main() {
                 update::drain_ws,
                 scene::rebuild_fixtures,
                 update::apply_live,
+                update::apply_panel_lights,
                 update::reflect_connection,
                 update::diag_state,
                 update::auto_screenshot,

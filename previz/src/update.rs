@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::protocol::{WsEvent, WsReceiver};
-use crate::scene::{BeamCone, BeamLight, DerbyFan, HeadTag, MoverHead, RingMesh, SourceGlow};
+use crate::scene::{BeamCone, BeamLight, DerbyFan, HeadTag, MoverHead, PanelLight, RingMesh, SourceGlow};
 use crate::state::{Live, Sent, Smoothed};
 
 /// Live zoom -> a multiplier on the profile's beam half-angle.
@@ -89,7 +89,18 @@ pub fn drain_ws(rx: Res<WsReceiver>, mut live: ResMut<Live>) {
                     // angle changed — the cones would keep the old spread; and
                     // since B1's layout editor, the OFFSETS can change without
                     // the count changing, so they sign too
-                    sig.push_str(&format!("{}#{}#{:.2}", id, cp.heads.len(), cp.beam_deg));
+                    // The form decides the body mesh AND the emitter primitive
+                    // — a panel gets a RectLight where a par gets a cone — so
+                    // an override typed in the patch table has to rebuild the
+                    // scene. Without it the picker would appear to do nothing
+                    // until some unrelated edit forced a rebuild.
+                    sig.push_str(&format!(
+                        "{}#{}#{:.2}#{:?}",
+                        id,
+                        cp.heads.len(),
+                        cp.beam_deg,
+                        cp.form()
+                    ));
                     for h in &cp.heads {
                         sig.push_str(&format!("|{:.3},{:.3}", h.offset, h.offset_y));
                     }
@@ -416,6 +427,7 @@ pub fn diag_state(
         With<BeamLight>,
     >,
     fogs: Query<&FogVolume>,
+    panels: Query<&RectLight, With<crate::scene::PanelLight>>,
     mut last: Local<f32>,
     mut enabled: Local<Option<bool>>,
 ) {
@@ -432,6 +444,8 @@ pub fn diag_state(
     let lit = lights.iter().filter(|l| l.intensity > 1.0).count();
     let max_i = lights.iter().map(|l| l.intensity).fold(0.0f32, f32::max);
     let fog = fogs.iter().next().map(|f| f.density_factor).unwrap_or(-1.0);
+    let panel_n = panels.iter().count();
+    let panel_lit = panels.iter().filter(|l| l.intensity > 1.0).count();
     let (snap_heads, haze) = live
         .snap
         .as_ref()
@@ -439,7 +453,7 @@ pub fn diag_state(
         .unwrap_or((0, -1.0));
     let fixtures = live.project.as_ref().map(|p| p.fixtures.len()).unwrap_or(0);
     eprintln!(
-        "[previz-diag] connected={} fixtures={fixtures} spotlights={total} lit={lit} maxI={max_i:.0} fog={fog:.3} snapHeads={snap_heads} haze={haze:.2}",
+        "[previz-diag] connected={} fixtures={fixtures} spotlights={total} lit={lit} maxI={max_i:.0} panels={panel_n} panelsLit={panel_lit} fog={fog:.3} snapHeads={snap_heads} haze={haze:.2}",
         live.connected
     );
     if let Some((tag, sl, inh, view, gt)) = lit_detail.iter().find(|(_, sl, ..)| sl.intensity > 1.0) {
@@ -473,4 +487,58 @@ pub fn reflect_connection(
     } else {
         "LIGHT · Previz — DISCONNECTED (engine not reachable)".to_string()
     };
+}
+
+/// Drive the area lights that stand in for panel faces.
+///
+/// Its own system rather than a loop inside `apply_live` because both want
+/// `&mut Visibility`, and two such queries in one system need filters that
+/// prove they are disjoint — which is a lot of ceremony for a dozen lines.
+///
+/// One light per fixture, coloured by the mean of its cells. A blinder's spill
+/// is a single area source from anywhere you can see it; the per-cell detail
+/// belongs on the face, and the emissive glows already draw that.
+pub fn apply_panel_lights(
+    live: Res<Live>,
+    time: Res<Time>,
+    mut panels: Query<(&HeadTag, &PanelLight, &mut RectLight, &mut Visibility)>,
+    mut sent: Local<std::collections::HashMap<String, Sent>>,
+) {
+    let Some(snap) = live.snap.as_ref() else { return };
+    let now_s = time.elapsed_secs();
+    let connected = live.connected;
+    for (tag, panel, mut light, mut vis) in &mut panels {
+        let (mut r, mut g, mut b, mut e) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+        let mut n = 0.0f32;
+        for h in 0..panel.heads.max(1) {
+            let Some(sm) = live.smoothed.get(&(tag.fixture.clone(), h)) else { continue };
+            let gate = snap
+                .heads
+                .iter()
+                .find(|x| x.f == tag.fixture && x.h == h)
+                .map_or(1.0, |x| gate(now_s, x.st));
+            r += sm.r;
+            g += sm.g;
+            b += sm.b;
+            e += sm.i * gate;
+            n += 1.0;
+        }
+        if n == 0.0 || !connected {
+            vis.set_if_neq(Visibility::Hidden);
+            continue;
+        }
+        let (r, g, b, e) = (r / n, g / n, b / n, e / n);
+        if e < 0.0015 {
+            vis.set_if_neq(Visibility::Hidden);
+            continue;
+        }
+        vis.set_if_neq(Visibility::Inherited);
+        let want = Sent { r, g, b, e };
+        if sent.get(&tag.fixture).is_some_and(|p| !p.differs(&want)) {
+            continue;
+        }
+        sent.insert(tag.fixture.clone(), want);
+        light.color = Color::srgb(r, g, b);
+        light.intensity = panel.lumens * e;
+    }
 }

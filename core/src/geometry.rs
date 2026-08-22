@@ -290,6 +290,7 @@ mod tests {
             beam_deg: 20.0,
             virtual_dimmer: false,
             credit: None,
+            form_override: None,
         };
         let mut project: Project =
             serde_json::from_str(r#"{"version":1,"universes":[],"fixtures":[{"id":"s","name":"S","profileId":"imported-strip","universeId":"u1","address":1,"pos":{"x":0,"y":3,"z":0},"rotY":0}],"groups":[],"layers":[],"columns":[]}"#)

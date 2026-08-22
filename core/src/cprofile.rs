@@ -162,6 +162,62 @@ impl CHead {
     }
 }
 
+/// What SHAPE of fixture this profile describes — the box, not the emitter.
+///
+/// `HeadKind` already says what one emitter does; this says what the thing on
+/// the truss physically is, which is a different question and the one a
+/// renderer needs. A CLF Nero is a rectangular blinder plate that happens to
+/// tilt; a Robe Spiider is a moving head that happens to have nineteen pixels.
+/// Neither is knowable from the head kinds alone, and getting it wrong is
+/// visible: before this existed, every Nero in the demo show rendered as a
+/// 16 cm cube throwing a spotlight cone, when it is a 41 x 32 cm panel.
+///
+/// Deliberately short. Each variant has to earn itself by changing how the
+/// fixture is drawn or lit, not by being a category a catalogue would use.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum FixtureForm {
+    /// Yoke and head: aims, throws a cone.
+    Mover,
+    /// A single-lens can on a bracket.
+    Par,
+    /// A linear batten or pixel bar — long, thin, cells in a row.
+    Bar,
+    /// A rectangular plate: blinders, LED panels, strobe plates. An AREA
+    /// emitter, not a lens — the thing a cone is most wrong about.
+    Panel,
+    /// A single-lens strobe.
+    Strobe,
+    /// Multi-lens rotating effect.
+    Derby,
+    /// Puts haze in the air and emits nothing.
+    Hazer,
+}
+
+impl FixtureForm {
+    pub fn label(self) -> &'static str {
+        match self {
+            FixtureForm::Mover => "moving head",
+            FixtureForm::Par => "par",
+            FixtureForm::Bar => "bar / batten",
+            FixtureForm::Panel => "panel / blinder",
+            FixtureForm::Strobe => "strobe",
+            FixtureForm::Derby => "derby",
+            FixtureForm::Hazer => "hazer",
+        }
+    }
+
+    pub const ALL: [FixtureForm; 7] = [
+        FixtureForm::Mover,
+        FixtureForm::Par,
+        FixtureForm::Bar,
+        FixtureForm::Panel,
+        FixtureForm::Strobe,
+        FixtureForm::Derby,
+        FixtureForm::Hazer,
+    ];
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompiledProfile {
@@ -185,6 +241,94 @@ pub struct CompiledProfile {
     /// which nobody else wrote.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credit: Option<String>,
+
+    /// An operator's override of the inferred form. Normally absent.
+    ///
+    /// Only the OVERRIDE is stored, never the guess. Two reasons: a re-import
+    /// must not silently clobber a correction someone made by hand, and
+    /// improving the heuristic should improve every show that already exists
+    /// rather than only the ones imported afterwards. `form()` is the accessor
+    /// everything should use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub form_override: Option<FixtureForm>,
+}
+
+impl CompiledProfile {
+    /// The form to draw this fixture as: the operator's override if they set
+    /// one, otherwise a guess from the profile itself.
+    pub fn form(&self) -> FixtureForm {
+        self.form_override.unwrap_or_else(|| self.infer_form())
+    }
+
+    /// Guess the form from what the profile actually says.
+    ///
+    /// Ordered, because the tests overlap. The beam angle carries most of the
+    /// signal and is the one that catches blinders: a source wider than 90 deg
+    /// has no lens worth speaking of, so it is a flood or a plate whatever else
+    /// it can do. That is what puts a CLF Nero — 123 deg, tilts, no pan — in
+    /// Panel rather than Mover, which testing it for aim first would not.
+    fn infer_form(&self) -> FixtureForm {
+        let kinds: Vec<HeadKind> = self.heads.iter().map(|h| h.kind).collect();
+        if kinds.iter().any(|k| *k == HeadKind::Hazer) {
+            return FixtureForm::Hazer;
+        }
+        if kinds.iter().any(|k| *k == HeadKind::Derby) {
+            return FixtureForm::Derby;
+        }
+        // A real moving head steers in both axes. Tilt alone is a hanging
+        // bracket, which plenty of static fixtures have.
+        if self.drives(Source::Pan) && self.drives(Source::Tilt) {
+            return FixtureForm::Mover;
+        }
+        if self.beam_deg >= 90.0 {
+            return FixtureForm::Panel;
+        }
+        // Cells spread along the fixture's own X, with no height to them: a
+        // batten. `span` is in metres, from the pixel layout.
+        if self.heads.len() >= 4 {
+            let span = self.head_span();
+            let rise = self.head_rise();
+            if span > 0.0 && rise <= span * 0.35 {
+                return FixtureForm::Bar;
+            }
+            return FixtureForm::Panel;
+        }
+        if self.drives(Source::Strobe) && !self.drives(Source::ColorR) {
+            return FixtureForm::Strobe;
+        }
+        FixtureForm::Par
+    }
+
+    /// Does any channel actually drive this source? An attribute that compiled
+    /// to no cases drives nothing, which is the whole point of the check.
+    pub fn drives(&self, want: Source) -> bool {
+        self.channels.iter().any(|ch| {
+            ch.cases.iter().any(|case| match &case.func {
+                Func::Linear { source } => *source == want,
+                _ => false,
+            })
+        })
+    }
+
+    /// Width across the cells, in metres.
+    pub fn head_span(&self) -> f64 {
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for h in &self.heads {
+            lo = lo.min(h.offset);
+            hi = hi.max(h.offset);
+        }
+        if hi >= lo { hi - lo } else { 0.0 }
+    }
+
+    /// Height across the cells, in metres.
+    pub fn head_rise(&self) -> f64 {
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for h in &self.heads {
+            lo = lo.min(h.offset_y);
+            hi = hi.max(h.offset_y);
+        }
+        if hi >= lo { hi - lo } else { 0.0 }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -392,6 +536,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         beam_deg: 5.0,
         virtual_dimmer: false,
         credit: None,
+        form_override: None,
         channels: vec![
             CChannel {
                 offsets: vec![0],
@@ -490,6 +635,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         beam_deg: 15.0,
         virtual_dimmer: false,
         credit: None,
+        form_override: None,
     });
 
     // Generic hazer — 2CH
@@ -507,6 +653,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         beam_deg: 0.0,
         virtual_dimmer: false,
         credit: None,
+        form_override: None,
     });
 
     // Generic dimmer — 1CH
@@ -521,6 +668,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         beam_deg: 25.0,
         virtual_dimmer: false,
         credit: None,
+        form_override: None,
     });
 
     // Generic RGB par — 3CH (virtual dimmer)
@@ -539,6 +687,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         beam_deg: 20.0,
         virtual_dimmer: true,
         credit: None,
+        form_override: None,
     });
 
     // Generic RGBW par — 4CH (virtual dimmer)
@@ -558,6 +707,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         beam_deg: 20.0,
         virtual_dimmer: true,
         credit: None,
+        form_override: None,
     });
 
     // Generic moving head RGBW — 10CH, 16-bit position
@@ -581,6 +731,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         beam_deg: 12.0,
         virtual_dimmer: false,
         credit: None,
+        form_override: None,
     });
 
     out

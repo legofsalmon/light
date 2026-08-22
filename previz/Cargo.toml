@@ -17,6 +17,11 @@ bevy = { version = "0.19", default-features = false, features = [
     "std",
     "x11",
     "tonemapping_luts",
+    # RectLight is a no-op without this — it needs the area-light LUTs, and
+    # the failure is silent: the component spawns, the light exists, nothing
+    # is illuminated. Panels and blinders are RectLights, so this is load
+    # bearing rather than optional.
+    "area_light_luts",
     "ktx2",
     "zstd_rust",
 ] }

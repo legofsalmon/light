@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { Project } from '../../../shared/types.ts';
-import { uid } from '../../../shared/types.ts';
+import type { FixtureForm, Project } from '../../../shared/types.ts';
+import { FIXTURE_FORMS, inferFixtureForm, uid } from '../../../shared/types.ts';
 import { PROFILES } from '../../../shared/profiles.ts';
 import { allProfileMetas, profileMeta } from '../profileInfo.ts';
 import { createGroupFromSelection } from '../selection.ts';
@@ -125,6 +125,46 @@ function AddressInput({ value, conflict, onCommit }: {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
       }}
     />
+  );
+}
+
+/** Fixture-form override, per PROFILE.
+ *
+ *  The importer can only guess what a fixture physically is, and the guess is
+ *  sometimes wrong in ways that show: a CLF Nero tilts, so an aim-first rule
+ *  calls it a moving head, and it has 1, 7 or 14 cells depending on mode, so a
+ *  cell-count rule calls it a bar. It is a 41 x 32 cm blinder plate in all of
+ *  them, and drawing it as a cube throwing a cone is visibly wrong.
+ *
+ *  "auto" stores nothing at all, so the inference stays live: sharpen the
+ *  heuristic and every show that never overrode anything gets the benefit,
+ *  while a hand correction survives re-importing the fixture. */
+function FormSelect(
+  { project, profileId, mutate }:
+  { project: Project; profileId: string; mutate: (fn: (p: Project) => void) => void },
+) {
+  const prof = project.profiles?.[profileId];
+  if (!prof) return <span className="label dim">—</span>;
+  const auto = inferFixtureForm(prof);
+  const autoLabel = FIXTURE_FORMS.find((x) => x.value === auto)?.label ?? auto;
+  return (
+    <select
+      className="sel"
+      style={{ width: 130 }}
+      value={prof.formOverride ?? 'auto'}
+      title={`how the previz draws and lights this fixture. Applies to every fixture on the "${prof.model}" profile. Auto reads it from the profile — beam angle, whether it steers in both axes, and how its cells are laid out.`}
+      onChange={(e) => mutate((p) => {
+        const target = p.profiles?.[profileId];
+        if (!target) return;
+        if (e.target.value === 'auto') delete target.formOverride;
+        else target.formOverride = e.target.value as FixtureForm;
+      })}
+    >
+      <option value="auto">auto — {autoLabel}</option>
+      {FIXTURE_FORMS.map((f) => (
+        <option key={f.value} value={f.value}>{f.label}</option>
+      ))}
+    </select>
   );
 }
 
@@ -463,6 +503,7 @@ export function PatchView() {
             <tr>
               <SortTh k="name" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Fixture</SortTh>
               <SortTh k="profile" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Profile</SortTh>
+              <th title="what shape of fixture this is — decides how the previz draws and lights it. Set on the PROFILE, so it applies to every fixture using it.">Form</th>
               <SortTh k="universe" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Universe</SortTh>
               <SortTh k="address" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Address</SortTh>
               <SortTh k="channels" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Ch</SortTh>
@@ -519,6 +560,9 @@ export function PatchView() {
                     >
                       {profileOptions}
                     </select>
+                  </td>
+                  <td>
+                    <FormSelect project={project} profileId={f.profileId} mutate={mutate} />
                   </td>
                   <td>
                     <select

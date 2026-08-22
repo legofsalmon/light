@@ -1,5 +1,6 @@
 use bevy::light::{FogVolume, VolumetricLight};
 use bevy::prelude::*;
+use light_core::cprofile::FixtureForm;
 use light_core::profiles::{profile_of, HeadKind};
 
 use crate::protocol::ProjectLite;
@@ -11,6 +12,10 @@ use crate::state::Live;
 struct ProfMeta {
     heads: Vec<(HeadKind, f64, f64)>,
     beam_deg: f64,
+    /// What shape of fixture this is — the operator's override if they set one,
+    /// otherwise inferred. Decides the body mesh, the emitter primitive and the
+    /// default flux, none of which the head kinds can answer on their own.
+    form: FixtureForm,
     /// The head whose snapshot pan/tilt steers the WHOLE fixture, when the
     /// fixture aims but its emitters are not `Mover` heads.
     ///
@@ -47,12 +52,22 @@ fn prof_meta(project: &ProjectLite, id: &str) -> Option<ProfMeta> {
         return Some(ProfMeta {
             heads: p.heads.iter().map(|h| (h.kind, h.offset, 0.0)).collect(),
             beam_deg: p.beam_deg,
+            // The built-ins are hand-written and predate the form idea; their
+            // head kinds happen to say enough.
+            form: match p.heads.first().map(|h| h.kind) {
+                Some(HeadKind::Derby) => FixtureForm::Derby,
+                Some(HeadKind::Hazer) => FixtureForm::Hazer,
+                Some(HeadKind::Mover) => FixtureForm::Mover,
+                _ if p.heads.len() > 1 => FixtureForm::Bar,
+                _ => FixtureForm::Par,
+            },
             aim_head: None,
         });
     }
     project.profiles.get(id).map(|c| ProfMeta {
         heads: c.heads.iter().map(|h| (h.kind, h.offset, h.offset_y)).collect(),
         beam_deg: c.beam_deg,
+        form: c.form(),
         // only when no head is a Mover already — those steer themselves
         aim_head: if c.heads.iter().any(|h| h.kind == HeadKind::Mover) {
             None
@@ -60,6 +75,18 @@ fn prof_meta(project: &ProjectLite, id: &str) -> Option<ProfMeta> {
             aim_head_of(c)
         },
     })
+}
+
+impl ProfMeta {
+    /// Width across the fixture's own cells, in metres.
+    fn span(&self) -> f64 {
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for (_, x, _) in &self.heads {
+            lo = lo.min(*x);
+            hi = hi.max(*x);
+        }
+        if hi >= lo { hi - lo } else { 0.0 }
+    }
 }
 
 #[derive(Component)]
@@ -86,7 +113,18 @@ pub struct BeamLight {
 #[derive(Component)]
 pub struct SourceGlow;
 
-/// Luminous flux for a head, in lumens — real numbers for real fixtures.
+/// The single area light standing in for a whole panel's face.
+///
+/// `heads` is how many cells the fixture has, so the update pass can average
+/// them into one colour; `lumens` is the fixture's total output, not one
+/// cell's.
+#[derive(Component)]
+pub struct PanelLight {
+    pub heads: usize,
+    pub lumens: f32,
+}
+
+/// Luminous flux for one head, in lumens — real numbers for real fixtures.
 ///
 /// A Robe Spiider is about 12,000 lm, an Ayrton profile about 22,000, an LED
 /// blinder tens of thousands across its whole face, one derby lens a couple of
@@ -96,19 +134,21 @@ pub struct SourceGlow;
 ///
 /// When the importer starts keeping LuminousFlux this becomes the fallback for
 /// profiles that lack it, rather than the answer for every fixture.
-fn lumens_for(kind: Option<HeadKind>, heads: usize) -> f32 {
-    match kind {
+fn lumens_for(form: FixtureForm, heads: usize) -> f32 {
+    match form {
         // One lens of a derby's six.
-        Some(HeadKind::Derby) => 1_800.0,
-        Some(HeadKind::Hazer) => 0.0,
-        // A moving head: wash, spot or beam.
-        Some(HeadKind::Mover) => 16_000.0,
-        // A multi-cell bar or pixel strip divides its output between cells, so
-        // a 12-cell batten is not twelve washes.
-        _ if heads > 4 => 18_000.0 / heads as f32,
-        _ if heads > 1 => 24_000.0 / heads as f32,
-        // A par, a blinder, a single-cell wash.
-        _ => 9_000.0,
+        FixtureForm::Derby => 1_800.0,
+        FixtureForm::Hazer => 0.0,
+        // Wash, spot or beam.
+        FixtureForm::Mover => 16_000.0,
+        // A blinder plate is the brightest thing on most rigs and the reason
+        // the audience squints. A CLF Nero draws 1400 W.
+        FixtureForm::Panel => 45_000.0 / heads.max(1) as f32,
+        FixtureForm::Strobe => 30_000.0,
+        // A batten divides its output between cells: a 12-cell bar is not
+        // twelve washes.
+        FixtureForm::Bar => 24_000.0 / heads.max(1) as f32,
+        FixtureForm::Par => 9_000.0,
     }
 }
 
@@ -648,12 +688,66 @@ pub fn rebuild_fixtures(
             .id();
 
         // body
-        let body = match prof.heads.first().map(|h| h.0) {
-            Some(HeadKind::Derby) => Cuboid::new(0.26, 0.2, 0.2),
-            Some(HeadKind::Hazer) => Cuboid::new(0.34, 0.26, 0.26),
-            _ if prof.heads.len() > 1 => Cuboid::new(1.06, 0.09, 0.09),
-            _ => Cuboid::new(0.16, 0.14, 0.16),
+        // Sized by FORM, not by head count. A CLF Nero has 1, 7 or 14 cells
+        // depending on its mode and is the same 41 x 32 x 17 cm plate in all of
+        // them — under the old rule it was a 16 cm cube in one mode and a
+        // 1.06 m bar in another.
+        let body = match prof.form {
+            FixtureForm::Derby => Cuboid::new(0.26, 0.2, 0.2),
+            FixtureForm::Hazer => Cuboid::new(0.34, 0.26, 0.26),
+            // Wide enough to hold its cells, and deep enough to read as a box
+            // rather than a card when the camera comes round the side.
+            FixtureForm::Panel => {
+                let w = (prof.span() + 0.16).max(0.34) as f32;
+                Cuboid::new(w, (w * 0.78).min(0.42), 0.17)
+            }
+            FixtureForm::Bar => Cuboid::new((prof.span() + 0.1).max(0.5) as f32, 0.09, 0.09),
+            FixtureForm::Strobe => Cuboid::new(0.36, 0.24, 0.16),
+            FixtureForm::Mover => Cuboid::new(0.16, 0.14, 0.16),
+            FixtureForm::Par => Cuboid::new(0.16, 0.14, 0.16),
         };
+        // A blinder plate is an AREA emitter: a 41 x 32 cm face throwing 117
+        // degrees, which a cone models badly in both directions — too directional
+        // near the fixture, and a hard elliptical edge where there should be a
+        // soft square-ish wash. Bevy 0.19 has the right primitive.
+        //
+        // One light for the whole fixture rather than one per cell. The spill
+        // from a plate really is a single area source at any distance you can
+        // see it from; the per-cell structure lives on the face, which the
+        // emissive glows already draw. It is also the difference between 24
+        // lights and 336 on this rig.
+        if prof.form == FixtureForm::Panel {
+            let (bw, bh) = (body.half_size.x * 2.0, body.half_size.y * 2.0);
+            // A RectLight lies in its local XY plane and faces local -Z, so it
+            // needs aiming exactly like a spot does. Left at identity it faces
+            // whatever the fixture root faces, which for anything hung on a bar
+            // is not where the fixture is pointed.
+            let face = if f.pos.y > 1.2 {
+                Vec3::new(0.0, -0.93, 0.37)
+            } else {
+                Vec3::new(0.0, -0.26, 0.97)
+            };
+            commands.entity(root).with_children(|p| {
+                p.spawn((
+                    HeadTag { fixture: f.id.clone(), head: 0, kind: HeadKind::Rgb },
+                    PanelLight {
+                        heads: prof.heads.len(),
+                        lumens: lumens_for(FixtureForm::Panel, 1) * q.lumen_scale,
+                    },
+                    RectLight {
+                        color: Color::BLACK,
+                        intensity: 0.0,
+                        range: light_range,
+                        width: bw,
+                        height: bh,
+                        ..default()
+                    },
+                    Transform::default().looking_to(face, Vec3::Y),
+                    Visibility::Hidden,
+                ));
+            });
+        }
+
         commands.entity(root).with_children(|p| {
             p.spawn((
                 Mesh3d(meshes.add(body)),
@@ -733,7 +827,7 @@ pub fn rebuild_fixtures(
                                             tag.clone(),
                                             BeamLight {
                                                 idx: k,
-                                                lumens: lumens_for(Some(HeadKind::Derby), 1) * q.lumen_scale,
+                                                lumens: lumens_for(FixtureForm::Derby, 1) * q.lumen_scale,
                                                 base_outer: outer * 0.7,
                                             },
                                             SpotLight {
@@ -764,13 +858,17 @@ pub fn rebuild_fixtures(
                             });
                         }
                         HeadKind::Hazer => {}
+                        // A panel's light comes from its whole face. It gets
+                        // one RectLight for the fixture, spawned after this
+                        // loop — not a cone per cell.
+                        _ if prof.form == FixtureForm::Panel => {}
                         _ if pixel_strip => {} // emissive glow only
                         _ => {
                             h.spawn((
                                 tag.clone(),
                                 BeamLight {
                                     idx: 0,
-                                    lumens: lumens_for(prof.heads.get(hi).map(|h| h.0), prof.heads.len())
+                                    lumens: lumens_for(prof.form, prof.heads.len())
                                         * q.lumen_scale,
                                     base_outer: outer,
                                 },

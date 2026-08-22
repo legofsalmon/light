@@ -417,7 +417,75 @@ export type CompiledProfile = {
   /** who authored the fixture definition — carried so the credit travels with
    *  the project, which is what GDTF Share's terms ask for. */
   credit?: string;
+  /** An operator's override of the inferred fixture form. Normally absent —
+   *  only the override is stored, never the guess, so a re-import cannot
+   *  clobber a hand correction and improving the heuristic improves shows
+   *  that already exist. Presentation only: it changes how a fixture is drawn
+   *  and lit in the previz and touches no DMX byte. */
+  formOverride?: FixtureForm;
 };
+
+/** What SHAPE of fixture a profile describes — the box, not the emitter.
+ *
+ *  `heads[].kind` says what one emitter does; this says what the thing on the
+ *  truss physically is. A CLF Nero is a rectangular blinder plate that happens
+ *  to tilt; a Robe Spiider is a moving head that happens to have nineteen
+ *  pixels. Neither is knowable from the head kinds alone.
+ *
+ *  Mirrors `FixtureForm` in core/src/cprofile.rs. */
+export type FixtureForm =
+  | 'mover'
+  | 'par'
+  | 'bar'
+  | 'panel'
+  | 'strobe'
+  | 'derby'
+  | 'hazer';
+
+export const FIXTURE_FORMS: { value: FixtureForm; label: string }[] = [
+  { value: 'mover', label: 'moving head' },
+  { value: 'par', label: 'par' },
+  { value: 'bar', label: 'bar / batten' },
+  { value: 'panel', label: 'panel / blinder' },
+  { value: 'strobe', label: 'strobe' },
+  { value: 'derby', label: 'derby' },
+  { value: 'hazer', label: 'hazer' },
+];
+
+/** The Node mirror of `CompiledProfile::infer_form` (core/src/cprofile.rs).
+ *
+ *  Both engines must land on the same answer or the two previz views draw the
+ *  same rig differently, so this is a twin and has to be kept one. Ordered
+ *  identically; see the Rust doc comment for why the beam angle is tested
+ *  before the head count. */
+export function inferFixtureForm(prof: CompiledProfile): FixtureForm {
+  const kinds = new Set((prof.heads ?? []).map((h) => h.kind));
+  if (kinds.has('hazer')) return 'hazer';
+  if (kinds.has('derby')) return 'derby';
+  const drives = (src: string) =>
+    (prof.channels ?? []).some((ch) =>
+      (ch.cases as { func?: { kind?: string; source?: string } }[] ?? []).some(
+        (c) => c?.func?.kind === 'linear' && c.func.source === src,
+      ),
+    );
+  if (drives('pan') && drives('tilt')) return 'mover';
+  if ((prof.beamDeg ?? 0) >= 90) return 'panel';
+  if ((prof.heads?.length ?? 0) >= 4) {
+    const spread = (key: 'offset' | 'offsetY') => {
+      const vs = (prof.heads ?? []).map((h) => h[key] ?? 0);
+      return vs.length ? Math.max(...vs) - Math.min(...vs) : 0;
+    };
+    const span = spread('offset');
+    return span > 0 && spread('offsetY') <= span * 0.35 ? 'bar' : 'panel';
+  }
+  if (drives('strobe') && !drives('colorR')) return 'strobe';
+  return 'par';
+}
+
+/** The form to draw a profile as: the override if set, otherwise the guess. */
+export function fixtureFormOf(prof: CompiledProfile): FixtureForm {
+  return prof.formOverride ?? inferFixtureForm(prof);
+}
 
 export type Project = {
   version: 1;
@@ -843,6 +911,13 @@ export function sanitizeProject(p: Project): Project | null {
       if (h.offsetY !== undefined && !Number.isFinite(h.offsetY)) delete h.offsetY;
       if (h.row !== undefined) h.row = Number.isFinite(h.row) ? Math.max(0, Math.floor(h.row)) : 0;
       if (h.col !== undefined) h.col = Number.isFinite(h.col) ? Math.max(0, Math.floor(h.col)) : 0;
+    }
+    // A form override from a newer build, or a typo in a hand-edited file, is
+    // dropped rather than failing the load: it is presentation, and the
+    // inference underneath it is always available.
+    if (prof.formOverride !== undefined
+      && !FIXTURE_FORMS.some((f) => f.value === prof.formOverride)) {
+      delete prof.formOverride;
     }
   }
   // FX pool: tolerant like the effect repair above (de_fx_pool in Rust). A

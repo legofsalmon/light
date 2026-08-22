@@ -438,6 +438,7 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             beam_deg,
             virtual_dimmer: !has_dimmer,
             credit: credit.clone(),
+            form_override: None,
         });
     }
     if out.is_empty() {
