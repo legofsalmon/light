@@ -13,6 +13,8 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
   const togglePreviz = useStore((s) => s.togglePreviz);
   const previewPane = useStore((s) => s.previewPane);
   const togglePreviewPane = useStore((s) => s.togglePreviewPane);
+  const autoExposure = useStore((s) => s.previzAutoExposure);
+  const toggleAutoExposure = useStore((s) => s.togglePrevizAutoExposure);
   const mode = useStore((s) => s.previzMode);
   const setMode = useStore((s) => s.setPrevizMode);
   const view2d = useStore((s) => s.previz2dView);
@@ -142,6 +144,13 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
               onClick={() => setShowBand(!showBand)}
             >
               band
+            </button>
+            <button
+              className={`btn small ${autoExposure ? 'on' : 'ghost'}`}
+              title="eye adaptation — the exposure follows how much light is on stage, the way your eyes do walking into a bright room. Partial, so a brighter look still reads brighter. Off holds a fixed exposure, for judging absolute levels."
+              onClick={toggleAutoExposure}
+            >
+              auto exp
             </button>
             <Fader label="beam viz" width={110} value={hazeViz} onChange={setHazeViz} def={0.7} variant="dim" />
           </>

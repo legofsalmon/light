@@ -30,6 +30,36 @@ type HeadHandle = {
  *  ~120 mm of the yoke. */
 const AIM_EMITTER_RADIUS = 0.12;
 
+/** Eye adaptation.
+ *
+ *  Beams are additive volumes, so the light in the frame adds up without any
+ *  ceiling: metered on the demo rig, a full-blast look accumulates more than
+ *  60× display white across most of the picture. No tone curve rescues that on
+ *  its own — ACES saturates above ~8 — so the exposure has to move, the way a
+ *  camera's does walking from a verse into a chorus.
+ *
+ *  `exposure = KEY / lum ^ STRENGTH`, where `lum` is the perceptual light the
+ *  rig is putting into the room this frame, scaled by the beam-viz setting
+ *  because that is genuinely how much of it the "camera" can see.
+ *
+ *  KEY was fitted by eye against the demo show's 153 heads: the Drop meters at
+ *  lum ≈ 15 and photographs correctly at 0.02, the Intro at lum ≈ 4.3 and 0.045.
+ *
+ *  STRENGTH is PARTIAL on purpose. At 1 the adaptation would cancel every
+ *  change and the previz would be useless as a lighting tool — you would push
+ *  the master and watch nothing happen. At 0.6, 3.5× the light on stage still
+ *  reads about 1.7× brighter: the direction and the feel survive, the clipping
+ *  does not.
+ *
+ *  The ceiling is 1.0 — never brighter than an unadapted frame. A real eye
+ *  keeps opening up in the dark, but a previz that quietly brightens a blackout
+ *  makes "is the rig actually out?" impossible to answer at a glance. */
+const ADAPT_KEY = 0.1;
+const ADAPT_STRENGTH = 0.6;
+const ADAPT_DOWN_S = 0.25;
+const ADAPT_UP_S = 1.2;
+const clampExposure = (e: number) => Math.min(1, Math.max(0.006, e));
+
 function makeBeam(deg: number, len: number): THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial> {
   const rad = (deg * Math.PI) / 180;
   const geo = new THREE.CylinderGeometry(0.012, Math.tan(rad / 2) * len + 0.02, len, 18, 1, true);
@@ -499,6 +529,8 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
     // instead, so twenty overlapping beams stay coloured and separable.
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
+    // Live exposure, adapted below. Kept out here so it survives frames.
+    let exposure = 1.0;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     host.appendChild(renderer.domElement);
 
@@ -618,7 +650,8 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       const dt = Math.min(0.1, (now - lastT) / 1000);
       lastT = now;
 
-      const { project, snap, hazeViz, showBand, showMeasure } = useStore.getState();
+      const { project, snap, hazeViz, showBand, showMeasure, previzAutoExposure: autoExposure } =
+        useStore.getState();
       measureGrid.visible = showMeasure;
       const sig = JSON.stringify(project?.props ?? []);
       if (sig !== propsSig) {
@@ -662,6 +695,7 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
           heads.set(`${hs.f}:${hs.h}`, hs);
         }
         const beamGain = 0.07 + hazeViz * 0.5;
+        let lumAcc = 0;
 
         for (const h of rig.handles) {
           const hs = heads.get(h.key);
@@ -698,6 +732,13 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             b.material.color.setRGB(r, g, bl);
             b.material.opacity = h.cur.i * beamGain * gate;
           });
+
+          // What this head is contributing to the room, for the eye-adaptation
+          // pass below. Perceptual weights, because green reads far brighter
+          // than blue at the same value — a deep blue wash should not stop the
+          // exposure down the way an open white one does.
+          lumAcc += h.cur.i * gate *
+            (0.2126 * h.cur.r + 0.7152 * h.cur.g + 0.0722 * h.cur.b);
 
           if (h.glow) {
             h.glow.material.color.setRGB(h.cur.r, h.cur.g, h.cur.b);
@@ -741,8 +782,23 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             for (const b of h.aimBeams ?? h.beams) fitBeam(b, rig.occ, zoomSpread(hs.zm));
           }
         }
+
+        // --- eye adaptation ------------------------------------------------
+        const lum = Math.max(lumAcc * beamGain, 1e-4);
+        const target = clampExposure(ADAPT_KEY / Math.pow(lum, ADAPT_STRENGTH));
+        // Stopping down is fast and opening up is slow, which is both what an
+        // eye does and what keeps a strobe from pumping the whole picture: the
+        // exposure settles on the lit frames and barely lifts in the gaps.
+        //
+        // Interpolated in LOG space, because the useful range here is two
+        // decades wide. A linear lerp covers 1.0 → 0.1 in a blink and then
+        // crawls the last stop, so a big cue would snap and then drift.
+        const tau = target < exposure ? ADAPT_DOWN_S : ADAPT_UP_S;
+        const k = 1 - Math.exp(-dt / tau);
+        exposure = Math.exp(Math.log(exposure) + (Math.log(target) - Math.log(exposure)) * k);
       }
 
+      renderer.toneMappingExposure = autoExposure ? exposure : 1.0;
       controls.update();
       renderer.render(scene, camera);
     };

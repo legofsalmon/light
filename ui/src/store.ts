@@ -51,6 +51,11 @@ type Store = {
    *  selects it — so a show run from the pads can switch it off and give the
    *  live rig the whole band. */
   previewPane: boolean;
+  /** Eye adaptation in the 3D previz: the exposure follows how much light is
+   *  on stage, the way an eye or a camera would. Partial, so a brighter look
+   *  still reads brighter — off gives a fixed exposure for judging absolute
+   *  levels. */
+  previzAutoExposure: boolean;
   previzMode: '3d' | '2d';
   /** What the previz was showing before the patch view borrowed it for the
    *  plan, so leaving patch gives back the view the operator was steering by.
@@ -125,6 +130,7 @@ type Store = {
   setLibraryHidden: (v: boolean) => void;
   setEditorHidden: (v: boolean) => void;
   togglePreviewPane: () => void;
+  togglePrevizAutoExposure: () => void;
   setPrevizMode: (m: '3d' | '2d') => void;
   setPreviz2dView: (v: 'plan' | 'front') => void;
   setFxSel: (ids: string[]) => void;
@@ -339,6 +345,7 @@ export const useStore = create<Store>()((set, get) => ({
   libraryHidden: loadFlag('libraryHidden'),
   editorHidden: loadFlag('editorHidden'),
   previewPane: loadFlag('previewPane', true),
+  previzAutoExposure: loadFlag('previzAutoExposure', true),
   // Launching straight back into the patch view must give the plan the view
   // exists for, the same way arriving there from anywhere else does — and must
   // record the loan, or the borrowed 2D leaks into every other view on exit.
@@ -514,6 +521,12 @@ export const useStore = create<Store>()((set, get) => ({
       const previewPane = !s.previewPane;
       saveFlag('previewPane', previewPane);
       return { previewPane };
+    }),
+  togglePrevizAutoExposure: () =>
+    set((s) => {
+      const previzAutoExposure = !s.previzAutoExposure;
+      saveFlag('previzAutoExposure', previzAutoExposure);
+      return { previzAutoExposure };
     }),
   // An explicit pick outranks the pending patch restore — otherwise leaving the
   // view would overwrite the screen they just chose.

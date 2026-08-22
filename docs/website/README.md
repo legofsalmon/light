@@ -53,13 +53,13 @@ known-good pose can be written directly rather than orbited to — but note the
 controls overwrite it as soon as anything drags, so set it and shoot without
 touching the view.
 
-And composition matters more than exposure now. Since the previz gained filmic
-tone mapping the highlights roll off instead of clipping, so a fan or a beam
-figure photographs well at ordinary master levels. What still does not
-photograph well is a full-stage look with the floor lit: 48 wash fixtures on a
-floor fill the frame with white whatever the master is. Pick a look with
-separation — beams in the air, a hue fan across the truss — and keep the camera
-out in the room rather than under the rig.
+And composition matters more than exposure now. Filmic tone mapping rolls the
+highlights off instead of clipping them, and `auto exp` (on by default) meters
+the frame, so even a full-blast look photographs with structure in it — leave
+both on unless you are deliberately shooting the blown-out version. Two things
+still help: keep the camera out in the room rather than under the rig, and
+remember the exposure takes about a second to settle after a cue change, so
+shoot a beat late.
 
 Still wanted, in the order the pages want them:
 

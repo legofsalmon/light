@@ -14,7 +14,24 @@ all against the LED wall.
 - **band** puts dummy performers on stage for scale and to catch light.
 - **beam viz** scales how strongly the beams render, independent of the rig's
   own haze value.
-- Drag to orbit, scroll to zoom. The camera is remembered.
+- **auto exp** is eye adaptation, on by default. Drag to orbit, scroll to zoom.
+  The camera is remembered.
+
+### Auto exposure
+
+Beams are additive, so on a rig this size a full look piles up far past white
+and the view turns into a flat sheet — exactly when you most need to see what
+it is doing. `auto exp` stops the picture down the way your eyes do walking
+into a bright room, and opens it back up in the quiet parts.
+
+It is **partial** on purpose: a look with three and a half times the light on
+stage still reads about 1.7× brighter, so you can tell a Drop from a Build.
+Stopping down is fast and opening up is slow, which is both what an eye does and
+what stops a strobe pumping the whole frame. A blackout is never brightened —
+"is the rig actually out?" has to stay answerable at a glance.
+
+Switch it off to judge absolute levels, or to compare two looks side by side
+without the view re-metering between them.
 
 Moving heads aim: pan and tilt from the look, and from any effect or control
 driving them, steer the beams live. That includes fixtures whose emitters are
