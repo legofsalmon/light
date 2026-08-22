@@ -16,11 +16,20 @@ type HeadHandle = {
   fan: THREE.Group | null;
   pan: THREE.Group | null;
   tilt: THREE.Group | null;
+  /** Beams carried by a FIXTURE-level yoke (a pixel mover like a Spiider):
+   *  every one of them has to re-cut when the fixture turns, not just the
+   *  head that happens to own the yoke handle. */
+  aimBeams?: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>[];
   spin: number;
   /** last zoom applied to this head's cones, so static beams re-cut only on change */
   lastZoom: number | undefined;
   cur: { r: number; g: number; b: number; i: number };
 };
+
+/** How far an emitter may sit from the pan anchor on a fixture that aims.
+ *  A moving head is a head, not a bar: everything it emits from is within
+ *  ~120 mm of the yoke. */
+const AIM_EMITTER_RADIUS = 0.12;
 
 function makeBeam(deg: number, len: number): THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial> {
   const rad = (deg * Math.PI) / 180;
@@ -115,18 +124,56 @@ function buildRig(project: Project): {
     fg.rotation.order = 'YXZ'; // yaw, then mounting tilt, then roll
     fg.rotation.set(f.rotX ?? 0, f.rotY, f.rotZ ?? 0);
 
-    // body
-    if (prof.heads.length > 1) fg.add(basicBox(1.06, 0.09, 0.09, 0x2c2c33));
+    // body — a bar for a bar, a head for a head. A multi-pixel fixture that
+    // AIMS is a moving head with a pixel face, not a metre of truss: drawing
+    // the bar made a Spiider look like a static bar whose beams pivoted around
+    // its middle, which is exactly the wrong story about where the light comes
+    // from. (canAim is computed just below; hoisted for the body.)
+    const bodyAims = !!prof.hasPan || !!prof.hasTilt;
+    if (prof.heads.length > 1 && !bodyAims) fg.add(basicBox(1.06, 0.09, 0.09, 0x2c2c33));
+    else if (prof.heads.length > 1) fg.add(basicBox(0.3, 0.24, 0.24, 0x2c2c33));
     else if (prof.heads[0]?.kind === 'derby') fg.add(basicBox(0.26, 0.2, 0.2, 0x2c2c33));
     else if (prof.heads[0]?.kind === 'hazer') fg.add(basicBox(0.34, 0.26, 0.26, 0x232328));
     else fg.add(basicBox(0.16, 0.14, 0.16, 0x2c2c33));
+
+    // Can this fixture AIM? Ask the channels, not the head kind — the same
+    // test the look editor and the patch table use. A Robin Spiider is a
+    // moving head whose emitters are pixels: its compiled profile is `rgb`
+    // heads with a Pan channel, so gating the yoke on `kind === 'mover'` left
+    // the beams nailed in place while the editor set pan/tilt, the snapshot
+    // carried them and the real fixture moved. Only the previz disagreed.
+    //
+    // The yoke goes between the fixture and its heads, because that is where
+    // it is on the truss: panning a Spiider swings every pixel with it.
+    const canAim = !!prof.hasPan || !!prof.hasTilt;
+    const hasMoverHead = prof.heads.some((h) => h.kind === 'mover');
+    let panG: THREE.Group | null = null;
+    let tiltG: THREE.Group | null = null;
+    if (canAim && !hasMoverHead) {
+      panG = new THREE.Group();
+      tiltG = new THREE.Group();
+      panG.add(tiltG);
+      fg.add(panG);
+    }
+    const aimBeams: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>[] = [];
+
+    // Emitters on a moving head sit ON the head, within a hand's width of the
+    // pivot — but a synthesised pixel layout spreads them across the fixture's
+    // nominal width with no idea of its real size (a Robin Spiider's two zones
+    // come out 600 mm apart). Swinging those on the yoke puts each beam's
+    // origin on a 300 mm arm around the pan anchor, which reads as the light
+    // starting somewhere other than where it pivots. Compress the spread to
+    // head scale for fixtures that aim; a static bar keeps its real layout,
+    // where the spread IS the fixture.
+    const spread = prof.heads.reduce((m, h) => Math.max(m, Math.abs(h.offset)), 0);
+    const aimScale = tiltG && spread > AIM_EMITTER_RADIUS ? AIM_EMITTER_RADIUS / spread : 1;
 
     prof.heads.forEach((hd, hi) => {
       const headRoot = new THREE.Group();
       // 2D pixel layouts (B1): offsetY lifts a head up the fixture's local Y,
       // so a Spiider's rings and a matrix panel read as their real shape
-      headRoot.position.set(hd.offset, hd.offsetY ?? 0, 0);
-      fg.add(headRoot);
+      headRoot.position.set(hd.offset * aimScale, (hd.offsetY ?? 0) * aimScale, 0);
+      (tiltG ?? fg).add(headRoot);
 
       const handle: HeadHandle = {
         key: `${f.id}:${hi}`,
@@ -191,15 +238,32 @@ function buildRig(project: Project): {
         handle.tilt = tilt;
       } else {
         const aim = new THREE.Group();
-        aim.rotation.x = f.pos.y > 1.2 ? -0.38 : -0.1; // rigged fixtures tip toward the crowd
+        // A fixture that aims gets its direction from the yoke above; the
+        // fixed downward tip is for things that cannot move.
+        aim.rotation.x = tiltG ? 0 : f.pos.y > 1.2 ? -0.38 : -0.1;
         headRoot.add(aim);
-        const beam = makeBeam(prof.beamDeg, 4.2);
+        const beam = makeBeam(prof.beamDeg, tiltG ? 5 : 4.2);
         aim.add(beam);
         handle.beams.push(beam);
+        if (tiltG) aimBeams.push(beam);
       }
 
       handles.push(handle);
     });
+
+    // Hand the yoke to the head whose channels actually carry the aim. GDTF
+    // binds Pan/Tilt to the fixture's Base geometry, which compiles to head 0,
+    // so that is the head whose snapshot values are the ones the rig obeys —
+    // the other pixels sit at their default 0.5 and would freeze the yoke
+    // mid-travel if they drove it. Every beam under the yoke re-cuts with it.
+    if (panG && tiltG) {
+      const owner = handles[handles.length - prof.heads.length];
+      if (owner) {
+        owner.pan = panG;
+        owner.tilt = tiltG;
+        owner.aimBeams = aimBeams;
+      }
+    }
 
     group.add(fg);
   }
@@ -680,7 +744,7 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             // tilt alone cut every beam against the previous frame's pan.
             // force=true propagates down through tilt to the beam.
             h.pan.updateMatrixWorld(true);
-            for (const b of h.beams) fitBeam(b, rig.occ, zoomSpread(hs.zm));
+            for (const b of h.aimBeams ?? h.beams) fitBeam(b, rig.occ, zoomSpread(hs.zm));
           }
         }
       }

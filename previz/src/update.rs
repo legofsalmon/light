@@ -225,7 +225,9 @@ pub fn apply_live(
     let mut cone_scales: HashMap<(String, usize), Vec3> = HashMap::new();
     for (tag, mv, mut tf) in &mut movers {
         let key = (tag.fixture.clone(), tag.head);
-        let Some(h) = heads.get(&key) else { continue };
+        // Steer by the head that CARRIES the aim channels, which for a pixel
+        // mover is not this beam's own head (see MoverHead::aim_head).
+        let Some(h) = heads.get(&(tag.fixture.clone(), mv.aim_head)) else { continue };
         let pan = (h.pan - 0.5) * mv.pan_range;
         let tilt = (h.tilt - 0.5) * mv.tilt_range;
         // pan about the rig's vertical, then tilt about the head's own local X

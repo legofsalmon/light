@@ -11,6 +11,35 @@ use crate::state::Live;
 struct ProfMeta {
     heads: Vec<(HeadKind, f64, f64)>,
     beam_deg: f64,
+    /// The head whose snapshot pan/tilt steers the WHOLE fixture, when the
+    /// fixture aims but its emitters are not `Mover` heads.
+    ///
+    /// A Robin Spiider is a moving head whose emitters are pixels: the compiled
+    /// profile is `rgb` heads with Pan/Tilt channels bound to the Base
+    /// geometry, which lands on one head (0 in practice). Gating the yoke on
+    /// `kind == Mover` left every GDTF-imported mover nailed in place while the
+    /// editor set pan/tilt, the snapshot carried it and the real fixture moved.
+    /// `None` keeps the built-in behaviour: each Mover head aims by its own
+    /// values.
+    aim_head: Option<usize>,
+}
+
+/// Which head carries this compiled profile's Pan/Tilt channels, if any.
+fn aim_head_of(c: &light_core::cprofile::CompiledProfile) -> Option<usize> {
+    c.channels
+        .iter()
+        .find(|ch| {
+            ch.cases.iter().any(|case| {
+                matches!(
+                    case.func,
+                    light_core::cprofile::Func::Linear {
+                        source: light_core::cprofile::Source::Pan
+                            | light_core::cprofile::Source::Tilt
+                    }
+                )
+            })
+        })
+        .map(|ch| ch.head)
 }
 
 fn prof_meta(project: &ProjectLite, id: &str) -> Option<ProfMeta> {
@@ -18,11 +47,18 @@ fn prof_meta(project: &ProjectLite, id: &str) -> Option<ProfMeta> {
         return Some(ProfMeta {
             heads: p.heads.iter().map(|h| (h.kind, h.offset, 0.0)).collect(),
             beam_deg: p.beam_deg,
+            aim_head: None,
         });
     }
     project.profiles.get(id).map(|c| ProfMeta {
         heads: c.heads.iter().map(|h| (h.kind, h.offset, h.offset_y)).collect(),
         beam_deg: c.beam_deg,
+        // only when no head is a Mover already — those steer themselves
+        aim_head: if c.heads.iter().any(|h| h.kind == HeadKind::Mover) {
+            None
+        } else {
+            aim_head_of(c)
+        },
     })
 }
 
@@ -166,6 +202,10 @@ pub struct DerbyFan;
 /// values but the compiled profile does not surface them yet.
 #[derive(Component)]
 pub struct MoverHead {
+    /// Which snapshot head steers this beam. Its own, for a Mover head; the
+    /// fixture's Pan/Tilt-bearing head for a pixel mover, whose other pixels
+    /// sit at a default 0.5 and would otherwise freeze half the fixture.
+    pub aim_head: usize,
     pub rest: Quat,
     pub pan_range: f32,
     pub tilt_range: f32,
@@ -746,6 +786,7 @@ pub fn rebuild_fixtures(
                             ))
                             .insert_if(
                                 MoverHead {
+                                    aim_head: prof.aim_head.unwrap_or(hi),
                                     rest: Transform::default().looking_to(beam_dir, Vec3::Y).rotation,
                                     pan_range: 540f32.to_radians(),
                                     tilt_range: 270f32.to_radians(),
@@ -754,7 +795,9 @@ pub fn rebuild_fixtures(
                                     outer,
                                     max_throw,
                                 },
-                                || kind == HeadKind::Mover,
+                                // Ask the CHANNELS, not the head kind — see
+                                // ProfMeta::aim_head.
+                                || kind == HeadKind::Mover || prof.aim_head.is_some(),
                             )
                             .with_children(|c| {
                                 c.spawn((
