@@ -15,6 +15,8 @@ export type ProfileMeta = {
   /** moving heads only: whether this profile actually has a pan / tilt axis,
    *  so the patch offers a base aim for the fixtures that can use one */
   hasPan: boolean;
+  /** drives a dedicated white emitter (RGBW), as opposed to a derby's on/off ring */
+  hasWhite: boolean;
   hasTilt: boolean;
   /** which beam parameters this profile actually drives — read off the
    *  compiled channels rather than their names, so a channel merely *called*
@@ -53,6 +55,14 @@ export const BEAM_LABELS: Record<BeamParam, string> = {
 
 /** Built-ins predate these parameters and none of them has one. */
 const NO_BEAM: BeamCaps = { zoom: false, focus: false, iris: false, frost: false, cto: false };
+
+/** A driven White source — the RGBW emitter. Asks the channels, not the name,
+ *  so a "ColorAdd_W" reads as white and an undriven channel does not. */
+function hasWhiteSource(c: NonNullable<Project['profiles']>[string]): boolean {
+  return c.channels.some((ch) =>
+    (ch.cases as { func?: { source?: string } }[]).some((k) => k?.func?.source === 'white'),
+  );
+}
 
 function beamCaps(c: NonNullable<Project['profiles']>[string]): BeamCaps {
   const out: BeamCaps = { ...NO_BEAM };
@@ -109,6 +119,7 @@ function computeProfileMeta(project: Project | null, id: string): ProfileMeta | 
       channelNames: b.channelNames,
       hasPan: hasAxis(b.channelNames, 'pan', b.heads),
       hasTilt: hasAxis(b.channelNames, 'tilt', b.heads),
+      hasWhite: b.channelNames.some((n) => /^white\b/i.test(n)),
       beam: NO_BEAM,
       beamDeg: b.beamDeg,
       imported: false,
@@ -125,6 +136,7 @@ function computeProfileMeta(project: Project | null, id: string): ProfileMeta | 
       channelNames: names,
       hasPan: hasAxis(names, 'pan', c.heads),
       hasTilt: hasAxis(names, 'tilt', c.heads),
+      hasWhite: hasWhiteSource(c),
       beam: beamCaps(c),
       beamDeg: c.beamDeg,
       imported: true,

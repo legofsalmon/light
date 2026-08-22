@@ -80,6 +80,23 @@ function groupCanAim(project: Project, groupId: string): boolean {
  *  head kind. A fixture only gets a zoom fader if something in the group has a
  *  zoom channel — an editor full of controls that go nowhere is worse than one
  *  that is honest about the rig. */
+/** Does anything in this group drive a white emitter? A derby's white ring is
+ *  a different thing — on/off hardware, already offered as `ring blinder` — so
+ *  this asks for a real, faded White channel, which every RGBW wash imported
+ *  from GDTF has and which the editor never offered a way to set. The parameter
+ *  itself already existed and already reaches the channel in both engines; only
+ *  the control was missing, so a white wash could be made by an EFFECT
+ *  targeting white but not by the look itself. */
+function groupCanWhite(project: Project, groupId: string): boolean {
+  const group = project.groups.find((g) => g.id === groupId);
+  if (!group) return false;
+  return group.heads.some((ref) => {
+    const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
+    const meta = fixture ? profileMeta(project, fixture.profileId) : null;
+    return !!meta?.hasWhite;
+  });
+}
+
 /** Does anything in this group have beam channels with no function behind
  *  them? Distinguishes "this fixture has no zoom" from "this fixture has a zoom
  *  channel that the stored profile never wired up", which look identical in an
@@ -307,6 +324,9 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
   const kinds = groupKinds(project, part.groupId);
   const canAim = groupCanAim(project, part.groupId);
   const beamCaps = groupBeamCaps(project, part.groupId);
+  // a derby's ring is on/off hardware and has its own control; this is the
+  // faded white emitter on an RGBW head
+  const canWhite = !kinds.has('derby') && groupCanWhite(project, part.groupId);
 
   const edit = (fn: (pt: LookPart) => void) =>
     mutate((p) => {
@@ -380,6 +400,26 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
           </div>
         )}
 
+        {canWhite && (
+            <div className="paramrow">
+              <Enable
+                on={prm.white !== undefined}
+                toggle={() => edit((pt) => (pt.params.white = pt.params.white === undefined ? 1 : undefined))}
+              />
+              <span className="label">white</span>
+              <div className={`grow paramrow ${prm.white === undefined ? 'off' : ''}`}>
+                <Fader
+                  label="white"
+                  width={180}
+                  value={softFor('white') ?? prm.white ?? 1}
+                  def={1}
+                  onChange={(v) => setP('white', v, (pt) => (pt.params.white = v))}
+                  fmt={pct}
+                  variant="dim"
+                />
+              </div>
+            </div>
+        )}
         {hasColorTargets && (
           <div className="paramrow">
             <Enable on={!!prm.color} toggle={() => edit((pt) => (pt.params.color = pt.params.color ? undefined : { h: 0, s: 1 }))} />

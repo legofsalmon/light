@@ -45,6 +45,9 @@ Select a cell → the Look tab shows its editor. A look is a list of **parts**; 
 - **Dimmer** — intensity 0–100%.
 - **Colour** — hue + saturation faders plus swatches. Derbies can't mix colour: they quantise to the nearest of their 14 fixed macros ("auto"), or pick an explicit macro from the dropdown.
 - **Derby extras** — *ring blinder* toggle (the white LED ring is on/off hardware — there is no ring dimmer), *ring FX* (the ring's built-in strobe patterns), *motor* (off / static aim / rotate + speed).
+- **White** — the dedicated white emitter on an RGBW head, offered whenever
+  something in the group actually drives one. Distinct from a derby's *ring
+  blinder*, which is on/off hardware.
 - **Strobe** — shutter rate, slow → fast.
 - **Position** — pan/tilt for moving heads.
 - **Haze** — output + fan for hazer-type fixtures (merged highest-wins with the manual haze slider in the top bar).
