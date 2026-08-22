@@ -648,11 +648,11 @@ pub fn rebuild_fixtures(
             let diag = (size.x * size.x + size.y * size.y + size.z * size.z).sqrt();
             // publish it so the camera can frame the same rig
             live.rig_extent = Some(crate::state::RigExtent { diag, height: b.max.y });
-            ((b.max.y + 2.0).max(9.0), diag.max(12.0))
+            ((b.max.y + 2.0).max(9.0), diag.max(12.0).min(q.light_range_cap))
         }
         None => {
             live.rig_extent = None;
-            (9.0, 12.0)
+            (9.0, 12.0f32.min(q.light_range_cap))
         }
     };
 
@@ -716,24 +716,56 @@ pub fn rebuild_fixtures(
             } else {
                 Vec3::new(0.0, -0.26, 0.97)
             };
+            let tag = HeadTag { fixture: f.id.clone(), head: 0, kind: HeadKind::Rgb };
+            let panel = PanelLight {
+                heads: prof.heads.len(),
+                lumens: lumens_for(&prof, false) * q.lumen_scale,
+            };
+            let aim = Transform::default().looking_to(face, Vec3::Y);
             commands.entity(root).with_children(|p| {
-                p.spawn((
-                    HeadTag { fixture: f.id.clone(), head: 0, kind: HeadKind::Rgb },
-                    PanelLight {
-                        heads: prof.heads.len(),
-                        lumens: lumens_for(&prof, false) * q.lumen_scale,
-                    },
-                    RectLight {
-                        color: Color::BLACK,
-                        intensity: 0.0,
-                        range: light_range,
-                        width: bw,
-                        height: bh,
-                        ..default()
-                    },
-                    Transform::default().looking_to(face, Vec3::Y),
-                    Visibility::Hidden,
-                ));
+                if q.panel_area_lights {
+                    p.spawn((
+                        tag,
+                        panel,
+                        RectLight {
+                            color: Color::BLACK,
+                            intensity: 0.0,
+                            range: light_range,
+                            width: bw,
+                            height: bh,
+                            ..default()
+                        },
+                        aim,
+                        Visibility::Hidden,
+                    ));
+                } else {
+                    // The cheap tier: a very wide spot. Wrong shape — a hard
+                    // ellipse where a plate throws a soft square — but it puts
+                    // light in the room, which a panel did not do at all before
+                    // any of this.
+                    let outer = (prof.beam_deg.max(2.0) as f32).to_radians() / 2.0;
+                    p.spawn((
+                        tag,
+                        panel,
+                        SpotLight {
+                            color: Color::BLACK,
+                            intensity: 0.0,
+                            range: light_range,
+                            radius: bw.max(bh) * 0.5,
+                            // Nearly uniform across the cone. A plate throws an
+                            // even wash with a soft edge, not a spot's smooth
+                            // centre-to-rim rolloff — with the inner angle low
+                            // most of the cone sits in falloff and the pools
+                            // vanish, which is most of what a panel is for.
+                            inner_angle: (outer * 0.88).min(1.30),
+                            outer_angle: outer.min(1.35),
+                            shadow_maps_enabled: false,
+                            ..default()
+                        },
+                        aim,
+                        Visibility::Hidden,
+                    ));
+                }
             });
         }
 
@@ -838,6 +870,7 @@ pub fn rebuild_fixtures(
                                             Transform::from_rotation(rot),
                                         ))
                                         .with_children(|c| {
+                                            if !q.beams { return; }
                                             c.spawn((
                                                 tag.clone(),
                                                 BeamLight {
@@ -909,6 +942,7 @@ pub fn rebuild_fixtures(
                                 || kind == HeadKind::Mover || prof.aim_head.is_some(),
                             )
                             .with_children(|c| {
+                                if !q.beams { return; }
                                 c.spawn((
                                     tag.clone(),
                                     BeamLight {

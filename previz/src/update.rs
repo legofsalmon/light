@@ -538,44 +538,78 @@ pub fn reflect_connection(
 pub fn apply_panel_lights(
     live: Res<Live>,
     time: Res<Time>,
-    mut panels: Query<(&HeadTag, &PanelLight, &mut RectLight, &mut Visibility)>,
+    mut panels_rect: Query<(&HeadTag, &PanelLight, &mut RectLight, &mut Visibility), Without<SpotLight>>,
+    mut panels_spot: Query<(&HeadTag, &PanelLight, &mut SpotLight, &mut Visibility), Without<RectLight>>,
     mut sent: Local<std::collections::HashMap<String, Sent>>,
 ) {
     let Some(snap) = live.snap.as_ref() else { return };
     let now_s = time.elapsed_secs();
     let connected = live.connected;
-    for (tag, panel, mut light, mut vis) in &mut panels {
-        let (mut r, mut g, mut b, mut e) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
-        let mut n = 0.0f32;
-        for h in 0..panel.heads.max(1) {
-            let Some(sm) = live.smoothed.get(&(tag.fixture.clone(), h)) else { continue };
-            let gate = snap
+
+    /// What a panel should be doing this frame: the mean of its cells, or
+    /// nothing.
+    ///
+    /// One light per fixture rather than one per cell. A plate's spill really
+    /// is a single area source from anywhere you can see it; the per-cell
+    /// detail lives on the face, which the emissive glows already draw. It is
+    /// also 24 lights instead of 336.
+    fn resolve(
+        live: &Live,
+        snap: &crate::protocol::SnapLite,
+        now_s: f32,
+        connected: bool,
+        fixture: &str,
+        heads: usize,
+    ) -> Option<Sent> {
+        if !connected {
+            return None;
+        }
+        let (mut r, mut g, mut b, mut e, mut n) = (0.0f32, 0.0, 0.0, 0.0, 0.0f32);
+        for h in 0..heads.max(1) {
+            let Some(sm) = live.smoothed.get(&(fixture.to_string(), h)) else { continue };
+            let g8 = snap
                 .heads
                 .iter()
-                .find(|x| x.f == tag.fixture && x.h == h)
+                .find(|x| x.f == fixture && x.h == h)
                 .map_or(1.0, |x| gate(now_s, x.st));
             r += sm.r;
             g += sm.g;
             b += sm.b;
-            e += sm.i * gate;
+            e += sm.i * g8;
             n += 1.0;
         }
-        if n == 0.0 || !connected {
+        if n == 0.0 {
+            return None;
+        }
+        let out = Sent { r: r / n, g: g / n, b: b / n, e: e / n };
+        (out.e >= 0.0015).then_some(out)
+    }
+
+    for (tag, panel, mut light, mut vis) in &mut panels_rect {
+        let Some(want) = resolve(&live, snap, now_s, connected, &tag.fixture, panel.heads) else {
             vis.set_if_neq(Visibility::Hidden);
             continue;
-        }
-        let (r, g, b, e) = (r / n, g / n, b / n, e / n);
-        if e < 0.0015 {
-            vis.set_if_neq(Visibility::Hidden);
-            continue;
-        }
+        };
         vis.set_if_neq(Visibility::Inherited);
-        let want = Sent { r, g, b, e };
         if sent.get(&tag.fixture).is_some_and(|p| !p.differs(&want)) {
             continue;
         }
         sent.insert(tag.fixture.clone(), want);
-        light.color = Color::srgb(r, g, b);
-        light.intensity = panel.lumens * e;
+        light.color = Color::srgb(want.r, want.g, want.b);
+        light.intensity = panel.lumens * want.e;
+    }
+
+    for (tag, panel, mut light, mut vis) in &mut panels_spot {
+        let Some(want) = resolve(&live, snap, now_s, connected, &tag.fixture, panel.heads) else {
+            vis.set_if_neq(Visibility::Hidden);
+            continue;
+        };
+        vis.set_if_neq(Visibility::Inherited);
+        if sent.get(&tag.fixture).is_some_and(|p| !p.differs(&want)) {
+            continue;
+        }
+        sent.insert(tag.fixture.clone(), want);
+        light.color = Color::srgb(want.r, want.g, want.b);
+        light.intensity = panel.lumens * want.e;
     }
 }
