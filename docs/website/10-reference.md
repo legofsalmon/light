@@ -17,6 +17,14 @@ Shortcuts are ignored while you are typing in a field. A text field left focused
 would otherwise swallow your cue keys, so the search box in the look library
 hands the keyboard back on `Esc`, on `Enter`, and when you start dragging a look.
 
+## Hover help
+
+Every control in the app carries a tooltip — buttons, pickers, number fields
+and faders alike. Where behaviour is deliberate but invisible it says so: which
+fields commit on Enter rather than per keystroke, which gestures are a ride
+rather than an edit, and what a warning badge is warning about. If something on
+screen is not obvious, rest on it before going looking in here.
+
 ## Glossary
 
 **Look** — a lighting state: colour, intensity, position, beam and effects for

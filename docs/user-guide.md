@@ -161,6 +161,12 @@ views (`band` toggles them in-app, `M` in the pop-out window), so you can judge
 how a look actually lands on people. `PREVIZ` in the top bar opens the native
 window with real beams, haze, and shadows.
 
+**Exposure.** `auto exp` in the previz bar is eye adaptation: the view stops
+down when the rig comes up and opens back up in the quiet parts, the way your
+eyes do. It is partial, so a brighter look still reads brighter, and a blackout
+is never brightened. Switch it off to judge absolute levels or to compare two
+looks without the view re-metering between them.
+
 **Layout.** The previz is a band across the **top** of every view — stages are
 wider than they are tall, so that is the shape that reads. `Pads` / `Previz` /
 `Patch` / `All` (⌥1–⌥4) choose what sits under it:
