@@ -24,6 +24,7 @@ a screenshot of the same thing would.
 
 | File | What it is |
 |---|---|
+| `hero.jpg` | a full look on the demo rig, front-page shot |
 | `signal-flow.svg` | how one frame is built — diagram |
 | `console-layout.svg` | the pads view, annotated — diagram |
 | `fan-sweep.gif` / `.mp4` | a hue fan sweeping the rig, captured from the 3D previz |
@@ -61,19 +62,18 @@ still help: keep the camera out in the room rather than under the rig, and
 remember the exposure takes about a second to settle after a cue change, so
 shoot a beat late.
 
-Still wanted, in the order the pages want them:
+Still wanted. All of what is left is **window**-level rather than canvas-level:
+the previz can be read out of the page with `toDataURL`, the rest of the console
+cannot, so these want a real screenshot at full resolution.
 
-1. **A hero shot** for the front page — a beam-heavy look composed by eye. The
-   automated attempts all came out as a lit floor; this one wants a human.
-2. **Pads view, whole window**, a cue live — for 02. Needs a window-level
-   screenshot rather than a canvas capture.
-3. **A look open in the editor**, a part expanded with colour, position and an
+1. **Pads view, whole window**, a cue live — for 02.
+2. **A look open in the editor**, a part expanded with colour, position and an
    effect row — for 03.
-4. **The control row** with a macro being moved and the RIDING chip appearing —
+3. **The control row** with a macro being moved and the RIDING chip appearing —
    for 05.
-5. **Patch table** with a fixture selected and its row highlighted in the plan —
+4. **Patch table** with a fixture selected and its row highlighted in the plan —
    for 06.
-6. **APC40** photographed with the grid lit, if the hardware is to hand — for 08.
+5. **APC40** photographed with the grid lit, if the hardware is to hand — for 08.
 
 ## House style
 

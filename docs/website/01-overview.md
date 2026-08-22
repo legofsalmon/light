@@ -9,7 +9,7 @@ no tracking sheet. There is a grid: rows are **layers**, columns are the
 **sections of a song**, and each pad holds a **look**. You fire looks, or you
 fire a whole column as a cue, and the rig follows the beat.
 
-![A hue fan across the rig, in the 3D previz](img/fan-still.jpg)
+![A full look on the demo rig, in the 3D previz](img/hero.jpg)
 
 ## The mental model
 
