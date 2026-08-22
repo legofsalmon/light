@@ -42,7 +42,20 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "LIGHT · Previz".into(),
-                resolution: WindowResolution::new(1380, 860),
+                // LIGHT_PREVIZ_SIZE=WxH — for measuring whether a change is
+                // fill-bound. Frame time that scales with pixel count is a
+                // fragment-shading cost and half-resolution rendering will
+                // help; frame time that does not is somewhere else entirely.
+                resolution: {
+                    let (w, h) = std::env::var("LIGHT_PREVIZ_SIZE")
+                        .ok()
+                        .and_then(|v| {
+                            let (a, b) = v.split_once('x')?;
+                            Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+                        })
+                        .unwrap_or((1380u32, 860u32));
+                    WindowResolution::new(w, h)
+                },
                 ..default()
             }),
             ..default()
