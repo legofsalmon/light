@@ -197,6 +197,20 @@ audition panes, the native previz's per-frame snapshot clone, its shadow budget
 spent in patch order rather than by relevance, its sRGB/linear inconsistency
 between pools and shafts, and no fixture labels or selection sync.
 
+**Exposure asymmetry, since the browser view gained eye adaptation.** The web
+previz now meters the light in the room each frame and moves
+`toneMappingExposure` with it (`ui/src/components/Previz3D.tsx`, `auto exp` in
+the previz bar). The native window does not: its camera is
+`Tonemapping::TonyMcMapface` + `Bloom::default()` at a fixed Bevy exposure
+(`previz/src/camera.rs:29`). It is a physically-lit renderer rather than a stack
+of additive cones, so it does not have the failure that forced the web change —
+but the two views now disagree about how bright a big look looks, and the docs
+send people to the native one to judge exactly that. Matching them belongs with
+the Stage 4 previz-quality work rather than as a patch: Bevy has an `Exposure`
+component, and the metering signal (per-frame emitted luminance) is already
+computed in the web twin and could be derived the same way from the snapshot.
+Calibration constant and reasoning are in the comment above `ADAPT_KEY`.
+
 ## 6. The motion engine (LX-operator feedback — investigated, designed, not yet built)
 
 Full investigation: <https://claude.ai/code/artifact/3aa44b37-811d-49b0-a630-940b18aab155>
