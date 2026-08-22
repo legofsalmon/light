@@ -12,6 +12,9 @@ use crate::state::Live;
 struct ProfMeta {
     heads: Vec<(HeadKind, f64, f64)>,
     beam_deg: f64,
+    /// Total flux for the whole fixture, in lumens — what the GDTF declares
+    /// where it declares one, otherwise a plausible figure for the form.
+    lumens: f64,
     /// What shape of fixture this is — the operator's override if they set one,
     /// otherwise inferred. Decides the body mesh, the emitter primitive and the
     /// default flux, none of which the head kinds can answer on their own.
@@ -54,6 +57,13 @@ fn prof_meta(project: &ProjectLite, id: &str) -> Option<ProfMeta> {
             beam_deg: p.beam_deg,
             // The built-ins are hand-written and predate the form idea; their
             // head kinds happen to say enough.
+            lumens: match p.heads.first().map(|h| h.kind) {
+                Some(HeadKind::Derby) => 10_000.0,
+                Some(HeadKind::Hazer) => 0.0,
+                Some(HeadKind::Mover) => 16_000.0,
+                _ if p.heads.len() > 1 => 24_000.0,
+                _ => 9_000.0,
+            },
             form: match p.heads.first().map(|h| h.kind) {
                 Some(HeadKind::Derby) => FixtureForm::Derby,
                 Some(HeadKind::Hazer) => FixtureForm::Hazer,
@@ -68,6 +78,7 @@ fn prof_meta(project: &ProjectLite, id: &str) -> Option<ProfMeta> {
         heads: c.heads.iter().map(|h| (h.kind, h.offset, h.offset_y)).collect(),
         beam_deg: c.beam_deg,
         form: c.form(),
+        lumens: c.lumens_or_guess(),
         // only when no head is a Mover already — those steer themselves
         aim_head: if c.heads.iter().any(|h| h.kind == HeadKind::Mover) {
             None
@@ -134,21 +145,19 @@ pub struct PanelLight {
 ///
 /// When the importer starts keeping LuminousFlux this becomes the fallback for
 /// profiles that lack it, rather than the answer for every fixture.
-fn lumens_for(form: FixtureForm, heads: usize) -> f32 {
-    match form {
-        // One lens of a derby's six.
-        FixtureForm::Derby => 1_800.0,
-        FixtureForm::Hazer => 0.0,
-        // Wash, spot or beam.
-        FixtureForm::Mover => 16_000.0,
-        // A blinder plate is the brightest thing on most rigs and the reason
-        // the audience squints. A CLF Nero draws 1400 W.
-        FixtureForm::Panel => 45_000.0 / heads.max(1) as f32,
-        FixtureForm::Strobe => 30_000.0,
-        // A batten divides its output between cells: a 12-cell bar is not
-        // twelve washes.
-        FixtureForm::Bar => 24_000.0 / heads.max(1) as f32,
-        FixtureForm::Par => 9_000.0,
+fn lumens_for(prof: &ProfMeta, per_head: bool) -> f32 {
+    if prof.form == FixtureForm::Hazer {
+        return 0.0;
+    }
+    let total = prof.lumens as f32;
+    // A fixture's declared flux is its WHOLE output. Split it between the
+    // emitters that actually draw a beam, or a 14-cell blinder is fourteen
+    // blinders. A derby is the exception the other way: its six lenses share
+    // one lamp, which is already what the total describes.
+    if per_head {
+        total / prof.heads.len().max(1) as f32
+    } else {
+        total
     }
 }
 
@@ -732,7 +741,7 @@ pub fn rebuild_fixtures(
                     HeadTag { fixture: f.id.clone(), head: 0, kind: HeadKind::Rgb },
                     PanelLight {
                         heads: prof.heads.len(),
-                        lumens: lumens_for(FixtureForm::Panel, 1) * q.lumen_scale,
+                        lumens: lumens_for(&prof, false) * q.lumen_scale,
                     },
                     RectLight {
                         color: Color::BLACK,
@@ -827,7 +836,7 @@ pub fn rebuild_fixtures(
                                             tag.clone(),
                                             BeamLight {
                                                 idx: k,
-                                                lumens: lumens_for(FixtureForm::Derby, 1) * q.lumen_scale,
+                                                lumens: lumens_for(&prof, false) / 6.0 * q.lumen_scale,
                                                 base_outer: outer * 0.7,
                                             },
                                             SpotLight {
@@ -868,8 +877,7 @@ pub fn rebuild_fixtures(
                                 tag.clone(),
                                 BeamLight {
                                     idx: 0,
-                                    lumens: lumens_for(prof.form, prof.heads.len())
-                                        * q.lumen_scale,
+                                    lumens: lumens_for(&prof, true) * q.lumen_scale,
                                     base_outer: outer,
                                 },
                                 SpotLight {

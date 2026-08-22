@@ -228,7 +228,35 @@ pub struct CompiledProfile {
     pub footprint: usize,
     pub heads: Vec<CHead>,
     pub channels: Vec<CChannel>,
+    /// The BEAM angle: full cone angle, in degrees, at 50 % of axial intensity.
     pub beam_deg: f64,
+    /// The FIELD angle: full cone angle at 10 % of axial intensity — the edge
+    /// of the usable light, where the beam angle is the hot core.
+    ///
+    /// GDTF carries both and the importer used to keep whichever it found
+    /// first, which threw away the more interesting of the two: the RATIO is
+    /// the fixture's character. Around 1.2 is a hard-edged beam, around 2.0 a
+    /// soft wash, and a renderer that only knows one of them has to invent an
+    /// edge. Absent on everything imported before this and on the built-ins;
+    /// `field_deg()` supplies a middling ratio in that case.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_deg: Option<f64>,
+    /// Total luminous flux, in lumens, summed across the file's Beam elements.
+    ///
+    /// GDTF states this and the importer used to drop it, so every renderer
+    /// downstream had to guess — badly. A CLF Nero declares 18,600 lm for its
+    /// RGB plate plus 54,381 for its white strobe layer; the previz had been
+    /// giving it 9,000 from a generic bucket. Real flux is also what lets a
+    /// beam shader conserve energy across a zoom instead of inventing a curve.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lumens: Option<f64>,
+    /// Physical radius of the emitting surface, in metres.
+    ///
+    /// Small, and load bearing: a beam integral with a 1/distance-squared term
+    /// goes to infinity when the camera looks straight at a lamp, and this is
+    /// the number that stops it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beam_radius: Option<f64>,
     /// no dimmer channel exists: fold intensity into colour/white sources
     pub virtual_dimmer: bool,
     /// Who authored the fixture definition this was compiled from.
@@ -254,6 +282,37 @@ pub struct CompiledProfile {
 }
 
 impl CompiledProfile {
+    /// The field angle to render with: the imported one, or a middling ratio.
+    ///
+    /// 1.55x is the middle of the range real fixtures occupy, and it is also
+    /// where a Gaussian core pinned to 50 % at the beam angle happens to land
+    /// on 10 % at the field angle — so a profile with no FieldAngle still gets
+    /// a self-consistent pair rather than an invented edge.
+    ///
+    /// Always at least the beam angle: a file claiming a field narrower than
+    /// its beam is describing something that cannot exist, and clamping beats
+    /// rendering an inside-out cone.
+    pub fn field_deg(&self) -> f64 {
+        self.field_deg.unwrap_or(self.beam_deg * 1.55).max(self.beam_deg)
+    }
+
+    /// Total flux in lumens: what the file declares, or a plausible figure for
+    /// the form when it declares nothing.
+    pub fn lumens_or_guess(&self) -> f64 {
+        if let Some(l) = self.lumens.filter(|l| l.is_finite() && *l > 0.0) {
+            return l;
+        }
+        match self.form() {
+            FixtureForm::Derby => 10_000.0,
+            FixtureForm::Hazer => 0.0,
+            FixtureForm::Mover => 16_000.0,
+            FixtureForm::Panel => 45_000.0,
+            FixtureForm::Strobe => 30_000.0,
+            FixtureForm::Bar => 24_000.0,
+            FixtureForm::Par => 9_000.0,
+        }
+    }
+
     /// The form to draw this fixture as: the operator's override if they set
     /// one, otherwise a guess from the profile itself.
     pub fn form(&self) -> FixtureForm {
@@ -534,6 +593,9 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         footprint: 4,
         heads: vec![CHead::flat(HeadKind::Derby, 0.0, "Derby".into())],
         beam_deg: 5.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: false,
         credit: None,
         form_override: None,
@@ -633,6 +695,9 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         heads: kam_heads,
         channels: kam_channels,
         beam_deg: 15.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: false,
         credit: None,
         form_override: None,
@@ -651,6 +716,9 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
             lin(1, 0, "Fan speed", Source::Fan, 0, 255),
         ],
         beam_deg: 0.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: false,
         credit: None,
         form_override: None,
@@ -666,6 +734,9 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         heads: vec![CHead::flat(HeadKind::Dimmer, 0.0, "Dim".into())],
         channels: vec![lin(0, 0, "Dimmer", Source::Dimmer, 0, 255)],
         beam_deg: 25.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: false,
         credit: None,
         form_override: None,
@@ -685,6 +756,9 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
             lin(2, 0, "Blue", Source::ColorB, 0, 255),
         ],
         beam_deg: 20.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: true,
         credit: None,
         form_override: None,
@@ -705,6 +779,9 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
             lin(3, 0, "White", Source::White, 0, 255),
         ],
         beam_deg: 20.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: true,
         credit: None,
         form_override: None,
@@ -729,6 +806,9 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
             lin(9, 0, "White", Source::White, 0, 255),
         ],
         beam_deg: 12.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: false,
         credit: None,
         form_override: None,

@@ -412,7 +412,20 @@ export type CompiledProfile = {
    *  falls back to col = head index, one row. */
   heads: { kind: 'rgb' | 'derby' | 'hazer' | 'dimmer' | 'mover'; offset: number; offsetY?: number; row?: number; col?: number; label: string }[];
   channels: { offsets: number[]; head: number; name: string; default: number; cases: unknown[] }[];
+  /** BEAM angle: full cone angle in degrees at 50 % of axial intensity. */
   beamDeg: number;
+  /** FIELD angle: full cone angle at 10 % — the edge of the usable light,
+   *  where beamDeg is the hot core. GDTF carries both; the ratio between them
+   *  is the fixture's character (~1.2 a hard-edged beam, ~2.0 a soft wash).
+   *  Absent on everything imported before it was kept, and on the built-ins. */
+  fieldDeg?: number;
+  /** Total luminous flux in lumens, summed over the file's Beam elements — a
+   *  fixture with more than one is describing layers of itself, not
+   *  alternatives. Absent when the file does not declare it. */
+  lumens?: number;
+  /** Radius of the emitting surface in metres. Small, and what keeps a
+   *  1/r² beam integral finite when the camera looks straight at a lamp. */
+  beamRadius?: number;
   virtualDimmer: boolean;
   /** who authored the fixture definition — carried so the credit travels with
    *  the project, which is what GDTF Share's terms ask for. */

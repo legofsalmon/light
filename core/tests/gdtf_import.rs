@@ -542,3 +542,37 @@ fn indexed_matching_does_not_swallow_unrelated_attributes() {
         "Dimmer2 is a dimmer",
     );
 }
+
+/// The beam physicals GDTF states, kept rather than thrown away.
+///
+/// The importer used to take BeamAngle *or* FieldAngle, whichever it found
+/// first, and drop LuminousFlux and BeamRadius entirely — so every renderer
+/// downstream invented an edge, a brightness and a source size. The ratio
+/// between the two angles is the fixture's character (a real CLF Nero is
+/// 123 deg over 160), the flux is what lets a beam conserve energy across a
+/// zoom, and the radius is what keeps a 1/r^2 integral finite when the camera
+/// looks at the lamp.
+#[test]
+fn beam_physicals_survive_import() {
+    let profiles = parse_gdtf(&synthetic_gdtf()).expect("parses");
+    let p = profiles.first().expect("at least one mode");
+
+    assert_eq!(p.beam_deg, 11.5, "BeamAngle is the 50% core");
+    assert_eq!(p.field_deg, Some(14.0), "FieldAngle is kept alongside it, not instead");
+    assert_eq!(p.lumens, Some(9000.0));
+    assert_eq!(p.beam_radius, Some(0.031));
+
+    // field_deg() is the accessor everything should use, and it must never
+    // return a field narrower than the beam.
+    assert_eq!(p.field_deg(), 14.0);
+    let mut inverted = p.clone();
+    inverted.field_deg = Some(4.0);
+    assert_eq!(inverted.field_deg(), 11.5, "an inside-out cone clamps to the beam angle");
+
+    // A profile that declares nothing still answers, from its form.
+    let mut bare = p.clone();
+    bare.field_deg = None;
+    bare.lumens = None;
+    assert!((bare.field_deg() - 11.5 * 1.55).abs() < 1e-9);
+    assert!(bare.lumens_or_guess() > 0.0);
+}

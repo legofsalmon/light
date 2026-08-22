@@ -192,16 +192,41 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
     // the Geometries tree — pixel fixtures carry per-pixel Position matrices
     let geometries = ft.descendants().find(|n| n.has_tag_name("Geometries"));
 
-    // beam physicals
-    let beam_deg = ft
-        .descendants()
-        .find(|n| n.has_tag_name("Beam"))
-        .and_then(|b| {
-            b.attribute("BeamAngle")
-                .or(b.attribute("FieldAngle"))
-                .and_then(|v| v.parse::<f64>().ok())
-        })
-        .unwrap_or(15.0);
+    // Beam physicals. Both angles, not whichever turns up first: BeamAngle is
+    // the 50 % core and FieldAngle the 10 % edge, and their RATIO is what tells
+    // a hard-edged beam from a soft wash. Keeping only one threw that away.
+    let beam_node = ft.descendants().find(|n| n.has_tag_name("Beam"));
+    let angle = |name: &str| {
+        beam_node
+            .and_then(|b| b.attribute(name))
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|v| v.is_finite() && *v > 0.0 && *v < 360.0)
+    };
+    let beam_deg = angle("BeamAngle").or_else(|| angle("FieldAngle")).unwrap_or(15.0);
+    // Only worth storing when it says something the beam angle did not.
+    let field_deg = angle("FieldAngle").filter(|f| *f > beam_deg * 1.001);
+
+    // Flux is SUMMED across every Beam the file declares, because a fixture
+    // with more than one is describing layers of itself, not alternatives: a
+    // CLF Nero has an 18,600 lm RGB plate and a 54,381 lm white strobe, and
+    // what lands in the room is both. Dropping this was making every renderer
+    // downstream guess.
+    let lumens = {
+        let total: f64 = ft
+            .descendants()
+            .filter(|n| n.has_tag_name("Beam"))
+            .filter_map(|b| b.attribute("LuminousFlux"))
+            .filter_map(|v| v.parse::<f64>().ok())
+            .filter(|v| v.is_finite() && *v > 0.0)
+            .sum();
+        (total > 0.0).then_some(total)
+    };
+    // The emitting surface, in metres. Tiny, and the thing that keeps a
+    // 1/r-squared beam integral finite when the camera looks at the lamp.
+    let beam_radius = beam_node
+        .and_then(|b| b.attribute("BeamRadius"))
+        .and_then(|v| v.parse::<f64>().ok())
+        .filter(|v| v.is_finite() && *v > 0.0 && *v < 2.0);
 
     let mut out = Vec::new();
     for mode in ft.descendants().filter(|n| n.has_tag_name("DMXMode")) {
@@ -436,6 +461,9 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             heads,
             channels,
             beam_deg,
+            field_deg,
+            lumens,
+            beam_radius,
             virtual_dimmer: !has_dimmer,
             credit: credit.clone(),
             form_override: None,
