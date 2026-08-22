@@ -142,11 +142,6 @@ pub struct RingMesh;
 #[derive(Component)]
 pub struct BandRoot;
 
-/// The stock 7 m goalpost from the demo scene — hidden once a project draws
-/// its own truss.
-#[derive(Component)]
-pub struct LegacyTruss;
-
 /// The light-catching back wall, repositioned behind the deepest geometry.
 #[derive(Component)]
 pub struct Backdrop;
@@ -252,30 +247,6 @@ pub fn setup_stage(
         })),
         Transform::from_xyz(0.0, 3.5, -2.0).with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
     ));
-
-    // truss
-    let truss_mat = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.22, 0.22, 0.25),
-        perceptual_roughness: 0.5,
-        metallic: 0.9,
-        ..default()
-    });
-    // The stock goalpost, kept only for projects that draw no structure of
-    // their own — otherwise it doubles up on the operator's real truss.
-    commands.spawn((
-        LegacyTruss,
-        Mesh3d(meshes.add(Cuboid::new(7.0, 0.09, 0.09))),
-        MeshMaterial3d(truss_mat.clone()),
-        Transform::from_xyz(0.0, 3.05, 0.0),
-    ));
-    for lx in [-3.5f32, 3.5] {
-        commands.spawn((
-            LegacyTruss,
-            Mesh3d(meshes.add(Cuboid::new(0.09, 3.05, 0.09))),
-            MeshMaterial3d(truss_mat.clone()),
-            Transform::from_xyz(lx, 3.05 / 2.0, 0.0),
-        ));
-    }
 
     // participating medium — density driven live by the engine's haze value.
     // Stage haze scatters close to isotropically: the default forward-biased
@@ -554,7 +525,6 @@ pub fn rebuild_fixtures(
     mut materials: ResMut<Assets<StandardMaterial>>,
     existing: Query<Entity, With<FixtureRoot>>,
     existing_props: Query<Entity, With<BandRoot>>,
-    mut legacy: Query<&mut Visibility, With<LegacyTruss>>,
     mut backdrop: Query<&mut Transform, (With<Backdrop>, Without<Floor>, Without<HazeVolume>)>,
     mut floor: Query<&mut Transform, (With<Floor>, Without<Backdrop>, Without<HazeVolume>)>,
     mut haze: Query<&mut Transform, (With<HazeVolume>, Without<Backdrop>, Without<Floor>)>,
@@ -571,16 +541,6 @@ pub fn rebuild_fixtures(
         commands.entity(e).despawn();
     }
     let Some(project) = live.project.clone() else { return };
-
-    // A project that draws its own structure replaces the demo goalpost rather
-    // than being shown on top of it.
-    let draws_structure = project
-        .props
-        .iter()
-        .any(|pr| matches!(pr.kind.as_str(), "trussBar" | "trussLeg" | "riser" | "screen"));
-    for mut v in &mut legacy {
-        *v = if draws_structure { Visibility::Hidden } else { Visibility::Inherited };
-    }
 
     fit_backdrop(&project, &mut backdrop, &mut floor, &mut haze);
 

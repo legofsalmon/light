@@ -4,7 +4,6 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { HeadSnap, Project } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
-import { isStructure } from '../../../shared/types.ts';
 import { buildOccluders, throwDistance, type Occluder } from '../../../shared/beamThrow.ts';
 
 type HeadHandle = {
@@ -553,21 +552,6 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
     floor.position.y = -0.01;
     scene.add(floor);
 
-    // Stand-in truss: a scale reference for a rig nobody has drawn yet. The
-    // moment you place real structure it hides itself, so the previz never
-    // shows a goalpost that is not there.
-    const stubTruss = new THREE.Group();
-    const trussMat = new THREE.MeshBasicMaterial({ color: 0x37373e });
-    const trussBar = new THREE.Mesh(new THREE.BoxGeometry(7, 0.09, 0.09), trussMat);
-    trussBar.position.set(0, 3.05, 0);
-    stubTruss.add(trussBar);
-    for (const lx of [-3.5, 3.5]) {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.09, 3.05, 0.09), trussMat);
-      leg.position.set(lx, 3.05 / 2, 0);
-      stubTruss.add(leg);
-    }
-    scene.add(stubTruss);
-
     // Metre grid — the cheapest possible answer to "how big is that?", and the
     // reason a 7 m truss and a 2 m riser can be placed by eye.
     const measureGrid = new THREE.GridHelper(20, 20, 0x4a4a58, 0x2a2a33);
@@ -628,7 +612,6 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       const sig = JSON.stringify(project?.props ?? []);
       if (sig !== propsSig) {
         propsSig = sig;
-        stubTruss.visible = !(project?.props ?? []).some((pr) => isStructure(pr.kind));
         scene.remove(band);
         // free the GPU buffers — rebuilding on every prop drag otherwise
         // leaks a geometry + material set per frame of the drag

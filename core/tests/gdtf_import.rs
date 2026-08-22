@@ -453,3 +453,92 @@ fn a_reimport_preserves_an_operator_authored_layout() {
     assert!((prof.heads[0].offset + 0.15).abs() < 1e-9, "real file geometry wins, got {}", prof.heads[0].offset);
     assert_eq!(prof.heads[0].row, 0);
 }
+
+/// A one-channel blinder whose GDTF names its attribute `Dimmer1` rather than
+/// `Dimmer` — the indexed spelling GDTF uses on indexed geometry, and the same
+/// convention as `Shutter1` / `Focus1`, which the importer already accepted.
+///
+/// Exact-matching `Dimmer` compiled this to a channel with NO cases: a fixture
+/// that renders 0 at full dimmer and never lights, with nothing anywhere saying
+/// so. A real show had 49 blinders dark for exactly this.
+#[test]
+fn an_indexed_dimmer_attribute_still_drives_the_dimmer() {
+    let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<GDTF DataVersion="1.2">
+  <FixtureType Name="Stage Blinder IP" Manufacturer="TEST">
+    <Geometries><Geometry Name="Base"/></Geometries>
+    <DMXModes>
+      <DMXMode Name="1 Channel Mode" Geometry="Base">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1" Geometry="Base">
+            <LogicalChannel Attribute="Dimmer1">
+              <ChannelFunction Attribute="Dimmer1" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+    </DMXModes>
+  </FixtureType>
+</GDTF>"#;
+    let profiles = light_core::gdtf::parse_gdtf(&zip_xml(xml)).expect("parses");
+    let p = profiles.first().expect("one mode");
+    let ch = p.channels.first().expect("one channel");
+    assert!(
+        !ch.cases.is_empty(),
+        "an indexed Dimmer must drive something — an empty case list is a dark fixture",
+    );
+    assert!(
+        ch.cases.iter().any(|c| matches!(
+            c.func,
+            light_core::cprofile::Func::Linear { source: light_core::cprofile::Source::Dimmer }
+        )),
+        "Dimmer1 should drive Source::Dimmer",
+    );
+}
+
+/// The narrowing that keeps the above from eating attributes that merely start
+/// with a handled name: `Effects1Rate` is not an effects channel's base, and a
+/// colour wheel's `Color1` must stay a wheel rather than becoming a dimmer.
+#[test]
+fn indexed_matching_does_not_swallow_unrelated_attributes() {
+    let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<GDTF DataVersion="1.2">
+  <FixtureType Name="Odd" Manufacturer="TEST">
+    <Geometries><Geometry Name="Base"/></Geometries>
+    <DMXModes>
+      <DMXMode Name="M" Geometry="Base">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1" Geometry="Base">
+            <LogicalChannel Attribute="Effects1Rate">
+              <ChannelFunction Attribute="Effects1Rate" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="2" Geometry="Base">
+            <LogicalChannel Attribute="Dimmer2">
+              <ChannelFunction Attribute="Dimmer2" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+    </DMXModes>
+  </FixtureType>
+</GDTF>"#;
+    let profiles = light_core::gdtf::parse_gdtf(&zip_xml(xml)).expect("parses");
+    let p = profiles.first().expect("one mode");
+    let rate = &p.channels[0];
+    let dim = &p.channels[1];
+    assert!(
+        !rate.cases.iter().any(|c| matches!(
+            c.func,
+            light_core::cprofile::Func::Linear { source: light_core::cprofile::Source::Dimmer }
+        )),
+        "Effects1Rate must not be read as a dimmer",
+    );
+    assert!(
+        dim.cases.iter().any(|c| matches!(
+            c.func,
+            light_core::cprofile::Func::Linear { source: light_core::cprofile::Source::Dimmer }
+        )),
+        "Dimmer2 is a dimmer",
+    );
+}

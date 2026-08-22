@@ -282,15 +282,24 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             };
 
             match attr_name.as_str() {
-                "Dimmer" => {
+                // Indexed forms count. GDTF writes `Dimmer` on a single-instance
+                // geometry and `Dimmer1`, `Dimmer2`… when it is indexed — the
+                // same convention this match already honours for `Shutter1`,
+                // `Focus1` and `Frost1`/`Frost2`. Dimmer, Pan and Tilt were
+                // exact-match only, so a file using the indexed spelling
+                // compiled to channels that drive NOTHING: a fixture that never
+                // lights and never moves, with no error anywhere. A real show
+                // had 49 blinders dark for exactly this (`Dimmer1`) and a
+                // 65-channel pixel dimmer array with them.
+                a if indexed_base(a) == "Dimmer" => {
                     has_dimmer = true;
                     cases.push(simple(Source::Dimmer));
                 }
-                "Pan" => {
+                a if indexed_base(a) == "Pan" => {
                     has_pan = true;
                     cases.push(simple(Source::Pan));
                 }
-                "Tilt" => {
+                a if indexed_base(a) == "Tilt" => {
                     has_tilt = true;
                     cases.push(simple(Source::Tilt));
                 }
@@ -581,6 +590,15 @@ fn synthesize_heads(
 struct GMat {
     r: [[f64; 3]; 3],
     t: [f64; 3],
+}
+
+/// `Dimmer3` -> `Dimmer`. Strips a trailing run of ASCII digits so an indexed
+/// GDTF attribute matches its base name. Deliberately narrow: it is applied
+/// only to the attributes whose arms opt into it, so `Effects1Rate`,
+/// `Color1` and friends keep their own meanings.
+fn indexed_base(attr: &str) -> &str {
+    let base = attr.trim_end_matches(|c: char| c.is_ascii_digit());
+    if base.is_empty() { attr } else { base }
 }
 
 fn parse_matrix(s: &str) -> Option<GMat> {
