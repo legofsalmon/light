@@ -57,11 +57,15 @@ struct Beam {
 
 const LN2: f32 = 0.6931472;
 const FRAC_4_PI: f32 = 0.07957747;
-/// Samples along the segment inside the cone. The 1/s^2 envelope — the term a
-/// naive march aliases worst — is handled by weighting each step at its
-/// midpoint, so this buys smoothness in the ANGULAR terms only and does not
-/// need to be large.
-const STEPS: i32 = 24;
+/// Samples along the segment inside the cone.
+///
+/// This is the fill-rate knob, and fill rate is what this shader costs: the
+/// hull covers far more screen than the shell it replaced, and every covered
+/// pixel runs this loop. The 1/s^2 envelope — the term a naive march aliases
+/// worst — is sampled at each step's midpoint, so the count only has to
+/// resolve the ANGULAR terms, which are smooth. 24 and 16 are visually
+/// indistinguishable on this rig.
+const STEPS: i32 = 16;
 
 /// Henyey-Greenstein phase function.
 ///

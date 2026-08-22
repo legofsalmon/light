@@ -67,6 +67,23 @@ pub struct Quality {
     /// Multiplies the additive beam-cone brightness.
     pub beam_gain: f32,
 
+    /// Eye adaptation: meter the frame and move the exposure with it.
+    ///
+    /// The web previz already does this and for the same reason — additive
+    /// shafts stack without bound, so a cue with 105 lit fixtures and one with
+    /// 48 cannot share a fixed exposure. Bevy ships a GPU histogram, which is
+    /// strictly better than the web twin's analytic estimate: it meters what is
+    /// actually on screen rather than the light leaving the rig, so it knows
+    /// how CONCENTRATED a look is — the one thing the web version admits it
+    /// cannot see.
+    pub auto_exposure: bool,
+    /// How much of a brightness change the adaptation cancels, 0..1.
+    ///
+    /// Partial on purpose, exactly as in the web view: at 1 the previz would be
+    /// useless for judging light, because pushing the master would change
+    /// nothing on screen.
+    pub adapt_strength: f32,
+
     /// Floor under the stage haze value, for visualisation only.
     ///
     /// A beam is only visible because something in the air scatters it, so a
@@ -92,17 +109,17 @@ impl Quality {
     /// Anything that still has to hold 60 fps on a laptop sharing itself with a
     /// live show.
     pub fn low() -> Self {
-        Quality { msaa: 1, fog_steps: 48, haze_oversize: 1.6, shadows: 4, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, haze_floor: 0.35 }
+        Quality { msaa: 1, fog_steps: 48, haze_oversize: 1.6, shadows: 4, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// The default: the measured budget, spent where it shows most.
     pub fn standard() -> Self {
-        Quality { msaa: 1, fog_steps: 64, haze_oversize: 1.6, shadows: 10, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, haze_floor: 0.35 }
+        Quality { msaa: 1, fog_steps: 64, haze_oversize: 1.6, shadows: 10, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// For a second machine, or a still.
     pub fn high() -> Self {
-        Quality { msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, haze_floor: 0.35 }
+        Quality { msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     pub fn from_env() -> Self {
@@ -145,13 +162,21 @@ impl Quality {
         if let Some(v) = env_f32("LIGHT_PREVIZ_HAZE") {
             q.haze_floor = v.clamp(0.0, 1.0);
         }
+        if let Ok(v) = std::env::var("LIGHT_PREVIZ_AUTOEXP") {
+            q.auto_exposure = v != "0" && !v.eq_ignore_ascii_case("off");
+        }
+        if let Some(v) = env_f32("LIGHT_PREVIZ_ADAPT") {
+            q.adapt_strength = v.clamp(0.0, 1.0);
+        }
         eprintln!(
             "[previz] quality: msaa x{} · fog {} steps · haze x{:.2} · {} shadow lights",
             q.msaa, q.fog_steps, q.haze_oversize, q.shadows
         );
         eprintln!(
-            "[previz] photometrics: EV100 {:.1} · lumens x{:.2} · ambient {:.0} · beam gain x{:.2} · haze floor {:.2}",
-            q.ev100, q.lumen_scale, q.ambient, q.beam_gain, q.haze_floor
+            "[previz] photometrics: EV100 {:.1} · lumens x{:.2} · ambient {:.0} · beam gain x{:.2} · haze floor {:.2} · auto exp {} (strength {:.2})",
+            q.ev100, q.lumen_scale, q.ambient, q.beam_gain, q.haze_floor,
+            if q.auto_exposure { "on" } else { "off" },
+            q.adapt_strength
         );
         q
     }

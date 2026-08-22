@@ -1,3 +1,5 @@
+use bevy::math::cubic_splines::LinearSpline;
+use bevy::post_process::auto_exposure::{AutoExposure, AutoExposureCompensationCurve};
 use bevy::post_process::bloom::Bloom;
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::core_pipeline::tonemapping::Tonemapping;
@@ -21,7 +23,38 @@ impl Default for Orbit {
     }
 }
 
-pub fn setup_camera(mut commands: Commands, q: Res<crate::quality::Quality>) {
+pub fn setup_camera(
+    mut commands: Commands,
+    q: Res<crate::quality::Quality>,
+    mut curves: ResMut<Assets<AutoExposureCompensationCurve>>,
+) {
+    // Eye adaptation, expressed as a compensation curve.
+    //
+    // Bevy's auto exposure on its own is FULL adaptation: it meters the frame
+    // and drives the exposure until the average lands on a fixed target, so a
+    // cue with twice the light on stage looks exactly as bright as one with
+    // half. That is correct for a game and useless for a lighting tool — you
+    // would push the master and watch nothing happen.
+    //
+    // The compensation curve is how you buy some of it back. It adds F-stops as
+    // a function of the metered EV, so a line of slope k lets a scene k stops
+    // brighter actually read k stops brighter: k = 1 - strength. At the default
+    // 0.6, doubling the light on stage still reads about a third brighter, and
+    // the frame never blows out. Same bargain the web previz struck, reached
+    // from the opposite direction.
+    let k = 1.0 - q.adapt_strength.clamp(0.0, 1.0);
+    let lo = -4.0f32;
+    let hi = 10.0f32;
+    let mid = 2.0f32;
+    let curve = curves.add(
+        AutoExposureCompensationCurve::from_curve(LinearSpline::new([
+            Vec2::new(lo, (lo - mid) * k),
+            Vec2::new(mid, 0.0),
+            Vec2::new(hi, (hi - mid) * k),
+        ]))
+        .expect("compensation curve is a monotonic line"),
+    );
+
     commands.spawn((
         Camera3d::default(),
         Camera::default(),
@@ -56,7 +89,28 @@ pub fn setup_camera(mut commands: Commands, q: Res<crate::quality::Quality>) {
             ..default()
         },
         Transform::from_xyz(0.0, 4.0, 9.0).looking_at(Vec3::new(0.0, 1.5, 0.0), Vec3::Y),
-    ));
+    ))
+    .insert_if(
+        AutoExposure {
+            // A stage runs from near-black to a wall of light; the default
+            // -8..8 window wastes most of its bins on luminances this scene
+            // never produces.
+            range: -4.0..=10.0,
+            // Ignore the darkest and brightest tails harder than the default.
+            // The darkest is a genuinely black room and the brightest is a
+            // handful of lens flares, and letting either steer the exposure is
+            // what makes an auto-exposed previz breathe on every strobe hit.
+            filter: 0.20..=0.85,
+            // Stopping down fast and opening up slowly is what an eye does and
+            // what stops a strobe pumping the whole picture.
+            speed_brighten: 2.5,
+            speed_darken: 0.8,
+            exponential_transition_distance: 1.5,
+            compensation_curve: curve,
+            ..default()
+        },
+        || q.auto_exposure,
+    );
 }
 
 pub fn orbit_camera(

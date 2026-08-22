@@ -47,6 +47,7 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins(bevy::post_process::auto_exposure::AutoExposurePlugin)
         .add_plugins(beam::BeamMaterialPlugin)
         // A rig is not a game level. Bevy sizes its GPU light-clustering lists
         // for a handful of lights; an arena plot is 153 spot lights, and on the
