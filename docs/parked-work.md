@@ -211,6 +211,42 @@ component, and the metering signal (per-frame emitted luminance) is already
 computed in the web twin and could be derived the same way from the snapshot.
 Calibration constant and reasoning are in the comment above `ADAPT_KEY`.
 
+**Stage 4's tonemapping item, on the web side — DONE, and the review's stated
+reason was half wrong.** The web previz now runs `THREE.NeutralToneMapping`
+(Khronos PBR Neutral) as Stage 4 asks. The review justified it as "ACES Filmic
+actively skews saturated reds orange and blues cyan"; measured against the
+actual three.js 0.179 shaders, in OKLab, at the 20× overdrive the beam stack
+lives in:
+
+- **Reds and amber: confirmed, and worse than stated.** ACES takes a saturated
+  red +53° of hue (red reads orange) and amber +27° with its saturation crushed
+  to 0.09.
+- **Blues: the claim points the wrong way.** ACES's blue shift maxes at −13°;
+  Neutral's reaches +19°. Neither curve is hue-preserving perceptually — the
+  often-repeated "Neutral preserves hue" is a property of *linear* HSV, not of
+  anything the eye uses, and it breaks because Neutral's final desaturating mix
+  lifts a zero channel to a small linear value that the sRGB curve then
+  magnifies.
+- **What actually justifies the swap is saturation, not hue.** A cyan beam
+  keeps 0.26 saturation under Neutral and 0.03 under ACES; ACES also ends in a
+  hard `saturate()` clip where Neutral asymptotes. Saturation is what decides
+  whether a colour reads as that colour at all, so the trade is worth taking —
+  but take it for that reason, not the folk one.
+
+Also worth knowing before comparing constants across the two: three.js
+pre-divides ACES's exposure by 0.6 and Neutral's not at all, so an exposure
+number fitted for one is meaningless for the other.
+
+**Stage 4's tonemapping item, on the native side — mostly already true.** The
+review's phrasing ("TonyMcMapface/AgX, tonemapper exposed as a setting")
+overstates the work: `previz/src/camera.rs:29` has set `TonyMcMapface` since
+the first previz commit and has never changed, and `Bloom` + `hdr: true` are
+already there. The only missing half is *exposed as a setting* — an env var
+plus a key to cycle the variant, about an hour, no protocol or parity surface.
+The genuinely large part of native Stage 4 is the Bevy 0.16 → 0.19 upgrade
+(declared `bevy = "0.16"` at `previz/Cargo.toml:8`, resolved 0.16.1), which
+everything else in that lane gates on.
+
 ## 6. The motion engine (LX-operator feedback — investigated, designed, not yet built)
 
 Full investigation: <https://claude.ai/code/artifact/3aa44b37-811d-49b0-a630-940b18aab155>

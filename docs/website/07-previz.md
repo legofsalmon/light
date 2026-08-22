@@ -4,7 +4,7 @@ Two renderers, for two different questions.
 
 ## The 3D stage
 
-![The 3D previz](img/fan-still.jpg)
+![The 3D previz — the demo show's Drop cue](img/previz-3d.jpg)
 
 What the rig looks like from the room: beams through haze, colour on people,
 shadows where they land. It is for judging whether a look *works* — whether the

@@ -24,7 +24,8 @@ a screenshot of the same thing would.
 
 | File | What it is |
 |---|---|
-| `hero.jpg` | a full look on the demo rig, front-page shot |
+| `hero.jpg` | the Peak cue on the demo rig, front-page shot |
+| `previz-3d.jpg` | the Drop cue — a plain shot of the 3D view, for the previz page |
 | `signal-flow.svg` | how one frame is built — diagram |
 | `console-layout.svg` | the pads view, annotated — diagram |
 | `fan-sweep.gif` / `.mp4` | a hue fan sweeping the rig, captured from the 3D previz |
@@ -54,13 +55,20 @@ known-good pose can be written directly rather than orbited to — but note the
 controls overwrite it as soon as anything drags, so set it and shoot without
 touching the view.
 
-And composition matters more than exposure now. Filmic tone mapping rolls the
-highlights off instead of clipping them, and `auto exp` (on by default) meters
-the frame, so even a full-blast look photographs with structure in it — leave
-both on unless you are deliberately shooting the blown-out version. Two things
-still help: keep the camera out in the room rather than under the rig, and
-remember the exposure takes about a second to settle after a cue change, so
-shoot a beat late.
+And composition matters more than exposure now. The tone curve (Khronos PBR
+Neutral — not a filmic one; it holds saturation where ACES washes a hot beam
+toward white) rolls the highlights off instead of clipping them, and `auto exp`
+(on by default) meters the frame, so even a full-blast look photographs with
+structure and colour in it. Leave both alone unless you are deliberately
+shooting the blown-out version.
+
+Three things still help. Keep the camera out in the room rather than under the
+rig. Remember the exposure takes about a second to settle after a cue change,
+so shoot a beat late. And pick a cue whose light is SPREAD: the meter reads the
+light leaving the rig, not the light reaching the lens, so a look that converges
+48 washes on one spot still blows its middle — a beam cue photographs better
+than a full wash, and the hue fan photographs best cropped to the truss line
+where the cones are still separate.
 
 Still wanted. All of what is left is **window**-level rather than canvas-level:
 the previz can be read out of the page with `toDataURL`, the rest of the console

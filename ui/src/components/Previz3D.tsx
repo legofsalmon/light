@@ -33,17 +33,39 @@ const AIM_EMITTER_RADIUS = 0.12;
 /** Eye adaptation.
  *
  *  Beams are additive volumes, so the light in the frame adds up without any
- *  ceiling: metered on the demo rig, a full-blast look accumulates more than
- *  60× display white across most of the picture. No tone curve rescues that on
- *  its own — ACES saturates above ~8 — so the exposure has to move, the way a
- *  camera's does walking from a verse into a chorus.
+ *  ceiling: metered by reading the framebuffer back on the demo rig, a
+ *  full-blast look accumulates more than 60× display white across most of the
+ *  picture. No tone curve rescues that on its own — PBR Neutral is inside 1%
+ *  of white by an input of 6 — so the exposure has to move, the way a camera's
+ *  does walking from a verse into a chorus.
  *
  *  `exposure = KEY / lum ^ STRENGTH`, where `lum` is the perceptual light the
  *  rig is putting into the room this frame, scaled by the beam-viz setting
  *  because that is genuinely how much of it the "camera" can see.
  *
- *  KEY was fitted by eye against the demo show's 153 heads: the Drop meters at
- *  lum ≈ 15 and photographs correctly at 0.02, the Intro at lum ≈ 4.3 and 0.045.
+ *  KEY was fitted by eye against the demo show's 153 heads, metered per cue
+ *  across five decks: the brightest cue in the show is the Drop on every deck,
+ *  at lum 11.7–19.5, and it photographs correctly at exposure ≈ 0.023; the
+ *  Intro meters 4.1 and lands at 0.058.
+ *
+ *  Re-fit if the tone curve below changes — the constant is curve-specific and
+ *  not even comparable across a swap, because three.js pre-divides ACES's
+ *  exposure by 0.6 and Neutral's not at all. Neutral's usable window is also
+ *  TIGHT: on the Drop, 0.022 is a photograph and 0.042 is a white sheet. It is
+ *  near-identity below its 0.76 shoulder and then compresses hard, where ACES
+ *  rolled off over decades — so the metering has to be more accurate than it
+ *  used to be, and when in doubt it should err dark, because a dark frame
+ *  still shows colour and structure and a blown one shows neither. A cue
+ *  carrying a strobe swings a good part of that window on its own (the Drop
+ *  runs 0.27–0.50 of display scale), so the target sits low enough that the
+ *  LIT frames still hold.
+ *
+ *  Known limit: `lum` is the light LEAVING the rig, not the light landing on
+ *  the camera, so it cannot see how CONCENTRATED a look is. A tight warm wash
+ *  can read brighter on screen than a Drop carrying three times the light
+ *  spread across the room. Metering the frame itself would fix it and costs a
+ *  readback or a second render pass — not worth it on a surface that shares a
+ *  laptop with a live show.
  *
  *  STRENGTH is PARTIAL on purpose. At 1 the adaptation would cancel every
  *  change and the previz would be useless as a lighting tool — you would push
@@ -54,7 +76,7 @@ const AIM_EMITTER_RADIUS = 0.12;
  *  The ceiling is 1.0 — never brighter than an unadapted frame. A real eye
  *  keeps opening up in the dark, but a previz that quietly brightens a blackout
  *  makes "is the rig actually out?" impossible to answer at a glance. */
-const ADAPT_KEY = 0.1;
+const ADAPT_KEY = 0.135;
 const ADAPT_STRENGTH = 0.6;
 const ADAPT_DOWN_S = 0.25;
 const ADAPT_UP_S = 1.2;
@@ -525,9 +547,25 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
     // Beams are additive cones, and on a real rig a lot of them overlap. With
     // no tone mapping every sum past 1.0 clips to flat white, so a busy look
     // reads as a white hole with a few coloured edges — precisely when you most
-    // need to see what the rig is doing. A filmic curve rolls the highlights off
+    // need to see what the rig is doing. A tone curve rolls the highlights off
     // instead, so twenty overlapping beams stay coloured and separable.
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    //
+    // Khronos PBR Neutral rather than ACES Filmic. A lighting previz lives in
+    // the overdrive part of the curve — the beam stack runs 20-60x display
+    // white — and that is exactly where the two disagree. Measured on this
+    // three.js build, at 20x over: ACES swings a saturated red +53 degrees of
+    // OKLab hue (red reads orange), takes amber +27 with its saturation
+    // crushed to 0.09, and collapses a cyan beam to 0.03 saturation where
+    // Neutral holds 0.26. ACES also ends in a hard clip; Neutral asymptotes,
+    // so the hot core keeps a little information instead of none.
+    //
+    // Not a clean win, and worth knowing before someone "fixes" it back:
+    // NEITHER curve preserves hue perceptually, and on BLUE specifically ACES
+    // is the better of the two (max -13 degrees OKLab against Neutral's +19).
+    // The trade is taken on saturation, because saturation is what decides
+    // whether a colour reads as that colour at all, and on red/amber/cyan,
+    // which are the cases that fail worst under ACES.
+    renderer.toneMapping = THREE.NeutralToneMapping;
     renderer.toneMappingExposure = 1.0;
     // Live exposure, adapted below. Kept out here so it survives frames.
     let exposure = 1.0;
