@@ -62,7 +62,7 @@ export function PixelLayout(): React.ReactElement | null {
       <div className="row" style={{ alignItems: 'flex-start', gap: 12 }}>
         <div>
           <div className="row" style={{ marginBottom: 6 }}>
-            <select className="sel" value={sel} onChange={(e) => setSel(e.target.value)}>
+            <select className="sel" title="which multi-pixel profile to lay out — every fixture using it inherits the result" value={sel} onChange={(e) => setSel(e.target.value)}>
               <option value="">choose profile…</option>
               {multi.map(([id, p]) => (
                 <option key={id} value={id}>

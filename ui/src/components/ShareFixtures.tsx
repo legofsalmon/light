@@ -313,6 +313,7 @@ export function ShareFixtures(): React.ReactElement | null {
           <label className="label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <input
               type="checkbox"
+              title="keep the session in the system keychain so the next fetch does not ask again — never written to the project file"
               checked={remember}
               onChange={(e) => setRemember(e.target.checked)}
             />

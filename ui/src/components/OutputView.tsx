@@ -214,6 +214,7 @@ function ChannelCheck({
         />
         <input
           type="range"
+          title="scrub this channel's level — takes effect only while the channel is overridden"
           min={0}
           max={255}
           value={value}
@@ -372,7 +373,7 @@ export function OutputView() {
               return (
                 <tr key={u.id}>
                   <td>
-                    <TextField className="text" style={{ width: 140 }} entityId={u.id} value={u.label} onCommit={(v) => editU((x) => (x.label = v))} />
+                    <TextField className="text" title="universe label — for your own reference; it is not sent anywhere" style={{ width: 140 }} entityId={u.id} value={u.label} onCommit={(v) => editU((x) => (x.label = v))} />
                   </td>
                   <td>
                     <button
@@ -386,6 +387,7 @@ export function OutputView() {
                   <td>
                     <NumInput
                       value={u.artnetUniverse}
+                      title="Art-Net port-address (0–32767) this universe is sent on — must match what the node expects"
                       min={0}
                       max={32767}
                       onCommit={(v) => editU((x) => (x.artnetUniverse = v))}
@@ -403,6 +405,7 @@ export function OutputView() {
                   <td>
                     <NumInput
                       value={u.sacnUniverse}
+                      title="sACN universe number (1–63999) this universe is sent on"
                       min={1}
                       max={63999}
                       onCommit={(v) => editU((x) => (x.sacnUniverse = v))}
@@ -478,7 +481,7 @@ export function OutputView() {
       <div>
         <div className="row" style={{ marginBottom: 6 }}>
           <div className="sectionhead" style={{ margin: 0, border: 'none', padding: 0 }}>DMX monitor</div>
-          <select className="sel" value={meterUniverse} onChange={(e) => setMeterU(e.target.value)}>
+          <select className="sel" title="which universe the channel meters below are showing" value={meterUniverse} onChange={(e) => setMeterU(e.target.value)}>
             {project.universes.map((u) => (
               <option key={u.id} value={u.id}>{u.label}</option>
             ))}

@@ -73,6 +73,7 @@ function LinkRow({ link, onEdit, onRemove }: {
       <select
         className="sel"
         value={link.lookId}
+        title="which look this link reaches into — the control does nothing until that look is on stage"
         onChange={(e) => onEdit((l) => {
           l.lookId = e.target.value;
           const lk = project.looks[e.target.value];
@@ -94,6 +95,7 @@ function LinkRow({ link, onEdit, onRemove }: {
       <select
         className="sel"
         value={link.partId}
+        title="which part of that look — each part points at one group, so this is also which fixtures move"
         onChange={(e) => onEdit((l) => {
           l.partId = e.target.value;
           delete l.effectId;
@@ -176,6 +178,7 @@ function BindingRow({ b, onEdit, onRemove }: {
       <select
         className="sel"
         value={b.lookId}
+        title="which look this binding rides — it offsets whatever the look and any ride have already set"
         onChange={(e) => onEdit((x) => {
           x.lookId = e.target.value;
           const lk = project.looks[e.target.value];
@@ -197,6 +200,7 @@ function BindingRow({ b, onEdit, onRemove }: {
       <select
         className="sel"
         value={b.partId}
+        title="which part of that look — each part points at one group, so this is also which fixtures move"
         onChange={(e) => onEdit((x) => {
           x.partId = e.target.value;
           delete x.effectId;
@@ -211,6 +215,7 @@ function BindingRow({ b, onEdit, onRemove }: {
       <select
         className="sel"
         value={b.effectId !== undefined ? `fx:${b.effectId}:${b.field}` : `p:${b.field}`}
+        title="which parameter the LFO rides — part fields, or a knob of one of the part's effects. Rate is deliberately absent: a continuously moving rate would drift the two engines apart"
         onChange={(e) => onEdit((x) => {
           const v = e.target.value;
           if (v.startsWith('p:')) {
@@ -284,6 +289,7 @@ export function ControlsView(): React.ReactElement {
             <div className="row" style={{ marginBottom: 4 }}>
               <TextField
                 className="text"
+                title="control name — this is what the pads page shows in the control row"
                 style={{ width: 150, fontSize: 13 }}
                 entityId={c.id}
                 value={c.name}
@@ -291,6 +297,7 @@ export function ControlsView(): React.ReactElement {
               />
               <Fader
                 width={220}
+                help={`${c.name} — moving this is a ride: live, not stored. Use Store in the top bar to keep it`}
                 value={liveValue ?? c.value}
                 def={c.value}
                 onChange={(v) => send({ type: 'setControl', controlId: c.id, value: v })}
@@ -377,17 +384,18 @@ export function ControlsView(): React.ReactElement {
             </button>
             <TextField
               className="text"
+              title="modulator name"
               style={{ width: 150, fontSize: 13 }}
               entityId={m.id}
               value={m.name}
               onCommit={(v) => editMod(m.id, (x) => (x.name = v))}
             />
-            <select className="sel" value={m.wave} onChange={(e) => editMod(m.id, (x) => (x.wave = e.target.value as Wave))}>
+            <select className="sel" title="the LFO's shape" value={m.wave} onChange={(e) => editMod(m.id, (x) => (x.wave = e.target.value as Wave))}>
               {MOD_WAVES.map((w) => (
                 <option key={w} value={w}>{w}</option>
               ))}
             </select>
-            <select className="sel" value={String(m.rate)} onChange={(e) => editMod(m.id, (x) => (x.rate = Number(e.target.value)))}>
+            <select className="sel" title="beats per cycle — musical, not hertz, so it stays in time when the tempo moves" value={String(m.rate)} onChange={(e) => editMod(m.id, (x) => (x.rate = Number(e.target.value)))}>
               {MOD_RATES.map((r) => (
                 <option key={r.v} value={String(r.v)}>{r.label}</option>
               ))}

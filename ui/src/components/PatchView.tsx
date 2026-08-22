@@ -115,7 +115,9 @@ function AddressInput({ value, conflict, onCommit }: {
       min={1}
       max={512}
       value={draft}
-      title={conflict ? 'address overlap!' : ''}
+      title={conflict
+        ? 'address overlap — another fixture already uses part of this range'
+        : 'DMX start address in this universe (1–512). Commits on Enter or blur; the channel span is shown beside it'}
       style={conflict ? { borderColor: 'var(--hot)', color: 'var(--hot)' } : undefined}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -495,6 +497,7 @@ export function PatchView() {
                   <td>
                     <input
                       className="text"
+                      title="fixture name — shown in the plan and in group lists"
                       style={{ width: 130 }}
                       value={f.name}
                       onChange={(e) => mutate((p) => {
@@ -728,11 +731,15 @@ export function PatchView() {
                 rotY: 0,
               });
             })}
-          
-            title="add one fixture at the next free address in the selected universe">
+            title="add one fixture at the next free address in the selected universe"
+          >
             + add fixture
           </button>
-          <label className="btn small" style={{ cursor: 'pointer' }}>
+          <label
+            className="btn small"
+            style={{ cursor: 'pointer' }}
+            title="import a GDTF fixture definition, or an MVR scene (fixtures, addresses, positions and the definitions inside it). Re-importing a file replaces the stored profile."
+          >
             ⇩ import .gdtf / .mvr
             <input
               type="file"
@@ -995,6 +1002,7 @@ export function PatchView() {
           <div key={g.id} className="row" style={{ marginBottom: 6, alignItems: 'flex-start' }}>
             <input
               className="text"
+              title="group name. Renaming a generated group does not promote it — use the pin for that"
               style={{ width: 130 }}
               value={g.name}
               onChange={(e) => mutate((p) => {

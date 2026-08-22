@@ -184,6 +184,7 @@ export function SyncView() {
           <span className="label">port</span>
           <NumInput
             value={sync.oscPort}
+            title="UDP port the engine listens on for OSC — Arena sends here"
             min={1024}
             max={65535}
             width={72}
@@ -221,7 +222,9 @@ export function SyncView() {
           {midiInputs.length === 0 ? (
             <span className="label" style={{ color: 'var(--text-faint)' }}>none detected (browser needs MIDI permission)</span>
           ) : (
-            midiInputs.map((n) => <span key={n} className="chip">{n}</span>)
+            midiInputs.map((n) => (
+              <span key={n} className="chip" title={`${n} — an input LIGHT is listening on`}>{n}</span>
+            ))
           )}
           <div className="grow" />
           <span className="label" style={{ fontFamily: 'var(--mono)' }}>{lastMidi ?? ''}</span>

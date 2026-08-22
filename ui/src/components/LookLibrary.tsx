@@ -93,7 +93,9 @@ export function LookLibrary() {
                 ))}
               </span>
               <span className="name">{look.steps?.length ? '⛓ ' : ''}{look.name}</span>
-              {look.flash && <span className="chip">FLASH</span>}
+              {look.flash && (
+                <span className="chip" title="momentary — this look holds only while the pad is held">FLASH</span>
+              )}
               {n > 0 && (
                 <span className="chip" title={`already on ${n} pad${n > 1 ? 's' : ''} in this song`}>
                   ×{n}

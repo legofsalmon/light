@@ -207,7 +207,7 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
       >
         {fx.bypass ? '▷' : '❙❙'}
       </button>
-      <select className="sel" value={fx.target} onChange={(e) => onEdit((x) => (x.target = e.target.value as EffectTarget))}>
+      <select className="sel" title="which parameter the wave moves. Targets this group cannot take are still assignable, and flagged" value={fx.target} onChange={(e) => onEdit((x) => (x.target = e.target.value as EffectTarget))}>
         <optgroup label="drives this group">
           {capable.map((t) => (
             <option key={t} value={t}>{t}</option>
@@ -226,13 +226,14 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
           ⚠
         </span>
       )}
-      <select className="sel" value={fx.wave} onChange={(e) => onEdit((x) => (x.wave = e.target.value as Wave))}>
+      <select className="sel" title="the wave shape — chase runs one head at a time and forces a full spread" value={fx.wave} onChange={(e) => onEdit((x) => (x.wave = e.target.value as Wave))}>
         {WAVES.map((w) => (
           <option key={w} value={w}>{w}</option>
         ))}
       </select>
       <select
         className="sel"
+        title="beats per cycle — 4 is one cycle per bar in 4/4. Musical, not hertz, so the rig stays in time when the tempo moves"
         value={String(soft('rate') ?? fx.rate)}
         onChange={(e) => onField('rate', Number(e.target.value), (x) => (x.rate = Number(e.target.value)))}
       >
@@ -371,6 +372,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
         <span className="label">group</span>
         <select
           className="sel"
+          title="the fixtures this part drives. Group ORDER is chase order, so it decides how a chase or an index fan runs through them"
           value={part.groupId}
           onChange={(e) => edit((pt) => (pt.groupId = e.target.value))}
         >
@@ -396,7 +398,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
             <Enable on={prm.dimmer !== undefined} toggle={() => edit((pt) => (pt.params.dimmer = pt.params.dimmer === undefined ? 1 : undefined))} />
             <span className="label">dimmer</span>
             <div className={`grow paramrow ${prm.dimmer === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
-              <Fader value={softFor('dimmer') ?? prm.dimmer ?? 1} def={1} onChange={(v) => setP('dimmer', v, (pt) => (pt.params.dimmer = v))} fmt={pct} width="100%" />
+              <Fader help="intensity for this part. Double-click to reset to full" value={softFor('dimmer') ?? prm.dimmer ?? 1} def={1} onChange={(v) => setP('dimmer', v, (pt) => (pt.params.dimmer = v))} fmt={pct} width="100%" />
             </div>
           </div>
         )}
@@ -480,6 +482,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
               <span className="label" style={{ marginLeft: 20 }}>derby macro</span>
               <select
                 className="sel"
+                title="derbies mix colour by macro slot rather than by RGB — auto picks the slot nearest the colour above"
                 value={prm.macro === undefined ? 'auto' : String(prm.macro)}
                 onChange={(e) => edit((pt) => (pt.params.macro = e.target.value === 'auto' ? undefined : Number(e.target.value)))}
               >
@@ -500,7 +503,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
               <Enable on={prm.ringFx !== undefined} toggle={() => edit((pt) => (pt.params.ringFx = pt.params.ringFx === undefined ? 0.5 : undefined))} />
               <span className="label">ring fx</span>
               <div className={`grow paramrow ${prm.ringFx === undefined ? 'off' : ''}`}>
-                <Fader value={softFor('ringFx') ?? prm.ringFx ?? 0.5} onChange={(v) => setP('ringFx', v, (pt) => (pt.params.ringFx = v))} fmt={pct} width={180} variant="dim" />
+                <Fader help="the fixture's own built-in ring effect, where it has one" value={softFor('ringFx') ?? prm.ringFx ?? 0.5} onChange={(v) => setP('ringFx', v, (pt) => (pt.params.ringFx = v))} fmt={pct} width={180} variant="dim" />
               </div>
             </div>
             <div className="paramrow">
@@ -551,7 +554,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
             <Enable on={prm.strobe !== undefined} toggle={() => edit((pt) => (pt.params.strobe = pt.params.strobe === undefined ? 0.6 : undefined))} />
             <span className="label">strobe</span>
             <div className={`grow paramrow ${prm.strobe === undefined ? 'off' : ''}`}>
-              <Fader value={softFor('strobe') ?? prm.strobe ?? 0.6} onChange={(v) => setP('strobe', v, (pt) => (pt.params.strobe = v))} fmt={pct} width={180} variant="dim" />
+              <Fader help="strobe rate — slow at the left, fastest at the right" value={softFor('strobe') ?? prm.strobe ?? 0.6} onChange={(v) => setP('strobe', v, (pt) => (pt.params.strobe = v))} fmt={pct} width={180} variant="dim" />
             </div>
           </div>
         )}
@@ -598,6 +601,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
             <span className="label">{BEAM_LABELS[k]}</span>
             <div className={`grow paramrow ${prm[k] === undefined ? 'off' : ''}`}>
               <Fader
+                help={`${BEAM_LABELS[k]} — greyed out until the ⏻ beside it enables this parameter for the part`}
                 value={softFor(k) ?? prm[k] ?? 0.5}
                 def={0.5}
                 onChange={(v) => setP(k, v, (pt) => (pt.params[k] = v))}
@@ -704,6 +708,7 @@ function BeatsInput({ value, onCommit }: { value: number; onCommit: (v: number) 
     <input
       ref={ref}
       className="num"
+      title="how long this step holds, in beats — fractions allowed, committed on Enter or blur"
       type="number"
       min={0.25}
       step={0.25}
@@ -954,6 +959,7 @@ export function LookEditor() {
               <span className="chip">{i + 1}</span>
               <select
                 className="sel"
+                title="the look this step fires"
                 value={st.lookId}
                 onChange={(e) => editLook((lk) => { if (lk.steps?.[i]) lk.steps[i].lookId = e.target.value; })}
               >

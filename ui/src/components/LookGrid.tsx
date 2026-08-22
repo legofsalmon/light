@@ -168,7 +168,11 @@ const Cell = React.memo(function Cell({
               <i key={i} style={{ background: c }} />
             ))}
           </div>
-          {look.flash && <div className="flashmark">FLASH</div>}
+          {look.flash && (
+            <div className="flashmark" title="momentary — this look holds only while the pad is held, and the layer goes back to what it was on release">
+              FLASH
+            </div>
+          )}
           {/* Two targets in one pad, like a Resolume clip: the body fires the
               look, the name selects it for editing without firing. Selecting
               has to be possible mid-show without putting the look on stage —
@@ -268,6 +272,7 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
         )}
       </div>
       <Fader
+        help={`${layer.name} master — scales everything this layer puts out. Double-click for full`}
         value={layer.master}
         onChange={(v) => send({ type: 'setLayerMaster', layerId: layer.id, v })}
         def={1}
@@ -586,7 +591,9 @@ function ControlRow() {
             <div
               key={`empty-${i}`}
               className={`cell ctlcell empty ${next ? 'addable' : ''}`}
-              title={next ? 'add a control — then link it to parameters in the Controls tab' : ''}
+              title={next
+                ? 'add a control — then link it to parameters in the Controls tab'
+                : 'empty control slot — controls fill left to right, eight to match the APC40 device knobs'}
               onClick={next ? addControl : undefined}
             >
               {next && <div className="ctladd">+</div>}
@@ -617,6 +624,7 @@ function ControlRow() {
               {c.name}
             </div>
             <Fader
+              help={`${c.name} — moving this is a ride: live, not stored. Use Store in the top bar to keep it`}
               value={liveValue ?? c.value}
               def={c.value}
               onChange={(v) => send({ type: 'setControl', controlId: c.id, value: v })}

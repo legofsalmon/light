@@ -7,6 +7,10 @@ type Props = {
   value: number;
   onChange: (v: number) => void;
   label?: string;
+  /** tooltip. Falls back to the label — but a fader whose caption is drawn
+   *  outside it has no label at all, and those are the ones that most need to
+   *  say what they do. */
+  help?: string;
   /** value formatter shown right-aligned */
   fmt?: (v: number) => string;
   min?: number;
@@ -19,7 +23,7 @@ type Props = {
   learn?: MidiAction;
 };
 
-export function Fader({ value, onChange, label, fmt, min = 0, max = 1, def, width, variant = 'accent', learn }: Props) {
+export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def, width, variant = 'accent', learn }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const norm = clamp((value - min) / (max - min));
   const learnMode = useStore((s) => s.learnMode);
@@ -57,7 +61,7 @@ export function Fader({ value, onChange, label, fmt, min = 0, max = 1, def, widt
         if (e.buttons & 1 && e.currentTarget.hasPointerCapture(e.pointerId)) setFromEvent(e);
       }}
       onDoubleClick={() => def !== undefined && onChange(def)}
-      title={label}
+      title={help ?? label}
     >
       {variant === 'hue' ? (
         <div className="marker" style={{ left: `${norm * 100}%` }} />

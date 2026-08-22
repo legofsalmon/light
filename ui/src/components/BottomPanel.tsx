@@ -6,12 +6,12 @@ import { OutputView } from './OutputView.tsx';
 import { SyncView } from './SyncView.tsx';
 import { ControlsView } from './ControlsView.tsx';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'look', label: 'Look' },
-  { id: 'patch', label: 'Fixtures' },
-  { id: 'controls', label: 'Controls' },
-  { id: 'output', label: 'Output' },
-  { id: 'sync', label: 'Sync · MIDI' },
+const TABS: { id: Tab; label: string; help: string }[] = [
+  { id: 'look', label: 'Look', help: 'edit the selected pad: parts, colour, position, beam and effects' },
+  { id: 'patch', label: 'Fixtures', help: 'the patch — addresses, profiles, positions, groups, and GDTF/MVR import' },
+  { id: 'controls', label: 'Controls', help: 'macro faders and their links, and the beat-locked modulators' },
+  { id: 'output', label: 'Output', help: 'universes, Art-Net and sACN, and a live DMX monitor' },
+  { id: 'sync', label: 'Sync · MIDI', help: 'tempo, Ableton Link, OSC from Resolume, and MIDI mappings' },
 ];
 
 export function BottomPanel() {
@@ -27,7 +27,7 @@ export function BottomPanel() {
     <>
       <div className="tabs">
         {TABS.map((t) => (
-          <div key={t.id} className={`tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
+          <div key={t.id} className={`tab ${tab === t.id ? 'on' : ''}`} title={t.help} onClick={() => setTab(t.id)}>
             {t.label}
           </div>
         ))}
