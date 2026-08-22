@@ -4,6 +4,8 @@ Two renderers, for two different questions.
 
 ## The 3D stage
 
+![The 3D previz](img/fan-still.jpg)
+
 What the rig looks like from the room: beams through haze, colour on people,
 shadows where they land. It is for judging whether a look *works* — whether the
 wash reaches the drummer, whether two beams collide, whether a colour reads at

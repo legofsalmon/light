@@ -41,6 +41,13 @@ nothing stutters.
 The fan is the part worth understanding, because it is what separates a rig that
 looks programmed from a rig that looks switched on.
 
+![A hue fan sweeping across the rig](img/fan-sweep.gif)
+
+*One effect: a saw on hue, `spread` at 100 %, `distribute: x`. The phase is laid
+across the stage by world position, so the colour walks the rig from one side to
+the other. Nothing is programmed per fixture, and moving a fixture in the patch
+moves its place in the fan.* ([MP4](img/fan-sweep.mp4))
+
 `spread` says *how much* phase difference there is across the group. **distribute**
 says *in what order the heads are counted*:
 

@@ -487,7 +487,18 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
     const host = hostRef.current;
     if (!host) return;
 
+    // No preserveDrawingBuffer: it forces the driver to keep a copy of every
+    // frame, and this canvas shares a laptop with a live show. Turn it on
+    // temporarily if you need to capture the previz with toDataURL — see
+    // docs/website/README.md.
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    // Beams are additive cones, and on a real rig a lot of them overlap. With
+    // no tone mapping every sum past 1.0 clips to flat white, so a busy look
+    // reads as a white hole with a few coloured edges — precisely when you most
+    // need to see what the rig is doing. A filmic curve rolls the highlights off
+    // instead, so twenty overlapping beams stay coloured and separable.
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     host.appendChild(renderer.domElement);
 
