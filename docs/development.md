@@ -127,6 +127,21 @@ base, yoke, tilting barrel, lens — and the aim splits across the yoke and the
 shell, so the body swings with the beam. Everything else gets a body frame
 turned to face where its light goes, with the emitters on the front face.
 
+The band's geometry lives in `shared/figure.json` and NOTHING ELSE defines it.
+`previz/src/figure.rs` reads it with `include_str!` + serde; the three.js view
+imports it directly (`ui/src/components/figure.ts`). Change the file and both
+views change. That file exists because the two renderers were independent
+hand-copies of ~140 numbers, and the web one was still drawing an armless
+capsule pawn three commits after the native figures grew limbs.
+
+Three things are still duplicated there, deliberately and minimally: `bone`,
+`chain`, and the FNV-1a/avalanche hash that turns a prop id into a stature and a
+pose. The hash has to agree BIT FOR BIT or the same musician is a different
+height in the two windows — JavaScript has no u32, so that side is `Math.imul`
+plus `>>> 0` after every step, and `the_hash_agrees_with_the_typescript_twin`
+pins five measured pairs against it. Measure both sides; do not type the
+expected values from memory.
+
 A performer's height is inferred too, and for the same reason. A stage prop's
 `y` is structural-only — `sanitizeProject` deletes it from performers and should
 keep doing so — so `standingHeightAt` (shared/beamThrow.ts) reads the height off

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { isStructure } from '../../../shared/types.ts';
+import { buildFigure } from './figure.ts';
 import type { HeadSnap, Project } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
@@ -390,6 +391,7 @@ function buildTrussRun(len: number, section: number, mat: THREE.Material): THREE
 
 function buildProps(
   props: {
+    id: string;
     kind: string;
     pos: { x: number; z: number };
     rotY?: number;
@@ -398,97 +400,35 @@ function buildProps(
   }[],
 ): THREE.Group {
   const g = new THREE.Group();
-  const cloth = new THREE.MeshStandardMaterial({ color: 0x232328, roughness: 0.92 });
-  const skin = new THREE.MeshStandardMaterial({ color: 0x9e7861, roughness: 0.75 });
-  const wood = new THREE.MeshStandardMaterial({ color: 0x591f1a, roughness: 0.55 });
-  const metal = new THREE.MeshStandardMaterial({ color: 0x8c8c99, roughness: 0.35, metalness: 0.85 });
-  const brass = new THREE.MeshStandardMaterial({ color: 0xb5944a, roughness: 0.3, metalness: 0.9 });
-  // structure reads as aluminium: bright enough to catch a beam, dull enough
-  // not to compete with the fixtures for attention
+  // Performer geometry comes from shared/figure.json, the same file
+  // previz/src/figure.rs reads — see ui/src/components/figure.ts.
   const truss = new THREE.MeshStandardMaterial({ color: 0x8d8d97, roughness: 0.42, metalness: 0.75 });
   const skirtMat = new THREE.MeshStandardMaterial({ color: 0x191920, roughness: 0.95 });
   const deckTop = new THREE.MeshStandardMaterial({ color: 0x2b2b33, roughness: 0.88 });
-  // a dark panel that still shows the light falling on it
   const screenFace = new THREE.MeshStandardMaterial({ color: 0x0d0d12, roughness: 0.6 });
 
-  const legsGeo = new THREE.CapsuleGeometry(0.13, 0.55, 4, 10);
-  const torsoGeo = new THREE.CapsuleGeometry(0.17, 0.4, 4, 10);
-  const headGeo = new THREE.SphereGeometry(0.11, 14, 10);
-
   for (const pr of props) {
-    const root = new THREE.Group();
     // Structure positions itself off its own `y`; a performer is stood on
     // whatever the scenery puts under their feet, so a musician dragged onto a
     // riser stands ON it instead of inside it. Derived rather than authored —
     // see standingHeightAt.
     const base = isStructure(pr.kind) ? 0 : standingHeightAt(props, pr.pos.x, pr.pos.z);
+
+    if (!isStructure(pr.kind)) {
+      // Cached merged geometry in the figure's own frame, so dragging a
+      // musician is a transform rather than a rebuild.
+      const fig = buildFigure(pr.kind, pr.id);
+      fig.position.set(pr.pos.x, base, pr.pos.z);
+      fig.rotation.y = pr.rotY ?? 0;
+      g.add(fig);
+      continue;
+    }
+
+    const root = new THREE.Group();
     root.position.set(pr.pos.x, base, pr.pos.z);
     root.rotation.y = pr.rotY ?? 0;
     g.add(root);
-    const addStanding = () => {
-      const legs = new THREE.Mesh(legsGeo, cloth);
-      legs.position.y = 0.5;
-      const torso = new THREE.Mesh(torsoGeo, cloth);
-      torso.position.y = 1.17;
-      const head = new THREE.Mesh(headGeo, skin);
-      head.position.y = 1.62;
-      root.add(legs, torso, head);
-    };
     switch (pr.kind) {
-      case 'vocalist': {
-        addStanding();
-        const mic = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 1.55, 8), metal);
-        mic.position.set(0.3, 0.775, 0.25);
-        const micHead = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), cloth);
-        micHead.position.set(0.3, 1.56, 0.25);
-        root.add(mic, micHead);
-        break;
-      }
-      case 'guitarist':
-      case 'bassist': {
-        addStanding();
-        const guitar = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.9, 0.09), wood);
-        guitar.position.set(0, 1.0, 0.22);
-        guitar.rotation.z = 0.55;
-        root.add(guitar);
-        break;
-      }
-      case 'keyboardist': {
-        addStanding();
-        const board = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.09, 0.32), cloth);
-        board.position.set(0, 0.93, 0.35);
-        root.add(board);
-        for (const dx of [-0.45, 0.45]) {
-          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.9, 0.05), metal);
-          leg.position.set(dx, 0.45, 0.35);
-          root.add(leg);
-        }
-        break;
-      }
-      case 'drummer': {
-        const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.45, 10), cloth);
-        stool.position.set(0, 0.225, -0.45);
-        const dtorso = new THREE.Mesh(torsoGeo, cloth);
-        dtorso.position.set(0, 0.85, -0.45);
-        const dhead = new THREE.Mesh(headGeo, skin);
-        dhead.position.set(0, 1.3, -0.45);
-        const kick = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.45, 16), wood);
-        kick.position.set(0, 0.28, 0.15);
-        kick.rotation.x = Math.PI / 2;
-        const snare = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.14, 12), metal);
-        snare.position.set(-0.32, 0.55, -0.15);
-        root.add(stool, dtorso, dhead, kick, snare);
-        for (const [cx, cy] of [[-0.5, 1.15], [0.5, 1.05]] as const) {
-          const cymbal = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.015, 16), brass);
-          cymbal.position.set(cx, cy, -0.05);
-          cymbal.rotation.z = 0.08;
-          const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, cy, 6), metal);
-          stand.position.set(cx, cy / 2, -0.05);
-          root.add(cymbal, stand);
-        }
-        break;
-      }
-      // ---- structure -----------------------------------------------------
       case 'trussBar': {
         const s = pr.size ?? { w: 7, h: 0.3, d: 0.3 };
         const run = buildTrussRun(s.w, Math.max(s.h, s.d), truss);
@@ -532,10 +472,9 @@ function buildProps(
         root.add(frame, panel);
         break;
       }
-      default:
-        addStanding();
     }
   }
+
   return g;
 }
 
@@ -710,6 +649,10 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
         // leaks a geometry + material set per frame of the drag
         band.traverse((o) => {
           const mesh = o as THREE.Mesh;
+          // Figure geometry and materials are cached and shared across
+          // rebuilds (see figure.ts) — disposing them here would leave every
+          // later rebuild drawing from freed buffers with a dead program.
+          if (mesh.userData?.shared) return;
           mesh.geometry?.dispose?.();
           const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
           if (Array.isArray(mat)) mat.forEach((mm) => mm.dispose());
