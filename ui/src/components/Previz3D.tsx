@@ -752,7 +752,7 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             const haze = snap.haze;
             for (const b of h.beams) {
               b.material.opacity = haze * 0.09;
-              b.material.color.setRGB(0.7, 0.72, 0.78);
+              b.material.color.setRGB(0.7, 0.72, 0.78, THREE.SRGBColorSpace);
             }
             if (h.glow) h.glow.material.opacity = 0;
             continue;
@@ -767,7 +767,21 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
               g = c[1] / 255;
               bl = c[2] / 255;
             }
-            b.material.color.setRGB(r, g, bl);
+            // sRGB, explicitly — the two previz views disagreed about this.
+            //
+            // three's `setRGB` defaults to the WORKING colour space, which is
+            // linear-sRGB, so a look's RGB was being taken as already-linear
+            // here while the native window decodes it as sRGB. Saturated
+            // primaries matched and everything in between did not: an amber at
+            // (1, 0.6, 0) came out linear 0.6 in the browser and 0.32 natively,
+            // which is the difference between a washed yellow and an orange.
+            //
+            // Decoding is the right side of that argument. A look's RGB comes
+            // from an sRGB colour picker, and it leaves the engine as a DMX
+            // level into a fixture whose default dimmer curve is square-law or
+            // thereabouts — sRGB decode lands at 0.60 where square law lands at
+            // 0.64, and the linear reading lands at 0.80.
+            b.material.color.setRGB(r, g, bl, THREE.SRGBColorSpace);
             b.material.opacity = h.cur.i * beamGain * gate;
           });
 
@@ -779,7 +793,7 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             (0.2126 * h.cur.r + 0.7152 * h.cur.g + 0.0722 * h.cur.b);
 
           if (h.glow) {
-            h.glow.material.color.setRGB(h.cur.r, h.cur.g, h.cur.b);
+            h.glow.material.color.setRGB(h.cur.r, h.cur.g, h.cur.b, THREE.SRGBColorSpace);
             h.glow.material.opacity = h.cur.i * 0.9 * gate;
             const s = 1 + h.cur.i * 1.6;
             h.glow.scale.set(s, s, s);
