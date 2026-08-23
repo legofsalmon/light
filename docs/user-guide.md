@@ -161,6 +161,18 @@ views (`band` toggles them in-app, `M` in the pop-out window), so you can judge
 how a look actually lands on people. `PREVIZ` in the top bar opens the native
 window with real beams, haze, and shadows.
 
+**The native window.** It opens framed on your whole rig — however big the plot
+is and wherever it sits — and stays where you put it after that; a patch edit
+will not throw away the shot you were lining up. `1` `2` `3` are FOH, side and
+top. Moving heads are drawn as real moving heads: the yoke pans and the head
+tilts with the beam, so you can see a fixture running out of travel or turning
+to point at the audience, not just where the light lands.
+
+Truss is drawn wherever the hang implies one — three or more fixtures in a line
+at the same height and depth. It is a reading of your patch, not something the
+show file carries, so a rig that is not hung in rows will not get bars drawn
+through it.
+
 **Exposure.** `auto exp` in the previz bar is eye adaptation: the view stops
 down when the rig comes up and opens back up in the quiet parts, the way your
 eyes do. It is partial, so a brighter look still reads brighter, and a blackout

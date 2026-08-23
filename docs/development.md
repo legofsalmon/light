@@ -90,10 +90,38 @@ Working on it:
 - `LIGHT_PREVIZ_DIAG=1` logs frame time plus a render-state line every two
   seconds — fixture count, live spotlights, panel lights, fog density, haze —
   so a dark window can be diagnosed from the terminal.
+- `LIGHT_PREVIZ_CAM=yaw,pitch,dist[,tx,ty,tz]` places the camera at startup.
+  Screenshots are how you judge this thing, and without it every screenshot came
+  from the same default viewpoint — half of them framing empty air, because on
+  an arena plot the rig hangs above where the default camera looks. Setting it
+  also *claims* the camera, so the automatic first framing leaves your shot
+  alone.
 - `previz/src/quality.rs` holds every knob that trades frame time for picture
   (MSAA, fog steps, shadow budget, exposure, flux, haze floor, beam gain,
-  adaptation) as `LIGHT_PREVIZ_*` variables. They exist because a release build
-  is five minutes and a `const` is not a knob anybody turns twice.
+  adaptation, truss) as `LIGHT_PREVIZ_*` variables. They exist because a release
+  build is five minutes and a `const` is not a knob anybody turns twice.
+
+Measure from a FIXED camera. The tiers read 11.5 / 20.2 / 44.2 ms from the shot
+the window now opens on and 13.9 / 31.3 / 69.8 ms from the old close default,
+for the same build — beams are fill, and fill is most of the frame time, so the
+viewpoint is worth more than most of the knobs. Any before/after number without
+`LIGHT_PREVIZ_CAM` pinned is measuring the camera.
+
+### What is drawn, and what is inferred
+
+Fixture geometry comes from the compiled profile's `FixtureForm`, which the
+operator can override per profile in the patch table. A mover is articulated —
+base, yoke, tilting barrel, lens — and the aim splits across the yoke and the
+shell, so the body swings with the beam. Everything else gets a body frame
+turned to face where its light goes, with the emitters on the front face.
+
+**Truss is inferred, not imported.** The project file has no truss in it, so
+`previz/src/truss.rs` reads it off the hang: three or more fixtures sharing a
+height and a depth over at least a metre and a half. A run breaks wherever a
+hole opens up that is several times wider than the fixture spacing around it —
+which is the only rule that both keeps a sparse front truss whole and refuses to
+join two side-fill wings eighteen metres apart. `LIGHT_PREVIZ_TRUSS=0` turns it
+off; when MVR geometry import lands, real truss should replace it.
 
 Debug it by bisecting with the shader, not by reasoning at it. Returning a flat
 colour early answers "does this rasterize at all", then "did the uniform
