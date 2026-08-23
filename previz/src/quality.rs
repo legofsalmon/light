@@ -48,6 +48,17 @@ pub struct Quality {
     pub haze_oversize: f32,
     /// Shadow-casting spotlights. Each costs its own depth pass, so this is the
     /// single biggest lever on a large rig.
+    ///
+    /// Measured on the 129-fixture arena plot, and the curve is flat then a
+    /// cliff: 0, 10 and 24 all land within noise of each other (19.9-20.0 ms
+    /// from the FOH shot, 31.1-31.2 from a close one) and 48 costs 4.3 ms. So
+    /// the old budget of 10 was leaving free shadows on the table, and shadows
+    /// are what sells a beam being interrupted by the person standing in it —
+    /// without them a band under a truss full of movers is uniformly hazy.
+    ///
+    /// The budget is spent in SPAWN order, which is arbitrary: a cue that only
+    /// lights fixtures late in the patch gets none. Allocating per frame to the
+    /// brightest lit heads is the right answer and is noted in parked work.
     pub shadows: usize,
 
     // --- photometrics -------------------------------------------------
@@ -183,12 +194,12 @@ impl Quality {
 
     /// The default: the measured budget, spent where it shows most.
     pub fn standard() -> Self {
-        Quality { smaa: true, msaa: 1, fog_steps: 32, haze_oversize: 1.6, shadows: 10, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { smaa: true, msaa: 1, fog_steps: 32, haze_oversize: 1.6, shadows: 24, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// For a second machine, or a still.
     pub fn high() -> Self {
-        Quality { smaa: true, msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 1, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { smaa: true, msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 32, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 1, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     pub fn from_env() -> Self {

@@ -406,3 +406,21 @@ Stage 4 (previz quality: bloom/tonemapping, camera bookmarks, soft-falloff beam
 shader, quality tiers, Bevy 0.19, DLSS on PC / MetalFX on macOS) and Stage 5
 (features: audio-reactivity, Art-Net HTP merge, MVR geometry, Link-clock
 timelines) are described in the review artifact.
+
+## 8. Previz shadow allocation *(noted while raising the budget)*
+
+`Quality::shadows` picks which spotlights cast shadows in **spawn order** — the
+first N heads in the patch — and the decision is made once, at scene build.
+
+That is arbitrary in a way that bites: a cue lighting only fixtures late in the
+patch gets no shadows at all, and a cue lighting the first twenty gets them all
+whether or not those beams land anywhere a shadow would show. Meanwhile the
+budget itself is now known to be nearly free up to about 24 on the arena plot
+(0, 10 and 24 all measure within noise; 48 costs 4.3 ms), so the allocation
+matters more than the number does.
+
+The right answer is to allocate per frame to the brightest LIT heads, next to
+the pass that already hides dark lights. Not done because flipping
+`shadow_maps_enabled` at runtime may churn render pipelines, and that needs
+measuring rather than assuming — if it does churn, the fallback is to re-rank
+only on scene rebuild plus a debounced re-rank when the lit set changes a lot.
