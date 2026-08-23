@@ -2,6 +2,8 @@
 
 use tauri::Manager;
 
+mod licence;
+mod licence_net;
 mod share;
 
 use std::sync::{Arc, Mutex};
@@ -148,7 +150,13 @@ fn main() {
                 share::ShareSession::disabled()
             }
         })
+        .manage(licence_net::Licence::new())
         .invoke_handler(tauri::generate_handler![
+            licence_net::licence_status,
+            licence_net::licence_start_trial,
+            licence_net::licence_activate,
+            licence_net::licence_heartbeat,
+            licence_net::licence_deactivate,
             share::share_status,
             share::share_login,
             share::share_login_saved,
@@ -218,6 +226,25 @@ fn main() {
             } else {
                 None
             };
+
+            // The one licence gate in the app, and it is here rather than
+            // anywhere else on purpose: decided once, offline, from a cached
+            // token, BEFORE the engine exists. A lapsed trial means this run
+            // does not start a session — it can never mean a session already
+            // running stops, because by the time anything is lit this code has
+            // long since returned. Every other status is a banner; see
+            // Status::blocks_new_session.
+            licence_net::start_heartbeat(app.handle().clone());
+
+            let gate = licence_net::startup_verdict();
+            if gate.status.blocks_new_session() {
+                log_line(&format!(
+                    "licence {:?} — not starting the engine; the window opens on the licence panel",
+                    gate.status
+                ));
+                eprintln!("[light] trial ended — start a licence in the window to run a show");
+                return Ok(());
+            }
 
             // The engine core runs on its own thread; the window is just a
             // view speaking the same WebSocket protocol as any LAN browser.

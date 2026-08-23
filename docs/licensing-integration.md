@@ -1,12 +1,13 @@
-# Licensing — LeTissier integration plan
+# Licensing — LeTissier integration
 
-Groundwork for wiring <https://letissier.ie/integrate> into LIGHT. **Nothing is
-implemented yet**, deliberately: the two blockers at the bottom mean a verifier
-written today could be neither compiled nor tested, and a licence check that has
-never run is not something to put in a console that drives a show.
+Wiring <https://letissier.ie/integrate> into LIGHT. **Implemented** in
+`src-tauri/src/licence.rs` (the decision, pure) and `licence_net.rs` (machine
+identity, Keychain, the four HTTP calls, the daily check-in), with the panel at
+`ui/src/components/LicencePanel.tsx` and the single startup gate in `main.rs`.
 
-Everything below was read off the service's own documentation and one of its
-published test vectors, not from memory.
+Everything below was read off the service's own documentation and its published
+test vectors, not from memory. Blocker 2 is now settled by measurement; blocker
+1 is still open and is the reason shipped builds read `invalid`.
 
 ## The shape of it
 
@@ -114,23 +115,43 @@ status.
 
 ## The two blockers
 
-1. **The production public key is a placeholder.** The integration page ships
-   `REPLACE_WITH_YOUR_PUBLIC_KEY_HEX`; the only real key published is the *test*
-   key in `vectors.json` (SPKI base64
-   `MCowBQYDK2VwAyEAZG93X11sthQjCXcHvKEW4/XE0jxDzaLy2ZOKHFPtQYA=`). The real one
-   is account-specific and has to come from the LeTissier account holder.
-2. **What the signature actually covers is not documented.** The token is
-   `payload.signature`, but nothing states whether Ed25519 signs the *raw
-   decoded payload bytes* or the *ASCII of the base64url payload segment*. The
-   vectors would settle it in one run; treat it as a single constant in the
-   verifier with a test pinning it, and check it against
-   `/integrate/vectors.json` before shipping. Do not "accept either" — a
-   verifier with two acceptance paths is a weaker verifier.
+1. **The production public key is a placeholder — STILL OPEN.** The integration
+   page ships `REPLACE_WITH_YOUR_PUBLIC_KEY_HEX` and now says why: "This
+   deployment has no signing key configured. Set `LICENCE_PUBLIC_KEY` and
+   redeploy." Until that is done the service cannot mint a token anyone can
+   verify, so every build reads `invalid` — which is a banner and a fully usable
+   console, never a lock. Once the key exists, rebuild with it:
 
-Both are one-line unblocks. Until then this file is the whole design, and no
-half-verifier is in the tree: an unverifiable signature check that defaults to
-"licensed" is a decoration, and one that defaults to "unlicensed" would be a
-console that refuses to work.
+   ```sh
+   LIGHT_LICENCE_PUBLIC_KEY=<64 hex chars> npm run app:build
+   ```
+
+   `build.rs` declares `rerun-if-env-changed` on it, so switching keys cannot
+   leave a stale constant in an otherwise fresh binary, and
+   `an_unconfigured_public_key_verifies_nothing` pins that the placeholder, the
+   empty string and a wrong key all verify nothing.
+
+2. **What the signature covers — SETTLED.** Measured against the published
+   vectors rather than trusted to the prose, which says the opposite: Ed25519
+   signs the **ASCII of the base64url payload segment**. Both valid vectors
+   verify that way and fail the other; both negative vectors fail both. It is
+   one constant, `signed_bytes`, with `the_published_vectors_agree` pinning it.
+   Deliberately one acceptance path — a verifier that tries both accepts
+   everything either scheme would, and the second path is where a forgery aims.
+
+## What shipped, and the one decision that is ours
+
+The service's six statuses map onto exactly one consequence in this app:
+`Status::blocks_new_session`, true only for a lapsed **trial**. That is a
+product decision, not the service's — a trial that never ends is not a trial,
+but a console that refuses to light a rig over a *lease* is worse than an
+unlicensed one. The gate is applied once, in `main.rs`, before the engine thread
+exists, so it can only ever decline to start a session and can never interrupt
+one. `nothing_but_a_dead_trial_stops_a_session_starting` pins the other five.
+
+Trial length is the service's to set (`/api/licence/trial` issues 30 days by
+default and is configurable per licence) — LIGHT reads `exp` off the token and
+has no opinion.
 
 ## Note on how this was gathered
 

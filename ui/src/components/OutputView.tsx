@@ -4,6 +4,7 @@ import { uid } from '../../../shared/types.ts';
 import { NumInput, ScrubNumInput, TextField, UnicastInput } from './inputs.tsx';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
+import { LicencePanel } from './LicencePanel.tsx';
 
 const METER_W = 1024;
 const METER_H = 88;
@@ -507,6 +508,11 @@ export function OutputView() {
           }
           pick={pick}
         />
+      </div>
+
+      <div>
+        <div className="sectionhead">Licence</div>
+        <LicencePanel />
       </div>
     </div>
   );

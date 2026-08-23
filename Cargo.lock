@@ -4646,13 +4646,17 @@ dependencies = [
 name = "light-app"
 version = "0.1.0"
 dependencies = [
+ "base64 0.21.7",
  "keyring",
  "light-core",
  "reqwest",
+ "ring",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
+ "tokio",
 ]
 
 [[package]]

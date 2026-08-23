@@ -23,6 +23,16 @@ serde_json = "1"
 # project is broadcast to every connected client, including a LAN tablet.
 keyring = { version = "3", features = ["apple-native"] }
 
+# Licence verification. All three are already in Cargo.lock and the local
+# registry cache — ring rides in with the TLS stack — so this adds no new
+# third-party crypto to a console that drives a rig, which was the condition in
+# docs/licensing-integration.md for doing it at all.
+# the daily check-in timer; already in the lock under Tauri's async runtime
+tokio = { version = "1", features = ["time"] }
+ring = "0.17"
+base64 = "0.21"
+sha2 = "0.10"
+
 [[bin]]
 name = "light-app"
 path = "src/main.rs"
