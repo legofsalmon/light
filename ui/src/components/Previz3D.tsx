@@ -3,6 +3,25 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { isStructure } from '../../../shared/types.ts';
 import { buildFigure } from './figure.ts';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import STRUCT from '../../../shared/structure.json';
+
+/** Structure materials, from the shared file so both views shade the same.
+ *  Hoisted and shared, like the figure materials — see figure.ts. */
+const STRUCT_MATS: Record<string, THREE.MeshStandardMaterial> = Object.fromEntries(
+  Object.entries(STRUCT.materials).map(([k, m]) => {
+    const mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(m.color),
+      roughness: m.roughness,
+      metalness: m.metallic,
+    });
+    mat.userData.shared = true; // module-level: no disposer may free it
+    return [k, mat];
+  }),
+);
+
+/** One unit box for every scaled structure part, mirroring the native kit. */
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
 import type { HeadSnap, Project } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
@@ -347,10 +366,19 @@ function refitBeams(
 function disposeDeep(obj: THREE.Object3D): void {
   obj.traverse((o) => {
     const mesh = o as THREE.Mesh;
+    // Never free the module-level caches. This runs on UNMOUNT, and the console
+    // mounts two of these — the live pane and the audition pane, which unmounts
+    // on every cell selection (PrevizPanel). Without this guard, clicking a pad
+    // frees the LIVE pane's merged figures and its shared materials, and the
+    // live view carries on drawing from dead buffers.
+    if (mesh.userData?.shared) return;
     if (mesh.geometry) mesh.geometry.dispose();
     const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
-    if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-    else mat?.dispose();
+    if (Array.isArray(mat)) {
+      mat.forEach((m) => { if (!m.userData?.shared) m.dispose(); });
+    } else if (mat && !mat.userData?.shared) {
+      mat.dispose();
+    }
   });
 }
 
@@ -361,32 +389,95 @@ function disposeDeep(obj: THREE.Object3D): void {
  *  Drawn rather than boxed because a truss is mostly holes — a solid bar reads
  *  as a wall in the previz and hides everything behind it, which is exactly
  *  wrong for judging what the rig lights. */
-function buildTrussRun(len: number, section: number, mat: THREE.Material): THREE.Group {
-  const g = new THREE.Group();
-  const r = Math.max(0.012, section * 0.075);
-  const half = section / 2 - r;
-  const chordGeo = new THREE.CylinderGeometry(r, r, len, 6);
-  for (const [dy, dz] of [[half, half], [half, -half], [-half, half], [-half, -half]] as const) {
-    const c = new THREE.Mesh(chordGeo, mat);
-    c.rotation.z = Math.PI / 2; // lie along X
-    c.position.set(0, dy, dz);
-    g.add(c);
+/** A box-truss run along +X from the origin, as ONE merged geometry.
+ *
+ *  Twin of `truss_mesh` in previz/src/truss.rs, down to the ratios, which both
+ *  read from shared/structure.json: four chords at the section corners, zigzag
+ *  webbing on the two vertical faces and the underside (a real truss webs all
+ *  four, but nobody is ever above the top one), and a vertical rung at each
+ *  node — which is what stops the zigzag reading as a lightning bolt.
+ *
+ *  This used to be a different lattice from the native one: braces on two faces
+ *  only, no underside, no rungs, and a chord radius from its own rule. */
+function trussGeometry(length: number, section: number): THREE.BufferGeometry {
+  const c = STRUCT.truss;
+  const r = Math.max(section * c.chordRatio, c.minChord);
+  const pitch = Math.max(section * c.bayRatio, 0.05);
+  const h = section / 2;
+  const webR = r * c.webRatio;
+  const parts: THREE.BufferGeometry[] = [];
+  const tube = (a: THREE.Vector3, b: THREE.Vector3, rad: number) => {
+    const d = b.clone().sub(a);
+    const len = d.length();
+    if (len < 1e-4) return;
+    // Open-ended, matching the native tube(): the caps are never seen and
+    // they double the triangle count.
+    const g = new THREE.CylinderGeometry(rad, rad, len, 6, 1, true);
+    const q = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      d.divideScalar(len),
+    );
+    g.applyMatrix4(
+      new THREE.Matrix4().compose(a.clone().add(b).multiplyScalar(0.5), q, new THREE.Vector3(1, 1, 1)),
+    );
+    parts.push(g);
+  };
+  const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  for (const [dy, dz] of [[h, h], [h, -h], [-h, h], [-h, -h]] as const) {
+    tube(V(0, dy, dz), V(length, dy, dz), r);
   }
-  // braces: one zig per ~section length, on both vertical faces
-  const bay = Math.max(section, 0.35);
-  const n = Math.max(1, Math.round(len / bay));
-  const braceLen = Math.hypot(len / n, section - 2 * r);
-  const braceGeo = new THREE.CylinderGeometry(r * 0.7, r * 0.7, braceLen, 5);
+  const n = Math.max(1, Math.round(length / pitch));
+  const step = length / n;
   for (let i = 0; i < n; i++) {
-    const cx = -len / 2 + (i + 0.5) * (len / n);
-    for (const dz of [half, -half]) {
-      const b = new THREE.Mesh(braceGeo, mat);
-      b.position.set(cx, 0, dz);
-      b.rotation.z = (i % 2 ? 1 : -1) * (Math.PI / 2 - Math.atan2(len / n, section));
-      g.add(b);
-    }
+    const x0 = i * step;
+    const x1 = (i + 1) * step;
+    const [lo, hi] = i % 2 === 0 ? [-h, h] : [h, -h];
+    for (const dz of [h, -h]) tube(V(x0, lo, dz), V(x1, hi, dz), webR);
+    tube(V(x0, -h, -h), V(x1, -h, h), webR);
+    tube(V(x1, -h, h), V(x1, h, h), webR);
+    tube(V(x1, -h, -h), V(x1, h, -h), webR);
+  }
+  const merged = mergeGeometries(parts, false);
+  for (const g of parts) g.dispose();
+  if (!merged) {
+    console.error('[truss] could not merge a run');
+    return new THREE.BufferGeometry();
+  }
+  // NOT computeVertexNormals: CylinderGeometry already carries correct radial
+  // normals, and recomputing over the merged set collapses each seam vertex to
+  // one facet normal — 30 degrees out on a 6-gon, a visible stripe down every
+  // chord that the native view does not have.
+  return merged;
+}
+
+/** Structure geometry is cached by its SHAPE, not by prop id — the stage table
+ *  lets an operator scrub w/h/d, so the id says nothing about what to draw, and
+ *  two bars of the same size should share one buffer. */
+const TRUSS_CACHE = new Map<string, THREE.BufferGeometry>();
+function trussGeo(length: number, section: number, used: Set<string>): THREE.BufferGeometry {
+  const key = `${length.toFixed(3)}|${section.toFixed(3)}`;
+  used.add(key);
+  let g = TRUSS_CACHE.get(key);
+  if (!g) {
+    g = trussGeometry(length, section);
+    TRUSS_CACHE.set(key, g);
   }
   return g;
+}
+
+/** Drop cached runs no longer on stage.
+ *
+ *  Unlike the figure cache, this key space is UNBOUNDED: scrubbing one bar from
+ *  1 m to 10 m in the stage table mints a key every step, each holding a merged
+ *  buffer, none of them ever referenced again. Swept AFTER the new group is
+ *  built, or it frees buffers that group is about to use. */
+function evictTruss(used: Set<string>) {
+  for (const [k, g] of TRUSS_CACHE) {
+    if (!used.has(k)) {
+      g.dispose();
+      TRUSS_CACHE.delete(k);
+    }
+  }
 }
 
 function buildProps(
@@ -400,12 +491,13 @@ function buildProps(
   }[],
 ): THREE.Group {
   const g = new THREE.Group();
+  const usedTruss = new Set<string>();
   // Performer geometry comes from shared/figure.json, the same file
   // previz/src/figure.rs reads — see ui/src/components/figure.ts.
-  const truss = new THREE.MeshStandardMaterial({ color: 0x8d8d97, roughness: 0.42, metalness: 0.75 });
-  const skirtMat = new THREE.MeshStandardMaterial({ color: 0x191920, roughness: 0.95 });
-  const deckTop = new THREE.MeshStandardMaterial({ color: 0x2b2b33, roughness: 0.88 });
-  const screenFace = new THREE.MeshStandardMaterial({ color: 0x0d0d12, roughness: 0.6 });
+  const truss = STRUCT_MATS.truss;
+  const skirtMat = STRUCT_MATS.skirt;
+  const deckTop = STRUCT_MATS.deck;
+  const screenFace = STRUCT_MATS.screen;
 
   for (const pr of props) {
     // Structure positions itself off its own `y`; a performer is stood on
@@ -431,31 +523,37 @@ function buildProps(
     switch (pr.kind) {
       case 'trussBar': {
         const s = pr.size ?? { w: 7, h: 0.3, d: 0.3 };
-        const run = buildTrussRun(s.w, Math.max(s.h, s.d), truss);
-        run.position.y = (pr.y ?? 3.05) + s.h / 2;
+        const run = new THREE.Mesh(trussGeo(s.w, Math.max(s.h, s.d), usedTruss), truss);
+        run.userData.shared = true; // cached buffer — the teardown must not free it
+        run.position.set(-s.w / 2, (pr.y ?? 3.05) + s.h / 2, 0);
         root.add(run);
         break;
       }
       case 'trussLeg': {
         const s = pr.size ?? { w: 0.3, h: 3.05, d: 0.3 };
-        const run = buildTrussRun(s.h, Math.max(s.w, s.d), truss);
-        run.rotation.z = Math.PI / 2; // stand it up
-        run.position.y = (pr.y ?? 0) + s.h / 2;
-        const foot = new THREE.Mesh(new THREE.BoxGeometry(s.w * 2.2, 0.04, s.d * 2.2), truss);
-        foot.position.y = (pr.y ?? 0) + 0.02;
+        const run = new THREE.Mesh(trussGeo(s.h, Math.max(s.w, s.d), usedTruss), truss);
+        run.userData.shared = true;
+        run.rotation.z = Math.PI / 2; // built along +X; stand it on end
+        run.position.y = pr.y ?? 0;
+        const f = STRUCT.trussLegFoot;
+        const foot = new THREE.Mesh(
+          new THREE.BoxGeometry(s.w * f.spread, f.thickness, s.d * f.spread),
+          truss,
+        );
+        foot.position.y = (pr.y ?? 0) + f.thickness / 2;
         root.add(run, foot);
         break;
       }
       case 'riser': {
         const s = pr.size ?? { w: 2, h: 0.4, d: 1.5 };
         const y = pr.y ?? 0;
-        // The slab is the TOP 5 cm of the riser, not 2.5 cm proud of it.
-        // Centred on y + s.h it stood the walking surface at y + s.h + 0.025,
-        // so a performer stood at the declared height sank 25 mm into it — and
-        // the native view, which draws the riser as one box topping out at
-        // y + s.h, disagreed with this one by that much.
-        const deck = new THREE.Mesh(new THREE.BoxGeometry(s.w, 0.05, s.d), deckTop);
-        deck.position.y = y + s.h - 0.025;
+        // The slab is the TOP of the riser, not proud of it. Centred on
+        // y + s.h it stood the walking surface 25 mm high, and buildOccluders,
+        // standingHeightAt and the native floor_height_at all treat a riser as
+        // one box from y to y + h with no notion of sub-parts.
+        const t = Math.min(STRUCT.riser.deckThickness, s.h);
+        const deck = new THREE.Mesh(new THREE.BoxGeometry(s.w, t, s.d), deckTop);
+        deck.position.y = y + s.h - t / 2;
         const skirt = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, s.d), skirtMat);
         skirt.position.y = y + s.h / 2;
         root.add(skirt, deck);
@@ -464,17 +562,25 @@ function buildProps(
       case 'screen': {
         const s = pr.size ?? { w: 4, h: 2.25, d: 0.12 };
         const y = pr.y ?? 0.5;
-        const panel = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, s.d * 0.4), screenFace);
-        panel.position.y = y + s.h / 2;
-        const frame = new THREE.Mesh(new THREE.BoxGeometry(s.w + 0.08, s.h + 0.08, s.d), truss);
-        frame.position.y = y + s.h / 2;
-        frame.position.z = -s.d * 0.35;
+        const c = STRUCT.screen;
+        const fd = s.d * c.faceDepth;
+        const fp = Math.min(c.faceProud, s.d * 0.25);
+        // Both inside the declared box, and the face stands a few millimetres
+        // proud of the frame — share a front plane and they z-fight.
+        const panel = new THREE.Mesh(
+          new THREE.BoxGeometry(s.w - c.bezel, s.h - c.bezel, fd),
+          screenFace,
+        );
+        panel.position.set(0, y + s.h / 2, s.d / 2 - fd / 2);
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, s.d - fp), truss);
+        frame.position.set(0, y + s.h / 2, -fp / 2);
         root.add(frame, panel);
         break;
       }
     }
   }
 
+  evictTruss(usedTruss);
   return g;
 }
 
@@ -649,14 +755,15 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
         // leaks a geometry + material set per frame of the drag
         band.traverse((o) => {
           const mesh = o as THREE.Mesh;
-          // Figure geometry and materials are cached and shared across
-          // rebuilds (see figure.ts) — disposing them here would leave every
-          // later rebuild drawing from freed buffers with a dead program.
+          // Geometry only, and only the geometry this rebuild created.
+          //
+          // EVERY material in this group is now hoisted and shared — the five
+          // figure materials in figure.ts and the four structure materials
+          // above — so disposing them here would leave the next rebuild drawing
+          // with a dead program. Likewise `userData.shared` marks cached
+          // buffers: the merged figures, and truss runs cached by shape.
           if (mesh.userData?.shared) return;
           mesh.geometry?.dispose?.();
-          const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
-          if (Array.isArray(mat)) mat.forEach((mm) => mm.dispose());
-          else mat?.dispose?.();
         });
         band = buildProps(project?.props ?? []);
         scene.add(band);

@@ -38,7 +38,6 @@ pub struct TrussRun {
 
 /// Standard 12-inch box truss: a 290 mm square section on 50 mm chords.
 pub const SECTION: f32 = 0.29;
-const CHORD_R: f32 = 0.025;
 /// Distance the drawn truss runs past the outermost fixture on it.
 const OVERHANG: f32 = 0.6;
 /// A fixture's clamp sits this far above its patch position — the mover base
@@ -174,25 +173,40 @@ impl Build {
     }
 }
 
-/// A box-truss run as ONE mesh.
+/// A box-truss run as ONE mesh, running along +X from the origin.
 ///
 /// One mesh per run and not one entity per bar, which is the difference between
 /// fifteen draws for the whole rig and about nine hundred: a fifteen-metre run
 /// carries sixty diagonals and thirty rungs on its own.
-pub fn truss_mesh(length: f32) -> Mesh {
-    let h = SECTION * 0.5;
+///
+/// `section` is the square section's side. Inferred runs pass the fixed 0.29 m
+/// `SECTION`; the ratios in shared/structure.json were chosen to reproduce the
+/// constants those runs were authored with — 0.0250009 against 0.025 for the
+/// chord, 0.499989 against 0.5 for the bay — so the geometry is identical to
+/// within a micrometre and the rendered frame is identical outright. It is NOT
+/// bit-for-bit, and saying so would be a lie a future reader could act on.
+/// A PLACED trussBar or trussLeg passes its own section, from the patch.
+///
+/// Chord axes sit AT +/- section/2 rather than inset by the chord radius, so
+/// the drawn envelope is section + 2*chord_r — 26 mm proud per face on a 0.3 m
+/// bar. Insetting them is incompatible with the ratio rule reproducing the
+/// authored constants, and 26 mm on a truss is not worth a second knob.
+pub fn truss_mesh(length: f32, section: f32) -> Mesh {
+    let cfg = &crate::scene::STRUCT.truss;
+    let chord_r = (section * cfg.chord_ratio).max(cfg.min_chord);
+    let pitch = (section * cfg.bay_ratio).max(0.05);
+    let h = section * 0.5;
     let mut b = Build::default();
     // The four chords, running the length at the corners of the section.
     for (dy, dz) in [(h, h), (h, -h), (-h, h), (-h, -h)] {
-        b.tube(Vec3::new(0.0, dy, dz), Vec3::new(length, dy, dz), CHORD_R);
+        b.tube(Vec3::new(0.0, dy, dz), Vec3::new(length, dy, dz), chord_r);
     }
     // Webbing. A real truss zigzags on all four faces; the two vertical faces
     // and the underside are the ones you can see from a room, and the top face
     // costs geometry to draw a pattern nobody will ever be above.
-    let pitch = 0.5f32;
     let n = ((length / pitch).round() as usize).max(1);
     let step = length / n as f32;
-    let web_r = CHORD_R * 0.62;
+    let web_r = chord_r * cfg.web_ratio;
     for i in 0..n {
         let (x0, x1) = (i as f32 * step, (i + 1) as f32 * step);
         // Zigzag, alternating direction so consecutive diagonals meet at a node
@@ -301,9 +315,20 @@ mod tests {
         assert!(infer_runs(&pair, 2.0).is_empty());
     }
 
+    /// Parameterising the section must not move the inferred runs, which were
+    /// authored against a hard-coded 0.025 m chord at a 0.29 m section.
+    #[test]
+    fn the_inferred_section_still_gives_the_authored_chord() {
+        let cfg = &crate::scene::STRUCT.truss;
+        let chord = (SECTION * cfg.chord_ratio).max(cfg.min_chord);
+        assert!((chord - 0.025).abs() < 1e-4, "chord is {chord}, was 0.025");
+        let pitch = SECTION * cfg.bay_ratio;
+        assert!((pitch - 0.5).abs() < 1e-3, "bay is {pitch}, was 0.5");
+    }
+
     #[test]
     fn a_run_is_a_closed_mesh_with_geometry_in_it() {
-        let m = truss_mesh(12.0);
+        let m = truss_mesh(12.0, SECTION);
         let n = m.count_vertices();
         assert!(n > 500, "{n} vertices is not a truss");
         assert!(m.indices().is_some_and(|i| i.len() % 3 == 0));

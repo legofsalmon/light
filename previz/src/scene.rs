@@ -206,6 +206,78 @@ pub struct BeamCone {
 #[derive(Component)]
 pub struct RingMesh;
 
+
+/// shared/structure.json — truss, riser and screen geometry, shared with the
+/// three.js view. See that file's own doc for why it exists.
+#[derive(serde::Deserialize)]
+pub struct StructMat {
+    pub color: String,
+    pub roughness: f32,
+    pub metallic: f32,
+}
+
+#[derive(serde::Deserialize)]
+pub struct TrussCfg {
+    #[serde(rename = "chordRatio")]
+    pub chord_ratio: f32,
+    #[serde(rename = "webRatio")]
+    pub web_ratio: f32,
+    #[serde(rename = "bayRatio")]
+    pub bay_ratio: f32,
+    #[serde(rename = "minChord")]
+    pub min_chord: f32,
+}
+
+#[derive(serde::Deserialize)]
+pub struct RiserCfg {
+    #[serde(rename = "deckThickness")]
+    pub deck_thickness: f32,
+}
+
+#[derive(serde::Deserialize)]
+pub struct ScreenCfg {
+    pub bezel: f32,
+    #[serde(rename = "faceDepth")]
+    pub face_depth: f32,
+    #[serde(rename = "faceProud")]
+    pub face_proud: f32,
+}
+
+#[derive(serde::Deserialize)]
+pub struct FootCfg {
+    pub spread: f32,
+    pub thickness: f32,
+}
+
+#[derive(serde::Deserialize)]
+pub struct StructureData {
+    pub materials: std::collections::HashMap<String, StructMat>,
+    pub truss: TrussCfg,
+    pub riser: RiserCfg,
+    pub screen: ScreenCfg,
+    #[serde(rename = "trussLegFoot")]
+    pub truss_leg_foot: FootCfg,
+}
+
+pub static STRUCT: std::sync::LazyLock<StructureData> = std::sync::LazyLock::new(|| {
+    serde_json::from_str(include_str!("../../shared/structure.json"))
+        .expect("shared/structure.json should parse")
+});
+
+fn struct_mat(materials: &mut Assets<StandardMaterial>, name: &str) -> Handle<StandardMaterial> {
+    let m = STRUCT
+        .materials
+        .get(name)
+        .unwrap_or_else(|| panic!("structure.json has no material {name}"));
+    let n = u32::from_str_radix(m.color.trim_start_matches('#'), 16).unwrap_or(0x808080);
+    materials.add(StandardMaterial {
+        base_color: Color::srgb_u8((n >> 16) as u8, (n >> 8) as u8, n as u8),
+        perceptual_roughness: m.roughness,
+        metallic: m.metallic,
+        ..default()
+    })
+}
+
 /// One inferred run of overhead truss. See `truss.rs` for what "inferred" buys
 /// and what it costs.
 #[derive(Component)]
@@ -553,24 +625,15 @@ fn spawn_props(
     // mesh assets. This is thirteen, whatever the prop count.
     let kit = crate::figure::Kit::new(meshes, materials);
 
-    // structure reads as aluminium and stage deck, matching the in-window previz
-    let truss_struct = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.22, 0.22, 0.25),
-        perceptual_roughness: 0.5,
-        metallic: 0.3,
-        ..default()
-    });
-    let deck = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.10, 0.10, 0.12),
-        perceptual_roughness: 0.85,
-        ..default()
-    });
-    let panel = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.03, 0.03, 0.04),
-        perceptual_roughness: 0.35,
-        metallic: 0.1,
-        ..default()
-    });
+    // Structure geometry and materials come from shared/structure.json, the
+    // same file ui/src/components/Previz3D.tsx reads. All four kinds used to be
+    // one scaled box here while the web view already drew a lattice, a two-tone
+    // riser and a framed screen — the same drift the band had, running the
+    // other way.
+    let truss_mat = struct_mat(materials, "truss");
+    let skirt_mat = struct_mat(materials, "skirt");
+    let deck_mat = struct_mat(materials, "deck");
+    let screen_mat = struct_mat(materials, "screen");
 
     for pr in props {
         // Every prop's root now carries its base — structure its own, a person
@@ -597,32 +660,103 @@ fn spawn_props(
                 // something to land on and so the operator can judge blocking.
                 // Sized from the project, so this view and the in-window previz
                 // describe the same stage.
-                "trussBar" | "trussLeg" => {
+                // A real lattice, from the same builder the inferred runs use
+                // (previz/src/truss.rs). The section comes from the patch — a
+                // 12-inch bar and a 20-inch one look different, which is half
+                // the reason to draw truss at all.
+                "trussBar" => {
                     let (w, h, d) = size_of(pr, 7.0, 0.3, 0.3);
+                    let section = h.max(d);
                     p.spawn((
-                        Mesh3d(kit.cube.clone()),
-                        MeshMaterial3d(truss_struct.clone()),
-                        // The root carries the base (see base_y); this is just
-                        // the box's own centre above it.
-                        Transform::from_xyz(0.0, h / 2.0, 0.0).with_scale(Vec3::new(w, h, d)),
+                        Mesh3d(meshes.add(crate::truss::truss_mesh(w, section))),
+                        MeshMaterial3d(truss_mat.clone()),
+                        // The builder runs along +X from its origin; centre it.
+                        Transform::from_xyz(-w / 2.0, h / 2.0, 0.0),
+                        // A horizontal bar makes a bad shadow, not a useful one.
+                        // Its web members are 31 mm across, and at a 55-degree
+                        // cone from 15 m the normal-bias offset is 24 mm — wider
+                        // than the member itself — so PCF turns the lattice into
+                        // a dashed shimmer that swims as the light moves. It is
+                        // also behind the lights that hang off it, so it only
+                        // ever reaches the maps of fixtures aiming up or across.
+                        // The LEGS keep casting: they are vertical, in the wash,
+                        // and read as real.
+                        bevy::light::NotShadowCaster,
                     ));
                 }
-                "riser" => {
-                    let (w, h, d) = size_of(pr, 2.0, 0.4, 1.5);
+                "trussLeg" => {
+                    let (w, h, d) = size_of(pr, 0.3, 3.05, 0.3);
+                    let section = w.max(d);
+                    p.spawn((
+                        Mesh3d(meshes.add(crate::truss::truss_mesh(h, section))),
+                        MeshMaterial3d(truss_mat.clone()),
+                        // Stood on end: the run is built along +X, so rotate it
+                        // up and start it at the base.
+                        Transform::from_xyz(0.0, 0.0, 0.0)
+                            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+                    ));
+                    let f = &STRUCT.truss_leg_foot;
                     p.spawn((
                         Mesh3d(kit.cube.clone()),
-                        MeshMaterial3d(deck.clone()),
-                        // The root carries the base (see base_y); this is just
-                        // the box's own centre above it.
-                        Transform::from_xyz(0.0, h / 2.0, 0.0).with_scale(Vec3::new(w, h, d)),
+                        MeshMaterial3d(truss_mat.clone()),
+                        Transform::from_xyz(0.0, f.thickness / 2.0, 0.0).with_scale(Vec3::new(
+                            w * f.spread,
+                            f.thickness,
+                            d * f.spread,
+                        )),
+                    ));
+                }
+                // A skirt with a deck slab forming its TOP — not one flat box.
+                //
+                // The slab's top face must stay exactly at y + h and must not
+                // overhang: buildOccluders, standingHeightAt and
+                // floor_height_at all treat a riser as one box from y to y + h
+                // with no notion of sub-parts, so a slab sitting proud would
+                // silently desync beam cutting from where a performer's feet go.
+                "riser" => {
+                    let (w, h, d) = size_of(pr, 2.0, 0.4, 1.5);
+                    let t = STRUCT.riser.deck_thickness.min(h * 0.5);
+                    // The skirt stops where the deck starts. Drawing it the full
+                    // height put two coplanar top faces at y + h and they
+                    // z-fight.
+                    let skirt = h - t;
+                    p.spawn((
+                        Mesh3d(kit.cube.clone()),
+                        MeshMaterial3d(skirt_mat.clone()),
+                        Transform::from_xyz(0.0, skirt / 2.0, 0.0)
+                            .with_scale(Vec3::new(w, skirt, d)),
+                    ));
+                    p.spawn((
+                        Mesh3d(kit.cube.clone()),
+                        MeshMaterial3d(deck_mat.clone()),
+                        Transform::from_xyz(0.0, h - t / 2.0, 0.0)
+                            .with_scale(Vec3::new(w, t, d)),
                     ));
                 }
                 "screen" => {
                     let (w, h, d) = size_of(pr, 4.0, 2.25, 0.12);
+                    let c = &STRUCT.screen;
+                    // Both parts stay INSIDE the declared box: the frame fills
+                    // it, the face is inset by the bezel and sits at the front.
+                    // The first cut put the frame 0.35*d behind the origin, so
+                    // the drawn screen overhung its own footprint — which the
+                    // beam occluder and the plan hit-test both take as truth.
+                    let fd = d * c.face_depth;
+                    let fp = c.face_proud.min(d * 0.25);
+                    // The frame is pulled back so the face stands a few
+                    // millimetres proud of it. Sharing a front plane makes the
+                    // two coplanar and they z-fight into a dithered mess.
                     p.spawn((
                         Mesh3d(kit.cube.clone()),
-                        MeshMaterial3d(panel.clone()),
-                        Transform::from_xyz(0.0, h / 2.0, 0.0).with_scale(Vec3::new(w, h, d)),
+                        MeshMaterial3d(truss_mat.clone()),
+                        Transform::from_xyz(0.0, h / 2.0, -fp * 0.5)
+                            .with_scale(Vec3::new(w, h, d - fp)),
+                    ));
+                    p.spawn((
+                        Mesh3d(kit.cube.clone()),
+                        MeshMaterial3d(screen_mat.clone()),
+                        Transform::from_xyz(0.0, h / 2.0, d * 0.5 - fd * 0.5)
+                            .with_scale(Vec3::new(w - c.bezel, h - c.bezel, fd)),
                     ));
                 }
                 // ---- people ----------------------------------------------
@@ -734,7 +868,18 @@ pub fn rebuild_fixtures(
     }
 
     // Structure, before the fixtures that hang off it.
-    if q.truss {
+    //
+    // Inference is suppressed entirely once the plot places any truss of its
+    // own. `infer_runs` is blind to placed props, so a bar the operator drew
+    // AND a run inferred from the fixtures rigged on it are two lattices in the
+    // same air, interpenetrating — and the drawn one is the one that is
+    // actually true. Inferring is a fallback for a plot that says nothing about
+    // its structure, not a supplement to one that does.
+    let placed_truss = project
+        .props
+        .iter()
+        .any(|pr| pr.kind == "trussBar" || pr.kind == "trussLeg");
+    if q.truss && !placed_truss {
         // Aluminium, but NOT as a mirror.
         //
         // The first pass had this at metallic 0.92, which is physically what
@@ -748,12 +893,7 @@ pub fn rebuild_fixtures(
         // Dialling metallic down lets the diffuse term carry it, which means
         // the truss is lit by the fixtures hanging off it. That is both cheaper
         // and closer to how a rig actually reads from the floor.
-        let steel = materials.add(StandardMaterial {
-            base_color: Color::srgb(0.46, 0.46, 0.50),
-            perceptual_roughness: 0.50,
-            metallic: 0.30,
-            ..default()
-        });
+        let steel = struct_mat(&mut materials, "truss");
         let hangs: Vec<Vec3> = project
             .fixtures
             .iter()
@@ -769,9 +909,11 @@ pub fn rebuild_fixtures(
             // another's — lengths differ, so there is nothing to share.
             commands.spawn((
                 TrussRunMesh,
-                Mesh3d(meshes.add(crate::truss::truss_mesh(r.x1 - r.x0))),
+                Mesh3d(meshes.add(crate::truss::truss_mesh(r.x1 - r.x0, crate::truss::SECTION))),
                 MeshMaterial3d(steel.clone()),
                 Transform::from_xyz(r.x0, r.y, r.z),
+                // Same reasoning as a placed bar — see the trussBar arm.
+                bevy::light::NotShadowCaster,
             ));
         }
     }

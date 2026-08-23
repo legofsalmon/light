@@ -155,6 +155,15 @@ them, so their CASES live in one file both sides load:
 thing standing between the two previz windows and a slow drift apart — do not
 add a case to one side only.
 
+Truss, risers and screens live in `shared/structure.json` the same way, read by
+`previz/src/scene.rs` and `ui/src/components/Previz3D.tsx`. The lattice is a
+RATIO rule rather than a table, because a placed bar carries its own section
+from the patch while an inferred run is a fixed 0.29 m — the ratios were chosen
+to reproduce the constants the inferred runs were authored with, so that path
+still renders the same frame. A placed truss also SUPPRESSES inference
+entirely: `infer_runs` is blind to placed props, so a drawn bar and a run
+inferred from the fixtures on it are two lattices in the same air.
+
 **Truss is inferred, not imported.** The project file has no truss in it, so
 `previz/src/truss.rs` reads it off the hang: three or more fixtures sharing a
 height and a depth over at least a metre and a half. A run breaks wherever a
