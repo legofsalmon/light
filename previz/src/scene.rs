@@ -936,13 +936,15 @@ pub fn rebuild_fixtures(
         // moving head whose emitters are all `Rgb`, and gating on head kind
         // left every imported mover bolted in place.
         let aims = prof.aim_head.is_some() || prof.heads.iter().any(|h| h.0 == HeadKind::Mover);
-        // The rest pose the yoke/shell chain deflects from, and the direction
-        // the barrel points when nothing is driving it.
-        let rest_dir = if f.pos.y > 1.2 {
-            Vec3::new(0.0, -0.93, 0.37)
-        } else {
-            Vec3::new(0.0, -0.26, 0.97)
+        // Which way this fixture's body faces when nothing is driving it: the
+        // rest pose a mover's yoke deflects from, and — new — the direction a
+        // fixture that does NOT move is bolted pointing.
+        let rest_dir = match prof.heads.first().map(|h| h.0) {
+            Some(HeadKind::Derby) => Vec3::new(0.0, -0.85, 0.52),
+            _ if f.pos.y > 1.2 => Vec3::new(0.0, -0.93, 0.37),
+            _ => Vec3::new(0.0, -0.26, 0.97),
         };
+        let body_rot = Transform::default().looking_to(rest_dir, Vec3::Y).rotation;
 
         // Everything below the yoke hangs off this. A fixture that does not aim
         // keeps the old flat arrangement exactly: one body mesh, heads parented
@@ -1046,19 +1048,44 @@ pub fn rebuild_fixtures(
             });
             shell
         } else {
-            commands.entity(root).with_children(|p| {
+            // A body frame for fixtures that do not move, for the same reason
+            // the mover got a shell — and this one is a straight bug fix.
+            //
+            // Every non-mover body was drawn square to the world while its
+            // light went somewhere else entirely. On this rig that is seventy
+            // three fixtures — pars, battens, blinders, strobes — hanging at
+            // 68 degrees down with their casings facing flat downstage, and
+            // their emissive cells floating in a horizontal line off the front
+            // of the box rather than sitting on the tilted face. A blinder
+            // plate aimed at the deck looked like a picture frame facing the
+            // audience.
+            //
+            // Rotating the whole frame, not just the mesh, is what fixes the
+            // cells too: they hang off this node, so they land on the face.
+            let bodyf = commands
+                .spawn((Transform::from_rotation(body_rot), Visibility::default()))
+                .id();
+            commands.entity(root).add_children(&[bodyf]);
+            commands.entity(bodyf).with_children(|p| {
                 p.spawn((
                     Mesh3d(meshes.add(body)),
                     MeshMaterial3d(body_mat.clone()),
                     Transform::default(),
                 ));
             });
-            root
+            bodyf
         };
-        // A mover's emitter is at the lens, not at the pivot the head node sits
-        // on — without this the glow ball is buried inside the barrel and the
-        // shaft starts 11 cm behind the front of the fixture.
-        let lens_z = if aims { -0.12 } else { 0.0 };
+        // Every emitter sits on the FRONT FACE of its casing, not at the
+        // middle of it.
+        //
+        // A mover's glow was buried inside the barrel and its shaft started
+        // 11 cm behind the lens. A static fixture was worse: its emitter sat at
+        // the dead centre of the box, so a par's glow was inside the can and a
+        // blinder's cells were half-sunk into the plate, which is why some of
+        // them appeared to be floating beside their own fixture rather than on
+        // it. Both are now a hair proud of the front face — of the barrel for a
+        // mover, of the body for everything else.
+        let lens_z = if aims { -0.12 } else { -(body.half_size.z + 0.012) };
 
         for (hi, &(kind, offset, offset_y)) in prof.heads.iter().enumerate() {
             let tag = HeadTag { fixture: f.id.clone(), head: hi, kind };
@@ -1068,6 +1095,14 @@ pub fn rebuild_fixtures(
                 _ if rigged => Vec3::new(0.0, -0.93, 0.37),
                 _ => Vec3::new(0.0, -0.26, 0.97),
             };
+            // The emitter's rotation RELATIVE to the body frame it now hangs
+            // in. For the ordinary fixture — every head the same kind — this is
+            // identity, because the body is already pointing where the light
+            // goes. It is only non-identity for a profile that mixes head kinds
+            // with different default aims, and then it is exactly right rather
+            // than approximately so.
+            let emitter_rot =
+                body_rot.inverse() * Transform::default().looking_to(beam_dir, Vec3::Y).rotation;
             let outer = (prof.beam_deg.max(2.0) as f32).to_radians() / 2.0;
             // Field half-angle, and a shoulder beyond it: f_r is non-zero out
             // to roughly 1.15x the field, so the hull has to be at least that
@@ -1132,7 +1167,7 @@ pub fn rebuild_fixtures(
                             ));
                             // 6-beam fan: aim → spinner → tilted cones
                             h.spawn((
-                                Transform::default().looking_to(beam_dir, Vec3::Y),
+                                Transform::from_rotation(emitter_rot),
                                 Visibility::default(),
                             ))
                             .with_children(|aim| {
@@ -1222,16 +1257,12 @@ pub fn rebuild_fixtures(
                                     ..default()
                                 },
                                 VolumetricLight,
-                                // An articulated fixture already points this
-                                // way: the shell above carries `rest`, so the
-                                // emitter is identity inside it. Re-applying
-                                // `looking_to` here would pitch the beam twice
-                                // and send every mover into the floor.
-                                if aims {
-                                    Transform::default()
-                                } else {
-                                    Transform::default().looking_to(beam_dir, Vec3::Y)
-                                },
+                                // The frame above — a mover's shell, or a static
+                                // fixture's body node — already points this way.
+                                // Re-applying the full `looking_to` here would
+                                // pitch the beam twice and send everything into
+                                // the floor.
+                                Transform::from_rotation(emitter_rot),
                             ))
                             .with_children(|c| {
                                 if !q.beams { return; }
