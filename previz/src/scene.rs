@@ -1,4 +1,5 @@
 use bevy::light::{FogVolume, VolumetricLight};
+use bevy::render::render_resource::Face;
 use bevy::prelude::*;
 use light_core::cprofile::FixtureForm;
 use light_core::profiles::{profile_of, HeadKind};
@@ -326,33 +327,90 @@ pub fn setup_stage(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    q: Res<crate::quality::Quality>,
 ) {
-    // stage floor — glossy dark so beams throw specular pools
+    // Stage deck: matte black ply, not polished ice.
     commands.spawn((
         Floor,
         Mesh3d(meshes.add(Plane3d::default().mesh().size(16.0, 12.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.055, 0.055, 0.065),
-            perceptual_roughness: 0.22,
-            metallic: 0.65,
-            reflectance: 0.55,
+            // A real matte black deck measures 2.5-5% reflectance — black
+            // marley about 3-4%, matte scenic black on ply 4-6%. sRGB 0.19
+            // decodes to 3.01% linear, dead centre of that. The old 0.055
+            // decoded to 0.4%, which is darker than anything physical.
+            // Keep the faint blue bias: it stops the bluish ambient fill
+            // reading as a neutral grey card.
+            base_color: Color::srgb(q.deck_albedo, q.deck_albedo, q.deck_albedo * 1.03),
+            // Not 1.0. alpha = perceptual^2, and at 1.0 the GGX lobe spreads
+            // until no highlight resolves at all. Black marley runs 5-15 gloss
+            // units at 60 degrees: glossier when new, dulled by rosin and gaff
+            // to about here. Broad enough that a 15-degree spot smears its
+            // highlight over metres of deck, tight enough that the smear is a
+            // shape rather than a uniform lift.
+            perceptual_roughness: 0.78,
+            // A deck is painted ply or PVC vinyl — a dielectric, no conductor
+            // anywhere in it. The old 0.65 was self-defeating in two ways at
+            // once: bevy's metallic scales diffuse by (1 - metallic) AND drags
+            // F0 from the dielectric value toward base_color, so with a
+            // near-black base it threw away two thirds of an already tiny
+            // diffuse term and came out DARKER in specular than a plain
+            // dielectric would have. The comment it carried — "glossy dark so
+            // beams throw specular pools" — described the opposite of what the
+            // numbers did.
+            metallic: 0.0,
+            // Bevy maps this to F0 as 0.16*r^2, so 0.5 gives exactly 4% —
+            // right for PVC vinyl (IOR 1.53 -> 4.4%) or sealed ply (~4.0%).
+            // A first pass at 0.20 gave F0 = 0.64%, which no dielectric on
+            // earth is; Schlick still drives F to 1 at true grazing, so that
+            // did not remove the edge highlight, it removed the whole 50-80
+            // degree band where a deck's sheen actually reads from a seated
+            // FOH camera — the one part the matte brief wanted kept.
+            reflectance: 0.5,
             ..default()
         })),
         Transform::from_xyz(0.0, 0.0, 1.0),
     ));
 
-    // Back wall to catch light. It is a lighting aid, not part of the plot, so
-    // it gets pushed behind whatever the project actually places — a fixed wall
-    // at z = -2 sits in the middle of any stage deeper than the demo one.
+    // An inverted room — the half of commit 445ebe3 that never landed.
+    //
+    // That commit rewrote `fit_backdrop` to scale this entity as a UNIT CUBE
+    // and its message describes a cuboid with its front faces culled, but the
+    // spawn was never touched: it stayed a Plane3d 16 x 7 rotated upright. The
+    // arithmetic and the mesh have disagreed ever since, and scaling a 16 x 7
+    // plane as though it were a unit cube produced a 685 x 98 m quad standing
+    // at z = -3.5 — four metres DOWNSTAGE of the upstage truss, hiding it and
+    // the whole upstage half of the deck from every FOH camera.
+    //
+    // Nothing caught it because every claim in that commit message is still
+    // true of a 685 m quad. The seam really was gone (the thing overflows the
+    // frame from any angle, so there is no top edge left to find) and the frame
+    // time really did drop 7 ms (the depth prepass really did start getting a
+    // hit for nearly every pixel). It was an accidental full-frame occluder,
+    // not a room.
+    //
+    // The mesh must stay Cuboid::new(1.0, 1.0, 1.0): it spans +/-0.5, which is
+    // exactly what fit_backdrop's arithmetic assumes. This transform is only
+    // the demo room — fit_backdrop early-returns on an empty project — and z is
+    // 1.0 to match the demo floor, which is centred there.
     commands.spawn((
         Backdrop,
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(16.0, 7.0))),
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.05, 0.05, 0.06),
             perceptual_roughness: 0.9,
+            metallic: 0.0,
+            // Only back faces are drawn, and a back face's vertex normal points
+            // AWAY from the camera. Without this the shader lights every
+            // interior surface with an outward normal and the room is black.
+            double_sided: true,
+            cull_mode: Some(Face::Front),
             ..default()
         })),
-        Transform::from_xyz(0.0, 3.5, -2.0).with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+        Transform::from_xyz(0.0, 3.48, 1.0).with_scale(Vec3::new(16.0, 7.0, 12.0)),
+        // Nothing lives outside the room for it to shadow, and a closed box
+        // around every light would otherwise put the entire scene inside its
+        // own shadow volume.
+        bevy::light::NotShadowCaster,
     ));
 
     // participating medium — density driven live by the engine's haze value.
@@ -441,39 +499,17 @@ fn spawn_props(
     materials: &mut Assets<StandardMaterial>,
     props: &[crate::protocol::PropLite],
 ) {
-    let cloth = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.14, 0.14, 0.16),
-        perceptual_roughness: 0.92,
-        ..default()
-    });
-    let skin = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.62, 0.47, 0.38),
-        perceptual_roughness: 0.75,
-        ..default()
-    });
-    let wood = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.35, 0.12, 0.10),
-        perceptual_roughness: 0.55,
-        ..default()
-    });
-    let metal = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.55, 0.55, 0.6),
-        metallic: 0.85,
-        perceptual_roughness: 0.35,
-        ..default()
-    });
-    let brass = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.71, 0.58, 0.28),
-        metallic: 0.9,
-        perceptual_roughness: 0.3,
-        ..default()
-    });
+    // One kit of shared handles for the whole band. The old code called
+    // `meshes.add` thirteen times INSIDE this loop, so two guitarists were two
+    // unbatchable copies of the same guitar and a twenty-prop stage was fifty
+    // mesh assets. This is thirteen, whatever the prop count.
+    let kit = crate::figure::Kit::new(meshes, materials);
 
     // structure reads as aluminium and stage deck, matching the in-window previz
     let truss_struct = materials.add(StandardMaterial {
         base_color: Color::srgb(0.22, 0.22, 0.25),
         perceptual_roughness: 0.5,
-        metallic: 0.9,
+        metallic: 0.3,
         ..default()
     });
     let deck = materials.add(StandardMaterial {
@@ -488,10 +524,6 @@ fn spawn_props(
         ..default()
     });
 
-    let legs_mesh = meshes.add(Capsule3d::new(0.13, 0.55));
-    let torso_mesh = meshes.add(Capsule3d::new(0.17, 0.40));
-    let head_mesh = meshes.add(Sphere::new(0.11));
-
     for pr in props {
         let root = commands
             .spawn((
@@ -502,80 +534,8 @@ fn spawn_props(
             ))
             .id();
         commands.entity(root).with_children(|p| {
-            let standing = |p: &mut ChildSpawnerCommands| {
-                p.spawn((Mesh3d(legs_mesh.clone()), MeshMaterial3d(cloth.clone()), Transform::from_xyz(0.0, 0.5, 0.0)));
-                p.spawn((Mesh3d(torso_mesh.clone()), MeshMaterial3d(cloth.clone()), Transform::from_xyz(0.0, 1.17, 0.0)));
-                p.spawn((Mesh3d(head_mesh.clone()), MeshMaterial3d(skin.clone()), Transform::from_xyz(0.0, 1.62, 0.0)));
-            };
             match pr.kind.as_str() {
-                "vocalist" => {
-                    standing(p);
-                    p.spawn((
-                        Mesh3d(meshes.add(Cylinder::new(0.013, 1.55))),
-                        MeshMaterial3d(metal.clone()),
-                        Transform::from_xyz(0.3, 0.775, 0.25),
-                    ));
-                    p.spawn((
-                        Mesh3d(meshes.add(Sphere::new(0.04))),
-                        MeshMaterial3d(cloth.clone()),
-                        Transform::from_xyz(0.3, 1.56, 0.25),
-                    ));
-                }
-                "guitarist" | "bassist" => {
-                    standing(p);
-                    p.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(0.32, 0.9, 0.09))),
-                        MeshMaterial3d(wood.clone()),
-                        Transform::from_xyz(0.0, 1.0, 0.22)
-                            .with_rotation(Quat::from_rotation_z(0.55)),
-                    ));
-                }
-                "keyboardist" => {
-                    standing(p);
-                    p.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(1.15, 0.09, 0.32))),
-                        MeshMaterial3d(cloth.clone()),
-                        Transform::from_xyz(0.0, 0.93, 0.35),
-                    ));
-                    for dx in [-0.45f32, 0.45] {
-                        p.spawn((
-                            Mesh3d(meshes.add(Cuboid::new(0.05, 0.9, 0.05))),
-                            MeshMaterial3d(metal.clone()),
-                            Transform::from_xyz(dx, 0.45, 0.35),
-                        ));
-                    }
-                }
-                "drummer" => {
-                    // seated: stool + shorter stack, kit facing local +Z
-                    p.spawn((Mesh3d(meshes.add(Cylinder::new(0.16, 0.45))), MeshMaterial3d(cloth.clone()), Transform::from_xyz(0.0, 0.225, -0.45)));
-                    p.spawn((Mesh3d(torso_mesh.clone()), MeshMaterial3d(cloth.clone()), Transform::from_xyz(0.0, 0.85, -0.45)));
-                    p.spawn((Mesh3d(head_mesh.clone()), MeshMaterial3d(skin.clone()), Transform::from_xyz(0.0, 1.3, -0.45)));
-                    p.spawn((
-                        Mesh3d(meshes.add(Cylinder::new(0.28, 0.45))),
-                        MeshMaterial3d(wood.clone()),
-                        Transform::from_xyz(0.0, 0.28, 0.15)
-                            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
-                    ));
-                    p.spawn((
-                        Mesh3d(meshes.add(Cylinder::new(0.17, 0.14))),
-                        MeshMaterial3d(metal.clone()),
-                        Transform::from_xyz(-0.32, 0.55, -0.15),
-                    ));
-                    for (cx, cy) in [(-0.5f32, 1.15f32), (0.5, 1.05)] {
-                        p.spawn((
-                            Mesh3d(meshes.add(Cylinder::new(0.19, 0.015))),
-                            MeshMaterial3d(brass.clone()),
-                            Transform::from_xyz(cx, cy, -0.05)
-                                .with_rotation(Quat::from_rotation_z(0.08)),
-                        ));
-                        p.spawn((
-                            Mesh3d(meshes.add(Cylinder::new(0.012, cy))),
-                            MeshMaterial3d(metal.clone()),
-                            Transform::from_xyz(cx, cy / 2.0, -0.05),
-                        ));
-                    }
-                }
-                // ---- structure ------------------------------------------
+                // ---- structure -------------------------------------------
                 // Boxes, not detailed trussing: these exist so a beam has
                 // something to land on and so the operator can judge blocking.
                 // Sized from the project, so this view and the in-window previz
@@ -583,35 +543,37 @@ fn spawn_props(
                 "trussBar" | "trussLeg" => {
                     let (w, h, d) = size_of(pr, 7.0, 0.3, 0.3);
                     p.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(w, h, d))),
+                        Mesh3d(kit.cube.clone()),
                         MeshMaterial3d(truss_struct.clone()),
-                        Transform::from_xyz(0.0, pr.y.unwrap_or(0.0) + h / 2.0, 0.0),
+                        Transform::from_xyz(0.0, pr.y.unwrap_or(0.0) + h / 2.0, 0.0)
+                            .with_scale(Vec3::new(w, h, d)),
                     ));
                 }
                 "riser" => {
                     let (w, h, d) = size_of(pr, 2.0, 0.4, 1.5);
                     p.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(w, h, d))),
+                        Mesh3d(kit.cube.clone()),
                         MeshMaterial3d(deck.clone()),
-                        Transform::from_xyz(0.0, pr.y.unwrap_or(0.0) + h / 2.0, 0.0),
+                        Transform::from_xyz(0.0, pr.y.unwrap_or(0.0) + h / 2.0, 0.0)
+                            .with_scale(Vec3::new(w, h, d)),
                     ));
                 }
                 "screen" => {
                     let (w, h, d) = size_of(pr, 4.0, 2.25, 0.12);
                     p.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(w, h, d))),
+                        Mesh3d(kit.cube.clone()),
                         MeshMaterial3d(panel.clone()),
-                        Transform::from_xyz(0.0, pr.y.unwrap_or(0.5) + h / 2.0, 0.0),
+                        Transform::from_xyz(0.0, pr.y.unwrap_or(0.5) + h / 2.0, 0.0)
+                            .with_scale(Vec3::new(w, h, d)),
                     ));
                 }
-                _ => standing(p),
+                // ---- people ----------------------------------------------
+                kind => crate::figure::spawn_performer(p, kind, &pr.id, &kit),
             }
         });
     }
 }
 
-/// A structural prop's dimensions, falling back to the same defaults the shared
-/// types use when a project predates the size field.
 fn size_of(pr: &crate::protocol::PropLite, w: f32, h: f32, d: f32) -> (f32, f32, f32) {
     match pr.size {
         Some(s) if s.w > 0.0 && s.h > 0.0 && s.d > 0.0 => (s.w, s.h, s.d),
@@ -668,7 +630,9 @@ pub fn rebuild_fixtures(
 
     fit_backdrop(q.haze_oversize, &project, &mut backdrop, &mut floor, &mut haze);
 
-    spawn_props(&mut commands, &mut meshes, &mut materials, &project.props);
+    if q.band {
+        spawn_props(&mut commands, &mut meshes, &mut materials, &project.props);
+    }
 
     // Structure, before the fixtures that hang off it.
     if q.truss {
@@ -776,6 +740,23 @@ pub fn rebuild_fixtures(
     let mut shadow_budget: usize = q.shadows;
     // Bevy's hard limit; see the note at the panel spawn.
     let mut rect_budget: usize = 8;
+    // Panels get their OWN shadow allowance rather than drawing on the main
+    // one, and this is the fix for "the band casts no shadow on the deck".
+    //
+    // A blinder is the widest thing on the rig — a Nero is a 123-degree plate,
+    // so one of them from 8 m up covers a 29 m circle — and there are 24 of
+    // them. They were the dominant source of light on the deck and NOT ONE of
+    // them cast a shadow: `RectLight` has no shadow support in bevy at all (see
+    // rect_light.rs, there is no field for it), and the spot fallback had
+    // `shadow_maps_enabled: false` hard-coded. Twenty-four shadowless floods
+    // washed out every shadow the movers did cast, which is why a figure
+    // standing on the deck had nothing under it.
+    //
+    // A separate allowance because the panel spawn runs BEFORE the head loop:
+    // sharing one counter would let 24 blinders eat the entire budget and leave
+    // the moving heads — whose shadows sweep, and are the ones you are watching
+    // — with none.
+    let mut panel_shadow_budget: usize = q.shadows / 3;
 
     // Beam reach, sized to the room rather than to the demo stage. The shaft
     // clamp used to be a hard 9 m and spotlight range a hard 11-12 m — fine for
@@ -921,7 +902,27 @@ pub fn rebuild_fixtures(
                             // edge rather than rolling off from a hot centre.
                             inner_angle: (outer * 0.88).min(1.30),
                             outer_angle: outer.min(1.35),
-                            shadow_maps_enabled: false,
+                            // See panel_shadow_budget. A 77-degree cone from
+                            // 8 m spreads a 1024-map over a 29 m circle, so
+                            // this shadow is soft to the point of being a
+                            // gradient — which is exactly what a 41 x 32 cm
+                            // emitter actually casts, and far better than the
+                            // hard nothing it cast before.
+                            shadow_maps_enabled: {
+                                let on = panel_shadow_budget > 0;
+                                panel_shadow_budget = panel_shadow_budget.saturating_sub(1);
+                                on
+                            },
+                            // Bevy's default normal bias is 1.8, and the
+                            // erosion it causes scales with the cone: 1.8 x
+                            // (2*tan(outer)/2048) x sqrt(2) x distance is 14 mm
+                            // for a 30-degree beam at 10 m but 43 mm for a
+                            // 60-degree wash — wider than the 42 mm forearm
+                            // that is the whole reason the figures grew arms.
+                            // 0.8 keeps the thin limbs and still holds off acne
+                            // on a 42 m wall at grazing incidence.
+                            shadow_normal_bias: 0.8,
+                            contact_shadows_enabled: q.contact_shadows,
                             ..default()
                         },
                         aim,
@@ -1312,6 +1313,13 @@ pub fn rebuild_fixtures(
                                                 radius: 0.02,
                                                 inner_angle: outer * 0.6,
                                                 outer_angle: outer,
+                                                // Deliberately off, and it does
+                                                // not draw on the budget. Six
+                                                // narrow spinning beams per
+                                                // derby is exactly where shadow
+                                                // cost explodes, and a shadow
+                                                // map buys nothing for a beam
+                                                // that sweeps a wall.
                                                 shadow_maps_enabled: false,
                                                 ..default()
                                             },
@@ -1370,6 +1378,16 @@ pub fn rebuild_fixtures(
                                         shadow_budget = shadow_budget.saturating_sub(1);
                                         on
                                     },
+                                // Bevy's default normal bias is 1.8, and the
+                                // erosion it causes scales with the cone: 1.8 x
+                                // (2*tan(outer)/2048) x sqrt(2) x distance is 14 mm
+                                // for a 30-degree beam at 10 m but 43 mm for a
+                                // 60-degree wash — wider than the 42 mm forearm
+                                // that is the whole reason the figures grew arms.
+                                // 0.8 keeps the thin limbs and still holds off acne
+                                // on a 42 m wall at grazing incidence.
+                                shadow_normal_bias: 0.8,
+                                    contact_shadows_enabled: q.contact_shadows,
                                     ..default()
                                 },
                                 VolumetricLight,

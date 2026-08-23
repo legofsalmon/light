@@ -90,6 +90,42 @@ pub struct Quality {
     pub beam_gain: f32,
     /// Draw box truss inferred from where the fixtures hang (LIGHT_PREVIZ_TRUSS).
     pub truss: bool,
+    /// Spawn the band and stage props at all (LIGHT_PREVIZ_BAND).
+    ///
+    /// The M key already hides them, but only from a keyboard — this is the
+    /// same switch for a headless capture or a measurement, and for anyone who
+    /// wants the window to open on the rig alone.
+    pub band: bool,
+    /// Deck albedo as an sRGB grey (LIGHT_PREVIZ_DECK).
+    ///
+    /// A real matte black deck measures 2.5-5% reflectance — black marley about
+    /// 3-4%, matte scenic black on ply 4-6% — which is sRGB 0.17-0.24, and 0.19
+    /// is what the physics says. It is NOT the default, and the reason is worth
+    /// stating: under this rig's wash cue, 67 fixtures at full on a 0.19 deck
+    /// render it as a white dance floor. That is arguably what a camera would
+    /// see, but it is not what the operator means by "black deck", and the deck
+    /// is the largest surface in shot so it drags the whole exposure with it.
+    ///
+    /// 0.09 keeps the deck reading black while still giving shadows something
+    /// to darken. Going metallic 0.65 -> 0 already multiplied the diffuse term
+    /// by 2.9x on its own; with this it is about 6x the old value, which is the
+    /// difference between a shadow worth a third of one 8-bit code value and
+    /// one you can actually see.
+    pub deck_albedo: f32,
+    /// Screen-space contact shadows (LIGHT_PREVIZ_CONTACT). OFF by default.
+    ///
+    /// The idea was right and the price is not. Shadow maps carry a depth bias
+    /// which erases the few centimetres where an object meets the floor, and
+    /// contact shadows raymarch the depth buffer to put that back. But the
+    /// march runs PER LIGHT per pixel, and this rig has 81 of them lit: measured
+    /// +19 to +25 ms on the standard tier, 40 ms becoming 59-66.
+    ///
+    /// It is off because it turned out not to be needed. Giving the blinders a
+    /// shadow allowance (see `panel_shadow_budget`) fixed the same complaint for
+    /// about 3 ms, because the reason figures had no shadow was never the bias —
+    /// it was 24 shadowless floods washing the shadow out. Kept as a knob: on a
+    /// small rig with few lights it is cheap and it does look better.
+    pub contact_shadows: bool,
 
     /// Hard cap on a light's range, in metres.
     ///
@@ -189,17 +225,17 @@ impl Quality {
     /// live show. No shafts and a coarse fog march: you keep the pools, the
     /// colour and where the light lands, and lose the air.
     pub fn low() -> Self {
-        Quality { smaa: true, msaa: 1, fog_steps: 16, haze_oversize: 1.6, shadows: 2, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, light_range_cap: 60.0, panel_area_lights: false, beams: false, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { smaa: true, msaa: 1, fog_steps: 16, haze_oversize: 1.6, shadows: 2, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, band: true, deck_albedo: 0.09, contact_shadows: false, light_range_cap: 60.0, panel_area_lights: false, beams: false, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// The default: the measured budget, spent where it shows most.
     pub fn standard() -> Self {
-        Quality { smaa: true, msaa: 1, fog_steps: 32, haze_oversize: 1.6, shadows: 24, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { smaa: true, msaa: 1, fog_steps: 32, haze_oversize: 1.6, shadows: 24, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, band: true, deck_albedo: 0.09, contact_shadows: false, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// For a second machine, or a still.
     pub fn high() -> Self {
-        Quality { smaa: true, msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 32, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 1, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { smaa: true, msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 32, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, band: true, deck_albedo: 0.09, contact_shadows: false, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 1, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     pub fn from_env() -> Self {
@@ -241,6 +277,15 @@ impl Quality {
         }
         if let Ok(v) = std::env::var("LIGHT_PREVIZ_TRUSS") {
             q.truss = v != "0" && !v.eq_ignore_ascii_case("off");
+        }
+        if let Ok(v) = std::env::var("LIGHT_PREVIZ_BAND") {
+            q.band = v != "0" && !v.eq_ignore_ascii_case("off");
+        }
+        if let Some(v) = env_f32("LIGHT_PREVIZ_DECK") {
+            q.deck_albedo = v.clamp(0.0, 1.0);
+        }
+        if let Ok(v) = std::env::var("LIGHT_PREVIZ_CONTACT") {
+            q.contact_shadows = v != "0" && !v.eq_ignore_ascii_case("off");
         }
         if let Some(v) = env_f32("LIGHT_PREVIZ_BEAMGAIN") {
             q.beam_gain = v.clamp(0.0, 20.0);

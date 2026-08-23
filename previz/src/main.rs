@@ -8,6 +8,7 @@ mod camera;
 mod protocol;
 mod quality;
 mod scene;
+mod figure;
 mod state;
 mod truss;
 mod update;

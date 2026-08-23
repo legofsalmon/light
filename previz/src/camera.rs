@@ -146,6 +146,14 @@ pub fn setup_camera(
         },
         Transform::from_xyz(0.0, 4.0, 9.0).looking_at(Vec3::new(0.0, 1.5, 0.0), Vec3::Y),
     ))
+    .insert_if(
+        // Short rays: this exists to darken the few centimetres a shadow map's
+        // depth bias erases where an object meets the deck, not to replace the
+        // shadow map. A long ray here would double-shade what the map already
+        // has and cost far more.
+        bevy::pbr::ContactShadows { linear_steps: 8, thickness: 0.12, length: 0.35 },
+        || q.contact_shadows,
+    )
     .insert_if(Smaa { preset: SmaaPreset::High }, || q.smaa)
     .insert_if(
         AutoExposure {
