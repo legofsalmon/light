@@ -1066,12 +1066,128 @@ pub fn rebuild_fixtures(
                 .spawn((Transform::from_rotation(body_rot), Visibility::default()))
                 .id();
             commands.entity(root).add_children(&[bodyf]);
+
+            // The HANGING hardware stays world-vertical, on the root, while the
+            // fixture it holds tilts inside it — the same split the mover makes
+            // between its base and its shell. A par's yoke does not tilt with
+            // the can; that is the entire point of a yoke.
+            let (bw, bh, bd) =
+                (body.half_size.x * 2.0, body.half_size.y * 2.0, body.half_size.z * 2.0);
+            commands.entity(root).with_children(|p| {
+                match prof.form {
+                    FixtureForm::Par | FixtureForm::Strobe => {
+                        let reach = (bw * 0.5 + 0.022).max(0.09);
+                        for sx in [-1.0f32, 1.0] {
+                            p.spawn((
+                                Mesh3d(meshes.add(Cuboid::new(0.028, bh + 0.06, bd * 0.55))),
+                                MeshMaterial3d(yoke_mat.clone()),
+                                Transform::from_xyz(sx * reach, 0.01, 0.0),
+                                bevy::light::NotShadowCaster,
+                            ));
+                        }
+                        p.spawn((
+                            Mesh3d(meshes.add(Cuboid::new(reach * 2.0, 0.028, bd * 0.55))),
+                            MeshMaterial3d(yoke_mat.clone()),
+                            Transform::from_xyz(0.0, bh * 0.5 + 0.04, 0.0),
+                            bevy::light::NotShadowCaster,
+                        ));
+                    }
+                    FixtureForm::Bar | FixtureForm::Panel => {
+                        // A batten or a plate hangs off a pair of drop
+                        // brackets rather than a yoke.
+                        for sx in [-1.0f32, 1.0] {
+                            p.spawn((
+                                Mesh3d(meshes.add(Cuboid::new(0.026, 0.11, bd * 0.6))),
+                                MeshMaterial3d(yoke_mat.clone()),
+                                Transform::from_xyz(sx * bw * 0.32, bh * 0.5 + 0.05, 0.0),
+                                bevy::light::NotShadowCaster,
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
+            });
+
             commands.entity(bodyf).with_children(|p| {
-                p.spawn((
-                    Mesh3d(meshes.add(body)),
-                    MeshMaterial3d(body_mat.clone()),
-                    Transform::default(),
-                ));
+                match prof.form {
+                    // A par is a can, not a box. Forty-nine of the hundred and
+                    // twenty-nine fixtures on this rig land on the Par
+                    // fallback, so it is the most repeated object on screen and
+                    // was the least considered.
+                    FixtureForm::Par => {
+                        let r = bw * 0.5;
+                        let lay = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
+                        p.spawn((
+                            Mesh3d(meshes.add(Cylinder::new(r, bd * 1.3))),
+                            MeshMaterial3d(body_mat.clone()),
+                            Transform::from_rotation(lay),
+                            bevy::light::NotShadowCaster,
+                        ));
+                        // The rim catches a highlight and gives the can a front.
+                        p.spawn((
+                            Mesh3d(meshes.add(Cylinder::new(r * 1.08, 0.018))),
+                            MeshMaterial3d(yoke_mat.clone()),
+                            Transform::from_xyz(0.0, 0.0, -bd * 0.65).with_rotation(lay),
+                            bevy::light::NotShadowCaster,
+                        ));
+                    }
+                    // A plate with a recessed face: an outer shell and an inset
+                    // darker front, which is what makes a blinder read as glass
+                    // in a frame rather than as a painted brick.
+                    FixtureForm::Panel => {
+                        p.spawn((
+                            Mesh3d(meshes.add(body)),
+                            MeshMaterial3d(body_mat.clone()),
+                            Transform::default(),
+                            bevy::light::NotShadowCaster,
+                        ));
+                        p.spawn((
+                            Mesh3d(meshes.add(Cuboid::new(bw * 0.90, bh * 0.86, 0.02))),
+                            MeshMaterial3d(lens_mat.clone()),
+                            Transform::from_xyz(0.0, 0.0, -bd * 0.5 - 0.006),
+                            bevy::light::NotShadowCaster,
+                        ));
+                    }
+                    FixtureForm::Bar => {
+                        p.spawn((
+                            Mesh3d(meshes.add(body)),
+                            MeshMaterial3d(body_mat.clone()),
+                            Transform::default(),
+                            bevy::light::NotShadowCaster,
+                        ));
+                        // End caps, so a batten has ends rather than fading
+                        // into a bar of the same colour as everything else.
+                        for sx in [-1.0f32, 1.0] {
+                            p.spawn((
+                                Mesh3d(meshes.add(Cuboid::new(0.03, bh * 1.25, bd * 1.25))),
+                                MeshMaterial3d(yoke_mat.clone()),
+                                Transform::from_xyz(sx * bw * 0.5, 0.0, 0.0),
+                                bevy::light::NotShadowCaster,
+                            ));
+                        }
+                    }
+                    FixtureForm::Strobe => {
+                        p.spawn((
+                            Mesh3d(meshes.add(body)),
+                            MeshMaterial3d(body_mat.clone()),
+                            Transform::default(),
+                            bevy::light::NotShadowCaster,
+                        ));
+                        p.spawn((
+                            Mesh3d(meshes.add(Cuboid::new(bw * 0.93, bh * 0.82, 0.02))),
+                            MeshMaterial3d(lens_mat.clone()),
+                            Transform::from_xyz(0.0, 0.0, -bd * 0.5 - 0.006),
+                            bevy::light::NotShadowCaster,
+                        ));
+                    }
+                    _ => {
+                        p.spawn((
+                            Mesh3d(meshes.add(body)),
+                            MeshMaterial3d(body_mat.clone()),
+                            Transform::default(),
+                        ));
+                    }
+                }
             });
             bodyf
         };
