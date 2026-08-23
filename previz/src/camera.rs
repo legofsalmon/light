@@ -20,7 +20,27 @@ pub struct Orbit {
 impl Default for Orbit {
     fn default() -> Self {
         // FOH view
-        Orbit { yaw: 0.0, pitch: 0.32, dist: 8.5, target: Vec3::new(0.0, 1.5, 0.0) }
+        let d = Orbit { yaw: 0.0, pitch: 0.32, dist: 8.5, target: Vec3::new(0.0, 1.5, 0.0) };
+        // LIGHT_PREVIZ_CAM=yaw,pitch,dist[,tx,ty,tz] — the starting viewpoint.
+        //
+        // Purely a development affordance, and it earns its keep: judging how
+        // this renderer LOOKS means a picture, pictures come from
+        // LIGHT_PREVIZ_SHOT, and until now every one of them was taken from the
+        // same default FOH position. Half the shots framed empty air because the
+        // rig they were meant to show hangs above it, and there was no way to
+        // aim the camera without a hand on the mouse.
+        let Ok(v) = std::env::var("LIGHT_PREVIZ_CAM") else { return d };
+        let n: Vec<f32> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+        if n.len() < 3 {
+            eprintln!("[previz] LIGHT_PREVIZ_CAM wants yaw,pitch,dist[,tx,ty,tz]; ignoring {v:?}");
+            return d;
+        }
+        Orbit {
+            yaw: n[0],
+            pitch: n[1],
+            dist: n[2],
+            target: if n.len() >= 6 { Vec3::new(n[3], n[4], n[5]) } else { d.target },
+        }
     }
 }
 

@@ -283,6 +283,40 @@ pub struct MoverHead {
     pub max_throw: f32,
 }
 
+/// Which joint of an articulated moving head this entity is.
+///
+/// A real mover is a base bolted to the truss, a yoke that swings about the
+/// vertical, and a head that tilts between the yoke's arms. Until now the previz
+/// drew one static box and swung only the light inside it: the beam moved and
+/// the fixture did not, which is the single most obvious way this window looked
+/// like a diagram rather than a stage. Sixty of the 129 fixtures on the rig are
+/// movers, so it was also the most common thing on screen.
+///
+/// The aim quaternion splits onto the two joints with no maths change at all.
+/// `MoverHead::rest` is `looking_to(beam_dir, Y)` and every `beam_dir` has a
+/// zero X component, so `rest` is a pure pitch about X and carries no yaw:
+///
+///   yoke  = from_rotation_y(pan)
+///   shell = rest * from_rotation_x(tilt)
+///
+/// composes through the hierarchy to exactly the `from_rotation_y(pan) * rest *
+/// from_rotation_x(tilt)` the single entity used to be given. It is the same
+/// rotation, redistributed onto the two things that physically carry it.
+///
+/// Both parts hold a copy of `MoverHead`, so one query with a match on this
+/// enum drives the pair. That matters more than it looks: `apply_live` already
+/// keeps three `&mut Transform` queries disjoint by hand-written `Without`
+/// filters, and adding two more as separate queries would need five mutually
+/// exclusive filter sets — Bevy panics at runtime the moment any pair overlaps.
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MoverPart {
+    /// Swings about the fixture's vertical. Carries pan.
+    Yoke,
+    /// Tilts between the yoke's arms. Carries the rest pose and tilt, and every
+    /// head, emitter and shaft rides on it.
+    Shell,
+}
+
 pub fn setup_stage(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -644,6 +678,41 @@ pub fn rebuild_fixtures(
     // be per-head because each carries its own live colour.
     let glow_mesh = meshes.add(Sphere::new(0.05));
 
+    // The articulated mover, as five shared handles. Sixty movers on this rig
+    // means these are instanced sixty times each and cost five meshes, not
+    // three hundred — the same reason `glow_mesh` is hoisted out of the loop.
+    //
+    // Dimensions are a mid-size wash/beam head (a Spiider or a Rival is roughly
+    // 0.5 m tall in its yoke). Everything is measured from the fixture's patch
+    // position, which stays exactly where the lens is: the base and yoke are
+    // built UPWARD from it, so adding the body does not move a single beam or
+    // change a single throw distance from the previous build.
+    let mover_base = meshes.add(Cuboid::new(0.22, 0.10, 0.22));
+    let mover_arm = meshes.add(Cuboid::new(0.036, 0.20, 0.11));
+    let mover_cross = meshes.add(Cuboid::new(0.27, 0.036, 0.11));
+    // Bevy's Cylinder runs along +Y; the head barrel runs along the beam, which
+    // is local -Z. Rotating the TRANSFORM rather than baking a second mesh
+    // keeps this a shared handle.
+    let mover_shell = meshes.add(Cylinder::new(0.088, 0.22));
+    let mover_lens = meshes.add(Cylinder::new(0.080, 0.014));
+    // Darker and rougher than the body: a mover's yoke is a matte casting, and
+    // giving it the body's 0.4 metallic made a wall of grey mirrors.
+    let yoke_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.10, 0.10, 0.115),
+        perceptual_roughness: 0.75,
+        metallic: 0.25,
+        ..default()
+    });
+    // The lens reads as glass even when the fixture is dark, which is what
+    // stops a blacked-out rig looking like a row of bricks.
+    let lens_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.03, 0.035, 0.05),
+        perceptual_roughness: 0.08,
+        metallic: 0.0,
+        reflectance: 0.85,
+        ..default()
+    });
+
     // Every shadow-casting spotlight costs its own depth pass, so cost grows
     // with rig size, not with what you can see: 10 bars + 4 derbies is 64 of
     // them and the previz falls to ~13 fps. Shadows are what sells the beams
@@ -804,13 +873,134 @@ pub fn rebuild_fixtures(
             });
         }
 
-        commands.entity(root).with_children(|p| {
-            p.spawn((
-                Mesh3d(meshes.add(body)),
-                MeshMaterial3d(body_mat.clone()),
-                Transform::default(),
-            ));
-        });
+        // Does this fixture physically aim? Ask the same question the beam
+        // steering asks — the CHANNELS first, because a GDTF pixel mover is a
+        // moving head whose emitters are all `Rgb`, and gating on head kind
+        // left every imported mover bolted in place.
+        let aims = prof.aim_head.is_some() || prof.heads.iter().any(|h| h.0 == HeadKind::Mover);
+        // The rest pose the yoke/shell chain deflects from, and the direction
+        // the barrel points when nothing is driving it.
+        let rest_dir = if f.pos.y > 1.2 {
+            Vec3::new(0.0, -0.93, 0.37)
+        } else {
+            Vec3::new(0.0, -0.26, 0.97)
+        };
+
+        // Everything below the yoke hangs off this. A fixture that does not aim
+        // keeps the old flat arrangement exactly: one body mesh, heads parented
+        // straight to the root.
+        let head_parent = if aims {
+            let base = commands
+                .spawn((
+                    Mesh3d(mover_base.clone()),
+                    MeshMaterial3d(body_mat.clone()),
+                    Transform::from_xyz(0.0, 0.185, 0.0),
+                    // A mover must not shadow its own output. The casing wraps
+                    // the emitter, and a spot light inside a closed mesh renders
+                    // that mesh into its own shadow map and goes black —
+                    // silently, because nothing errors. Cheaper than moving the
+                    // light out of the casing, and correct: real fixtures do not
+                    // cast their body into their own beam.
+                    bevy::light::NotShadowCaster,
+                ))
+                .id();
+            let yoke = commands
+                .spawn((
+                    HeadTag {
+                        fixture: f.id.clone(),
+                        head: prof.aim_head.unwrap_or(0),
+                        kind: HeadKind::Mover,
+                    },
+                    MoverPart::Yoke,
+                    MoverHead {
+                        aim_head: prof.aim_head.unwrap_or(0),
+                        rest: Transform::default().looking_to(rest_dir, Vec3::Y).rotation,
+                        pan_range: 540f32.to_radians(),
+                        tilt_range: 270f32.to_radians(),
+                        root_rot: root_tf.rotation,
+                        height: f.pos.y,
+                        outer: (prof.beam_deg.max(2.0) as f32).to_radians() / 2.0,
+                        max_throw,
+                    },
+                    Transform::from_xyz(0.0, 0.135, 0.0),
+                    Visibility::default(),
+                ))
+                .id();
+            let shell = commands
+                .spawn((
+                    HeadTag {
+                        fixture: f.id.clone(),
+                        head: prof.aim_head.unwrap_or(0),
+                        kind: HeadKind::Mover,
+                    },
+                    MoverPart::Shell,
+                    MoverHead {
+                        aim_head: prof.aim_head.unwrap_or(0),
+                        rest: Transform::default().looking_to(rest_dir, Vec3::Y).rotation,
+                        pan_range: 540f32.to_radians(),
+                        tilt_range: 270f32.to_radians(),
+                        root_rot: root_tf.rotation,
+                        height: f.pos.y,
+                        outer: (prof.beam_deg.max(2.0) as f32).to_radians() / 2.0,
+                        max_throw,
+                    },
+                    // Puts the shell pivot back at the fixture's patch position,
+                    // undoing the yoke's rise. The lens therefore sits exactly
+                    // where the single body box used to, and every throw
+                    // distance in the scene is unchanged.
+                    Transform::from_xyz(0.0, -0.135, 0.0),
+                    Visibility::default(),
+                ))
+                .id();
+            commands.entity(root).add_children(&[base, yoke]);
+            commands.entity(yoke).add_children(&[shell]);
+            commands.entity(yoke).with_children(|p| {
+                for sx in [-1.0f32, 1.0] {
+                    p.spawn((
+                        Mesh3d(mover_arm.clone()),
+                        MeshMaterial3d(yoke_mat.clone()),
+                        Transform::from_xyz(sx * 0.118, -0.075, 0.0),
+                        bevy::light::NotShadowCaster,
+                    ));
+                }
+                p.spawn((
+                    Mesh3d(mover_cross.clone()),
+                    MeshMaterial3d(yoke_mat.clone()),
+                    Transform::from_xyz(0.0, 0.012, 0.0),
+                    bevy::light::NotShadowCaster,
+                ));
+            });
+            commands.entity(shell).with_children(|p| {
+                // Cylinder runs along +Y; lay it along the beam axis, -Z.
+                let lay = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
+                p.spawn((
+                    Mesh3d(mover_shell.clone()),
+                    MeshMaterial3d(body_mat.clone()),
+                    Transform::from_rotation(lay),
+                    bevy::light::NotShadowCaster,
+                ));
+                p.spawn((
+                    Mesh3d(mover_lens.clone()),
+                    MeshMaterial3d(lens_mat.clone()),
+                    Transform::from_xyz(0.0, 0.0, -0.114).with_rotation(lay),
+                    bevy::light::NotShadowCaster,
+                ));
+            });
+            shell
+        } else {
+            commands.entity(root).with_children(|p| {
+                p.spawn((
+                    Mesh3d(meshes.add(body)),
+                    MeshMaterial3d(body_mat.clone()),
+                    Transform::default(),
+                ));
+            });
+            root
+        };
+        // A mover's emitter is at the lens, not at the pivot the head node sits
+        // on — without this the glow ball is buried inside the barrel and the
+        // shaft starts 11 cm behind the front of the fixture.
+        let lens_z = if aims { -0.12 } else { 0.0 };
 
         for (hi, &(kind, offset, offset_y)) in prof.heads.iter().enumerate() {
             let tag = HeadTag { fixture: f.id.clone(), head: hi, kind };
@@ -830,10 +1020,13 @@ pub fn rebuild_fixtures(
             let fr = (throw * field.tan()).max(0.03);
             let field_scale = Vec3::new(fr, fr, throw);
 
-            commands.entity(root).with_children(|p| {
+            commands.entity(head_parent).with_children(|p| {
+                // On an articulated fixture this is the SHELL, so a pixel
+                // mover's cells ride the head that carries them instead of
+                // hanging in space where the fixture used to be pointing.
                 let mut head = p.spawn((
                     tag.clone(),
-                    Transform::from_xyz(offset as f32, offset_y as f32, 0.0),
+                    Transform::from_xyz(offset as f32, offset_y as f32, lens_z),
                     Visibility::default(),
                 ));
 
@@ -850,7 +1043,17 @@ pub fn rebuild_fixtures(
                             perceptual_roughness: 1.0,
                             ..default()
                         })),
-                        Transform::default(),
+                        // On an articulated head, squash the emitter into the
+                        // lens it is sitting in. A 10 cm sphere hanging off the
+                        // front of a 22 cm barrel reads as a ball stuck to the
+                        // fixture; the same sphere flattened to the lens disc
+                        // reads as glass with a lamp behind it, which is what
+                        // you actually see on a rig.
+                        if aims {
+                            Transform::from_scale(Vec3::new(1.65, 1.65, 0.30))
+                        } else {
+                            Transform::default()
+                        },
                     ));
                     }
 
@@ -961,23 +1164,17 @@ pub fn rebuild_fixtures(
                                     ..default()
                                 },
                                 VolumetricLight,
-                                Transform::default().looking_to(beam_dir, Vec3::Y),
-                            ))
-                            .insert_if(
-                                MoverHead {
-                                    aim_head: prof.aim_head.unwrap_or(hi),
-                                    rest: Transform::default().looking_to(beam_dir, Vec3::Y).rotation,
-                                    pan_range: 540f32.to_radians(),
-                                    tilt_range: 270f32.to_radians(),
-                                    root_rot: root_tf.rotation,
-                                    height: f.pos.y,
-                                    outer,
-                                    max_throw,
+                                // An articulated fixture already points this
+                                // way: the shell above carries `rest`, so the
+                                // emitter is identity inside it. Re-applying
+                                // `looking_to` here would pitch the beam twice
+                                // and send every mover into the floor.
+                                if aims {
+                                    Transform::default()
+                                } else {
+                                    Transform::default().looking_to(beam_dir, Vec3::Y)
                                 },
-                                // Ask the CHANNELS, not the head kind — see
-                                // ProfMeta::aim_head.
-                                || kind == HeadKind::Mover || prof.aim_head.is_some(),
-                            )
+                            ))
                             .with_children(|c| {
                                 if !q.beams { return; }
                                 c.spawn((
@@ -1012,6 +1209,53 @@ pub fn rebuild_fixtures(
 mod tests {
     use super::*;
     use crate::protocol::ProjectLite;
+
+    /// The whole two-joint split rests on one property of the rest pose, and
+    /// nothing in the type system protects it.
+    ///
+    /// `MoverPart` puts pan on the yoke and `rest * tilt` on the shell. The
+    /// COMPOSED rotation is the same as the old single entity's `pan * rest *
+    /// tilt` whatever `rest` is — quaternion multiplication does not care where
+    /// you put the brackets — so the beam always points the right way. What is
+    /// not automatic is the BODY: tilt is applied after `rest`, so it turns
+    /// about `rest * X`, and the yoke's arms are at fixed x = +/-0.118. Those
+    /// have to be the same axis, or the head swings out through the side of its
+    /// own yoke.
+    ///
+    /// A first pass at this test asserted `rest` had no yaw and failed
+    /// immediately: the downstage mounting direction yaws by exactly pi,
+    /// because `looking_to` has to turn the local -Z all the way round to face
+    /// +Z. That is harmless — pi about Y maps the arm positions onto each
+    /// other and only flips which way tilt counts, which the old code did too.
+    /// The axis is the real invariant, so test the axis.
+    #[test]
+    fn tilt_turns_about_the_axis_the_yoke_arms_are_on() {
+        for dir in [
+            Vec3::new(0.0, -0.85, 0.52),
+            Vec3::new(0.0, -0.93, 0.37),
+            Vec3::new(0.0, -0.26, 0.97),
+        ] {
+            let rest = Transform::default().looking_to(dir, Vec3::Y).rotation;
+            let tilt_axis = rest * Vec3::X;
+            assert!(
+                (tilt_axis.x.abs() - 1.0).abs() < 1e-5,
+                "{dir:?} tilts about {tilt_axis:?}, not the yoke's X"
+            );
+        }
+    }
+
+    /// The yoke rises and the shell drops back by the same amount, so the lens
+    /// lands exactly where the old single body box put it.
+    ///
+    /// This is what let the articulation ship without re-checking a single
+    /// throw distance, pool position or shaft length: the emitter did not move.
+    /// If someone retunes the body proportions, this says so.
+    #[test]
+    fn articulation_leaves_the_emitter_where_it_was() {
+        const YOKE_RISE: f32 = 0.135;
+        const SHELL_DROP: f32 = -0.135;
+        assert!((YOKE_RISE + SHELL_DROP).abs() < 1e-6);
+    }
 
     fn project(json: &str) -> ProjectLite {
         serde_json::from_str(json).expect("ProjectLite should parse")

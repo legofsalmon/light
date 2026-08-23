@@ -3,7 +3,9 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::protocol::{WsEvent, WsReceiver};
-use crate::scene::{BeamCone, BeamLight, DerbyFan, HeadTag, MoverHead, PanelLight, RingMesh, SourceGlow};
+use crate::scene::{
+    BeamCone, BeamLight, DerbyFan, HeadTag, MoverHead, MoverPart, PanelLight, RingMesh, SourceGlow,
+};
 use crate::state::{Live, Sent, Smoothed};
 
 /// One place that decides what a look's RGB triple MEANS.
@@ -163,7 +165,10 @@ pub fn apply_live(
     glows: Query<(&HeadTag, &MeshMaterial3d<StandardMaterial>), With<SourceGlow>>,
     mut rings: Query<(&HeadTag, &mut Visibility), With<RingMesh>>,
     mut fans: Query<(&HeadTag, &mut Transform), With<DerbyFan>>,
-    mut movers: Query<(&HeadTag, &MoverHead, &mut Transform), Without<DerbyFan>>,
+    // Yoke and shell in ONE query, split by the enum. Both carry the same
+    // `MoverHead`, so a single lookup drives the pair — see MoverPart for why
+    // this is one query and not two.
+    mut mover_parts: Query<(&HeadTag, &MoverHead, &MoverPart, &mut Transform), Without<DerbyFan>>,
     // Beam cones live one level under the head, so they need their own mutable
     // Transform access. Disjoint from `movers` (Without<MoverHead>) and from
     // `fans` (Without<DerbyFan>), which is what lets Bevy accept three
@@ -302,10 +307,27 @@ pub fn apply_live(
         m.beam.color = Vec4::new(lin.red, lin.green, lin.blue, e);
         m.beam.axial = crate::beam::axial_intensity(beam.lumens, field_half, cone.base_field);
         m.beam.one_minus_cos_b = (1.0 - beam_half.cos()).max(1e-6);
-        // The shoulder brackets the field angle: fully lit a little inside it,
-        // dark a little outside. Cosine is decreasing in angle, so in > out.
-        m.beam.cos_shoulder_in = (field_half * 0.85).cos();
-        m.beam.cos_shoulder_out = (field_half * 1.15).cos();
+        // The shoulder has to reach zero EXACTLY at the hull silhouette, and
+        // this is where it did not.
+        //
+        // `base_field` is already the profile's field angle oversized by 1.15,
+        // because that is how wide the proxy hull was built (see scene.rs) —
+        // the soft edge lives outside the field angle and geometry sized to the
+        // field would clip it. Taking another 1.15 on top here put the far end
+        // of the shoulder at 1.32x the field, a third of a degree of falloff
+        // OUTSIDE the triangles that exist. There is no fragment out there to
+        // shade, so the smoothstep was cut off partway down: evaluated at the
+        // hull boundary it still returned 0.5, and every beam in the picture
+        // had a hard straight-edged silhouette at half brightness.
+        //
+        // That single number is why the shafts read as flat translucent sheets
+        // rather than light. The soft edge was being computed correctly and
+        // then thrown away.
+        //
+        // So: dark exactly at the hull, fully lit a little inside the true
+        // field angle, which is `field_half / 1.15`.
+        m.beam.cos_shoulder_in = (field_half * (0.85 / 1.15)).cos();
+        m.beam.cos_shoulder_out = field_half.cos();
         m.beam.sigma_t = sigma_t;
         m.beam.sigma_s = sigma_s;
         m.beam.g = 0.35;
@@ -360,33 +382,57 @@ pub fn apply_live(
     // pointed at. Movers are the dominant arena fixture, so most of what this
     // view exists to judge — where the moving beams land — was wrong the moment
     // anything moved. One ray-plane intersection per mover per snapshot.
-    let mut cone_scales: HashMap<(String, usize), Vec3> = HashMap::new();
-    for (tag, mv, mut tf) in &mut movers {
-        let key = (tag.fixture.clone(), tag.head);
+    //
+    // Keyed by FIXTURE, not by (fixture, head): one yoke and one shell serve
+    // the whole fixture now, so a pixel mover's nineteen cells share the aim
+    // that steers them, and there is one throw distance for all of them.
+    let mut cone_scales: HashMap<String, Vec3> = HashMap::new();
+    for (tag, mv, part, mut tf) in &mut mover_parts {
         // Steer by the head that CARRIES the aim channels, which for a pixel
         // mover is not this beam's own head (see MoverHead::aim_head).
         let Some(h) = heads.get(&(tag.fixture.clone(), mv.aim_head)) else { continue };
         let pan = (h.pan - 0.5) * mv.pan_range;
         let tilt = (h.tilt - 0.5) * mv.tilt_range;
-        // pan about the rig's vertical, then tilt about the head's own local X
-        tf.rotation = Quat::from_rotation_y(pan) * mv.rest * Quat::from_rotation_x(tilt);
-
-        // world beam direction: the cone opens along the head's local -Z
-        let dir = (mv.root_rot * (tf.rotation * Vec3::NEG_Z)).normalize_or_zero();
-        let throw = if dir.y < -0.01 {
-            (mv.height / -dir.y).clamp(1.0, mv.max_throw) // hits the floor
-        } else {
-            mv.max_throw // level or climbing — draw the full shaft
+        // The full aim, built here rather than read back off the transform.
+        //
+        // It used to be read back — `tf.rotation * Vec3::NEG_Z` — which worked
+        // when one entity held the whole rotation. Split across two ancestors,
+        // the shell's local rotation is only half of it and the yoke's is the
+        // other half, so reading either alone gives the rest-pose direction and
+        // every shaft freezes at its resting length. That is precisely the bug
+        // parked-work section 5 records as already fixed once, and it would
+        // have come straight back.
+        //
+        // Reading the propagated GlobalTransform instead is not the answer
+        // either: propagation runs in PostUpdate, so it describes the PREVIOUS
+        // frame and the shaft would lag the head by one frame while sweeping.
+        let aim = Quat::from_rotation_y(pan) * mv.rest * Quat::from_rotation_x(tilt);
+        let want = match part {
+            MoverPart::Yoke => Quat::from_rotation_y(pan),
+            MoverPart::Shell => mv.rest * Quat::from_rotation_x(tilt),
         };
-        let r = (throw * mv.outer.tan()).max(0.02);
-        cone_scales.insert(key, Vec3::new(r, r, throw));
+        if tf.rotation.angle_between(want) > 1e-5 {
+            tf.rotation = want;
+        }
+        if *part == MoverPart::Yoke {
+            // One fixture, one throw — computed on the yoke so it is not done
+            // twice per mover.
+            let dir = (mv.root_rot * (aim * Vec3::NEG_Z)).normalize_or_zero();
+            let throw = if dir.y < -0.01 {
+                (mv.height / -dir.y).clamp(1.0, mv.max_throw) // hits the floor
+            } else {
+                mv.max_throw // level or climbing — draw the full shaft
+            };
+            let r = (throw * mv.outer.tan()).max(0.02);
+            cone_scales.insert(tag.fixture.clone(), Vec3::new(r, r, throw));
+        }
     }
     // Cone geometry: length from the mover pass above where there is one, and
     // width from the live zoom. Every cone, not just the movers' — a zoomed par
     // has to change shape too.
     for (tag, cone, beam, mut tf) in &mut mover_cones {
         let key = (tag.fixture.clone(), tag.head);
-        let base = cone_scales.get(&key).copied().unwrap_or(cone.base_scale);
+        let base = cone_scales.get(&tag.fixture).copied().unwrap_or(cone.base_scale);
         let k = match heads.get(&key) {
             // Widen in tan-space: the cone's radius at unit length IS tan θ.
             // The cone entity carries a BeamLight too, so it knows the same
