@@ -4,7 +4,7 @@ import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
 import { buildGeometry, localXDir, type HeadGeom } from '../../../shared/geometry.ts';
-import { hitsPropFootprint } from '../../../shared/beamThrow.ts';
+import { hitsPropFootprint, standingHeightAt } from '../../../shared/beamThrow.ts';
 import { askConfirm } from '../dialog.tsx';
 
 /** Head world positions from the shared geometry module — the same builder the
@@ -316,7 +316,13 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
         const LETTER: Record<string, string> = {
           vocalist: 'V', guitarist: 'G', bassist: 'B', drummer: 'D', keyboardist: 'K',
         };
+        // Two passes over the same array, structure first. One pass in array
+        // order let a riser added after the band paint its 18 % fill straight
+        // over the people standing on it — and that is the COMMON case, since
+        // the default show ships five performers and no structure, so anything
+        // you add is later in the array than everyone on it.
         for (const pr of project.props ?? []) {
+          if (!isStructure(pr.kind)) continue;
           const px = m.toX(pr.pos.x);
           const py = m.toY(pr.pos.z);
 
@@ -351,8 +357,12 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             ctx.font = `${Math.max(7, m.scale * 0.1)}px -apple-system, sans-serif`;
             ctx.textAlign = 'center';
             ctx.fillText(`${STRUCTURE_LABEL[pr.kind] ?? pr.kind} ${s.w}×${s.d}m`, px, py - d / 2 - 3);
-            continue;
           }
+        }
+        for (const pr of project.props ?? []) {
+          if (isStructure(pr.kind)) continue;
+          const px = m.toX(pr.pos.x);
+          const py = m.toY(pr.pos.z);
 
           const rad = 0.24 * m.scale;
           // shoulders + head silhouette
@@ -373,6 +383,19 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
           ctx.textBaseline = 'middle';
           ctx.fillText(LETTER[pr.kind] ?? '?', px, py + 0.5);
           ctx.textBaseline = 'alphabetic';
+
+          // How high the scenery is holding them. A performer's height is
+          // DERIVED from the riser they are inside rather than typed, so this
+          // tag is the only place the operator can see that the derivation
+          // fired — and the only cue for the pop as they cross a riser's edge.
+          // Same function both 3D views call, so the plan can never claim a
+          // height the renderers disagree with.
+          const lift = standingHeightAt(project.props, pr.pos.x, pr.pos.z);
+          if (lift > 0) {
+            ctx.fillStyle = 'rgba(200,205,220,0.85)';
+            ctx.font = `${Math.max(7, m.scale * 0.1)}px -apple-system, sans-serif`;
+            ctx.fillText(`+${lift.toFixed(2)}m`, px, py - rad - 3);
+          }
         }
       }
 
@@ -484,7 +507,14 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       const additive = e.shiftKey || e.metaKey || e.ctrlKey;
       // stage props hit-test first (plan view only) — they render on top
       if (view === 'plan' && !additive) {
-        let bestProp: { id: string; d: number } | null = null;
+        // A person always wins over the scenery they are standing on. Comparing
+        // distance-to-centre across kinds with a plain `<` let array order break
+        // the tie — and a performer on a riser is near that riser's centre BY
+        // CONSTRUCTION, so clicking the drummer grabbed the riser and a hurried
+        // double-click offered to remove it.
+        let bestProp: { id: string; d: number; person: boolean } | null = null;
+        const better = (d: number, person: boolean) =>
+          !bestProp || (person !== bestProp.person ? person : d < bestProp.d);
         for (const pr of project.props ?? []) {
           const dx = pos.x - pr.pos.x;
           const dz = pos.v - pr.pos.z;
@@ -500,13 +530,13 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             const s = pr.size ?? STRUCTURE_DEFAULTS[pr.kind] ?? { w: 1, h: 1, d: 1 };
             if (
               hitsPropFootprint({ x: pos.x, z: pos.v }, { pos: pr.pos, rotY: pr.rotY, size: s }) &&
-              (!bestProp || d < bestProp.d)
+              better(d, false)
             ) {
-              bestProp = { id: pr.id, d };
+              bestProp = { id: pr.id, d, person: false };
             }
-          } else if (d < 0.35 && (!bestProp || d < bestProp.d)) {
+          } else if (d < 0.35 && better(d, true)) {
             // a performer keeps the old fixed radius
-            bestProp = { id: pr.id, d };
+            bestProp = { id: pr.id, d, person: true };
           }
         }
         // A fixture rigged on a bar sits INSIDE the bar's footprint, so the
@@ -518,7 +548,8 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             const d = Math.hypot(f.pos.x - pos.x, vertOf(f.pos, view) - pos.v);
             return d < 0.4 && (!acc || d < acc.d) ? { id: f.id, d } : acc;
           }, null);
-          if (nearestFixture && nearestFixture.d < bestProp.d) bestProp = null;
+          // ...but not over a person: a fixture is never rigged on a musician.
+          if (!bestProp.person && nearestFixture && nearestFixture.d < bestProp.d) bestProp = null;
         }
         if (bestProp) {
           const hit = bestProp;

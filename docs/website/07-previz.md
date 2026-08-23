@@ -50,7 +50,10 @@ group.
 
 `+ musician` drops dummy performers; `+ structure` draws truss bars, legs,
 risers and screens. Structure is real geometry — beams terminate on it, and
-moving a truss bar moves everything rigged to it.
+moving a truss bar moves everything rigged to it. Stand a musician inside a
+riser's footprint and they stand on top of it, kit and all, in both 3D views;
+the plan tags them with the height. There is nothing to set, and moving or
+resizing the riser moves whoever is on it.
 
 ## The audition pane
 

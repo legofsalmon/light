@@ -119,9 +119,14 @@ A performer's height is inferred too, and for the same reason. A stage prop's
 `y` is structural-only — `sanitizeProject` deletes it from performers and should
 keep doing so — so `standingHeightAt` (shared/beamThrow.ts) reads the height off
 whichever riser the performer is standing inside, and `floor_height_at`
-(previz/src/scene.rs) is its twin. Change one and change the other, or the same
-show stands at different heights in the two previz windows; the cases are
-mirrored one-for-one between `engine/test/smoke.ts` and the Rust unit tests.
+(previz/src/scene.rs) is its twin.
+
+Those two are hand-copied into different languages with no parity test between
+them, so their CASES live in one file both sides load:
+`shared/testdata/standingHeight.json`. Add a case there and it runs in
+`engine/test/smoke.ts` and in the Rust unit tests at once. That is the only
+thing standing between the two previz windows and a slow drift apart — do not
+add a case to one side only.
 
 **Truss is inferred, not imported.** The project file has no truss in it, so
 `previz/src/truss.rs` reads it off the hang: three or more fixtures sharing a

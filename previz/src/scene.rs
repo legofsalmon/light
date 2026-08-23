@@ -253,7 +253,10 @@ impl Bounds {
         for pr in &project.props {
             // a rotated prop can reach further than its centre in either axis
             let reach = pr.size.map_or(0.5, |s| s.w.max(s.d) * 0.5);
-            let top = pr.y.unwrap_or(0.0) + pr.size.map_or(1.8, |s| s.h);
+            // base_y, not pr.y: a performer lifted onto a riser reaches higher,
+            // and this figure fits the floor, the room, the haze volume, the
+            // beam reach and the RigExtent the camera frames on.
+            let top = base_y(&project.props, pr) + pr.size.map_or(1.8, |s| s.h);
             min = min.min(Vec3::new(pr.pos.x - reach, 0.0, pr.pos.z - reach));
             max = max.max(Vec3::new(pr.pos.x + reach, top, pr.pos.z + reach));
             any = true;
@@ -488,14 +491,31 @@ fn fit_backdrop(
     }
 }
 
-/// Dummy musicians: capsule-and-sphere figures at real human scale
-/// (~1.75 m standing), matte cloth and skin so pools, shafts, and colour
-/// read on them the way they will on the actual band. Spawned from the
-/// project's placed props (2D plan: "+ musician…", drag to move,
-/// double-click to remove). Press M in this window to show/hide them all.
-/// Twin of STRUCTURE_KINDS in shared/types.ts.
-const STRUCTURE_KINDS: [&str; 4] = ["trussBar", "trussLeg", "riser", "screen"];
+/// The Y a prop's root sits at: its own declared base if it is structure, the
+/// surface under their feet if it is a person.
+///
+/// Stated once. The first cut of this asked `STRUCTURE_KINDS.contains(..)` off
+/// a four-string array copied out of shared/types.ts — a hand-kept twin of a
+/// list that already exists, which is the exact mistake the sanitizer's own
+/// comment warns about, and it displaced `spawn_props`' doc block on the way in.
+///
+/// The structural defaults here are the web view's, not the old native ones: a
+/// `trussBar` with no `y` now hangs at 3.05 rather than lying on the floor,
+/// which is what ui/src/components/Previz3D.tsx has always drawn. Only a
+/// malformed file can tell the difference — `addStructure` always writes `y`.
+fn base_y(props: &[crate::protocol::PropLite], pr: &crate::protocol::PropLite) -> f32 {
+    match pr.kind.as_str() {
+        "trussBar" => pr.y.unwrap_or(3.05),
+        "trussLeg" | "riser" => pr.y.unwrap_or(0.0),
+        "screen" => pr.y.unwrap_or(0.5),
+        _ => floor_height_at(props, pr.pos.x, pr.pos.z),
+    }
+}
 
+/// Dummy musicians — jointed figures at real human scale, posed by instrument
+/// (see figure.rs) — plus the truss, risers and screens the plot places.
+/// Spawned from the project's props (2D plan: "+ musician…", drag to move,
+/// double-click to remove). Press M in this window to show/hide them all.
 fn spawn_props(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -528,16 +548,15 @@ fn spawn_props(
     });
 
     for pr in props {
-        // Structure positions itself off its own `y`; a performer is stood on
-        // whatever the scenery puts under their feet. Lifting the ROOT is the
-        // whole mechanism — figure.rs pins every sole to y = 0 in the figure's
-        // own frame, so the instrument, the mic stand's base plate and the drum
-        // stool all rise with them and nothing else has to know.
-        let base = if STRUCTURE_KINDS.contains(&pr.kind.as_str()) {
-            0.0
-        } else {
-            floor_height_at(props, pr.pos.x, pr.pos.z)
-        };
+        // Every prop's root now carries its base — structure its own, a person
+        // the surface under their feet. Lifting the ROOT is the whole mechanism
+        // for a person: figure.rs pins every sole to y = 0 in the figure's own
+        // frame and the stature node is pure scale, so the instrument, the mic
+        // stand's base plate and the drum stool rise together with no relative
+        // drift. Lifting the STATURE node instead would look identical and
+        // silently throw the drum sticks off, whose origin is converted from
+        // body to root frame by a bare scalar multiply.
+        let base = base_y(props, pr);
         let root = commands
             .spawn((
                 BandRoot,
@@ -558,8 +577,9 @@ fn spawn_props(
                     p.spawn((
                         Mesh3d(kit.cube.clone()),
                         MeshMaterial3d(truss_struct.clone()),
-                        Transform::from_xyz(0.0, pr.y.unwrap_or(0.0) + h / 2.0, 0.0)
-                            .with_scale(Vec3::new(w, h, d)),
+                        // The root carries the base (see base_y); this is just
+                        // the box's own centre above it.
+                        Transform::from_xyz(0.0, h / 2.0, 0.0).with_scale(Vec3::new(w, h, d)),
                     ));
                 }
                 "riser" => {
@@ -567,8 +587,9 @@ fn spawn_props(
                     p.spawn((
                         Mesh3d(kit.cube.clone()),
                         MeshMaterial3d(deck.clone()),
-                        Transform::from_xyz(0.0, pr.y.unwrap_or(0.0) + h / 2.0, 0.0)
-                            .with_scale(Vec3::new(w, h, d)),
+                        // The root carries the base (see base_y); this is just
+                        // the box's own centre above it.
+                        Transform::from_xyz(0.0, h / 2.0, 0.0).with_scale(Vec3::new(w, h, d)),
                     ));
                 }
                 "screen" => {
@@ -576,8 +597,7 @@ fn spawn_props(
                     p.spawn((
                         Mesh3d(kit.cube.clone()),
                         MeshMaterial3d(panel.clone()),
-                        Transform::from_xyz(0.0, pr.y.unwrap_or(0.5) + h / 2.0, 0.0)
-                            .with_scale(Vec3::new(w, h, d)),
+                        Transform::from_xyz(0.0, h / 2.0, 0.0).with_scale(Vec3::new(w, h, d)),
                     ));
                 }
                 // ---- people ----------------------------------------------
@@ -611,14 +631,18 @@ fn floor_height_at(props: &[crate::protocol::PropLite], x: f32, z: f32) -> f32 {
         if pr.kind != "riser" {
             continue;
         }
-        let s = pr.size.unwrap_or(crate::protocol::PropSizeLite { w: 2.0, h: 0.4, d: 1.5 });
+        // `size_of`, not `pr.size.unwrap_or(..)`: it also rejects a component
+        // that is zero or negative, which is what the renderer does when it
+        // DRAWS the riser. Without it a riser with w = 0 was drawn at the
+        // default 2 x 0.4 x 1.5 and lifted nobody.
+        let (w, h, d) = size_of(pr, 2.0, 0.4, 1.5);
         let (dx, dz) = (x - pr.pos.x, z - pr.pos.z);
         let (c, sn) = (pr.rot_y.unwrap_or(0.0).cos(), pr.rot_y.unwrap_or(0.0).sin());
         let (lx, lz) = (dx * c - dz * sn, dx * sn + dz * c);
         // No margin. Standing within 15 cm of a riser's edge should not
         // levitate someone who is beside it.
-        if lx.abs() <= s.w * 0.5 && lz.abs() <= s.d * 0.5 {
-            top = top.max(pr.y.unwrap_or(0.0) + s.h);
+        if lx.abs() <= w * 0.5 && lz.abs() <= d * 0.5 {
+            top = top.max(pr.y.unwrap_or(0.0) + h);
         }
     }
     top
@@ -1483,77 +1507,86 @@ mod tests {
     use super::*;
     use crate::protocol::ProjectLite;
 
-    fn riser(x: f32, z: f32, w: f32, h: f32, d: f32, y: f32, rot: f32) -> crate::protocol::PropLite {
-        serde_json::from_value(serde_json::json!({
-            "id": "r", "kind": "riser",
-            "pos": { "x": x, "z": z },
-            "rotY": rot,
-            "size": { "w": w, "h": h, "d": d },
-            "y": y
-        }))
-        .expect("PropLite should parse")
-    }
-
-    /// The bug: a musician dropped on a riser stood INSIDE it, because the
-    /// performer root was hard-coded to y = 0.
+    /// Both previz views must lift a figure by the same amount, and they are
+    /// hand-copied twins in two languages with no parity test between them. So
+    /// the CASES live in one file that both sides load —
+    /// shared/testdata/standingHeight.json — and adding one there adds it to
+    /// both suites at once. The mirror of this loop is in engine/test/smoke.ts.
     #[test]
-    fn a_performer_on_a_riser_stands_on_top_of_it() {
-        let props = vec![riser(0.0, 1.0, 2.0, 0.4, 1.5, 0.0, 0.0)];
-        assert!((floor_height_at(&props, 0.0, 1.0) - 0.4).abs() < 1e-5);
-        // A riser whose base is itself lifted carries its occupant up with it.
-        let props = vec![riser(0.0, 1.0, 2.0, 0.4, 1.5, 0.6, 0.0)];
-        assert!((floor_height_at(&props, 0.0, 1.0) - 1.0).abs() < 1e-5);
-    }
-
-    #[test]
-    fn standing_beside_a_riser_is_standing_on_the_deck() {
-        let props = vec![riser(0.0, 1.0, 2.0, 0.4, 1.5, 0.0, 0.0)];
-        // just past the long edge, and just past the short edge
-        assert_eq!(floor_height_at(&props, 1.02, 1.0), 0.0);
-        assert_eq!(floor_height_at(&props, 0.0, 1.80), 0.0);
-        assert_eq!(floor_height_at(&[], 0.0, 1.0), 0.0);
-    }
-
-    /// The case a conservative axis-aligned footprint gets WRONG.
-    ///
-    /// `buildOccluders` deliberately expands a rotated prop to the axis-aligned
-    /// box that contains it, because for stopping a beam early is the safe
-    /// error. For standing on something the safe error is the opposite — an
-    /// expanded box levitates people standing beside a turned riser — so this
-    /// rotates the point into the prop's frame properly.
-    #[test]
-    fn a_turned_riser_does_not_levitate_the_corner_of_its_bounding_box() {
-        let r = std::f32::consts::FRAC_PI_4;
-        let props = vec![riser(0.0, 0.0, 3.0, 0.4, 1.0, 0.0, r)];
-        // Dead centre is on it whatever the rotation.
-        assert!((floor_height_at(&props, 0.0, 0.0) - 0.4).abs() < 1e-5);
-        // A point along the turned long axis is on it...
-        let (dx, dz) = (1.2 * r.cos(), -1.2 * r.sin());
-        assert!((floor_height_at(&props, dx, dz) - 0.4).abs() < 1e-5, "on the long axis");
-        // ...while the axis-aligned bounding box's corner is NOT. Half-extents
-        // of the expanded box are (3/2 + 1/2)*cos45 = 1.414 in both axes.
-        assert_eq!(floor_height_at(&props, 1.35, 1.35), 0.0, "bounding-box corner");
-    }
-
-    #[test]
-    fn the_highest_containing_surface_wins() {
-        let props = vec![
-            riser(0.0, 0.0, 4.0, 0.2, 4.0, 0.0, 0.0),
-            riser(0.0, 0.0, 2.0, 0.3, 2.0, 0.2, 0.0),
-        ];
-        assert!((floor_height_at(&props, 0.0, 0.0) - 0.5).abs() < 1e-5, "stacked");
-        assert!((floor_height_at(&props, 1.7, 0.0) - 0.2).abs() < 1e-5, "lower tier only");
-    }
-
-    /// Only risers are walkable. A truss bar lying at deck level, or a screen,
-    /// is not something a person stands on.
-    #[test]
-    fn only_risers_hold_a_person_up() {
-        for kind in ["trussBar", "trussLeg", "screen", "guitarist"] {
-            let mut p = riser(0.0, 0.0, 3.0, 0.5, 3.0, 0.0, 0.0);
-            p.kind = kind.to_string();
-            assert_eq!(floor_height_at(&[p], 0.0, 0.0), 0.0, "{kind} should not");
+    fn floor_height_matches_the_shared_corpus() {
+        let raw = include_str!("../../shared/testdata/standingHeight.json");
+        let cases: serde_json::Value = serde_json::from_str(raw).expect("corpus parses");
+        let cases = cases.as_array().expect("corpus is an array");
+        assert!(cases.len() >= 15, "corpus shrank to {}", cases.len());
+        for c in cases {
+            let props: Vec<crate::protocol::PropLite> =
+                serde_json::from_value(c["props"].clone()).expect("props parse");
+            let at = c["at"].as_array().unwrap();
+            let (x, z) = (at[0].as_f64().unwrap() as f32, at[1].as_f64().unwrap() as f32);
+            let want = c["expect"].as_f64().unwrap() as f32;
+            let got = floor_height_at(&props, x, z);
+            assert!(
+                (got - want).abs() < 1e-4,
+                "{}: floor_height_at({x}, {z}) = {got}, expected {want}",
+                c["why"].as_str().unwrap_or("?")
+            );
         }
+    }
+
+    fn prop(json: serde_json::Value) -> crate::protocol::PropLite {
+        serde_json::from_value(json).expect("PropLite should parse")
+    }
+
+    /// The regression guard for base_y: the root now carries the base and the
+    /// child no longer re-adds it, so a miss double-counts. A riser at the
+    /// default y = 0 renders identically either way — only a hanging bar or a
+    /// lifted riser can catch it.
+    #[test]
+    fn a_truss_bar_hangs_at_its_own_base() {
+        let bar = prop(serde_json::json!({
+            "id": "t", "kind": "trussBar", "pos": { "x": 0, "z": 0 }, "y": 3.05
+        }));
+        assert!((base_y(&[], &bar) - 3.05).abs() < 1e-5);
+        // and with no y at all it still hangs, matching the web view
+        let bare = prop(serde_json::json!({
+            "id": "t", "kind": "trussBar", "pos": { "x": 0, "z": 0 }
+        }));
+        assert!((base_y(&[], &bare) - 3.05).abs() < 1e-5, "a y-less bar should hang");
+        let screen = prop(serde_json::json!({
+            "id": "s", "kind": "screen", "pos": { "x": 0, "z": 0 }
+        }));
+        assert!((base_y(&[], &screen) - 0.5).abs() < 1e-5);
+    }
+
+    /// A performer's own `y` must do nothing. The Node engine deletes it and
+    /// the Rust core does not, so one can reach the renderer; after base_y it
+    /// is inert and that disagreement has no visible consequence.
+    #[test]
+    fn a_stray_performer_y_is_inert() {
+        let g = prop(serde_json::json!({
+            "id": "g", "kind": "guitarist", "pos": { "x": 0, "z": 0 }, "y": 5.0
+        }));
+        assert_eq!(base_y(&[], &g), 0.0);
+        let r = prop(serde_json::json!({
+            "id": "r", "kind": "riser", "pos": { "x": 0, "z": 0 },
+            "size": { "w": 2, "h": 0.4, "d": 1.5 }, "y": 0
+        }));
+        assert!((base_y(&[r], &g) - 0.4).abs() < 1e-5);
+    }
+
+    /// A lifted performer reaches higher, and the fitted floor, room, haze
+    /// volume, beam reach and the RigExtent the camera frames on all come off
+    /// these bounds.
+    #[test]
+    fn a_lifted_performer_extends_the_fitted_bounds() {
+        let p = project(
+            r#"{"fixtures":[],"props":[
+                {"id":"r","kind":"riser","pos":{"x":0,"z":0},"size":{"w":2,"h":0.4,"d":1.5},"y":0},
+                {"id":"d","kind":"drummer","pos":{"x":0,"z":0}}
+            ],"profiles":{}}"#,
+        );
+        let b = Bounds::of(&p).expect("bounds");
+        assert!((b.max.y - 2.2).abs() < 1e-4, "top is {}", b.max.y);
     }
 
     /// The whole two-joint split rests on one property of the rest pose, and

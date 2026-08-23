@@ -1,0 +1,78 @@
+[
+  { "why": "centre of a default riser",
+    "props": [{ "id": "r", "kind": "riser", "pos": { "x": 0, "z": 1 }, "size": { "w": 2, "h": 0.4, "d": 1.5 }, "y": 0 }],
+    "at": [0, 1], "expect": 0.4 },
+
+  { "why": "a riser whose own base is lifted carries its occupant up with it",
+    "props": [{ "id": "r", "kind": "riser", "pos": { "x": 0, "z": 1 }, "size": { "w": 2, "h": 0.4, "d": 1.5 }, "y": 0.6 }],
+    "at": [0, 1], "expect": 1.0 },
+
+  { "why": "two centimetres past the long edge is the deck",
+    "props": [{ "id": "r", "kind": "riser", "pos": { "x": 0, "z": 1 }, "size": { "w": 2, "h": 0.4, "d": 1.5 }, "y": 0 }],
+    "at": [1.02, 1], "expect": 0 },
+
+  { "why": "past the short edge is the deck",
+    "props": [{ "id": "r", "kind": "riser", "pos": { "x": 0, "z": 1 }, "size": { "w": 2, "h": 0.4, "d": 1.5 }, "y": 0 }],
+    "at": [0, 1.8], "expect": 0 },
+
+  { "why": "no props at all",
+    "props": [], "at": [0, 1], "expect": 0 },
+
+  { "why": "a turned riser still holds its own centre",
+    "props": [{ "id": "r", "kind": "riser", "pos": { "x": 0, "z": 0 }, "rotY": 0.7853981633974483, "size": { "w": 3, "h": 0.4, "d": 1 }, "y": 0 }],
+    "at": [0, 0], "expect": 0.4 },
+
+  { "why": "a point along a turned riser's long axis is on it",
+    "props": [{ "id": "r", "kind": "riser", "pos": { "x": 0, "z": 0 }, "rotY": 0.7853981633974483, "size": { "w": 3, "h": 0.4, "d": 1 }, "y": 0 }],
+    "at": [0.8485281374238570, -0.8485281374238570], "expect": 0.4 },
+
+  { "why": "the SIGN-FLIPPED point across the same axis is NOT on it — this is the case an inverse rotation with the wrong sign passes anyway",
+    "props": [{ "id": "r", "kind": "riser", "pos": { "x": 0, "z": 0 }, "rotY": 0.7853981633974483, "size": { "w": 3, "h": 0.4, "d": 1 }, "y": 0 }],
+    "at": [0.8485281374238570, 0.8485281374238570], "expect": 0 },
+
+  { "why": "the corner of a turned riser's BOUNDING BOX is not on the riser — a conservative axis-aligned footprint gets this wrong",
+    "props": [{ "id": "r", "kind": "riser", "pos": { "x": 0, "z": 0 }, "rotY": 0.7853981633974483, "size": { "w": 3, "h": 0.4, "d": 1 }, "y": 0 }],
+    "at": [1.35, 1.35], "expect": 0 },
+
+  { "why": "stacked risers: the highest containing surface wins",
+    "props": [
+      { "id": "lo", "kind": "riser", "pos": { "x": 0, "z": 0 }, "size": { "w": 4, "h": 0.2, "d": 4 }, "y": 0 },
+      { "id": "hi", "kind": "riser", "pos": { "x": 0, "z": 0 }, "size": { "w": 2, "h": 0.3, "d": 2 }, "y": 0.2 }
+    ],
+    "at": [0, 0], "expect": 0.5 },
+
+  { "why": "off the upper tier but still on the lower one",
+    "props": [
+      { "id": "lo", "kind": "riser", "pos": { "x": 0, "z": 0 }, "size": { "w": 4, "h": 0.2, "d": 4 }, "y": 0 },
+      { "id": "hi", "kind": "riser", "pos": { "x": 0, "z": 0 }, "size": { "w": 2, "h": 0.3, "d": 2 }, "y": 0.2 }
+    ],
+    "at": [1.7, 0], "expect": 0.2 },
+
+  { "why": "a truss bar at deck level is not something you stand on",
+    "props": [{ "id": "t", "kind": "trussBar", "pos": { "x": 0, "z": 0 }, "size": { "w": 3, "h": 0.5, "d": 3 }, "y": 0 }],
+    "at": [0, 0], "expect": 0 },
+
+  { "why": "nor a truss leg",
+    "props": [{ "id": "t", "kind": "trussLeg", "pos": { "x": 0, "z": 0 }, "size": { "w": 3, "h": 0.5, "d": 3 }, "y": 0 }],
+    "at": [0, 0], "expect": 0 },
+
+  { "why": "nor a screen",
+    "props": [{ "id": "s", "kind": "screen", "pos": { "x": 0, "z": 0 }, "size": { "w": 3, "h": 0.5, "d": 3 }, "y": 0 }],
+    "at": [0, 0], "expect": 0 },
+
+  { "why": "nor another performer",
+    "props": [{ "id": "g", "kind": "guitarist", "pos": { "x": 0, "z": 0 }, "size": { "w": 3, "h": 0.5, "d": 3 }, "y": 0 }],
+    "at": [0, 0], "expect": 0 },
+
+  { "why": "a riser with no size falls back to the 2 x 0.4 x 1.5 default",
+    "props": [{ "id": "r", "kind": "riser", "pos": { "x": 0, "z": 0 }, "y": 0 }],
+    "at": [0.9, 0], "expect": 0.4 },
+
+  { "why": "a riser with a DEGENERATE size falls back too — it is drawn at the default, so it must lift at the default",
+    "props": [{ "id": "r", "kind": "riser", "pos": { "x": 0, "z": 0 }, "size": { "w": 0, "h": 0.4, "d": 1.5 }, "y": 0 }],
+    "at": [0.9, 0], "expect": 0.4 },
+
+  { "why": "a performer's own y is inert — only the scenery lifts them",
+    "props": [{ "id": "g", "kind": "guitarist", "pos": { "x": 0, "z": 0 }, "y": 5.0 }],
+    "at": [0, 0], "expect": 0 }
+]

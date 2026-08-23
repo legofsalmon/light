@@ -34,9 +34,9 @@ export function buildOccluders(project: Project): Occluder[] {
   const out: Occluder[] = [];
   for (const pr of project.props ?? []) {
     if (!isStructure(pr.kind)) continue;
-    const d = STRUCTURE_DEFAULTS[pr.kind];
-    const s = pr.size ?? d;
+    const s = propSize(pr.kind, pr.size);
     if (!s) continue;
+    const d = STRUCTURE_DEFAULTS[pr.kind];
     const ry = pr.rotY ?? 0;
     const c = Math.abs(Math.cos(ry));
     const sn = Math.abs(Math.sin(ry));
@@ -50,6 +50,16 @@ export function buildOccluders(project: Project): Occluder[] {
   }
   return out;
 }
+
+/** A prop's size, falling back to the kind default when it is missing OR
+ *  degenerate. A zero or negative component is not a smaller prop, it is a
+ *  broken one — and the renderers already draw those at the default size, so
+ *  the footprint tests have to agree or a riser with `w: 0` gets drawn at 2 m
+ *  and lifts nobody. */
+const propSize = (kind: string, s?: { w: number; h: number; d: number }) => {
+  const d = STRUCTURE_DEFAULTS[kind];
+  return s && s.w > 0 && s.h > 0 && s.d > 0 ? s : d;
+};
 
 const AXES = ['x', 'y', 'z'] as const;
 
@@ -99,17 +109,6 @@ export function throwDistance(o: Vec3, dir: Vec3, occ: Occluder[]): number {
   return Math.max(MIN_THROW, best);
 }
 
-/** Is a plan-view click inside a structural prop's footprint?
- *
- *  Shared with the 2D plan's hit-test. It used to be a circle of radius
- *  max(w,d)/2, which for the default 7 x 0.3 m truss bar is a 3.5 m grab radius
- *  — ~38 m² instead of ~2 m². Every plain click near centre stage selected the
- *  truss, fixtures rigged on it could not be picked, and a hurried double-click
- *  popped a removal dialog. Rotating the click into the prop's own frame and
- *  testing the rectangle is both correct and cheap.
- *
- *  `margin` keeps a thin bar grabbable — a 0.3 m-deep truss is under two pixels
- *  of tolerance at typical zoom without it. */
 /** Height of the surface a performer standing at (x, z) is actually standing
  *  ON, in metres — 0 for the deck, or the top of the riser they are inside.
  *
@@ -147,7 +146,8 @@ export function standingHeightAt(
   let top = 0;
   for (const pr of props ?? []) {
     if (pr.kind !== 'riser') continue;
-    const s = pr.size ?? STRUCTURE_DEFAULTS.riser;
+    const s = propSize(pr.kind, pr.size);
+    if (!s) continue;
     // margin 0, unlike the click test this shares its maths with: being within
     // 15 cm of a riser's edge should not levitate someone standing beside it.
     if (!hitsPropFootprint({ x, z }, { pos: pr.pos, rotY: pr.rotY, size: s }, 0)) continue;
@@ -156,6 +156,17 @@ export function standingHeightAt(
   return top;
 }
 
+/** Is a plan-view click inside a structural prop's footprint?
+ *
+ *  Shared with the 2D plan's hit-test. It used to be a circle of radius
+ *  max(w,d)/2, which for the default 7 x 0.3 m truss bar is a 3.5 m grab radius
+ *  — ~38 m² instead of ~2 m². Every plain click near centre stage selected the
+ *  truss, fixtures rigged on it could not be picked, and a hurried double-click
+ *  popped a removal dialog. Rotating the click into the prop's own frame and
+ *  testing the rectangle is both correct and cheap.
+ *
+ *  `margin` keeps a thin bar grabbable — a 0.3 m-deep truss is under two pixels
+ *  of tolerance at typical zoom without it. */
 export function hitsPropFootprint(
   click: { x: number; z: number },
   prop: { pos: { x: number; z: number }; rotY?: number; size: { w: number; d: number } },
