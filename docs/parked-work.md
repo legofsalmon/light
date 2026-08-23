@@ -407,20 +407,16 @@ shader, quality tiers, Bevy 0.19, DLSS on PC / MetalFX on macOS) and Stage 5
 (features: audio-reactivity, Art-Net HTP merge, MVR geometry, Link-clock
 timelines) are described in the review artifact.
 
-## 8. Previz shadow allocation *(noted while raising the budget)*
+## 8. Previz shadow allocation — DONE (`update::allocate_shadows`)
 
-`Quality::shadows` picks which spotlights cast shadows in **spawn order** — the
-first N heads in the patch — and the decision is made once, at scene build.
+Was: the budget was spent in spawn order and decided once at scene build, so a
+cue lighting only fixtures late in the patch got none of it. Measured on the
+real rig it was worse than that — all 24 head slots went to a group no look in
+the show uses, and three of the four groups that DO get fired cast nothing at
+all.
 
-That is arbitrary in a way that bites: a cue lighting only fixtures late in the
-patch gets no shadows at all, and a cue lighting the first twenty gets them all
-whether or not those beams land anywhere a shadow would show. Meanwhile the
-budget itself is now known to be nearly free up to about 24 on the arena plot
-(0, 10 and 24 all measure within noise; 48 costs 4.3 ms), so the allocation
-matters more than the number does.
-
-The right answer is to allocate per frame to the brightest LIT heads, next to
-the pass that already hides dark lights. Not done because flipping
-`shadow_maps_enabled` at runtime may churn render pipelines, and that needs
-measuring rather than assuming — if it does churn, the fallback is to re-rank
-only on scene rebuild plus a debounced re-rank when the lit set changes a lot.
+Now dealt per frame, round-robin across fixture groups, to the lights that are
+lit. The "may churn render pipelines" worry that parked it was unfounded:
+bevy's shadow-pass pipeline key carries one bit of light information
+(orthographic vs perspective) and no light identity, so the pipeline is always
+a cache hit.

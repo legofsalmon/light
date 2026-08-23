@@ -101,6 +101,18 @@ Working on it:
   adaptation, truss) as `LIGHT_PREVIZ_*` variables. They exist because a release
   build is five minutes and a `const` is not a knob anybody turns twice.
 
+Shadow maps are dealt PER FRAME by `update::allocate_shadows`, round-robin
+across fixture groups, to the lights that are actually lit. They used to be
+handed out in patch order at scene build, which on a real rig gave every slot to
+one or two fixture types and left the rest casting nothing — measured by
+differencing shadows-on against shadows-off per group, three of the four groups
+the show actually fires changed 0.00 % of the frame. Two things make the
+per-frame version cheap, and both were assumed to be the opposite: bevy's
+shadow-pass pipeline key carries no light identity, so toggling can never cause
+a shader compile; and a light hidden with `Visibility::Hidden` is dropped by
+`extract_lights` before clustering, before the shadow count and before the atlas
+allocation, so the old budget was being reserved for darkness.
+
 Measure from a FIXED camera. The tiers read 11.5 / 20.2 / 44.2 ms from the shot
 the window now opens on and 13.9 / 31.3 / 69.8 ms from the old close default,
 for the same build — beams are fill, and fill is most of the frame time, so the

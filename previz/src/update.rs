@@ -160,7 +160,10 @@ fn gate(now_s: f32, st: f32) -> f32 {
 pub fn apply_live(
     time: Res<Time>,
     mut live: ResMut<Live>,
-    mut lights: Query<(&HeadTag, &BeamLight, &mut SpotLight, &mut Visibility), Without<RingMesh>>,
+    mut lights: Query<
+        (&HeadTag, &BeamLight, &mut SpotLight, &mut Visibility, Option<&mut crate::scene::ShadowCandidate>),
+        Without<RingMesh>,
+    >,
     cones: Query<(&HeadTag, &BeamLight, &BeamCone, &MeshMaterial3d<crate::beam::BeamMaterial>)>,
     glows: Query<(&HeadTag, &MeshMaterial3d<StandardMaterial>), With<SourceGlow>>,
     mut rings: Query<(&HeadTag, &mut Visibility), With<RingMesh>>,
@@ -227,11 +230,16 @@ pub fn apply_live(
     // `set_if_neq` matters as much as the test: writing Visibility every frame
     // dirties it and re-runs propagation for the whole subtree.
     const LIGHT_ON: f32 = 0.0015;
-    for (tag, beam, mut light, mut vis) in &mut lights {
+    for (tag, beam, mut light, mut vis, mut cand) in &mut lights {
         let key = (tag.fixture.clone(), tag.head);
         let (Some(h), Some(s)) = (heads.get(&key), live.smoothed.get(&key)) else {
             if light.intensity != 0.0 {
                 light.intensity = 0.0;
+            }
+            // The ONLY path that zeroes the rank. A head that is merely in the
+            // off half of a strobe must keep its rank — see below.
+            if let Some(c) = cand.as_mut() {
+                c.rank = 0.0;
             }
             vis.set_if_neq(Visibility::Hidden);
             continue;
@@ -245,17 +253,31 @@ pub fn apply_live(
                 b = c[2] as f32 / 255.0;
             }
         }
+        // Zoom, finally. Both halves of it: the cone the light throws, and how
+        // bright that cone is.
+        let outer = (beam.base_outer * zoom_scale(h.zm)).clamp(0.5f32.to_radians(), 1.4);
+
+        // The shadow allocator's rank — `s.i`, NOT the gated energy below.
+        //
+        // `gate` is a 2-14 Hz square wave between 1.0 and 0.06, so a head ranked
+        // on the gated level swings 16x several times a second and would win and
+        // lose its shadow slot at strobe rate, dragging the whole allocation with
+        // it. `s.i` is the level the strobe modulates — which is what "how much
+        // does this head matter" means — and it is already EWMA-smoothed at
+        // 18/9 Hz, so the input is damped for free.
+        if let Some(c) = cand.as_mut() {
+            c.rank = beam.lumens * s.i * flux_gain(beam.base_outer, outer);
+        }
+
         let energy = s.i * gate(now_s, h.st);
         if energy < LIGHT_ON {
+            // Deliberately does NOT zero the rank: this is the off half of a
+            // strobe, and the head should hold its slot through it.
             vis.set_if_neq(Visibility::Hidden);
             continue;
         }
         vis.set_if_neq(Visibility::Inherited);
         light.color = Color::srgb(r, g, b);
-
-        // Zoom, finally. Both halves of it: the cone the light throws, and how
-        // bright that cone is.
-        let outer = (beam.base_outer * zoom_scale(h.zm)).clamp(0.5f32.to_radians(), 1.4);
         if (light.outer_angle - outer).abs() > 1e-4 {
             light.outer_angle = outer;
             light.inner_angle = outer * 0.7;
@@ -456,6 +478,121 @@ pub fn apply_live(
     }
 }
 
+/// Hand the shadow-map budget to the lights that are actually lit, every frame.
+///
+/// This replaces two counters spent in PATCH ORDER at scene build, and the
+/// difference is not subtle. On the operator's rig that gave all 24 head slots
+/// to the Ayrton Rivales and the 8 panel slots to the first Neros, which left
+/// the Spiiders, the 49 Blinders and the Lyras with none — and NO LOOK IN THE
+/// SHOW USES THE RIVALES. Measured by differencing shadows-on against
+/// shadows-off, per group: Neros changed 37.9 % of the frame, and the Lyra beam
+/// looks, the Spiider ripples and every blinder hit changed 0.00 %. Three of
+/// the four groups the show actually fires cast nothing at all.
+///
+/// Doing it per frame is cheap, and the reason is worth writing down because
+/// the opposite was assumed and parked:
+///
+///   - Toggling `shadow_maps_enabled` cannot cause a shader compile. Bevy's
+///     shadow-pass pipeline key carries exactly one bit of light information —
+///     orthographic or perspective — and no light identity, index or count, so
+///     every spot in the scene resolves to the same cached pipeline.
+///   - A light hidden with `Visibility::Hidden` is entirely free: `extract_lights`
+///     drops it before clustering, before the shadow-map count, before the atlas
+///     allocation and before mesh culling. The old budget was therefore being
+///     RESERVED FOR DARKNESS — reserved on dark heads that cost nothing, while
+///     the lit ones it was meant to buy shadows for were hard-coded off.
+///
+/// Dealt ROUND-ROBIN across fixture groups, best-ranked member of each group
+/// first. Ranking globally on output would have restored the same bug in mirror
+/// image — the 30,000 lm blinders would take all 24 slots off the beams the
+/// moment one came up. Within a group every member is the same profile at the
+/// same trim, so lumens, cone and throw all cancel and the rank is just the
+/// level; cross-type photometric comparison is never needed.
+/// Deal `budget` shadow slots across the lit candidates, round-robin by group.
+///
+/// Pure and generic over the id so it can be tested without a world. Each entry
+/// is `(id, group, rank, spread)`.
+///
+/// One slot to each group's best, then each group's second, and so on: every
+/// lit group gets a shadow before any group gets two. Within a group, higher
+/// rank wins and `spread` breaks ties — it is the patch index bit-reversed, so
+/// any prefix of it is spread across the patch rather than bunched at the end
+/// that happened to be addressed first, which is what a blinder hit needs since
+/// every one of its ranks is identical.
+pub fn deal_shadow_slots<T: Copy + Ord>(
+    cands: &[(T, u16, f32, u16)],
+    budget: usize,
+) -> Vec<T> {
+    if budget == 0 {
+        return Vec::new();
+    }
+    let mut by_group: std::collections::BTreeMap<u16, Vec<(T, f32, u16)>> = Default::default();
+    for (id, g, rank, spread) in cands {
+        if *rank > 0.0 {
+            by_group.entry(*g).or_default().push((*id, *rank, *spread));
+        }
+    }
+    // Rank first, then spread, then the id itself — so the result cannot depend
+    // on the order the ECS happened to hand the candidates over, which is not
+    // stable frame to frame and would otherwise make the deal flicker.
+    for v in by_group.values_mut() {
+        v.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.2.cmp(&b.2)).then(a.0.cmp(&b.0)));
+    }
+    let deepest = by_group.values().map(|v| v.len()).max().unwrap_or(0);
+    let mut out = Vec::with_capacity(budget);
+    'deal: for lap in 0..deepest {
+        for v in by_group.values() {
+            if let Some((id, _, _)) = v.get(lap) {
+                out.push(*id);
+                if out.len() >= budget {
+                    break 'deal;
+                }
+            }
+        }
+    }
+    out
+}
+
+pub fn allocate_shadows(
+    q: Res<crate::quality::Quality>,
+    mut lights: Query<(Entity, &mut SpotLight, &crate::scene::ShadowCandidate)>,
+    mut held: Local<std::collections::HashSet<Entity>>,
+) {
+    if q.shadows == 0 {
+        if !held.is_empty() {
+            for (_, mut l, _) in &mut lights {
+                if l.shadow_maps_enabled {
+                    l.shadow_maps_enabled = false;
+                }
+            }
+            held.clear();
+        }
+        return;
+    }
+
+    let cands: Vec<(Entity, u16, f32, u16)> = lights
+        .iter()
+        .filter(|(_, _, c)| c.rank > 0.0)
+        .map(|(e, _, c)| (e, c.group, c.rank, c.spread))
+        .collect();
+    let want: std::collections::HashSet<Entity> =
+        deal_shadow_slots(&cands, q.shadows).into_iter().collect();
+
+    if want == *held {
+        return;
+    }
+    for (e, mut l, _) in &mut lights {
+        let on = want.contains(&e);
+        // Only on a real change. The write itself is free — apply_live already
+        // dirties every visible SpotLight — but flipping the flag despawns and
+        // respawns bevy's light-view entity, which is the one cost there is.
+        if l.shadow_maps_enabled != on {
+            l.shadow_maps_enabled = on;
+        }
+    }
+    *held = want;
+}
+
 /// LIGHT_PREVIZ_SHOT=<path.png>: save one screenshot of the rendered frame
 /// ~5s after launch — lets the rendered output be inspected headlessly
 /// (macOS screen-recording permission can't block an in-app capture).
@@ -588,7 +725,10 @@ pub fn apply_panel_lights(
     live: Res<Live>,
     time: Res<Time>,
     mut panels_rect: Query<(&HeadTag, &PanelLight, &mut RectLight, &mut Visibility), Without<SpotLight>>,
-    mut panels_spot: Query<(&HeadTag, &PanelLight, &mut SpotLight, &mut Visibility), Without<RectLight>>,
+    mut panels_spot: Query<
+        (&HeadTag, &PanelLight, &mut SpotLight, &mut Visibility, &mut crate::scene::ShadowCandidate),
+        Without<RectLight>,
+    >,
     mut sent: Local<std::collections::HashMap<String, Sent>>,
 ) {
     let Some(snap) = live.snap.as_ref() else { return };
@@ -648,17 +788,95 @@ pub fn apply_panel_lights(
         light.intensity = panel.lumens * panel.scale * want.e;
     }
 
-    for (tag, panel, mut light, mut vis) in &mut panels_spot {
+    for (tag, panel, mut light, mut vis, mut cand) in &mut panels_spot {
         let Some(want) = resolve(&live, snap, now_s, connected, &tag.fixture, panel.heads) else {
+            cand.rank = 0.0;
             vis.set_if_neq(Visibility::Hidden);
             continue;
         };
         vis.set_if_neq(Visibility::Inherited);
+        // WITHOUT `panel.scale`. That factor is bevy's 4*pi spot unit
+        // conversion, not light the fixture emits — ranking with it in makes a
+        // 30,000 lm blinder score 377,000 and take every slot the moment one is
+        // lit, which is the bug this allocator exists to fix, restored.
+        //
+        // Written before the `sent` short-circuit below, or a panel holding a
+        // steady colour would keep a stale rank forever.
+        cand.rank = panel.lumens * want.e;
         if sent.get(&tag.fixture).is_some_and(|p| !p.differs(&want)) {
             continue;
         }
         sent.insert(tag.fixture.clone(), want);
         light.color = Color::srgb(want.r, want.g, want.b);
         light.intensity = panel.lumens * panel.scale * want.e;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::deal_shadow_slots;
+
+    /// `(id, group, rank, spread)`
+    fn c(id: u32, g: u16, rank: f32) -> (u32, u16, f32, u16) {
+        (id, g, rank, (id as u16).reverse_bits())
+    }
+
+    /// The bug this exists to fix, as an assertion: a budget spent in one
+    /// order handed every slot to one fixture type and left three groups
+    /// casting nothing at all.
+    #[test]
+    fn every_lit_group_gets_a_slot_before_any_group_gets_two() {
+        // 24 blinders at 30,000 lm against 8 beams at 1,000 — a global rank on
+        // output gives the beams nothing.
+        let mut v: Vec<_> = (0..24).map(|i| c(i, 0, 30_000.0)).collect();
+        v.extend((100..108).map(|i| c(i, 1, 1_000.0)));
+        let got = deal_shadow_slots(&v, 6);
+        let beams = got.iter().filter(|id| **id >= 100).count();
+        assert_eq!(beams, 3, "beams got {beams} of 6 slots: {got:?}");
+    }
+
+    #[test]
+    fn a_dark_candidate_never_takes_a_slot() {
+        let v = vec![c(1, 0, 0.0), c(2, 0, 5.0), c(3, 1, 0.0)];
+        assert_eq!(deal_shadow_slots(&v, 4), vec![2]);
+    }
+
+    #[test]
+    fn within_a_group_the_brightest_wins() {
+        let v = vec![c(1, 0, 1.0), c(2, 0, 9.0), c(3, 0, 5.0)];
+        assert_eq!(deal_shadow_slots(&v, 2), vec![2, 3]);
+    }
+
+    /// A blinder hit puts every member of a group at the SAME level, so rank
+    /// cannot choose between them and `spread` does. Bit-reversed patch order
+    /// means the winners are spread along the truss rather than bunched at the
+    /// end that happened to be addressed first.
+    #[test]
+    fn a_tied_group_spreads_its_winners_across_the_patch() {
+        let v: Vec<_> = (0..16u32).map(|i| c(i, 0, 1.0)).collect();
+        let got = deal_shadow_slots(&v, 4);
+        let span = got.iter().max().unwrap() - got.iter().min().unwrap();
+        assert!(span >= 8, "winners {got:?} span only {span} of 16 fixtures");
+        // and the naive answer — the first four patched — is NOT what we get
+        assert_ne!(got, vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn the_budget_is_never_exceeded_and_zero_means_none() {
+        let v: Vec<_> = (0..50u32).map(|i| c(i, (i % 5) as u16, 1.0 + i as f32)).collect();
+        assert_eq!(deal_shadow_slots(&v, 7).len(), 7);
+        assert!(deal_shadow_slots(&v, 0).is_empty());
+        assert_eq!(deal_shadow_slots(&v, 500).len(), 50, "budget above supply");
+    }
+
+    /// The ECS hands candidates over in no stable order, so the deal must not
+    /// depend on it or the allocation flickers frame to frame.
+    #[test]
+    fn the_deal_does_not_depend_on_input_order() {
+        let mut v: Vec<_> = (0..20u32).map(|i| c(i, (i % 3) as u16, 1.0)).collect();
+        let a = deal_shadow_slots(&v, 8);
+        v.reverse();
+        let b = deal_shadow_slots(&v, 8);
+        assert_eq!(a, b);
     }
 }

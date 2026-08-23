@@ -79,6 +79,7 @@ fn main() {
                 scene::rebuild_fixtures,
                 update::apply_live,
                 update::apply_panel_lights,
+                update::allocate_shadows,
                 update::reflect_connection,
                 update::diag_state,
                 update::auto_screenshot,

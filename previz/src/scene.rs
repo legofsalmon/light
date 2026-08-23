@@ -211,6 +211,31 @@ pub struct RingMesh;
 #[derive(Component)]
 pub struct TrussRunMesh;
 
+/// A spot light that is allowed to take one of the shadow-map slots.
+///
+/// Every fixture head and every panel fallback carries this; the derby's six
+/// spinning sub-beams deliberately do not. Which candidates actually get a slot
+/// is decided PER FRAME by `update::allocate_shadows`.
+#[derive(Component)]
+pub struct ShadowCandidate {
+    /// One profile at one trim — what the operator means by "the Spiiders" or
+    /// "the floor package". The budget is dealt ACROSS groups so no fixture
+    /// type can be starved by a louder one: rank globally on output and the
+    /// 30,000 lm blinders take every slot off the beams, which is the reported
+    /// bug back in mirror image.
+    pub group: u16,
+    /// The fixture's patch index with its bits reversed.
+    ///
+    /// Sorting ascending on this makes any PREFIX spread across the patch, so
+    /// when a whole group sits at one level — a blinder hit, the common case,
+    /// where every rank is identical — the winners land along the truss instead
+    /// of bunched at whichever end happened to be patched first.
+    pub spread: u16,
+    /// This frame's priority within the group, written by `apply_live` and
+    /// `apply_panel_lights`. Zero means dark.
+    pub rank: f32,
+}
+
 /// Root of the dummy band — human-scale primitive figures for judging throw
 /// distances and how looks actually land on people. Toggle with M.
 #[derive(Component)]
@@ -805,32 +830,8 @@ pub fn rebuild_fixtures(
         ..default()
     });
 
-    // Every shadow-casting spotlight costs its own depth pass, so cost grows
-    // with rig size, not with what you can see: 10 bars + 4 derbies is 64 of
-    // them and the previz falls to ~13 fps. Shadows are what sells the beams
-    // landing on people, so keep them — but only for a fixed budget of main
-    // heads. Derby sub-beams never get one: six narrow spinning beams per
-    // fixture is where the cost explodes and where a shadow map buys nothing.
-    let mut shadow_budget: usize = q.shadows;
     // Bevy's hard limit; see the note at the panel spawn.
     let mut rect_budget: usize = 8;
-    // Panels get their OWN shadow allowance rather than drawing on the main
-    // one, and this is the fix for "the band casts no shadow on the deck".
-    //
-    // A blinder is the widest thing on the rig — a Nero is a 123-degree plate,
-    // so one of them from 8 m up covers a 29 m circle — and there are 24 of
-    // them. They were the dominant source of light on the deck and NOT ONE of
-    // them cast a shadow: `RectLight` has no shadow support in bevy at all (see
-    // rect_light.rs, there is no field for it), and the spot fallback had
-    // `shadow_maps_enabled: false` hard-coded. Twenty-four shadowless floods
-    // washed out every shadow the movers did cast, which is why a figure
-    // standing on the deck had nothing under it.
-    //
-    // A separate allowance because the panel spawn runs BEFORE the head loop:
-    // sharing one counter would let 24 blinders eat the entire budget and leave
-    // the moving heads — whose shadows sweep, and are the ones you are watching
-    // — with none.
-    let mut panel_shadow_budget: usize = q.shadows / 3;
 
     // Beam reach, sized to the room rather than to the demo stage. The shaft
     // clamp used to be a hard 9 m and spotlight range a hard 11-12 m — fine for
@@ -857,8 +858,22 @@ pub fn rebuild_fixtures(
         }
     };
 
-    for f in &project.fixtures {
+    // (profile, in the air) — the two things that make one fixture
+    // interchangeable with another for "does this type cast a shadow".
+    let mut group_keys: Vec<(String, bool)> = Vec::new();
+
+    for (fi, f) in project.fixtures.iter().enumerate() {
         let Some(prof) = prof_meta(&project, &f.profile_id) else { continue };
+        let gkey = (f.profile_id.clone(), f.pos.y > 1.2);
+        let group = group_keys.iter().position(|k| *k == gkey).unwrap_or_else(|| {
+            group_keys.push(gkey);
+            group_keys.len() - 1
+        }) as u16;
+        let candidate = || ShadowCandidate {
+            group,
+            spread: (fi as u16).reverse_bits(),
+            rank: 0.0,
+        };
         // Pixel strips (imported multi-pixel fixtures): each pixel renders as
         // an emissive source, not a shadow-casting volumetric spotlight — 64
         // shadowed lights would crush the GPU for zero visual gain.
@@ -976,17 +991,13 @@ pub fn rebuild_fixtures(
                             // edge rather than rolling off from a hot centre.
                             inner_angle: (outer * 0.88).min(1.30),
                             outer_angle: outer.min(1.35),
-                            // See panel_shadow_budget. A 77-degree cone from
-                            // 8 m spreads a 1024-map over a 29 m circle, so
-                            // this shadow is soft to the point of being a
-                            // gradient — which is exactly what a 41 x 32 cm
-                            // emitter actually casts, and far better than the
-                            // hard nothing it cast before.
-                            shadow_maps_enabled: {
-                                let on = panel_shadow_budget > 0;
-                                panel_shadow_budget = panel_shadow_budget.saturating_sub(1);
-                                on
-                            },
+                            // Off at spawn; `allocate_shadows` turns it on if
+                            // this panel is among the brightest lit lights this
+                            // frame. A 77-degree cone from 8 m spreads a
+                            // 1024-map over a 29 m circle, so the shadow is
+                            // soft to the point of being a gradient — which is
+                            // what a 41 x 32 cm emitter actually casts.
+                            shadow_maps_enabled: false,
                             // Bevy's default normal bias is 1.8, and the
                             // erosion it causes scales with the cone: 1.8 x
                             // (2*tan(outer)/2048) x sqrt(2) x distance is 14 mm
@@ -1000,6 +1011,7 @@ pub fn rebuild_fixtures(
                             ..default()
                         },
                         aim,
+                        candidate(),
                         Visibility::Hidden,
                     ));
                 }
@@ -1260,6 +1272,13 @@ pub fn rebuild_fixtures(
                             Mesh3d(meshes.add(body)),
                             MeshMaterial3d(body_mat.clone()),
                             Transform::default(),
+                            // The only body mesh that was missing this. A spot
+                            // inside a closed casing renders the casing into
+                            // its own shadow map and goes black, silently — it
+                            // was latent only because such a fixture rarely
+                            // fell inside the first 24 in patch order, and
+                            // per-frame allocation makes it reachable.
+                            bevy::light::NotShadowCaster,
                         ));
                     }
                 }
@@ -1447,11 +1466,9 @@ pub fn rebuild_fixtures(
                                     radius: 0.04,
                                     inner_angle: outer * 0.7,
                                     outer_angle: outer,
-                                    shadow_maps_enabled: {
-                                        let on = shadow_budget > 0;
-                                        shadow_budget = shadow_budget.saturating_sub(1);
-                                        on
-                                    },
+                                    // Off at spawn; `allocate_shadows` decides
+                                    // per frame which lit heads get a slot.
+                                    shadow_maps_enabled: false,
                                 // Bevy's default normal bias is 1.8, and the
                                 // erosion it causes scales with the cone: 1.8 x
                                 // (2*tan(outer)/2048) x sqrt(2) x distance is 14 mm
@@ -1465,6 +1482,7 @@ pub fn rebuild_fixtures(
                                     ..default()
                                 },
                                 VolumetricLight,
+                                candidate(),
                                 // The frame above — a mover's shell, or a static
                                 // fixture's body node — already points this way.
                                 // Re-applying the full `looking_to` here would
