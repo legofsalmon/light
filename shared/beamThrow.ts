@@ -110,6 +110,52 @@ export function throwDistance(o: Vec3, dir: Vec3, occ: Occluder[]): number {
  *
  *  `margin` keeps a thin bar grabbable — a 0.3 m-deep truss is under two pixels
  *  of tolerance at typical zoom without it. */
+/** Height of the surface a performer standing at (x, z) is actually standing
+ *  ON, in metres — 0 for the deck, or the top of the riser they are inside.
+ *
+ *  DERIVED, not authored, and that is the whole point. A performer has no
+ *  height of their own: `sanitizeProject` deletes `y` from every non-structural
+ *  prop, and it should keep doing so. The operator drags a drummer around a
+ *  plan that already draws the risers; asking them to ALSO type a height that
+ *  has to match whichever riser they happened to land on is a number that goes
+ *  stale the first time the riser moves. Reading it from the scenery cannot go
+ *  stale, needs no control, and moves the drummer when the riser moves.
+ *
+ *  Only risers count. A truss bar lying at deck level is not a thing you stand
+ *  on, and a screen is not either.
+ *
+ *  Stacking falls out: a riser on a riser has the higher top, and the highest
+ *  containing surface wins.
+ *
+ *  Twin of `floor_height_at` in previz/src/scene.rs — the native and web views
+ *  must lift a figure by the same amount or the same show looks different in
+ *  the two windows.
+ */
+export function standingHeightAt(
+  // The minimal shape this actually reads, not `StageProp[]` — the previz's
+  // own prop list is structurally typed and carries no id.
+  props: readonly {
+    kind: string;
+    pos: { x: number; z: number };
+    rotY?: number;
+    size?: { w: number; h: number; d: number };
+    y?: number;
+  }[] | undefined,
+  x: number,
+  z: number,
+): number {
+  let top = 0;
+  for (const pr of props ?? []) {
+    if (pr.kind !== 'riser') continue;
+    const s = pr.size ?? STRUCTURE_DEFAULTS.riser;
+    // margin 0, unlike the click test this shares its maths with: being within
+    // 15 cm of a riser's edge should not levitate someone standing beside it.
+    if (!hitsPropFootprint({ x, z }, { pos: pr.pos, rotY: pr.rotY, size: s }, 0)) continue;
+    top = Math.max(top, (pr.y ?? 0) + s.h);
+  }
+  return top;
+}
+
 export function hitsPropFootprint(
   click: { x: number; z: number },
   prop: { pos: { x: number; z: number }; rotY?: number; size: { w: number; d: number } },

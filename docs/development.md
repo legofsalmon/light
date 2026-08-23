@@ -115,6 +115,14 @@ base, yoke, tilting barrel, lens — and the aim splits across the yoke and the
 shell, so the body swings with the beam. Everything else gets a body frame
 turned to face where its light goes, with the emitters on the front face.
 
+A performer's height is inferred too, and for the same reason. A stage prop's
+`y` is structural-only — `sanitizeProject` deletes it from performers and should
+keep doing so — so `standingHeightAt` (shared/beamThrow.ts) reads the height off
+whichever riser the performer is standing inside, and `floor_height_at`
+(previz/src/scene.rs) is its twin. Change one and change the other, or the same
+show stands at different heights in the two previz windows; the cases are
+mirrored one-for-one between `engine/test/smoke.ts` and the Rust unit tests.
+
 **Truss is inferred, not imported.** The project file has no truss in it, so
 `previz/src/truss.rs` reads it off the hang: three or more fixtures sharing a
 height and a depth over at least a metre and a half. A run breaks wherever a

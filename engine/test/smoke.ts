@@ -19,7 +19,7 @@ import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, parseG
  *  content means editing a song looks like an engine regression. */
 const demoProject = (): Project =>
   JSON.parse(fs.readFileSync(path.join(process.cwd(), 'core/tests/data/demo_project.json'), 'utf8'));
-import { MAX_THROW, buildOccluders, hitsPropFootprint, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
+import { MAX_THROW, buildOccluders, hitsPropFootprint, standingHeightAt, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
 import { parseOsc } from '../osc.ts';
 import { ArtnetOut } from '../artnet.ts';
 import { BeatClock } from '../clock.ts';
@@ -365,6 +365,51 @@ await new Promise<void>((resolve) => {
   check(
     'occluders: performers are not occluders',
     buildOccluders({ ...demoProject(), props: [{ id: 'v', kind: 'vocalist', pos: { x: 0, z: 0 } }] } as Project).length === 0,
+  );
+
+  // --- standingHeightAt: the twin of floor_height_at in previz/src/scene.rs.
+  // These cases mirror the Rust tests one for one; if the two ever disagree the
+  // same show stands at different heights in the two previz windows.
+  const rs = (o: Partial<{ x: number; z: number; w: number; h: number; d: number; y: number; rot: number }>) => ({
+    id: 'r', kind: 'riser',
+    pos: { x: o.x ?? 0, z: o.z ?? 0 },
+    rotY: o.rot ?? 0,
+    size: { w: o.w ?? 2, h: o.h ?? 0.4, d: o.d ?? 1.5 },
+    y: o.y ?? 0,
+  });
+  check(
+    'riser: a performer on one stands on top of it',
+    Math.abs(standingHeightAt([rs({ z: 1 })], 0, 1) - 0.4) < 1e-6 &&
+      Math.abs(standingHeightAt([rs({ z: 1, y: 0.6 })], 0, 1) - 1.0) < 1e-6,
+  );
+  check(
+    'riser: standing beside one is standing on the deck',
+    standingHeightAt([rs({ z: 1 })], 1.02, 1) === 0 &&
+      standingHeightAt([rs({ z: 1 })], 0, 1.8) === 0 &&
+      standingHeightAt([], 0, 1) === 0,
+  );
+  {
+    // The case a conservative axis-aligned footprint gets wrong: the corner of
+    // the bounding box of a turned riser is NOT on the riser.
+    const r = Math.PI / 4;
+    const p = [rs({ w: 3, d: 1, rot: r })];
+    check(
+      'riser: a turned one does not levitate its bounding-box corner',
+      Math.abs(standingHeightAt(p, 0, 0) - 0.4) < 1e-6 &&
+        Math.abs(standingHeightAt(p, 1.2 * Math.cos(r), -1.2 * Math.sin(r)) - 0.4) < 1e-6 &&
+        standingHeightAt(p, 1.35, 1.35) === 0,
+    );
+  }
+  check(
+    'riser: the highest containing surface wins',
+    Math.abs(standingHeightAt([rs({ w: 4, h: 0.2, d: 4 }), rs({ w: 2, h: 0.3, d: 2, y: 0.2 })], 0, 0) - 0.5) < 1e-6 &&
+      Math.abs(standingHeightAt([rs({ w: 4, h: 0.2, d: 4 }), rs({ w: 2, h: 0.3, d: 2, y: 0.2 })], 1.7, 0) - 0.2) < 1e-6,
+  );
+  check(
+    'riser: only risers hold a person up',
+    ['trussBar', 'trussLeg', 'screen', 'guitarist'].every(
+      (kind) => standingHeightAt([{ ...rs({ w: 3, h: 0.5, d: 3 }), kind }], 0, 0) === 0,
+    ),
   );
 }
 

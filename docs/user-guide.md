@@ -173,6 +173,12 @@ at the same height and depth. It is a reading of your patch, not something the
 show file carries, so a rig that is not hung in rows will not get bars drawn
 through it.
 
+**Risers.** Drag a musician onto a riser in the 2D plan and they stand on top of
+it, kit and all — in both 3D views. There is no height to set: the previz reads
+it off the riser your performer is standing inside, so moving or resizing the
+riser moves whoever is on it. Only risers hold someone up, and standing beside
+one leaves you on the deck.
+
 **Exposure.** `auto exp` in the previz bar is eye adaptation: the view stops
 down when the rig comes up and opens back up in the quiet parts, the way your
 eyes do. It is partial, so a brighter look still reads brighter, and a blackout

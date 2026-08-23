@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { isStructure } from '../../../shared/types.ts';
 import type { HeadSnap, Project } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
-import { buildOccluders, throwDistance, type Occluder } from '../../../shared/beamThrow.ts';
+import { buildOccluders, standingHeightAt, throwDistance, type Occluder } from '../../../shared/beamThrow.ts';
 
 type HeadHandle = {
   key: string;
@@ -416,7 +417,12 @@ function buildProps(
 
   for (const pr of props) {
     const root = new THREE.Group();
-    root.position.set(pr.pos.x, 0, pr.pos.z);
+    // Structure positions itself off its own `y`; a performer is stood on
+    // whatever the scenery puts under their feet, so a musician dragged onto a
+    // riser stands ON it instead of inside it. Derived rather than authored —
+    // see standingHeightAt.
+    const base = isStructure(pr.kind) ? 0 : standingHeightAt(props, pr.pos.x, pr.pos.z);
+    root.position.set(pr.pos.x, base, pr.pos.z);
     root.rotation.y = pr.rotY ?? 0;
     g.add(root);
     const addStanding = () => {
@@ -503,8 +509,13 @@ function buildProps(
       case 'riser': {
         const s = pr.size ?? { w: 2, h: 0.4, d: 1.5 };
         const y = pr.y ?? 0;
+        // The slab is the TOP 5 cm of the riser, not 2.5 cm proud of it.
+        // Centred on y + s.h it stood the walking surface at y + s.h + 0.025,
+        // so a performer stood at the declared height sank 25 mm into it — and
+        // the native view, which draws the riser as one box topping out at
+        // y + s.h, disagreed with this one by that much.
         const deck = new THREE.Mesh(new THREE.BoxGeometry(s.w, 0.05, s.d), deckTop);
-        deck.position.y = y + s.h;
+        deck.position.y = y + s.h - 0.025;
         const skirt = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, s.d), skirtMat);
         skirt.position.y = y + s.h / 2;
         root.add(skirt, deck);

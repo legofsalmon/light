@@ -493,6 +493,9 @@ fn fit_backdrop(
 /// read on them the way they will on the actual band. Spawned from the
 /// project's placed props (2D plan: "+ musician…", drag to move,
 /// double-click to remove). Press M in this window to show/hide them all.
+/// Twin of STRUCTURE_KINDS in shared/types.ts.
+const STRUCTURE_KINDS: [&str; 4] = ["trussBar", "trussLeg", "riser", "screen"];
+
 fn spawn_props(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -525,10 +528,20 @@ fn spawn_props(
     });
 
     for pr in props {
+        // Structure positions itself off its own `y`; a performer is stood on
+        // whatever the scenery puts under their feet. Lifting the ROOT is the
+        // whole mechanism — figure.rs pins every sole to y = 0 in the figure's
+        // own frame, so the instrument, the mic stand's base plate and the drum
+        // stool all rise with them and nothing else has to know.
+        let base = if STRUCTURE_KINDS.contains(&pr.kind.as_str()) {
+            0.0
+        } else {
+            floor_height_at(props, pr.pos.x, pr.pos.z)
+        };
         let root = commands
             .spawn((
                 BandRoot,
-                Transform::from_xyz(pr.pos.x, 0.0, pr.pos.z)
+                Transform::from_xyz(pr.pos.x, base, pr.pos.z)
                     .with_rotation(Quat::from_rotation_y(pr.rot_y.unwrap_or(0.0))),
                 Visibility::default(),
             ))
@@ -572,6 +585,43 @@ fn spawn_props(
             }
         });
     }
+}
+
+/// Height of the surface a performer standing at (x, z) is actually standing
+/// ON — 0 for the deck, or the top of the riser they are inside.
+///
+/// DERIVED, not authored, and that is the point. A performer has no height of
+/// their own: `sanitizeProject` deletes `y` from every non-structural prop and
+/// should keep doing so. The operator drags a musician around a plan that
+/// already draws the risers; asking them to ALSO type a height matching
+/// whichever riser they landed on is a number that goes stale the first time
+/// the riser moves. Read from the scenery it cannot go stale, needs no control,
+/// and the drummer moves when the riser does.
+///
+/// Only risers count — a truss bar at deck level is not something you stand on.
+/// Stacking falls out: the highest containing surface wins.
+///
+/// Twin of `standingHeightAt` in shared/beamThrow.ts, including the yaw
+/// convention: local +X is (cos, -sin), so a point is taken into the prop's
+/// frame with lx = dx*c - dz*s, lz = dx*s + dz*c. Get that backwards and a
+/// rotated riser lifts people standing beside it instead of on it.
+fn floor_height_at(props: &[crate::protocol::PropLite], x: f32, z: f32) -> f32 {
+    let mut top = 0.0f32;
+    for pr in props {
+        if pr.kind != "riser" {
+            continue;
+        }
+        let s = pr.size.unwrap_or(crate::protocol::PropSizeLite { w: 2.0, h: 0.4, d: 1.5 });
+        let (dx, dz) = (x - pr.pos.x, z - pr.pos.z);
+        let (c, sn) = (pr.rot_y.unwrap_or(0.0).cos(), pr.rot_y.unwrap_or(0.0).sin());
+        let (lx, lz) = (dx * c - dz * sn, dx * sn + dz * c);
+        // No margin. Standing within 15 cm of a riser's edge should not
+        // levitate someone who is beside it.
+        if lx.abs() <= s.w * 0.5 && lz.abs() <= s.d * 0.5 {
+            top = top.max(pr.y.unwrap_or(0.0) + s.h);
+        }
+    }
+    top
 }
 
 fn size_of(pr: &crate::protocol::PropLite, w: f32, h: f32, d: f32) -> (f32, f32, f32) {
@@ -1432,6 +1482,79 @@ pub fn rebuild_fixtures(
 mod tests {
     use super::*;
     use crate::protocol::ProjectLite;
+
+    fn riser(x: f32, z: f32, w: f32, h: f32, d: f32, y: f32, rot: f32) -> crate::protocol::PropLite {
+        serde_json::from_value(serde_json::json!({
+            "id": "r", "kind": "riser",
+            "pos": { "x": x, "z": z },
+            "rotY": rot,
+            "size": { "w": w, "h": h, "d": d },
+            "y": y
+        }))
+        .expect("PropLite should parse")
+    }
+
+    /// The bug: a musician dropped on a riser stood INSIDE it, because the
+    /// performer root was hard-coded to y = 0.
+    #[test]
+    fn a_performer_on_a_riser_stands_on_top_of_it() {
+        let props = vec![riser(0.0, 1.0, 2.0, 0.4, 1.5, 0.0, 0.0)];
+        assert!((floor_height_at(&props, 0.0, 1.0) - 0.4).abs() < 1e-5);
+        // A riser whose base is itself lifted carries its occupant up with it.
+        let props = vec![riser(0.0, 1.0, 2.0, 0.4, 1.5, 0.6, 0.0)];
+        assert!((floor_height_at(&props, 0.0, 1.0) - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn standing_beside_a_riser_is_standing_on_the_deck() {
+        let props = vec![riser(0.0, 1.0, 2.0, 0.4, 1.5, 0.0, 0.0)];
+        // just past the long edge, and just past the short edge
+        assert_eq!(floor_height_at(&props, 1.02, 1.0), 0.0);
+        assert_eq!(floor_height_at(&props, 0.0, 1.80), 0.0);
+        assert_eq!(floor_height_at(&[], 0.0, 1.0), 0.0);
+    }
+
+    /// The case a conservative axis-aligned footprint gets WRONG.
+    ///
+    /// `buildOccluders` deliberately expands a rotated prop to the axis-aligned
+    /// box that contains it, because for stopping a beam early is the safe
+    /// error. For standing on something the safe error is the opposite — an
+    /// expanded box levitates people standing beside a turned riser — so this
+    /// rotates the point into the prop's frame properly.
+    #[test]
+    fn a_turned_riser_does_not_levitate_the_corner_of_its_bounding_box() {
+        let r = std::f32::consts::FRAC_PI_4;
+        let props = vec![riser(0.0, 0.0, 3.0, 0.4, 1.0, 0.0, r)];
+        // Dead centre is on it whatever the rotation.
+        assert!((floor_height_at(&props, 0.0, 0.0) - 0.4).abs() < 1e-5);
+        // A point along the turned long axis is on it...
+        let (dx, dz) = (1.2 * r.cos(), -1.2 * r.sin());
+        assert!((floor_height_at(&props, dx, dz) - 0.4).abs() < 1e-5, "on the long axis");
+        // ...while the axis-aligned bounding box's corner is NOT. Half-extents
+        // of the expanded box are (3/2 + 1/2)*cos45 = 1.414 in both axes.
+        assert_eq!(floor_height_at(&props, 1.35, 1.35), 0.0, "bounding-box corner");
+    }
+
+    #[test]
+    fn the_highest_containing_surface_wins() {
+        let props = vec![
+            riser(0.0, 0.0, 4.0, 0.2, 4.0, 0.0, 0.0),
+            riser(0.0, 0.0, 2.0, 0.3, 2.0, 0.2, 0.0),
+        ];
+        assert!((floor_height_at(&props, 0.0, 0.0) - 0.5).abs() < 1e-5, "stacked");
+        assert!((floor_height_at(&props, 1.7, 0.0) - 0.2).abs() < 1e-5, "lower tier only");
+    }
+
+    /// Only risers are walkable. A truss bar lying at deck level, or a screen,
+    /// is not something a person stands on.
+    #[test]
+    fn only_risers_hold_a_person_up() {
+        for kind in ["trussBar", "trussLeg", "screen", "guitarist"] {
+            let mut p = riser(0.0, 0.0, 3.0, 0.5, 3.0, 0.0, 0.0);
+            p.kind = kind.to_string();
+            assert_eq!(floor_height_at(&[p], 0.0, 0.0), 0.0, "{kind} should not");
+        }
+    }
 
     /// The whole two-joint split rests on one property of the rest pose, and
     /// nothing in the type system protects it.
