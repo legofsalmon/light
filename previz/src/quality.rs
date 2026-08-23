@@ -95,6 +95,11 @@ pub struct Quality {
     /// third of them.
     pub panel_area_lights: bool,
 
+    /// Draw the emissive blob at each emitter. Diagnostic knob: there is one
+    /// mesh AND one material asset per head, so this measures the cost of that
+    /// rather than of the geometry.
+    pub glows: bool,
+
     /// Draw beam shafts at all.
     ///
     /// A tier in its own right — the shafts are the most expensive thing in the
@@ -147,17 +152,17 @@ impl Quality {
     /// live show. No shafts and a coarse fog march: you keep the pools, the
     /// colour and where the light lands, and lose the air.
     pub fn low() -> Self {
-        Quality { msaa: 1, fog_steps: 16, haze_oversize: 1.6, shadows: 2, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: false, beams: false, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { msaa: 1, fog_steps: 16, haze_oversize: 1.6, shadows: 2, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: false, beams: false, glows: true, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// The default: the measured budget, spent where it shows most.
     pub fn standard() -> Self {
-        Quality { msaa: 1, fog_steps: 32, haze_oversize: 1.6, shadows: 10, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { msaa: 1, fog_steps: 32, haze_oversize: 1.6, shadows: 10, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// For a second machine, or a still.
     pub fn high() -> Self {
-        Quality { msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     pub fn from_env() -> Self {
@@ -205,6 +210,9 @@ impl Quality {
         }
         if let Ok(v) = std::env::var("LIGHT_PREVIZ_PANELS") {
             q.panel_area_lights = v != "0" && !v.eq_ignore_ascii_case("off");
+        }
+        if let Ok(v) = std::env::var("LIGHT_PREVIZ_GLOWS") {
+            q.glows = v != "0" && !v.eq_ignore_ascii_case("off");
         }
         if let Ok(v) = std::env::var("LIGHT_PREVIZ_BEAMS") {
             q.beams = v != "0" && !v.eq_ignore_ascii_case("off");

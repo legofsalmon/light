@@ -485,6 +485,7 @@ pub fn diag_state(
     let panel_n = panels.iter().count();
     let panel_lit = panels.iter().filter(|l| l.intensity > 1.0).count();
     let panel_spot_n = panel_spots.iter().count();
+    let panel_spot_lit = panel_spots.iter().filter(|l| l.intensity > 1.0).count();
     let (snap_heads, haze) = live
         .snap
         .as_ref()
@@ -492,7 +493,7 @@ pub fn diag_state(
         .unwrap_or((0, -1.0));
     let fixtures = live.project.as_ref().map(|p| p.fixtures.len()).unwrap_or(0);
     eprintln!(
-        "[previz-diag] connected={} fixtures={fixtures} spotlights={total} lit={lit} maxI={max_i:.0} panels={panel_n}(area)+{panel_spot_n}(spot) panelsLit={panel_lit} fog={fog:.3} snapHeads={snap_heads} haze={haze:.2}",
+        "[previz-diag] connected={} fixtures={fixtures} spotlights={total} lit={lit} maxI={max_i:.0} panels={panel_n}(area)+{panel_spot_n}(spot) panelsLit={panel_lit}+{panel_spot_lit} fog={fog:.3} snapHeads={snap_heads} haze={haze:.2}",
         live.connected
     );
     if let Some((tag, sl, inh, view, gt)) = lit_detail.iter().find(|(_, sl, ..)| sl.intensity > 1.0) {

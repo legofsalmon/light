@@ -637,6 +637,11 @@ pub fn rebuild_fixtures(
     // the geometry to the core would clip it back to a hard silhouette — the
     // exact defect the shader exists to remove.
     let cone_mesh = meshes.add(crate::beam::unit_cone_hull());
+    // ONE handle, not one per head. This was `meshes.add(Sphere::new(0.05))`
+    // inside the head loop: 153 identical 720-triangle spheres, each its own
+    // asset, its own vertex buffer and its own draw. The material still has to
+    // be per-head because each carries its own live colour.
+    let glow_mesh = meshes.add(Sphere::new(0.05));
 
     // Every shadow-casting spotlight costs its own depth pass, so cost grows
     // with rig size, not with what you can see: 10 bars + 4 derbies is 64 of
@@ -833,10 +838,11 @@ pub fn rebuild_fixtures(
 
                 head.with_children(|h| {
                     // emissive source for bloom
+                    if q.glows {
                     h.spawn((
                         tag.clone(),
                         SourceGlow,
-                        Mesh3d(meshes.add(Sphere::new(0.05))),
+                        Mesh3d(glow_mesh.clone()),
                         MeshMaterial3d(materials.add(StandardMaterial {
                             base_color: Color::srgb(0.02, 0.02, 0.02),
                             emissive: LinearRgba::BLACK,
@@ -845,6 +851,7 @@ pub fn rebuild_fixtures(
                         })),
                         Transform::default(),
                     ));
+                    }
 
                     match kind {
                         HeadKind::Derby => {
