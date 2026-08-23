@@ -22,6 +22,17 @@ use bevy::prelude::*;
 
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct Quality {
+    /// Post-process anti-aliasing (SMAA).
+    ///
+    /// The previz is thin bright geometry against near-black with bloom on
+    /// top, which is the worst case for edge crawl — and MSAA is no longer
+    /// available at the default tier, because it cannot coexist with the
+    /// single-sampled half-res beam target. SMAA runs after tonemapping on the
+    /// resolved image, so it is compatible with everything, costs about a
+    /// millisecond, and unlike TAA it cannot smear a moving beam, which is the
+    /// one thing this window exists to show.
+    pub smaa: bool,
+
     /// MSAA samples: 1 (off), 2, 4 or 8.
     ///
     /// A previz is thin bright geometry against near-black with bloom on top,
@@ -165,17 +176,17 @@ impl Quality {
     /// live show. No shafts and a coarse fog march: you keep the pools, the
     /// colour and where the light lands, and lose the air.
     pub fn low() -> Self {
-        Quality { msaa: 1, fog_steps: 16, haze_oversize: 1.6, shadows: 2, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: false, beams: false, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { smaa: true, msaa: 1, fog_steps: 16, haze_oversize: 1.6, shadows: 2, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: false, beams: false, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// The default: the measured budget, spent where it shows most.
     pub fn standard() -> Self {
-        Quality { msaa: 1, fog_steps: 32, haze_oversize: 1.6, shadows: 10, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { smaa: true, msaa: 1, fog_steps: 32, haze_oversize: 1.6, shadows: 10, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// For a second machine, or a still.
     pub fn high() -> Self {
-        Quality { msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 1, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { smaa: true, msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 1, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     pub fn from_env() -> Self {
@@ -184,6 +195,9 @@ impl Quality {
             Ok("high") => Self::high(),
             _ => Self::standard(),
         };
+        if let Ok(v) = std::env::var("LIGHT_PREVIZ_SMAA") {
+            q.smaa = v != "0" && !v.eq_ignore_ascii_case("off");
+        }
         if let Some(v) = env_u32("LIGHT_PREVIZ_MSAA") {
             q.msaa = match v {
                 2 => 2,
@@ -245,8 +259,9 @@ impl Quality {
             q.beam_scale = 1;
         }
         eprintln!(
-            "[previz] quality: msaa x{} · fog {} steps · haze x{:.2} · {} shadow lights · beam scale 1/{}",
-            q.msaa, q.fog_steps, q.haze_oversize, q.shadows, q.beam_scale
+            "[previz] quality: msaa x{} · fog {} steps · haze x{:.2} · {} shadow lights · beam scale 1/{} · smaa {}",
+            q.msaa, q.fog_steps, q.haze_oversize, q.shadows, q.beam_scale,
+            if q.smaa { "on" } else { "off" }
         );
         eprintln!(
             "[previz] photometrics: EV100 {:.1} · lumens x{:.2} · ambient {:.0} · beam gain x{:.2} · haze floor {:.2} · auto exp {} (strength {:.2})",

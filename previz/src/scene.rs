@@ -364,13 +364,14 @@ fn fit_backdrop(
         t.translation.z = cz;
     }
 
-    // wall: base mesh 16 x 7, rotated upright, so local z is world height
+    // The room encloses the rig with a margin and reaches from the floor to
+    // well above the highest hang, so a beam pointed up has something to land
+    // on. Unit cube, so the scale IS the size. Dropped a hair below zero so it
+    // never z-fights the floor it sits on.
     if let Ok(mut t) = backdrop.single_mut() {
-        t.scale.x = width / 16.0;
-        t.scale.z = height / 7.0;
-        t.translation.x = cx;
-        t.translation.y = height * 0.5;
-        t.translation.z = b.min.z - MARGIN;
+        let room_h = height + MARGIN;
+        t.scale = Vec3::new(width, room_h, depth);
+        t.translation = Vec3::new(cx, room_h * 0.5 - 0.02, cz);
     }
 
     // Haze. A beam only scatters inside this volume, so it has to reach the

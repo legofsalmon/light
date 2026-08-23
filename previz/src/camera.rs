@@ -4,6 +4,7 @@ use bevy::post_process::bloom::Bloom;
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
+use bevy::anti_alias::smaa::{Smaa, SmaaPreset};
 use bevy::camera::{Exposure, Hdr};
 use bevy::light::VolumetricFog;
 use bevy::prelude::*;
@@ -90,6 +91,7 @@ pub fn setup_camera(
         },
         Transform::from_xyz(0.0, 4.0, 9.0).looking_at(Vec3::new(0.0, 1.5, 0.0), Vec3::Y),
     ))
+    .insert_if(Smaa { preset: SmaaPreset::High }, || q.smaa)
     .insert_if(
         AutoExposure {
             // A stage runs from near-black to a wall of light; the default
