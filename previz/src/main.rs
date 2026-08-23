@@ -3,6 +3,7 @@
 //! beams, haze-coupled fog, bloom, and a glossy stage floor.
 
 mod beam;
+mod beam_halfres;
 mod camera;
 mod protocol;
 mod quality;
@@ -62,6 +63,7 @@ fn main() {
         }))
         .add_plugins(bevy::post_process::auto_exposure::AutoExposurePlugin)
         .add_plugins(beam::BeamMaterialPlugin)
+        .add_plugins(beam_halfres::BeamHalfResPlugin { scale: quality.beam_scale })
         // A rig is not a game level. Bevy sizes its GPU light-clustering lists
         // for a handful of lights; an arena plot is 153 spot lights, and on the
         // first frame that they all land in view Bevy logs "the scene lighting

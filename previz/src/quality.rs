@@ -95,6 +95,19 @@ pub struct Quality {
     /// third of them.
     pub panel_area_lights: bool,
 
+    /// Divisor on the beam pass's resolution: 1, 2 or 4.
+    ///
+    /// The shafts are fill-bound — measured 11.7 ms of a 46.7 ms frame — and
+    /// they are the ideal thing to under-sample, being smooth everywhere except
+    /// at the silhouette of what they land on, which comes from the depth clamp
+    /// rather than from the geometry.
+    ///
+    /// Mutually exclusive with MSAA, and the code enforces it: the beam
+    /// pipeline is specialised for the view's sample count, and the half-res
+    /// attachment is single-sampled, so the two disagree. MSAA wins if both are
+    /// asked for, because a tier that asked for MSAA wanted edges.
+    pub beam_scale: u32,
+
     /// Draw the emissive blob at each emitter. Diagnostic knob: there is one
     /// mesh AND one material asset per head, so this measures the cost of that
     /// rather than of the geometry.
@@ -152,17 +165,17 @@ impl Quality {
     /// live show. No shafts and a coarse fog march: you keep the pools, the
     /// colour and where the light lands, and lose the air.
     pub fn low() -> Self {
-        Quality { msaa: 1, fog_steps: 16, haze_oversize: 1.6, shadows: 2, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: false, beams: false, glows: true, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { msaa: 1, fog_steps: 16, haze_oversize: 1.6, shadows: 2, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: false, beams: false, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// The default: the measured budget, spent where it shows most.
     pub fn standard() -> Self {
-        Quality { msaa: 1, fog_steps: 32, haze_oversize: 1.6, shadows: 10, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { msaa: 1, fog_steps: 32, haze_oversize: 1.6, shadows: 10, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// For a second machine, or a still.
     pub fn high() -> Self {
-        Quality { msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 1, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     pub fn from_env() -> Self {
@@ -211,6 +224,9 @@ impl Quality {
         if let Ok(v) = std::env::var("LIGHT_PREVIZ_PANELS") {
             q.panel_area_lights = v != "0" && !v.eq_ignore_ascii_case("off");
         }
+        if let Some(v) = env_u32("LIGHT_PREVIZ_BEAMSCALE") {
+            q.beam_scale = match v { 4 => 4, 2 => 2, _ => 1 };
+        }
         if let Ok(v) = std::env::var("LIGHT_PREVIZ_GLOWS") {
             q.glows = v != "0" && !v.eq_ignore_ascii_case("off");
         }
@@ -223,9 +239,14 @@ impl Quality {
         if let Some(v) = env_f32("LIGHT_PREVIZ_ADAPT") {
             q.adapt_strength = v.clamp(0.0, 1.0);
         }
+        // MSAA and a single-sampled half-res attachment cannot coexist.
+        if q.msaa > 1 && q.beam_scale > 1 {
+            eprintln!("[previz] MSAA x{} wins over half-res beams; beam scale forced to 1", q.msaa);
+            q.beam_scale = 1;
+        }
         eprintln!(
-            "[previz] quality: msaa x{} · fog {} steps · haze x{:.2} · {} shadow lights",
-            q.msaa, q.fog_steps, q.haze_oversize, q.shadows
+            "[previz] quality: msaa x{} · fog {} steps · haze x{:.2} · {} shadow lights · beam scale 1/{}",
+            q.msaa, q.fog_steps, q.haze_oversize, q.shadows, q.beam_scale
         );
         eprintln!(
             "[previz] photometrics: EV100 {:.1} · lumens x{:.2} · ambient {:.0} · beam gain x{:.2} · haze floor {:.2} · auto exp {} (strength {:.2})",
