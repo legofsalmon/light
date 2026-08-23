@@ -60,6 +60,81 @@ fn flux_gain(base_outer: f32, outer: f32) -> f32 {
     (b / d).clamp(0.05, 64.0)
 }
 
+/// What the scene is built from, as a string — everything a rebuild would draw
+/// differently, and nothing else.
+///
+/// Quantised to the MILLIMETRE, and that number is the whole point of pulling
+/// this out into a function. It used to be the centimetre, which meant nudging
+/// a rig four millimetres back into alignment updated the web previz and left
+/// this one showing the old position: the web signature is raw floats, so the
+/// two views disagreed about what counts as a change. A millimetre is finer
+/// than anything an operator can mean and still coarse enough that this is not
+/// a full scene rebuild per unit of float noise.
+///
+/// Rebuilding is not cheap — it despawns and respawns every fixture, the band
+/// and the truss — so the quantisation is load-bearing during a drag. That is
+/// an argument for HAVING a threshold, never for the threshold being visible.
+pub fn patch_signature(p: &crate::protocol::ProjectLite) -> String {
+    let mut sig = String::new();
+    for f in &p.fixtures {
+        sig.push_str(&format!(
+            "{}|{}|{:.3},{:.3},{:.3}|{:.3},{:.3},{:.3};",
+            f.id,
+            f.profile_id,
+            f.pos.x,
+            f.pos.y,
+            f.pos.z,
+            f.rot_y,
+            f.rot_x.unwrap_or(0.0),
+            f.rot_z.unwrap_or(0.0)
+        ));
+    }
+    for pr in &p.props {
+        // size and base-Y are part of the shape, not decoration: the patch
+        // table scrubs them live, and omitting them meant a riser's height or
+        // a screen's base could be changed without this window ever rebuilding
+        // — the geometry AND the fitted floor/backdrop/haze stayed at the old
+        // bounds until some unrelated fixture move forced a rebuild.
+        let s = pr.size.unwrap_or(crate::protocol::PropSizeLite { w: 0.0, h: 0.0, d: 0.0 });
+        sig.push_str(&format!(
+            "P{}|{}|{:.3},{:.3}|{:.3}|{:.3},{:.3},{:.3}|{:.3};",
+            pr.id,
+            pr.kind,
+            pr.pos.x,
+            pr.pos.z,
+            pr.rot_y.unwrap_or(0.0),
+            s.w,
+            s.h,
+            s.d,
+            pr.y.unwrap_or(0.0)
+        ));
+    }
+    let mut prof_ids: Vec<_> = p.profiles.iter().collect();
+    prof_ids.sort_by(|a, b| a.0.cmp(b.0));
+    for (id, cp) in prof_ids {
+        // head count alone missed a re-imported profile whose beam angle
+        // changed — the cones would keep the old spread; and since B1's layout
+        // editor, the OFFSETS can change without the count changing, so they
+        // sign too. The form decides the body mesh AND the emitter primitive —
+        // a panel gets a RectLight where a par gets a cone — so an override
+        // typed in the patch table has to rebuild the scene. Without it the
+        // picker would appear to do nothing until some unrelated edit forced a
+        // rebuild.
+        sig.push_str(&format!(
+            "{}#{}#{:.2}#{:?}",
+            id,
+            cp.heads.len(),
+            cp.beam_deg,
+            cp.form()
+        ));
+        for h in &cp.heads {
+            sig.push_str(&format!("|{:.3},{:.3}", h.offset, h.offset_y));
+        }
+        sig.push(';');
+    }
+    sig
+}
+
 /// Pull everything the WS thread has queued into the Live resource.
 pub fn drain_ws(rx: Res<WsReceiver>, mut live: ResMut<Live>) {
     let rx = rx.0.lock().unwrap();
@@ -68,68 +143,7 @@ pub fn drain_ws(rx: Res<WsReceiver>, mut live: ResMut<Live>) {
             WsEvent::Project(p) => {
                 // Only rebuild the scene when the patch itself changed — the
                 // engine echoes the whole project on every edit.
-                let mut sig = p
-                    .fixtures
-                    .iter()
-                    .map(|f| {
-                        format!(
-                            "{}|{}|{:.2},{:.2},{:.2}|{:.3},{:.3},{:.3};",
-                            f.id,
-                            f.profile_id,
-                            f.pos.x,
-                            f.pos.y,
-                            f.pos.z,
-                            f.rot_y,
-                            f.rot_x.unwrap_or(0.0),
-                            f.rot_z.unwrap_or(0.0)
-                        )
-                    })
-                    .collect::<String>();
-                for pr in &p.props {
-                    // size and base-Y are part of the shape, not decoration:
-                    // the patch table scrubs them live, and omitting them meant
-                    // a riser's height or a screen's base could be changed
-                    // without this window ever rebuilding — the geometry AND
-                    // the fitted floor/backdrop/haze stayed at the old bounds
-                    // until some unrelated fixture move forced a rebuild.
-                    let s = pr.size.unwrap_or(crate::protocol::PropSizeLite { w: 0.0, h: 0.0, d: 0.0 });
-                    sig.push_str(&format!(
-                        "P{}|{}|{:.2},{:.2}|{:.2}|{:.2},{:.2},{:.2}|{:.2};",
-                        pr.id,
-                        pr.kind,
-                        pr.pos.x,
-                        pr.pos.z,
-                        pr.rot_y.unwrap_or(0.0),
-                        s.w,
-                        s.h,
-                        s.d,
-                        pr.y.unwrap_or(0.0)
-                    ));
-                }
-                let mut prof_ids: Vec<_> = p.profiles.iter().collect();
-                prof_ids.sort_by(|a, b| a.0.cmp(b.0));
-                for (id, cp) in prof_ids {
-                    // head count alone missed a re-imported profile whose beam
-                    // angle changed — the cones would keep the old spread; and
-                    // since B1's layout editor, the OFFSETS can change without
-                    // the count changing, so they sign too
-                    // The form decides the body mesh AND the emitter primitive
-                    // — a panel gets a RectLight where a par gets a cone — so
-                    // an override typed in the patch table has to rebuild the
-                    // scene. Without it the picker would appear to do nothing
-                    // until some unrelated edit forced a rebuild.
-                    sig.push_str(&format!(
-                        "{}#{}#{:.2}#{:?}",
-                        id,
-                        cp.heads.len(),
-                        cp.beam_deg,
-                        cp.form()
-                    ));
-                    for h in &cp.heads {
-                        sig.push_str(&format!("|{:.3},{:.3}", h.offset, h.offset_y));
-                    }
-                    sig.push(';');
-                }
+                let sig = patch_signature(&p);
                 if sig != live.fixture_sig {
                     live.fixture_sig = sig;
                     live.project_rev += 1;
@@ -878,5 +892,65 @@ mod tests {
         v.reverse();
         let b = deal_shadow_slots(&v, 8);
         assert_eq!(a, b);
+    }
+}
+
+#[cfg(test)]
+mod sig_tests {
+    use super::patch_signature;
+    use crate::protocol::ProjectLite;
+
+    fn project(json: &str) -> ProjectLite {
+        serde_json::from_str(json).expect("ProjectLite should parse")
+    }
+
+    fn with_x(x: f64) -> ProjectLite {
+        project(&format!(
+            r#"{{"fixtures":[{{"id":"a","profileId":"p","pos":{{"x":{x},"y":7.0,"z":-2.0}},"rotY":0.0}}],
+                "props":[],"profiles":{{}}}}"#
+        ))
+    }
+
+    /// The reported bug: nudging a rig four millimetres back into alignment
+    /// updated the web previz and left this one showing the old position,
+    /// because the signature was quantised to the CENTIMETRE while the web's is
+    /// raw floats. The two views disagreed about what counts as a change.
+    #[test]
+    fn a_four_millimetre_nudge_is_a_change() {
+        assert_ne!(patch_signature(&with_x(0.0)), patch_signature(&with_x(0.004)));
+    }
+
+    #[test]
+    fn every_axis_and_every_rotation_is_signed() {
+        let base = r#"{"fixtures":[{"id":"a","profileId":"p","pos":{"x":1.0,"y":7.0,"z":-2.0},"rotY":0.5,"rotX":0.1,"rotZ":0.2}],"props":[],"profiles":{}}"#;
+        let b = patch_signature(&project(base));
+        for moved in [
+            r#"{"fixtures":[{"id":"a","profileId":"p","pos":{"x":1.004,"y":7.0,"z":-2.0},"rotY":0.5,"rotX":0.1,"rotZ":0.2}],"props":[],"profiles":{}}"#,
+            r#"{"fixtures":[{"id":"a","profileId":"p","pos":{"x":1.0,"y":7.004,"z":-2.0},"rotY":0.5,"rotX":0.1,"rotZ":0.2}],"props":[],"profiles":{}}"#,
+            r#"{"fixtures":[{"id":"a","profileId":"p","pos":{"x":1.0,"y":7.0,"z":-2.004},"rotY":0.5,"rotX":0.1,"rotZ":0.2}],"props":[],"profiles":{}}"#,
+            r#"{"fixtures":[{"id":"a","profileId":"p","pos":{"x":1.0,"y":7.0,"z":-2.0},"rotY":0.504,"rotX":0.1,"rotZ":0.2}],"props":[],"profiles":{}}"#,
+            r#"{"fixtures":[{"id":"a","profileId":"p","pos":{"x":1.0,"y":7.0,"z":-2.0},"rotY":0.5,"rotX":0.104,"rotZ":0.2}],"props":[],"profiles":{}}"#,
+            r#"{"fixtures":[{"id":"a","profileId":"p","pos":{"x":1.0,"y":7.0,"z":-2.0},"rotY":0.5,"rotX":0.1,"rotZ":0.204}],"props":[],"profiles":{}}"#,
+        ] {
+            assert_ne!(b, patch_signature(&project(moved)), "an axis is not signed: {moved}");
+        }
+    }
+
+    /// A prop nudged the same amount, for the same reason.
+    #[test]
+    fn a_prop_nudge_is_a_change() {
+        let a = project(r#"{"fixtures":[],"props":[{"id":"r","kind":"riser","pos":{"x":0.0,"z":1.0},"size":{"w":2.0,"h":0.4,"d":1.5},"y":0.0}],"profiles":{}}"#);
+        let b = project(r#"{"fixtures":[],"props":[{"id":"r","kind":"riser","pos":{"x":0.004,"z":1.0},"size":{"w":2.0,"h":0.4,"d":1.5},"y":0.0}],"profiles":{}}"#);
+        let c = project(r#"{"fixtures":[],"props":[{"id":"r","kind":"riser","pos":{"x":0.0,"z":1.0},"size":{"w":2.0,"h":0.404,"d":1.5},"y":0.0}],"profiles":{}}"#);
+        assert_ne!(patch_signature(&a), patch_signature(&b), "position");
+        assert_ne!(patch_signature(&a), patch_signature(&c), "size");
+    }
+
+    /// And the other half: an unchanged project must NOT rebuild. The engine
+    /// echoes the whole project on every edit, including edits this window does
+    /// not draw, and a rebuild despawns and respawns the entire rig.
+    #[test]
+    fn an_unchanged_patch_does_not_rebuild() {
+        assert_eq!(patch_signature(&with_x(1.5)), patch_signature(&with_x(1.5)));
     }
 }
