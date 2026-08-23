@@ -205,6 +205,11 @@ pub struct BeamCone {
 #[derive(Component)]
 pub struct RingMesh;
 
+/// One inferred run of overhead truss. See `truss.rs` for what "inferred" buys
+/// and what it costs.
+#[derive(Component)]
+pub struct TrussRunMesh;
+
 /// Root of the dummy band — human-scale primitive figures for judging throw
 /// distances and how looks actually land on people. Toggle with M.
 #[derive(Component)]
@@ -639,6 +644,7 @@ pub fn rebuild_fixtures(
     mut beam_mats: ResMut<Assets<crate::beam::BeamMaterial>>,
     existing: Query<Entity, With<FixtureRoot>>,
     existing_props: Query<Entity, With<BandRoot>>,
+    existing_truss: Query<Entity, With<TrussRunMesh>>,
     mut backdrop: Query<&mut Transform, (With<Backdrop>, Without<Floor>, Without<HazeVolume>)>,
     mut floor: Query<&mut Transform, (With<Floor>, Without<Backdrop>, Without<HazeVolume>)>,
     mut haze: Query<&mut Transform, (With<HazeVolume>, Without<Backdrop>, Without<Floor>)>,
@@ -655,16 +661,64 @@ pub fn rebuild_fixtures(
     for e in &existing_props {
         commands.entity(e).despawn();
     }
+    for e in &existing_truss {
+        commands.entity(e).despawn();
+    }
     let Some(project) = live.project.clone() else { return };
 
     fit_backdrop(q.haze_oversize, &project, &mut backdrop, &mut floor, &mut haze);
 
     spawn_props(&mut commands, &mut meshes, &mut materials, &project.props);
 
+    // Structure, before the fixtures that hang off it.
+    if q.truss {
+        // Aluminium, but NOT as a mirror.
+        //
+        // The first pass had this at metallic 0.92, which is physically what
+        // raw truss is, and it rendered pure black. A metal's colour is
+        // entirely what it reflects, and this scene has no environment map — so
+        // a fully metallic surface in a blacked-out room reflects a blacked-out
+        // room. Bevy 0.19 can filter a generated cubemap at runtime and that is
+        // the real answer, but it re-filters every frame for a room that never
+        // changes.
+        //
+        // Dialling metallic down lets the diffuse term carry it, which means
+        // the truss is lit by the fixtures hanging off it. That is both cheaper
+        // and closer to how a rig actually reads from the floor.
+        let steel = materials.add(StandardMaterial {
+            base_color: Color::srgb(0.46, 0.46, 0.50),
+            perceptual_roughness: 0.50,
+            metallic: 0.30,
+            ..default()
+        });
+        let hangs: Vec<Vec3> = project
+            .fixtures
+            .iter()
+            .map(|f| Vec3::new(f.pos.x, f.pos.y, f.pos.z))
+            .collect();
+        let runs = crate::truss::infer_runs(&hangs, 2.0);
+        if !runs.is_empty() {
+            eprintln!("[previz] truss: {} run(s) inferred from the hang", runs.len());
+        }
+        for r in runs {
+            // The mesh is built along +X from the origin, so the entity carries
+            // the whole placement and one run's geometry is never shared with
+            // another's — lengths differ, so there is nothing to share.
+            commands.spawn((
+                TrussRunMesh,
+                Mesh3d(meshes.add(crate::truss::truss_mesh(r.x1 - r.x0))),
+                MeshMaterial3d(steel.clone()),
+                Transform::from_xyz(r.x0, r.y, r.z),
+            ));
+        }
+    }
+
+    // Powder-coated casing, not chrome — same reasoning as the truss steel
+    // below: with no environment map, metallic is a synonym for black here.
     let body_mat = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.16, 0.16, 0.18),
-        perceptual_roughness: 0.6,
-        metallic: 0.4,
+        base_color: Color::srgb(0.20, 0.20, 0.225),
+        perceptual_roughness: 0.62,
+        metallic: 0.15,
         ..default()
     });
     // The proxy hull the beam shader integrates inside. Cut at the FIELD
@@ -698,9 +752,9 @@ pub fn rebuild_fixtures(
     // Darker and rougher than the body: a mover's yoke is a matte casting, and
     // giving it the body's 0.4 metallic made a wall of grey mirrors.
     let yoke_mat = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.10, 0.10, 0.115),
+        base_color: Color::srgb(0.135, 0.135, 0.155),
         perceptual_roughness: 0.75,
-        metallic: 0.25,
+        metallic: 0.10,
         ..default()
     });
     // The lens reads as glass even when the fixture is dark, which is what

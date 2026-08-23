@@ -77,6 +77,8 @@ pub struct Quality {
     pub ambient: f32,
     /// Multiplies the additive beam-cone brightness.
     pub beam_gain: f32,
+    /// Draw box truss inferred from where the fixtures hang (LIGHT_PREVIZ_TRUSS).
+    pub truss: bool,
 
     /// Hard cap on a light's range, in metres.
     ///
@@ -176,17 +178,17 @@ impl Quality {
     /// live show. No shafts and a coarse fog march: you keep the pools, the
     /// colour and where the light lands, and lose the air.
     pub fn low() -> Self {
-        Quality { smaa: true, msaa: 1, fog_steps: 16, haze_oversize: 1.6, shadows: 2, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: false, beams: false, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { smaa: true, msaa: 1, fog_steps: 16, haze_oversize: 1.6, shadows: 2, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, light_range_cap: 60.0, panel_area_lights: false, beams: false, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// The default: the measured budget, spent where it shows most.
     pub fn standard() -> Self {
-        Quality { smaa: true, msaa: 1, fog_steps: 32, haze_oversize: 1.6, shadows: 10, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { smaa: true, msaa: 1, fog_steps: 32, haze_oversize: 1.6, shadows: 10, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 2, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     /// For a second machine, or a still.
     pub fn high() -> Self {
-        Quality { smaa: true, msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 1, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
+        Quality { smaa: true, msaa: 4, fog_steps: 128, haze_oversize: 1.8, shadows: 16, ev100: 3.0, lumen_scale: 1.0, ambient: 2.0, beam_gain: 1.0, truss: true, light_range_cap: 60.0, panel_area_lights: true, beams: true, glows: true, beam_scale: 1, haze_floor: 0.35, auto_exposure: true, adapt_strength: 0.6 }
     }
 
     pub fn from_env() -> Self {
@@ -225,6 +227,9 @@ impl Quality {
         }
         if let Some(v) = env_f32("LIGHT_PREVIZ_AMBIENT") {
             q.ambient = v.clamp(0.0, 500.0);
+        }
+        if let Ok(v) = std::env::var("LIGHT_PREVIZ_TRUSS") {
+            q.truss = v != "0" && !v.eq_ignore_ascii_case("off");
         }
         if let Some(v) = env_f32("LIGHT_PREVIZ_BEAMGAIN") {
             q.beam_gain = v.clamp(0.0, 20.0);

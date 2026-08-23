@@ -9,6 +9,7 @@ mod protocol;
 mod quality;
 mod scene;
 mod state;
+mod truss;
 mod update;
 
 use bevy::prelude::*;
