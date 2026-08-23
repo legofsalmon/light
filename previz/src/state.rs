@@ -70,4 +70,8 @@ pub struct RigExtent {
     pub diag: f32,
     /// highest thing in the rig, in metres
     pub height: f32,
+    /// Where the rig actually is on the floor. An MVR does not have to be
+    /// centred on the origin, and framing a plot that sits ten metres stage
+    /// left by pointing at 0,0 is the same miss as not framing it at all.
+    pub center: Vec3,
 }

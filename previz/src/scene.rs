@@ -789,7 +789,11 @@ pub fn rebuild_fixtures(
             let size = b.max - b.min;
             let diag = (size.x * size.x + size.y * size.y + size.z * size.z).sqrt();
             // publish it so the camera can frame the same rig
-            live.rig_extent = Some(crate::state::RigExtent { diag, height: b.max.y });
+            live.rig_extent = Some(crate::state::RigExtent {
+                diag,
+                height: b.max.y,
+                center: Vec3::new((b.min.x + b.max.x) * 0.5, 0.0, (b.min.z + b.max.z) * 0.5),
+            });
             ((b.max.y + 2.0).max(9.0), diag.max(12.0).min(q.light_range_cap))
         }
         None => {

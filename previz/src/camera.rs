@@ -15,12 +15,41 @@ pub struct Orbit {
     pub pitch: f32,
     pub dist: f32,
     pub target: Vec3,
+    /// True once the operator has driven the camera, or LIGHT_PREVIZ_CAM has
+    /// placed it. Until then the view is ours to frame; after, it is theirs and
+    /// nothing may move it.
+    pub claimed: bool,
+    /// Latches once the view has been framed to a rig, so a scene rebuild — a
+    /// patch edit, a re-import — never resets a view the operator is working
+    /// in. Lives here rather than on `Live` so this system can keep taking the
+    /// project read-only.
+    pub framed: bool,
+}
+
+/// The FOH shot for a rig of this size, sitting in this place.
+///
+/// One definition, used by the `1` preset and by the automatic first framing,
+/// because they should obviously agree and when they were written separately
+/// they did not.
+pub fn foh_for(e: Option<crate::state::RigExtent>) -> Orbit {
+    let (dist, eye_h, center) = match e {
+        Some(e) => (e.diag * 0.8, ((e.height + 3.0).max(5.0) * 0.25).clamp(1.5, 4.0), e.center),
+        None => (8.5, 1.5, Vec3::ZERO),
+    };
+    Orbit {
+        yaw: 0.0,
+        pitch: 0.32,
+        dist,
+        target: Vec3::new(center.x, eye_h, center.z),
+        claimed: false,
+        framed: true,
+    }
 }
 
 impl Default for Orbit {
     fn default() -> Self {
         // FOH view
-        let d = Orbit { yaw: 0.0, pitch: 0.32, dist: 8.5, target: Vec3::new(0.0, 1.5, 0.0) };
+        let d = Orbit { yaw: 0.0, pitch: 0.32, dist: 8.5, target: Vec3::new(0.0, 1.5, 0.0), claimed: false, framed: false };
         // LIGHT_PREVIZ_CAM=yaw,pitch,dist[,tx,ty,tz] — the starting viewpoint.
         //
         // Purely a development affordance, and it earns its keep: judging how
@@ -40,6 +69,12 @@ impl Default for Orbit {
             pitch: n[1],
             dist: n[2],
             target: if n.len() >= 6 { Vec3::new(n[3], n[4], n[5]) } else { d.target },
+            // An explicitly placed camera is a claimed camera: auto-framing
+            // would otherwise yank a deliberately composed shot back to FOH the
+            // moment the first project arrived, which made the knob useless for
+            // the screenshots it exists for.
+            claimed: true,
+            framed: true,
         }
     }
 }
@@ -155,14 +190,36 @@ pub fn orbit_camera(
         None => (22.0, 5.0, 8.5),
     };
 
+    // Frame the rig the first time we learn how big it is.
+    //
+    // The presets already scaled with the plot, but the view the window OPENS
+    // on did not: a fixed 8.5 m at eye height, which on the arena plot is a
+    // close-up of the band's knees with all hundred and twenty-nine fixtures
+    // and every beam out of frame above. The rig is 37 m across and hangs at
+    // 10 m. You had to know to press 1.
+    //
+    // Once the operator has touched anything the camera is theirs and this
+    // never fires again — including on a rebuild, so editing the patch does not
+    // throw away the shot you were lining up.
+    if !orbit.claimed && !orbit.framed && live.rig_extent.is_some() {
+        *orbit = foh_for(live.rig_extent);
+    }
+
     let mut delta = Vec2::ZERO;
     for ev in motion.read() {
         delta += ev.delta;
     }
-    if buttons.pressed(MouseButton::Left) {
+    if !delta.is_finite() {
+        delta = Vec2::ZERO;
+    }
+    if buttons.pressed(MouseButton::Left) && delta != Vec2::ZERO {
+        orbit.claimed = true;
         orbit.yaw -= delta.x * 0.005;
         orbit.pitch = (orbit.pitch + delta.y * 0.005).clamp(-0.1, 1.45);
-    } else if buttons.pressed(MouseButton::Right) || buttons.pressed(MouseButton::Middle) {
+    } else if (buttons.pressed(MouseButton::Right) || buttons.pressed(MouseButton::Middle))
+        && delta != Vec2::ZERO
+    {
+        orbit.claimed = true;
         let yaw_rot = Quat::from_rotation_y(orbit.yaw);
         let right = yaw_rot * Vec3::X;
         let pan = (right * -delta.x + Vec3::Y * delta.y) * 0.004 * orbit.dist.max(1.0) * 0.35;
@@ -174,6 +231,9 @@ pub fn orbit_camera(
             bevy::input::mouse::MouseScrollUnit::Line => ev.y * 0.6,
             bevy::input::mouse::MouseScrollUnit::Pixel => ev.y * 0.02,
         };
+        if step != 0.0 {
+            orbit.claimed = true;
+        }
         orbit.dist = (orbit.dist - step).clamp(2.0, max_dist);
     }
 
@@ -182,8 +242,8 @@ pub fn orbit_camera(
     // of a 37 m stage is not the shot anyone wanted.
     let eye_h = (max_target_y * 0.25).clamp(1.5, 4.0);
     if keys.just_pressed(KeyCode::Digit1) {
-        // FOH
-        *orbit = Orbit { yaw: 0.0, pitch: 0.32, dist: near_dist, target: Vec3::new(0.0, eye_h, 0.0) };
+        *orbit = foh_for(live.rig_extent);
+        orbit.claimed = true;
     }
     if keys.just_pressed(KeyCode::Digit2) {
         // side
@@ -192,6 +252,8 @@ pub fn orbit_camera(
             pitch: 0.18,
             dist: near_dist * 0.95,
             target: Vec3::new(0.0, eye_h, 0.5),
+            claimed: true,
+            framed: true,
         };
     }
     if keys.just_pressed(KeyCode::Digit3) {
@@ -201,6 +263,8 @@ pub fn orbit_camera(
             pitch: 1.42,
             dist: near_dist * 1.3,
             target: Vec3::new(0.0, 0.0, 0.8),
+            claimed: true,
+            framed: true,
         };
     }
 
