@@ -77,14 +77,11 @@ export function LicencePanel(): React.ReactElement | null {
 
   return (
     <div className="col" style={{ gap: 10, maxWidth: 620 }}>
-      <div className="row" style={{ gap: 8, alignItems: 'baseline' }}>
-        <strong>Licence</strong>
-        {said && (
-          <span style={{ color: TONE[said.tone] }}>
-            {said.title}
-          </span>
-        )}
-      </div>
+      {/* No "Licence" heading here — OutputView's sectionhead already says it,
+          and printing the word twice is how a panel looks bolted on. */}
+      {said && (
+        <div style={{ color: TONE[said.tone], fontWeight: 600 }}>{said.title}</div>
+      )}
 
       {said && <div style={{ color: 'var(--text-dim)', lineHeight: 1.5 }}>{said.detail}</div>}
 
