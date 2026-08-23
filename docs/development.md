@@ -66,6 +66,19 @@ The v0.4 roadmap milestone replaces this dance with data-driven GDTF profiles in
 - `engine/test/diff.ts` boots both engines on side ports (9901/9902) with network output disabled and compares snapshots — extend its command script when you add DMX-affecting features. It needs `cargo build -p light-core` first.
 - The Node smoke test binds UDP :6454 for the Art-Net loopback check and skips gracefully if something else (another Art-Net tool) holds the port; same for the Rust suite.
 - Effects are deterministic (integrated beat + hashed sample-and-hold), so assertions sample *off* whole beats where waveforms sit at extremes.
+- MIDI hot-plug on macOS needs a CFRunLoop pump. CoreMIDI keeps each process's
+  device list in a cache it only refreshes from notifications delivered on a run
+  loop, and the engine is a plain binary that never runs one — so the list is
+  frozen at the moment the process first touches CoreMIDI, and a controller
+  plugged in after launch is invisible until restart. Making a fresh `MidiInput`
+  does not help: the cache is per-process, not per-client. `refresh::pump()` in
+  `core/src/midi.rs` drains the pending notifications with a zero-timeout
+  `CFRunLoopRunInMode` (~16 µs) and the effect is process-wide, which is why the
+  scan thread is the only caller — `ApcOut::ensure_connection` enumerates on the
+  DMX tick thread, where blocking is not an option, and gets the corrected list
+  for free. `a_device_that_appears_after_start_becomes_visible` pins both halves;
+  it has to spawn a child process, because a virtual port created in the same
+  process is visible immediately and never exercises the notification path.
 
 ## Tauri app
 
