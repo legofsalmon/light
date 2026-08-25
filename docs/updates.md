@@ -62,17 +62,62 @@ Developer-ID-signed, Apple-notarised bundle this copy is:
 Note 4 versus a signing key of our own: minisign would prove we signed it.
 Stapling proves Apple scanned it and the ticket travelled inside the file.
 
-## Why it does not install itself
+## Installing
 
-The bundle cannot be modified in place. Adding a file to a signed bundle breaks
-its seal, and a broken seal is worse than no signature — Gatekeeper rejects
-outright rather than offering the Open Anyway path. The only safe operation is a
-whole-bundle swap by a process outside the bundle, after the app has quit and
-flushed.
+Nothing downloads until you press download, and nothing installs until you press
+install twice. The check is the only automatic part of this.
 
-That is buildable, and the design is written down. What it needs first is a
-liveness refusal in the engine (never swap with the rig lit), reaping the previz
-child on shutdown (it reconnects forever and would silently attach to the new
-engine), and the swap spawned from `ExitRequested` *after* the project flush —
-never `app.restart()`, which skips it. Until those exist, the honest thing is a
-link to the download.
+The sequence, and every step of it exists for a reason:
+
+```
+download → unpack (ditto) → verify → write the swap script → ARM → quit normally
+   → engine flushes the project → script waits for the pid AND the port
+   → mv aside → mv in → reopen
+```
+
+**The bundle is never modified in place.** Adding a file to a signed bundle
+breaks its seal, and a broken seal is worse than no signature — Gatekeeper
+rejects outright rather than offering Open Anyway. The only safe operation is a
+whole-bundle swap by a process that is not inside the bundle, which is why a
+detached `/bin/sh` script does it after LIGHT has gone.
+
+**The swap is spawned from `ExitRequested`, after the flush.** Not from the
+install command, and never through `app.restart()` or `process::exit` — both
+skip the shutdown that writes the project. An update that ate the last hour of
+patching would be worse than whatever it fixed.
+
+**It refuses rather than queues.** With the rig lit — any head above zero within
+the last 30 seconds — or with more than one client connected, install refuses
+and says why. "It will install when you stop" is a promise to do something
+disruptive at a moment nobody chose. The 30 seconds is so a blackout between
+songs does not read as "the room is empty".
+
+**The previz child is killed on shutdown.** It reconnects forever and never
+exits on disconnect, so a copy left running across a swap would silently
+reattach to the *new* engine speaking the *old* protocol.
+
+**It waits for the port, not just the pid.** `resolve_port` pops a blocking
+dialog if `:9900` is still held, which on relaunch would be the worst possible
+moment for one.
+
+**Rollback.** `mv` aside, `mv` in, and if the second fails the first is undone.
+The window where neither is in place is two same-volume renames wide. If the
+staging directory and the app are on different volumes — a rig running LIGHT
+from an external SSD — `mv` would degrade to copy-then-unlink, which is neither
+atomic nor safe to interrupt, so the install refuses and points at the manual
+download instead of shipping an untested path.
+
+Three tests run the real script through `sh` with `open`, `lsof` and `xattr`
+stubbed: the happy path, the rollback, and a target path containing a space, a
+quote and a semicolon.
+
+## What is deliberately not here
+
+- **No background download and no install-on-quit.** Both are ways for an update
+  to happen at a time nobody picked.
+- **No modal, ever.** `ask()` shells to `osascript` and blocks the calling
+  thread until a human clicks — it already needed a 10 s watchdog elsewhere. The
+  updater is a panel and at most a status dot.
+- **No install from a tablet.** The panel is hidden without a Tauri bridge, the
+  same way the licence panel is. Pressing install from a phone would quit the
+  machine running the show from a device that is not it.

@@ -49,8 +49,36 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   return invoke<T>(cmd, args);
 }
 
+export type InstallProgress = {
+  /** '' | 'downloading' | 'unpacking' | 'verifying' | 'ready' | 'armed' | 'failed' */
+  stage: string;
+  got: number;
+  total: number;
+  stagedVersion: string | null;
+  /** why this copy can never replace itself — not a moment-in-time thing */
+  blocker: string | null;
+  /** why installing RIGHT NOW would be a bad idea */
+  refusal: string | null;
+};
+
 export const updateStatus = () => call<UpdateStatus>('update_status');
 export const updateCheckNow = () => call<UpdateStatus>('update_check_now');
+export const updateProgress = () => call<InstallProgress>('update_progress');
+export const updateDownload = () => call<InstallProgress>('update_download');
+export const updateCancel = () => call<InstallProgress>('update_cancel');
+
+/** Arms the swap and quits. Nothing after this call runs. */
+export const updateInstall = (port: number) => call<void>('update_install', { port });
+
+/** The engine port this window is talking to — the same derivation the WS uses,
+ *  so a moved LIGHT_PORT is handled and the swap script waits on the right one. */
+export function enginePort(): number {
+  const dev = location.port === '5173' || location.port === '5177';
+  if (location.protocol.startsWith('http') && !location.hostname.endsWith('tauri.localhost') && !dev) {
+    return Number(location.port) || 9900;
+  }
+  return 9900;
+}
 
 /** Bytes as an operator reads them. */
 export function mb(bytes: number): string {

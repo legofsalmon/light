@@ -208,6 +208,11 @@ impl Updates {
     pub fn new() -> Self {
         Updates::default()
     }
+
+    /// What the last check found, if anything.
+    pub fn available(&self) -> Option<Release> {
+        self.found.lock().ok().and_then(|v| v.clone())
+    }
 }
 
 async fn fetch() -> Result<String, String> {

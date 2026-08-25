@@ -6,6 +6,7 @@ mod licence;
 mod licence_net;
 mod share;
 mod update;
+mod update_install;
 
 use std::sync::{Arc, Mutex};
 
@@ -153,9 +154,14 @@ fn main() {
         })
         .manage(licence_net::Licence::new())
         .manage(update::Updates::new())
+        .manage(update_install::Install::new())
         .invoke_handler(tauri::generate_handler![
             update::update_status,
             update::update_check_now,
+            update_install::update_progress,
+            update_install::update_download,
+            update_install::update_install,
+            update_install::update_cancel,
             licence_net::licence_status,
             licence_net::licence_start_trial,
             licence_net::licence_activate,
@@ -334,6 +340,7 @@ fn main() {
         .expect("error while building LIGHT");
 
     app.run(move |_handle, event| {
+        use tauri::Manager;
         if let tauri::RunEvent::ExitRequested { .. } = event {
             // Logged because this is the one way run() can end that only exists
             // in the app: Shutdown has exactly one sender, right here. Tauri
@@ -349,6 +356,26 @@ fn main() {
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(400));
+
+            // ONLY now. The swap script replaces this bundle, and it must not
+            // start until the engine has written the project — which is what
+            // the Shutdown above and this sleep are for. This is also why the
+            // install path never calls app.restart() or process::exit: both
+            // skip this arm entirely, and an update that ate the last hour of
+            // patching is worse than whatever it fixed.
+            if let Some(script) = _handle.state::<update_install::Install>().armed_script() {
+                log_line(&format!("update armed — spawning {}", script.display()));
+                let quoted = update_install::shell_quote(&script.to_string_lossy());
+                match std::process::Command::new("/bin/sh")
+                    .arg("-c")
+                    // detached: it has to outlive this process by definition
+                    .arg(format!("{quoted} >/dev/null 2>&1 &"))
+                    .spawn()
+                {
+                    Ok(_) => log_line("update: swap script running, LIGHT will reopen"),
+                    Err(e) => log_line(&format!("update: could not start the swap: {e}")),
+                }
+            }
         }
     });
 }

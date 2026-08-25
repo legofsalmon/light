@@ -247,6 +247,7 @@ impl std::fmt::Display for ExitReason {
 
 pub fn run(mut cfg: EngineConfig) -> ExitReason {
     let epoch = Instant::now();
+    let _ = EPOCH.set(epoch);
     let now_ms = move || epoch.elapsed().as_secs_f64() * 1000.0;
 
     let dir = persist::project_dir();
@@ -368,6 +369,9 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
             }
             match rx.recv_timeout(next - now) {
                 Ok(EngineMsg::Shutdown) => {
+                    // Before anything else: a previz left alive across a
+                    // self-update reconnects to the new engine on its own.
+                    reap_previz();
                     // final flush: an edit inside the autosave debounce window
                     // must survive ⌘Q
                     let slug = persist::current_slug(&dir);
@@ -473,6 +477,14 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
             }
         }
 
+        // Is anything actually lit? `i` is resolved intensity, already computed
+        // for this tick, so this is a scan of a vec that is in cache and one
+        // relaxed store — not a second render.
+        if res.heads.iter().any(|h| h.i > 0.0) {
+            RIG_LIT_AT_MS.store(t as u64, std::sync::atomic::Ordering::Relaxed);
+        }
+        CLIENTS.store(bc.count(), std::sync::atomic::Ordering::Relaxed);
+
         window_ticks += 1;
         if t - window_start >= 2000.0 {
             stats = EngineStats {
@@ -574,6 +586,70 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
 /// environment variable would be worse than this.
 static ENGINE_PORT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(9900);
 
+/// The previz child, kept so it can be killed on shutdown.
+///
+/// It used to be dropped on the floor. That is fine for a quit — the process
+/// dies with its parent's session — and NOT fine for a self-update: the previz
+/// client reconnects forever and never exits on disconnect, so a copy left
+/// running across an app swap silently reattaches to the NEW engine, speaking
+/// whatever protocol the OLD build had.
+static PREVIZ_CHILD: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
+
+fn hold_previz(child: std::process::Child) {
+    if let Ok(mut slot) = PREVIZ_CHILD.lock() {
+        // A previous one should already be gone, but never leak the handle.
+        if let Some(mut old) = slot.replace(child) {
+            let _ = old.kill();
+            let _ = old.wait();
+        }
+    }
+}
+
+/// Kill and reap the previz window. Called on shutdown, and safe to call when
+/// no previz was ever launched.
+pub fn reap_previz() {
+    if let Ok(mut slot) = PREVIZ_CHILD.lock() {
+        if let Some(mut child) = slot.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+/// Wall-clock ms when a head was last rendered above zero, or 0 for never.
+///
+/// One relaxed store per tick, which is the same trade ENGINE_PORT already
+/// makes. It exists so the app shell can refuse to replace itself while a rig
+/// is lit: an update that blacks out a room mid-set is worse than any bug it
+/// fixes. The grace window is the caller's to choose, because a blackout
+/// between songs must not read as "the room is empty".
+static RIG_LIT_AT_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many clients are connected right now — a browser here, a phone or a
+/// tablet on the venue WiFi. Published for the same reason as the liveness
+/// clock: someone driving the show from a tablet must not have the machine
+/// running it quit underneath them.
+static CLIENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+pub fn client_count() -> usize {
+    CLIENTS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The tick clock's zero, published so `rig_lit_within` can read the same
+/// monotonic scale the tick writes on. `now_ms` inside `run` is a closure over
+/// an Instant and a free function cannot reach it.
+static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// True when anything was lit within `grace_ms`.
+pub fn rig_lit_within(grace_ms: u64) -> bool {
+    let at = RIG_LIT_AT_MS.load(std::sync::atomic::Ordering::Relaxed);
+    if at == 0 {
+        return false;
+    }
+    let Some(epoch) = EPOCH.get() else { return false };
+    epoch.elapsed().as_millis() as u64 <= at.saturating_add(grace_ms)
+}
+
 fn spawn_previz() -> (bool, String) {
     let port = ENGINE_PORT.load(std::sync::atomic::Ordering::Relaxed);
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
@@ -596,12 +672,18 @@ fn spawn_previz() -> (bool, String) {
             // shows no connection state.
             let stale = previz_is_stale(c);
             return match std::process::Command::new(c).env("LIGHT_PORT", port.to_string()).spawn() {
-                Ok(_) if stale => (
+                Ok(child) if stale => {
+                    hold_previz(child);
+                    (
                     true,
                     "previz launched — but the binary is OLDER than previz/src.                      Rebuild: cargo build --release -p light-previz"
                         .into(),
-                ),
-                Ok(_) => (true, "previz launched".into()),
+                )
+                }
+                Ok(child) => {
+                    hold_previz(child);
+                    (true, "previz launched".into())
+                }
                 Err(e) => (false, format!("previz failed to start: {e}")),
             };
         }
