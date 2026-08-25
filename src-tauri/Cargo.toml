@@ -6,6 +6,9 @@ description = "LIGHT — look engine for Resolume"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# build.rs reads the version out of tauri.conf.json so there is one source of
+# truth; already in the lock as a normal dependency, so nothing new is fetched.
+serde_json = "1"
 
 [dependencies]
 tauri = { version = "2", features = [] }

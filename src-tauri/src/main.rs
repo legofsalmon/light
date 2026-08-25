@@ -5,6 +5,7 @@ use tauri::Manager;
 mod licence;
 mod licence_net;
 mod share;
+mod update;
 
 use std::sync::{Arc, Mutex};
 
@@ -151,7 +152,10 @@ fn main() {
             }
         })
         .manage(licence_net::Licence::new())
+        .manage(update::Updates::new())
         .invoke_handler(tauri::generate_handler![
+            update::update_status,
+            update::update_check_now,
             licence_net::licence_status,
             licence_net::licence_start_trial,
             licence_net::licence_activate,
@@ -235,6 +239,10 @@ fn main() {
             // long since returned. Every other status is a banner; see
             // Status::blocks_new_session.
             licence_net::start_heartbeat(app.handle().clone());
+            // Before the licence gate below on purpose: a lapsed trial is
+            // exactly when the operator most wants to know a newer build
+            // exists, and this only ever sets a flag a panel can read.
+            update::start_update_check(app.handle().clone());
 
             let gate = licence_net::startup_verdict();
             if gate.status.blocks_new_session() {

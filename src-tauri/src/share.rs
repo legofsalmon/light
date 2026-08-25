@@ -35,7 +35,7 @@ impl ShareSession {
     pub fn new() -> Result<Self, String> {
         let client = reqwest::Client::builder()
             .cookie_store(true)
-            .user_agent(concat!("LIGHT/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("LIGHT/", env!("LIGHT_VERSION")))
             // a 6.4 MB catalogue on a venue connection needs room, but not forever
             .timeout(std::time::Duration::from_secs(120))
             .build()

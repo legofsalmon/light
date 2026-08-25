@@ -6,6 +6,8 @@ import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 import { LicencePanel } from './LicencePanel.tsx';
 import { licenceAvailable } from '../licence.ts';
+import { UpdatePanel } from './UpdatePanel.tsx';
+import { updateAvailable } from '../update.ts';
 
 const METER_W = 1024;
 const METER_H = 88;
@@ -514,6 +516,13 @@ export function OutputView() {
       {/* Gated out here, not just inside the panel: the panel returns null
           without a Tauri bridge, but a bare sectionhead over nothing is what a
           browser and the LAN tablet were left looking at. */}
+      {updateAvailable() && (
+        <div>
+          <div className="sectionhead">Updates</div>
+          <UpdatePanel />
+        </div>
+      )}
+
       {licenceAvailable() && (
         <div>
           <div className="sectionhead">Licence</div>

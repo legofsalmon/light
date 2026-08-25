@@ -100,6 +100,12 @@ jobs:
       - name: Rust core tests
         run: cargo test -p light-core
 
+      - name: App shell tests (licence + updater)
+        # Not in ci.yml: that runs on ubuntu-latest and a Tauri app needs
+        # webkit2gtk to compile there, which the Linux job does not install.
+        # macOS is the only platform this app is built for anyway.
+        run: cargo test -p light-app
+
       - name: Differential parity (Node vs Rust)
         run: cargo build -p light-core && npm run test:parity
 
@@ -135,8 +141,19 @@ jobs:
           codesign -dv --verbose=2 "target/$LIGHT_TARGET/release/bundle/macos/LIGHT.app" 2>&1 | \
             grep -E 'Authority|TeamIdentifier|Signature|flags' || true
           echo "--- notarisation ticket (absent on ad-hoc builds) ---"
-          xcrun stapler validate "target/$LIGHT_TARGET/release/bundle/macos/LIGHT.app" || \
+          if xcrun stapler validate "target/$LIGHT_TARGET/release/bundle/macos/LIGHT.app"; then
+            echo "stapled"
+          elif [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
+            # Fatal on a tag, and this is why: LIGHT.zip below is the payload
+            # the in-app updater offers, and every installed copy verifies the
+            # Apple anchor before swapping. An unstapled release does not
+            # inconvenience one downloader — it publishes an update nobody can
+            # take, which is an update channel that dies silently.
+            echo "::error::not stapled — refusing to publish a release no installed copy could update to"
+            exit 1
+          else
             echo "not stapled — first launch needs the Privacy & Security > Open Anyway step"
+          fi
 
       - name: Zip the bundle (ditto preserves signatures)
         run: ditto -c -k --keepParent "target/$LIGHT_TARGET/release/bundle/macos/LIGHT.app" LIGHT.zip
