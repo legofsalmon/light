@@ -159,7 +159,12 @@ pub fn check(
     // cover the overlap, so the order is a decision: a lapsed lease is the one
     // the app can fix by itself with a heartbeat, so surface that first and let
     // the update banner appear once the lease is healthy again.
-    let status = if now > claims.exp {
+    // `>=`, not `>`, to match the vendor SDK exactly: theirs computes
+    // `exp - now` and treats `<= 0` as lapsed, so at the tick where now == exp
+    // it says lapsed and a `>` here would say active. One second, and no test
+    // vector covers it — which is exactly the kind of gap where two
+    // implementations of the same rule quietly disagree forever.
+    let status = if now >= claims.exp {
         if claims.is_trial() {
             Status::Expired
         } else {
@@ -275,6 +280,15 @@ mod tests {
     #[test]
     fn a_token_for_another_product_is_invalid_here() {
         assert_eq!(check(VALID, MACHINE, IN_WINDOW, NOW, PUBKEY, "light").status, Status::Invalid);
+    }
+
+    /// The exact boundary, pinned because the vendor's vectors do not cover it
+    /// and their SDK is the only statement of it.
+    #[test]
+    fn the_lease_lapses_at_exp_not_after_it() {
+        // VALID has exp = 1762592000
+        assert_eq!(status_of(VALID, IN_WINDOW, 1_762_591_999), Status::Active);
+        assert_eq!(status_of(VALID, IN_WINDOW, 1_762_592_000), Status::CheckInRequired);
     }
 
     /// The placeholder the integration page currently serves must never read as

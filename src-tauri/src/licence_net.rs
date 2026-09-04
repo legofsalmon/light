@@ -34,22 +34,26 @@ const BUILD_DATE: i64 = match i64::from_str_radix(env!("LIGHT_BUILD_DATE"), 10) 
     Err(_) => 0,
 };
 
-/// The verifying key, baked in at compile time.
+/// The studio's licence signing key, from <https://letissier.ie/integrate>
+/// ("Signing public key (embed this)") and matching `PUBLIC_KEY_HEX` in the
+/// vendor's own Rust SDK.
 ///
-/// Empty until the LeTissier deployment has a signing key configured — the
-/// integration page currently serves `REPLACE_WITH_YOUR_PUBLIC_KEY_HEX` and
-/// says so. An empty key verifies nothing, so every token reads `invalid`,
-/// which is a banner and never a locked console. Set it at build time:
+/// A *public* key: embedding it is the intended use. It can only verify, never
+/// mint, so it is safe in a binary and safe in this repository.
 ///
-/// ```sh
-/// LIGHT_LICENCE_PUBLIC_KEY=<64 hex chars> npm run app:build
-/// ```
+/// Compiled in as the DEFAULT rather than read from the environment. It used to
+/// default to "" with the env var as the only source, which meant a release
+/// built without that variable set would ship a licence check that verifies
+/// nothing — silently, and looking exactly like a working build. A wrong key is
+/// a loud failure; a missing one was not.
 ///
-/// It is a *public* key: embedding it is the intended use, and it can only
-/// verify, never mint.
+/// `LIGHT_LICENCE_PUBLIC_KEY` still overrides it, for testing against a
+/// different deployment.
+const DEFAULT_PUBLIC_KEY: &str = "1fca6c21f2eb7963fd646272a731a41a191d3a4cda839e295c5cda67978fcc85";
+
 const PUBLIC_KEY: &str = match option_env!("LIGHT_LICENCE_PUBLIC_KEY") {
     Some(k) => k,
-    None => "",
+    None => DEFAULT_PUBLIC_KEY,
 };
 
 pub fn public_key_configured() -> bool {
@@ -359,15 +363,24 @@ mod tests {
         assert_eq!(a, machine_hash(), "fingerprint moved between two calls");
     }
 
-    /// Until the deployment has a signing key this must read false, and the
-    /// build must still be usable — an unconfigured key is the shipping state,
-    /// not an error state.
+    /// Every build ships a usable verifying key. This is the test that would
+    /// have caught the old default of "" — which produced a build that looked
+    /// fine and verified nothing.
     #[test]
-    fn an_unset_public_key_is_reported_rather_than_guessed() {
-        assert_eq!(public_key_configured(), PUBLIC_KEY.len() == 64);
-        if !public_key_configured() {
-            assert!(!startup_verdict().status.blocks_new_session());
-        }
+    fn the_signing_key_is_compiled_in_and_plausible() {
+        assert!(public_key_configured(), "no verifying key in this build");
+        assert_eq!(PUBLIC_KEY.len(), 64);
+        assert!(PUBLIC_KEY.chars().all(|c| c.is_ascii_hexdigit()), "not hex: {PUBLIC_KEY}");
+        assert_ne!(PUBLIC_KEY, "REPLACE_WITH_YOUR_PUBLIC_KEY_HEX");
+        // 32 bytes, and ring will only accept a well-formed curve point
+        assert_eq!(DEFAULT_PUBLIC_KEY.len(), 64);
+    }
+
+    /// A key that cannot verify must never block a session — the console runs
+    /// unlicensed rather than refusing to open.
+    #[test]
+    fn a_licence_that_cannot_be_read_never_locks_the_console() {
+        assert!(!startup_verdict().status.blocks_new_session());
     }
 
     #[test]

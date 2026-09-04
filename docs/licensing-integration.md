@@ -5,9 +5,9 @@ Wiring <https://letissier.ie/integrate> into LIGHT. **Implemented** in
 identity, Keychain, the four HTTP calls, the daily check-in), with the panel at
 `ui/src/components/LicencePanel.tsx` and the single startup gate in `main.rs`.
 
-Everything below was read off the service's own documentation and its published
-test vectors, not from memory. Blocker 2 is now settled by measurement; blocker
-1 is still open and is the reason shipped builds read `invalid`.
+Everything below was read off the service's own documentation, its published
+test vectors and its own Rust SDK, not from memory. **Both blockers are now
+cleared** — see the section at the bottom.
 
 ## The shape of it
 
@@ -113,31 +113,43 @@ test can mint a token, assert it verifies, then assert that a flipped byte in
 the payload, a foreign machine hash, and a lapsed `exp` each land on the right
 status.
 
-## The two blockers
+## The two blockers — both cleared
 
-1. **The production public key is a placeholder — STILL OPEN.** The integration
-   page ships `REPLACE_WITH_YOUR_PUBLIC_KEY_HEX` and now says why: "This
-   deployment has no signing key configured. Set `LICENCE_PUBLIC_KEY` and
-   redeploy." Until that is done the service cannot mint a token anyone can
-   verify, so every build reads `invalid` — which is a banner and a fully usable
-   console, never a lock. Once the key exists, rebuild with it:
+1. **The production public key — RESOLVED (2026-09).** The deployment now has a
+   signing key configured and the integration page serves it as "Signing public
+   key (embed this)":
+   `1fca6c21f2eb7963fd646272a731a41a191d3a4cda839e295c5cda67978fcc85`. It
+   matches `PUBLIC_KEY_HEX` in the vendor's own Rust SDK.
 
-   ```sh
-   LIGHT_LICENCE_PUBLIC_KEY=<64 hex chars> npm run app:build
-   ```
+   It is compiled in as `DEFAULT_PUBLIC_KEY`, not read from the environment.
+   That distinction matters: with the key living only in
+   `LIGHT_LICENCE_PUBLIC_KEY`, a release built without that variable would ship
+   a licence check that verifies nothing — silently, and looking exactly like a
+   working build. A wrong key fails loudly; a missing one did not.
+   `the_signing_key_is_compiled_in_and_plausible` pins it.
 
-   `build.rs` declares `rerun-if-env-changed` on it, so switching keys cannot
-   leave a stale constant in an otherwise fresh binary, and
-   `an_unconfigured_public_key_verifies_nothing` pins that the placeholder, the
-   empty string and a wrong key all verify nothing.
+2. **What the signature covers — RESOLVED, and confirmed twice.** Measured
+   against the published vectors first (the prose guide says the opposite), then
+   confirmed against the vendor's SDK, which does
+   `key.verify_strict(payload.as_bytes(), …)` — the **ASCII of the base64url
+   payload segment**.
 
-2. **What the signature covers — SETTLED.** Measured against the published
-   vectors rather than trusted to the prose, which says the opposite: Ed25519
-   signs the **ASCII of the base64url payload segment**. Both valid vectors
-   verify that way and fail the other; both negative vectors fail both. It is
-   one constant, `signed_bytes`, with `the_published_vectors_agree` pinning it.
-   Deliberately one acceptance path — a verifier that tries both accepts
-   everything either scheme would, and the second path is where a forgery aims.
+## Where this implementation is deliberately stricter than the SDK
+
+- **Product is checked.** Theirs does not look at `claims.product`; a `vizz`
+  token would satisfy it. Here a token minted for another of the studio's
+  products is `invalid`. The product ids are `vizz, light, datamosh, yewee,
+  crewbox` and ours is `light`.
+- **One acceptance path for the signature.** A verifier that tries both byte
+  interpretations accepts everything either would.
+
+## Where it was wrong, and now matches
+
+The lease boundary. The SDK computes `exp - now` and lapses on `<= 0`; this
+lapsed on `now > exp`, so at exactly `now == exp` the two disagreed for one
+second. No published vector covers that tick — which is precisely the sort of
+gap where two implementations of one rule diverge quietly and forever. Now
+`now >= claims.exp`, pinned by `the_lease_lapses_at_exp_not_after_it`.
 
 ## What shipped, and the one decision that is ours
 
