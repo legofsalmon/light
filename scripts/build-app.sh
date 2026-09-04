@@ -110,7 +110,17 @@ rm -rf "$DMG_DIR" "$DMG_OUT" "$DMG_ALIAS"
 mkdir -p "$DMG_DIR"
 cp -R "$BUNDLE" "$DMG_DIR/"
 ln -s /Applications "$DMG_DIR/Applications"
-hdiutil create -volname "LIGHT ${VERSION}" -srcfolder "$DMG_DIR" -ov -format UDZO -quiet "$DMG_OUT"
+# NOT -quiet. It suppresses hdiutil's errors as well as its progress, and under
+# `set -e` that produced a build that printed "==> dmg" and died with exit 1 and
+# nothing else — notarised, stapled, and unshippable, with no way to tell why.
+# A few lines of progress in the log is a cheap price for a failure that says
+# what it was.
+df -h "$(dirname "$BUNDLE")" | tail -1
+if ! hdiutil create -volname "LIGHT ${VERSION}" -srcfolder "$DMG_DIR" -ov -format UDZO "$DMG_OUT"; then
+  echo "hdiutil failed to build the dmg (exit $?)" >&2
+  df -h "$(dirname "$BUNDLE")" >&2
+  exit 1
+fi
 rm -rf "$DMG_DIR"
 if [ ${#NOTARY_AUTH[@]} -gt 0 ]; then
   # the .dmg is what people download, so it needs its own ticket — a stapled

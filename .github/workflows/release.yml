@@ -121,6 +121,12 @@ jobs:
         run: |
           npm run build
           cargo test -p light-app
+          # These tests compile the whole app in DEBUG, several GB, on top of a
+          # release build that has already compiled Bevy. The release bundle
+          # lives under target/$LIGHT_TARGET, so this is safe to drop — and the
+          # dmg step later needs room to copy an 80 MB bundle and compress it.
+          rm -rf target/debug
+          df -h /
 
       - name: Build the app (signed + notarised when secrets exist)
         # With no secrets set these are empty and the bundler falls back to the
