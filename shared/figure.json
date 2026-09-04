@@ -1,0 +1,531 @@
+{
+  "_": "The band's geometry, shared by both previz renderers. previz/src/figure.rs reads this with include_str! + serde_json; ui/src/components/Previz3D.tsx imports it directly. It exists so the two views cannot drift: they used to be independent hand-copies and the web one was still drawing an armless pawn three commits after the native figures grew limbs. Lengths are metres, angles radians, directions need not be unit \u2014 they are normalised on use. Axes: +Y up, +Z downstage toward the audience, +X the figure's own left.",
+  "segments": {
+    "thigh": 0.429,
+    "shank": 0.431,
+    "lumbar": 0.122,
+    "thorax": 0.382,
+    "neck": 0.085,
+    "head": 0.117,
+    "uarm": 0.3,
+    "farm": 0.26,
+    "hand": 0.105,
+    "hipX": 0.088,
+    "footLift": 0.034
+  },
+  "_segments": "Drillis & Contini fractions of a 1.75 m stature. The chain closes exactly: 0.068 ankle + shank + thigh = 0.928 hip, + lumbar + thorax + neck + 0.233 head = 1.750 vertex. A test asserts it.",
+  "meshes": {
+    "pelvis": {
+      "kind": "box",
+      "size": [0.31, 0.19, 0.21]
+    },
+    "abdomen": {
+      "kind": "capsule",
+      "radius": 0.115,
+      "length": 0.1
+    },
+    "chest": {
+      "kind": "capsule",
+      "radius": 0.145,
+      "length": 0.24
+    },
+    "neck": {
+      "kind": "capsule",
+      "radius": 0.052,
+      "length": 0.05
+    },
+    "uarm": {
+      "kind": "capsule",
+      "radius": 0.05,
+      "length": 0.3
+    },
+    "farm": {
+      "kind": "capsule",
+      "radius": 0.043,
+      "length": 0.26
+    },
+    "hand": {
+      "kind": "box",
+      "size": [0.085, 0.105, 0.045]
+    },
+    "thigh": {
+      "kind": "capsule",
+      "radius": 0.08,
+      "length": 0.429
+    },
+    "shank": {
+      "kind": "capsule",
+      "radius": 0.058,
+      "length": 0.431
+    },
+    "foot": {
+      "kind": "box",
+      "size": [0.1, 0.068, 0.266]
+    }
+  },
+  "_meshes": "Body parts, authored at exact segment length and NEVER scaled: a capsule's caps distort under non-uniform scale, and `bone` relies on the cylinder section matching the joint-to-joint distance so the caps overlap at every joint. An overlapping joint cannot leak a pinhole of light through the shadow. Bevy's Capsule3d(radius, length) and three's CapsuleGeometry(radius, height) both mean the CYLINDER section, so these transcribe 1:1.",
+  "trunkFlatten": {
+    "abdomen": [1.0, 1.0, 0.82],
+    "chest": [1.0, 1.0, 0.76]
+  },
+  "head": {
+    "scale": [0.155, 0.233, 0.195]
+  },
+  "deltoid": {
+    "scale": 0.144,
+    "offset": [0.155, -0.005, 0.005]
+  },
+  "shoulder": {
+    "offset": [0.165, -0.03, 0.01]
+  },
+  "_head": "A 7.5-head egg, not a ball. The 0.22 m sphere it replaced was 6.5 cm too wide and read as a ball on a post. Deltoids take the bideltoid to 0.454 m against canon 0.453; the old figure's widest point was a 0.34 m torso.",
+  "materials": {
+    "cloth": {
+      "color": "#242429",
+      "roughness": 0.92,
+      "metallic": 0.0
+    },
+    "skin": {
+      "color": "#9e7861",
+      "roughness": 0.75,
+      "metallic": 0.0
+    },
+    "wood": {
+      "color": "#591f1a",
+      "roughness": 0.55,
+      "metallic": 0.0
+    },
+    "metal": {
+      "color": "#8c8c99",
+      "roughness": 0.35,
+      "metallic": 0.85
+    },
+    "brass": {
+      "color": "#b5944a",
+      "roughness": 0.3,
+      "metallic": 0.9
+    }
+  },
+  "stances": {
+    "even": {
+      "pelvisY": 0.928,
+      "legs": [
+        {
+          "thigh": [-0.03, -1.0, -0.02],
+          "shank": [0.02, -1.0, 0.02],
+          "toe": -0.08
+        },
+        {
+          "thigh": [0.03, -1.0, -0.02],
+          "shank": [-0.02, -1.0, 0.02],
+          "toe": 0.08
+        }
+      ]
+    },
+    "shift": {
+      "pelvisY": 0.92,
+      "legs": [
+        {
+          "thigh": [-0.07, -1.0, -0.04],
+          "shank": [0.05, -1.0, 0.03],
+          "toe": -0.06
+        },
+        {
+          "thigh": [0.1, -1.0, 0.3],
+          "shank": [-0.06, -1.0, -0.16],
+          "toe": 0.22
+        }
+      ]
+    },
+    "wide": {
+      "pelvisY": 0.912,
+      "legs": [
+        {
+          "thigh": [-0.2, -1.0, 0.14],
+          "shank": [0.12, -1.0, -0.12],
+          "toe": -0.18
+        },
+        {
+          "thigh": [0.2, -1.0, 0.14],
+          "shank": [-0.12, -1.0, -0.12],
+          "toe": 0.18
+        }
+      ]
+    }
+  },
+  "_stances": "Right leg first, at x = -hipX. pelvisY belongs to the STANCE \u2014 the first cut let a kind pick a stance but take pelvisY from the random variation stream, so a shift stance could get an even-stance pelvis and the ankle landed 8 mm out. Harmless, because the sole is pinned to the deck regardless, but wrong.",
+  "kinds": {
+    "vocalist": {
+      "stance": "shift",
+      "spine": {
+        "lumbar": [0, 1, 0.1],
+        "thorax": [0, 1, 0.22],
+        "neck": [0, 1, 0.05],
+        "head": [0, 1, 0.02]
+      },
+      "headPitch": -0.1,
+      "headYaw": 0.0,
+      "armR": [[-0.35, -0.9, 0.26], [0.55, 0.72, 0.42], [0.55, 0.1, 0.83]],
+      "armL": [[0.6, 0.4, 0.28], [0.22, 0.95, 0.15], [0.06, 0.99, 0.08]]
+    },
+    "guitarist": {
+      "stance": "wide",
+      "spine": {
+        "lumbar": [0, 1, 0.16],
+        "thorax": [0, 1, 0.3],
+        "neck": [0, 1, 0.3],
+        "head": [0, 1, 0.34]
+      },
+      "headPitch": 0.38,
+      "headYaw": 0.0,
+      "armR": [[-0.3, -0.9, 0.2], [0.6, -0.55, 0.3], [0.35, -0.35, 0.87]],
+      "armL": [[0.25, -0.94, 0.1], [0.55, 0.42, 0.05], [0.9, 0.3, -0.1]]
+    },
+    "bassist": {
+      "stance": "wide",
+      "spine": {
+        "lumbar": [0, 1, 0.02],
+        "thorax": [0, 1, 0.05],
+        "neck": [0, 1, 0.02],
+        "head": [0, 1, 0.02]
+      },
+      "headPitch": 0.04,
+      "headYaw": 0.12,
+      "armR": [[-0.22, -0.94, 0.26], [0.5, -0.42, 0.42], [0.3, -0.3, 0.9]],
+      "armL": [[0.34, -0.9, 0.12], [0.66, 0.14, 0.08], [0.94, 0.2, -0.1]]
+    },
+    "keyboardist": {
+      "stance": "even",
+      "spine": {
+        "lumbar": [0, 1, 0.1],
+        "thorax": [0, 1, 0.16],
+        "neck": [0, 1, 0.26],
+        "head": [0, 1, 0.28]
+      },
+      "headPitch": 0.34,
+      "headYaw": 0.0,
+      "armR": [[-0.18, -0.95, 0.3], [0.12, -0.42, 0.9], [0.05, -0.55, 0.83]],
+      "armL": [[0.26, -0.94, 0.26], [0.1, -0.4, 0.91], [0.02, -0.55, 0.84]]
+    },
+    "drummer": {
+      "stance": "seated",
+      "pelvis": [0.0, 0.52, -0.42],
+      "legs": [
+        {
+          "thigh": [-0.1, -0.2, 1.0],
+          "shank": [0.02, -0.9, 0.44],
+          "toe": 0.0
+        },
+        {
+          "thigh": [0.3, -0.22, 0.94],
+          "shank": [0.1, -0.88, 0.46],
+          "toe": 0.0
+        }
+      ],
+      "feet": [
+        {
+          "pos": [-0.115, 0.045, 0.235],
+          "rotX": 0.3,
+          "rotY": 0.0
+        },
+        {
+          "pos": [0.265, 0.045, 0.225],
+          "rotX": 0.26,
+          "rotY": 0.2
+        }
+      ],
+      "spine": {
+        "lumbar": [0, 1, 0.12],
+        "thorax": [0, 1, 0.14],
+        "neck": [0, 1, 0.1],
+        "head": [0, 1, 0.12]
+      },
+      "headPitch": 0.16,
+      "headYaw": 0.0,
+      "armR": [[-0.55, 0.28, 0.6], [-0.3, 0.34, 0.8], [-0.34, 0.1, 0.94]],
+      "armL": [[0.28, -0.86, 0.42], [-0.34, -0.1, 0.93], [-0.2, -0.2, 0.96]]
+    },
+    "default": {
+      "stance": "even",
+      "spine": {
+        "lumbar": [0, 1, 0.02],
+        "thorax": [0, 1, 0.04],
+        "neck": [0, 1, 0.02],
+        "head": [0, 1, 0.0]
+      },
+      "headPitch": 0.0,
+      "headYaw": 0.0,
+      "armR": [[-0.12, -1.0, 0.06], [0.05, -1.0, 0.1], [0.0, -1.0, 0.1]],
+      "armL": [[0.12, -1.0, 0.06], [-0.05, -1.0, 0.1], [0.0, -1.0, 0.1]]
+    }
+  },
+  "_kinds": "Each player posed doing their job. The asymmetry is the point rather than decoration: an arm held clear of the chest punches a hole through the silhouette AND the shadow, which is what makes one read as a drummer from ten metres. 'seated' means the pose carries its own pelvis, legs and explicit feet \u2014 both of the drummer's are on pedals, heels up.",
+  "variation": {
+    "statureBase": 0.96,
+    "statureRange": 0.08,
+    "streams": {
+      "stature": 0,
+      "torsoYaw": 3,
+      "headPitch": 5,
+      "headYaw": 19,
+      "stance": 2,
+      "mirror": 11
+    },
+    "torsoYawRange": 0.3,
+    "headPitchRange": 0.2,
+    "headYawRange": 0.5
+  },
+  "_variation": "FNV-1a over the prop's stable id, then an avalanche mixer per stream. Deterministic from the id so the same musician is the same height after every rebuild \u2014 and a rebuild happens on any 1 cm nudge of an unrelated prop. stance/mirror apply only to the 'default' kind; the named kinds pin their own. Ranges are peak-to-peak, centred.",
+  "instruments": {
+    "vocalist": [
+      {
+        "mesh": "cyl",
+        "mat": "metal",
+        "size": [0.28, 0.024, 0.28],
+        "pos": [-0.098, 0.012, 0.335]
+      },
+      {
+        "mesh": "cyl",
+        "mat": "metal",
+        "size": [0.022, 1.47, 0.022],
+        "pos": [-0.098, 0.735, 0.335]
+      },
+      {
+        "mesh": "cyl",
+        "mat": "metal",
+        "size": [0.048, 0.17, 0.048],
+        "pos": [-0.08600000000000001, 1.53, 0.313],
+        "rotX": -0.34
+      },
+      {
+        "mesh": "ball",
+        "mat": "cloth",
+        "size": [0.075, 0.075, 0.075],
+        "pos": [-0.07200000000000001, 1.602, 0.265]
+      }
+    ],
+    "guitarist": [
+      {
+        "mesh": "ball",
+        "mat": "wood",
+        "size": [0.34, 0.42, 0.11],
+        "pos": [-0.1, 1.0, 0.235],
+        "rotX": -0.22,
+        "rotZ": -0.3
+      },
+      {
+        "mesh": "cube",
+        "mat": "wood",
+        "from": [0.055, 1.085, 0.205],
+        "to": [0.635, 1.31, 0.115],
+        "thick": 0.052
+      },
+      {
+        "mesh": "cube",
+        "mat": "wood",
+        "size": [0.075, 0.17, 0.02],
+        "pos": [0.663, 1.32, 0.111],
+        "alignTo": [[0.055, 1.085, 0.205], [0.635, 1.31, 0.115]],
+        "rotX": 0.2
+      }
+    ],
+    "bassist": [
+      {
+        "mesh": "ball",
+        "mat": "wood",
+        "size": [0.3, 0.38, 0.105],
+        "pos": [-0.12, 0.905, 0.215],
+        "rotX": -0.16,
+        "rotZ": -0.16
+      },
+      {
+        "mesh": "cube",
+        "mat": "wood",
+        "from": [0.04, 0.96, 0.19],
+        "to": [0.76, 1.18, 0.1],
+        "thick": 0.058
+      },
+      {
+        "mesh": "cube",
+        "mat": "wood",
+        "size": [0.095, 0.23, 0.022],
+        "pos": [0.805, 1.194, 0.095],
+        "alignTo": [[0.04, 0.96, 0.19], [0.76, 1.18, 0.1]],
+        "rotX": 0.2
+      }
+    ],
+    "keyboardist": [
+      {
+        "mesh": "cube",
+        "mat": "cloth",
+        "size": [1.15, 0.09, 0.34],
+        "pos": [0.0, 0.91, 0.39],
+        "rotX": -0.09
+      },
+      {
+        "mesh": "cube",
+        "mat": "cloth",
+        "size": [0.9, 0.07, 0.28],
+        "pos": [0.0, 1.15, 0.56],
+        "rotX": -0.14
+      },
+      {
+        "mesh": "cube",
+        "mat": "metal",
+        "size": [0.038, 0.96, 0.038],
+        "pos": [0.0, 0.455, 0.39],
+        "rotZ": -0.24
+      },
+      {
+        "mesh": "cube",
+        "mat": "metal",
+        "size": [0.038, 0.96, 0.038],
+        "pos": [0.0, 0.455, 0.39],
+        "rotZ": 0.24
+      },
+      {
+        "mesh": "cube",
+        "mat": "metal",
+        "size": [0.9, 0.035, 0.035],
+        "pos": [0.0, 0.018, 0.39]
+      }
+    ]
+  },
+  "drumKit": [
+    {
+      "mesh": "cyl",
+      "mat": "wood",
+      "size": [0.56, 0.46, 0.56],
+      "pos": [0.0, 0.29, 0.18],
+      "rotX": 1.5707963267948966
+    },
+    {
+      "mesh": "cube",
+      "mat": "metal",
+      "size": [0.1, 0.03, 0.24],
+      "pos": [-0.06, 0.02, 0.03]
+    },
+    {
+      "mesh": "cyl",
+      "mat": "metal",
+      "size": [0.36, 0.15, 0.36],
+      "pos": [0.24, 0.61, -0.03],
+      "rotX": -0.14
+    },
+    {
+      "mesh": "cyl",
+      "mat": "metal",
+      "size": [0.032, 0.54, 0.032],
+      "pos": [0.24, 0.27, -0.03]
+    },
+    {
+      "mesh": "cyl",
+      "mat": "wood",
+      "size": [0.26, 0.24, 0.26],
+      "pos": [-0.15, 0.79, 0.12],
+      "rotX": 0.34
+    },
+    {
+      "mesh": "cyl",
+      "mat": "wood",
+      "size": [0.3, 0.26, 0.3],
+      "pos": [0.155, 0.8, 0.15],
+      "rotX": 0.3
+    },
+    {
+      "mesh": "cyl",
+      "mat": "wood",
+      "size": [0.36, 0.4, 0.36],
+      "pos": [-0.48, 0.32, -0.06]
+    },
+    {
+      "mesh": "cyl",
+      "mat": "brass",
+      "size": [0.36, 0.02, 0.36],
+      "pos": [0.48, 0.84, 0.1]
+    },
+    {
+      "mesh": "cyl",
+      "mat": "brass",
+      "size": [0.36, 0.02, 0.36],
+      "pos": [0.48, 0.878, 0.1]
+    },
+    {
+      "mesh": "cyl",
+      "mat": "metal",
+      "size": [0.026, 0.86, 0.026],
+      "pos": [0.48, 0.43, 0.1]
+    },
+    {
+      "mesh": "cube",
+      "mat": "metal",
+      "size": [0.09, 0.03, 0.22],
+      "pos": [0.47, 0.02, -0.02]
+    },
+    {
+      "mesh": "cyl",
+      "mat": "brass",
+      "size": [0.4, 0.02, 0.4],
+      "pos": [-0.66, 1.34, 0.06],
+      "rotZ": 0.2
+    },
+    {
+      "mesh": "cyl",
+      "mat": "metal",
+      "size": [0.028, 1.32, 0.028],
+      "pos": [-0.66, 0.66, 0.06]
+    },
+    {
+      "mesh": "cyl",
+      "mat": "brass",
+      "size": [0.5, 0.02, 0.5],
+      "pos": [0.56, 1.14, 0.24],
+      "rotZ": -0.16
+    },
+    {
+      "mesh": "cyl",
+      "mat": "metal",
+      "size": [0.028, 1.13, 0.028],
+      "pos": [0.56, 0.565, 0.24]
+    }
+  ],
+  "floorTomLegs": {
+    "from": [-0.48, 0.3, -0.06],
+    "radius": 0.16,
+    "y": 0.01,
+    "thick": 0.02,
+    "count": 3
+  },
+  "_floorTomLegs": "Stated, not found. Both ports used to locate the floor tom by scanning drumKit for the part 0.400 tall \u2014 so retuning any other drum to that height silently grew it a second tripod.",
+  "_drumKit": "Cymbals are 0.020 thick, not 0.015: bevy's shadow_depth_bias is a flat 0.02 m along the light vector, so a disc thinner than that drops its own shadow and is lit but casts nothing.",
+  "drumStool": {
+    "seat": {
+      "mesh": "cyl",
+      "mat": "cloth",
+      "size": [0.34, 0.055, 0.34],
+      "pos": [0.0, 0.473, -0.42]
+    },
+    "post": {
+      "mesh": "cyl",
+      "mat": "metal",
+      "size": [0.055, 0.4, 0.055],
+      "pos": [0.0, 0.245, -0.42]
+    },
+    "legs": {
+      "from": [0.0, 0.29, -0.42],
+      "radius": 0.16,
+      "y": 0.02,
+      "thick": 0.028,
+      "count": 3
+    }
+  },
+  "_drumStool": "The stool is the one instrument part that scales WITH the player, or a tall drummer floats above their own seat.",
+  "sticks": {
+    "length": 0.4,
+    "thick": 0.011,
+    "mat": "cloth",
+    "targetR": [-0.66, 1.34, 0.06],
+    "targetL": [0.24, 0.61, -0.03]
+  },
+  "_sticks": "Aimed from each hand at what that hand is about to hit; the tip overshoots, which is what a real stick does."
+}

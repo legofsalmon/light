@@ -9,6 +9,9 @@ import { Renderer } from '../renderer.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Project } from '../../shared/types.ts';
+import { sanitizeProject } from '../../shared/types.ts';
+import type { ShareList } from '../../shared/gdtfShare.ts';
+import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
 
 /** The demo show these tests were written against — five fixtures at known
  *  addresses, looks with known ids. Deliberately NOT the shipped default: that
@@ -16,6 +19,8 @@ import type { Project } from '../../shared/types.ts';
  *  content means editing a song looks like an engine regression. */
 const demoProject = (): Project =>
   JSON.parse(fs.readFileSync(path.join(process.cwd(), 'core/tests/data/demo_project.json'), 'utf8'));
+import { readFileSync } from 'node:fs';
+import { MAX_THROW, buildOccluders, hitsPropFootprint, standingHeightAt, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
 import { parseOsc } from '../osc.ts';
 import { ArtnetOut } from '../artnet.ts';
 import { BeatClock } from '../clock.ts';
@@ -57,7 +62,7 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
 
 // ---------- merge → DMX ----------
 {
-  const st = new EngineState(demoProject());
+  const st = new EngineState(sanitizeProject(demoProject())!);
   const r = new Renderer(st);
   const t0 = 1000;
   r.tick(t0); // prime dt integration
@@ -182,7 +187,7 @@ await new Promise<void>((resolve) => {
     done(okId && okOp && okUni && okLen && okData, `id=${okId} op=${okOp} uni=${okUni} len=${okLen} data=${okData}`);
   });
   rx.bind(6454, '127.0.0.1', () => {
-    const st = new EngineState(demoProject());
+    const st = new EngineState(sanitizeProject(demoProject())!);
     const r = new Renderer(st);
     r.tick(0);
     st.trigger('layer-wash', 1, 0);
@@ -195,6 +200,570 @@ await new Promise<void>((resolve) => {
     }, 150);
   });
 });
+
+
+// A truss must survive the sanitiser. It did not: the allow-list was hand
+// written and never grew when stage structure was added, so every truss, leg,
+// riser and screen was stripped on load, on updateProject and on
+// replaceProject — silently, because the echo is withheld from the sender, so
+// the UI kept drawing a stage the autosave had already thrown away.
+{
+  const p = sanitizeProject({
+    ...demoProject(),
+    props: [
+      { id: 'p1', kind: 'trussBar', pos: { x: 0, z: 0 }, size: { w: 7, h: 0.3, d: 0.3 }, y: 3.05 },
+      { id: 'p2', kind: 'riser', pos: { x: 1, z: 1 } },
+      { id: 'p3', kind: 'vocalist', pos: { x: 0, z: 2 } },
+      { id: 'p4', kind: 'nonsense', pos: { x: 0, z: 0 } },
+    ],
+  } as unknown as Project);
+  const kinds = (p?.props ?? []).map((x) => x.kind).sort();
+  check(
+    'sanitize keeps stage structure',
+    JSON.stringify(kinds) === JSON.stringify(['riser', 'trussBar', 'vocalist']),
+    `got ${JSON.stringify(kinds)}`,
+  );
+  const bar = p?.props?.find((x) => x.id === 'p1');
+  check('sanitize keeps truss dimensions', bar?.size?.w === 7 && bar?.y === 3.05, JSON.stringify(bar));
+  const riser = p?.props?.find((x) => x.id === 'p2');
+  check('sanitize fills missing structure size', (riser?.size?.w ?? 0) > 0, JSON.stringify(riser));
+}
+
+
+// --- GDTF Share matching ----------------------------------------------------
+// Against a slice of a REAL catalogue response, using the three fixtures from a
+// real festival MVR. Exact manufacturer+model lookup fails on two of the three,
+// which is why this is a ranked shortlist and not a key lookup.
+{
+  const sample: ShareList = JSON.parse(
+    fs.readFileSync(path.join(process.cwd(), 'core/tests/data/gdtf-share-list.sample.json'), 'utf8'),
+  );
+
+  const spec = parseGdtfSpec('Robe@Robin Spiider@r3045.gdtf');
+  check('gdtfSpec: manufacturer parsed', spec.manufacturer === 'Robe', JSON.stringify(spec));
+  check('gdtfSpec: revision marker dropped', spec.model === 'Robin Spiider', JSON.stringify(spec));
+
+  const cases: [string, string][] = [
+    ['Robe@Robin Spiider@r3045.gdtf', 'Robin Spiider'],
+    ['Acme@Lyra@r3006.gdtf', 'LYRA'],
+    ['Ayrton@Rivale Profile@r3014.gdtf', 'Rivale Profile'],
+  ];
+  for (const [gdtfSpec, expectFixture] of cases) {
+    const top = rankMatches(parseGdtfSpec(gdtfSpec), sample.list, 5);
+    const hit = top[0];
+    check(
+      `share match: ${gdtfSpec.split('@')[1]}`,
+      !!hit && new RegExp(expectFixture, 'i').test(hit.entry.fixture),
+      `top was ${hit ? `"${hit.entry.manufacturer}" / "${hit.entry.fixture}" (${hit.score.toFixed(2)})` : 'nothing'}`,
+    );
+  }
+
+  // the decoy that makes this hard: "LPL" also ships a "Rivale Profile"
+  const rivale = rankMatches(parseGdtfSpec('Ayrton@Rivale Profile@r3014.gdtf'), sample.list, 5);
+  check(
+    'share match: right manufacturer wins over a same-named decoy',
+    rivale[0]?.entry.manufacturer === 'Ayrton',
+    rivale.map((m) => `${m.entry.manufacturer}/${m.entry.fixture}=${m.score.toFixed(2)}`).join(' '),
+  );
+
+  // the guard that stops a bad day at the API wiping the fixture library
+  check('share list: empty rejected', !isAcceptableList({ result: true, list: [] }, 100));
+  check('share list: collapse rejected', !isAcceptableList({ result: true, list: sample.list.slice(0, 5) }, 100));
+  check('share list: healthy accepted', isAcceptableList(sample, 100));
+}
+
+
+// --- placeholder GDTF detection ---------------------------------------------
+// A real festival MVR carried five stub fixture definitions: correct addresses,
+// no personality. Telling them apart from a genuine dimmer is the whole job.
+{
+  const stub = {
+    channels: Array.from({ length: 65 }, (_, i) => ({ name: `Dimmer${i + 1}` })),
+    heads: [{ kind: 'dimmer' }],
+  };
+  check('placeholder: a 65-channel all-Dimmer profile is a stub', isPlaceholderProfile(stub));
+
+  const realDimmer = { channels: [{ name: 'Dimmer1' }], heads: [{ kind: 'dimmer' }] };
+  check('placeholder: a single-channel dimmer is NOT a stub', !isPlaceholderProfile(realDimmer));
+
+  const mover = {
+    channels: [{ name: 'Pan' }, { name: 'Tilt' }, { name: 'Dimmer1' }, { name: 'ColorSub_C' }],
+    heads: [{ kind: 'mover' }],
+  };
+  check('placeholder: a real mover is NOT a stub', !isPlaceholderProfile(mover));
+
+  const strip = {
+    channels: [{ name: 'ColorAdd_R' }, { name: 'ColorAdd_G' }, { name: 'ColorAdd_B' }],
+    heads: [{ kind: 'rgb' }, { kind: 'rgb' }],
+  };
+  check('placeholder: an rgb strip is NOT a stub', !isPlaceholderProfile(strip));
+}
+
+// --- beam throw ------------------------------------------------------------
+// A previz cone is only informative if its length is the real throw, so the
+// distances are asserted as numbers rather than judged by eye in a 3D view.
+{
+  const down = { x: 0, y: -1, z: 0 };
+  const at = (y: number) => ({ x: 0, y, z: 0 });
+
+  check(
+    'throw: a fixture 6 m up lands on the floor at 6 m',
+    Math.abs(throwDistance(at(6), down, []) - 6) < 1e-9,
+  );
+  check(
+    'throw: nothing underneath is capped, not infinite',
+    throwDistance({ x: 0, y: 2, z: 0 }, { x: 0, y: 0, z: -1 }, []) === MAX_THROW,
+  );
+  check(
+    'throw: a beam climbing away from the floor is capped',
+    throwDistance(at(1), { x: 0, y: 1, z: 0 }, []) === MAX_THROW,
+  );
+
+  // a riser under the fixture shortens the throw to the riser's top
+  const riser: Occluder = { min: { x: -1, y: 0, z: -1 }, max: { x: 1, y: 0.4, z: 1 } };
+  check(
+    'throw: a 0.4 m riser under a 6 m fixture cuts the beam to 5.6 m',
+    Math.abs(throwDistance(at(6), down, [riser]) - 5.6) < 1e-9,
+  );
+  check(
+    'throw: a riser off to the side does not shorten the beam',
+    Math.abs(
+      throwDistance({ x: 5, y: 6, z: 0 }, down, [riser]) - 6,
+    ) < 1e-9,
+  );
+
+  // the nearest of several surfaces wins, whatever order they arrive in
+  const screen: Occluder = { min: { x: -2, y: 0.5, z: -3 }, max: { x: 2, y: 2.75, z: -2.9 } };
+  const far: Occluder = { min: { x: -9, y: 0, z: -9 }, max: { x: 9, y: 9, z: -8.9 } };
+  const back = { x: 0, y: 0, z: -1 };
+  check(
+    'throw: the nearest surface wins regardless of list order',
+    Math.abs(throwDistance({ x: 0, y: 1.5, z: 0 }, back, [screen, far]) - 2.9) < 1e-9 &&
+      Math.abs(throwDistance({ x: 0, y: 1.5, z: 0 }, back, [far, screen]) - 2.9) < 1e-9,
+  );
+
+  // a fixture clamped ON the truss it hangs from must not clip itself to zero
+  const truss: Occluder = { min: { x: -3.5, y: 3.0, z: -0.15 }, max: { x: 3.5, y: 3.3, z: 0.15 } };
+  check(
+    'throw: a fixture inside its own truss still throws to the floor',
+    Math.abs(throwDistance(at(3.15), down, [truss]) - 3.15) < 1e-9,
+  );
+
+  // rotation is taken into account when boxing a prop
+  const rotated: Project = {
+    ...demoProject(),
+    props: [
+      { id: 'p1', kind: 'screen', pos: { x: 0, z: -3 }, rotY: Math.PI / 2, size: { w: 4, h: 3, d: 0.1 }, y: 0 },
+    ],
+  } as Project;
+  const occ = buildOccluders(rotated);
+  check(
+    'occluders: a screen turned 90° is boxed across z, not x',
+    occ.length === 1 && Math.abs(occ[0].max.z - occ[0].min.z - 4) < 1e-6 &&
+      Math.abs(occ[0].max.x - occ[0].min.x - 0.1) < 1e-6,
+    occ.length ? `got x=${(occ[0].max.x - occ[0].min.x).toFixed(3)} z=${(occ[0].max.z - occ[0].min.z).toFixed(3)}` : 'no occluder',
+  );
+  check(
+    'occluders: performers are not occluders',
+    buildOccluders({ ...demoProject(), props: [{ id: 'v', kind: 'vocalist', pos: { x: 0, z: 0 } }] } as Project).length === 0,
+  );
+
+  // --- standingHeightAt: the twin of floor_height_at in previz/src/scene.rs.
+  // Both previz views must lift a figure by the same amount, and they are
+  // hand-copied twins in two languages with no parity test between them. So the
+  // CASES live in one file that both sides load, and adding one there adds it
+  // to both suites at once. The mirror of this loop is in previz/src/scene.rs
+  // (`floor_height_matches_the_shared_corpus`).
+  {
+    type Case = {
+      why: string;
+      props: { kind: string; pos: { x: number; z: number }; rotY?: number;
+               size?: { w: number; h: number; d: number }; y?: number }[];
+      at: [number, number];
+      expect: number;
+    };
+    const corpus = JSON.parse(
+      readFileSync(new URL('../../shared/testdata/standingHeight.json', import.meta.url), 'utf8'),
+    ) as Case[];
+    check('riser: the shared corpus has not shrunk', corpus.length >= 15, `${corpus.length} cases`);
+    for (const c of corpus) {
+      const got = standingHeightAt(c.props, c.at[0], c.at[1]);
+      check(
+        `riser: ${c.why}`,
+        Math.abs(got - c.expect) < 1e-4,
+        `got ${got}, expected ${c.expect}`,
+      );
+    }
+  }
+  check(
+    'occluders: a riser with a degenerate size falls back to the default footprint',
+    (() => {
+      const o = buildOccluders({
+        ...demoProject(),
+        props: [{ id: 'r', kind: 'riser', pos: { x: 0, z: 0 }, size: { w: 0, h: 0.4, d: 1.5 }, y: 0 }],
+      } as Project);
+      return o.length === 1 && Math.abs(o[0].max.x - o[0].min.x - 2) < 1e-6;
+    })(),
+  );
+}
+
+// --- stale compiled profiles ------------------------------------------------
+{
+  const spiiderBefore = {
+    channels: [
+      { name: 'Pan', cases: [{}] },
+      { name: 'Tilt', cases: [{}] },
+      { name: 'Zoom', cases: [] },
+    ],
+  };
+  check(
+    'stale: a profile compiled before zoom existed is offered a rebuild',
+    hasUndrivenBeamChannels(spiiderBefore),
+  );
+  const spiiderAfter = {
+    channels: [
+      { name: 'Pan', cases: [{}] },
+      { name: 'Tilt', cases: [{}] },
+      { name: 'Zoom', cases: [{}, {}] },
+    ],
+  };
+  check(
+    'stale: a freshly compiled profile is NOT offered a rebuild',
+    !hasUndrivenBeamChannels(spiiderAfter),
+  );
+  check(
+    'stale: an undriven channel LIGHT has no parameter for is not staleness',
+    !hasUndrivenBeamChannels({ channels: [{ name: 'Effects2Rate', cases: [] }] }),
+  );
+  check('stale: a profile with no channels is not stale', !hasUndrivenBeamChannels({}));
+}
+
+// --- 2D plan hit-test --------------------------------------------------------
+// A truss bar is long and thin. Testing a circle of radius max(w,d)/2 made it
+// swallow every click within 3.5 m of stage centre, so these assert the
+// rectangle — including the rotated case, which the circle ignored entirely.
+{
+  const truss = { pos: { x: 0, z: 0 }, size: { w: 7, d: 0.3 } };
+  check(
+    'hit-test: a click on the bar hits it',
+    hitsPropFootprint({ x: 3, z: 0 }, truss),
+  );
+  check(
+    'hit-test: a click 2 m downstage of a 0.3 m-deep bar MISSES it',
+    !hitsPropFootprint({ x: 0, z: 2 }, truss),
+    'the old circle grabbed everything within 3.5 m',
+  );
+  check(
+    'hit-test: a click past the end of the bar misses it',
+    !hitsPropFootprint({ x: 4, z: 0 }, truss),
+  );
+  check(
+    'hit-test: the thin axis keeps a grabbable margin',
+    hitsPropFootprint({ x: 0, z: 0.2 }, truss),
+  );
+  // rotated 90 degrees: the long axis now runs across z, not x
+  const turned = { pos: { x: 0, z: 0 }, rotY: Math.PI / 2, size: { w: 7, d: 0.3 } };
+  check(
+    'hit-test: a bar turned 90° is hit along z',
+    hitsPropFootprint({ x: 0, z: 3 }, turned),
+  );
+  check(
+    'hit-test: a bar turned 90° is NOT hit along x',
+    !hitsPropFootprint({ x: 3, z: 0 }, turned),
+    'rotation ignored — the old circle could not tell these apart',
+  );
+  // SIGN-discriminating case — every test above is 90° or axis-aligned, which
+  // is exactly how a mirrored (+sin) frame passed unnoticed for so long. Under
+  // the canonical yaw (local +X → (cos θ, 0, −sin θ)) a bar at +30° has its +X
+  // end at NEGATIVE z; the mirrored frame puts it at positive z.
+  const tilted = { pos: { x: 0, z: 0 }, rotY: Math.PI / 6, size: { w: 7, d: 0.3 } };
+  check(
+    'hit-test: a bar at +30° is hit on the canonical (−z) side',
+    hitsPropFootprint({ x: 1.732, z: -1.0 }, tilted),
+    'the +X end of a +30° bar sits at −z under the canonical convention',
+  );
+  check(
+    'hit-test: a bar at +30° is NOT hit on the mirrored (+z) side',
+    !hitsPropFootprint({ x: 1.732, z: 1.0 }, tilted),
+    'the old +sin frame would have hit here',
+  );
+}
+
+// --- truss offsets: canonical frame + round-trip -----------------------------
+// offsetOnParent/posFromOffset must (a) be exact inverses, and (b) agree with
+// the canonical yaw the whole plan view now uses — a fixture at positive
+// `along` on a +30° truss sits at NEGATIVE z, matching the drawn rectangle,
+// the head fans, and the 3D previz.
+{
+  const { offsetOnParent, posFromOffset } = await import('../../shared/types.ts');
+  const truss = { pos: { x: 0, z: 0 }, rotY: Math.PI / 6, y: 3 };
+  const p = posFromOffset({ along: 2, across: 0, drop: 0 }, truss);
+  check(
+    'truss offsets: +along on a +30° truss lands at −z (canonical)',
+    Math.abs(p.x - 1.7320508075688774) < 1e-12 && Math.abs(p.z - -1.0) < 1e-12,
+    `got (${p.x}, ${p.z})`,
+  );
+  const o = offsetOnParent({ pos: { x: p.x, y: 3.4, z: p.z } }, truss);
+  check(
+    'truss offsets: round-trip is the identity',
+    Math.abs(o.along - 2) < 1e-12 && Math.abs(o.across) < 1e-12 && Math.abs(o.drop - 0.4) < 1e-12,
+    `got along=${o.along} across=${o.across} drop=${o.drop}`,
+  );
+}
+
+// --- geometry: the cross-language golden contract ---------------------------
+// The vectors were generated by an INDEPENDENT third implementation (Python)
+// of the same formula and quantizer, and are asserted EXACTLY here and in
+// core/src/geometry.rs. If V8's trig lands a quantization boundary differently
+// from libm's, this is where it surfaces — as an exact-value mismatch, not a
+// byte drift later.
+{
+  const { buildGeometry } = await import('../../shared/geometry.ts');
+  const golden = JSON.parse(
+    fs.readFileSync(path.join(process.cwd(), 'core/tests/data/geometry_golden.json'), 'utf8'),
+  ) as { project: Project; expected: Record<string, { x: number; y: number; z: number; along: number; row: number; col: number; rowT: number; colT: number }> };
+  const geom = buildGeometry(golden.project);
+  const keys = Object.keys(golden.expected);
+  check('geometry: golden head count', geom.size === keys.length, `got ${geom.size}, want ${keys.length}`);
+  let bad = '';
+  for (const key of keys) {
+    const g = geom.get(key);
+    const want = golden.expected[key];
+    if (!g) { bad = `${key} missing`; break; }
+    // exact f64 equality — quantization is the tolerance
+    if (g.x !== want.x || g.y !== want.y || g.z !== want.z || g.along !== want.along || g.row !== want.row || g.col !== want.col || g.rowT !== want.rowT || g.colT !== want.colT) {
+      bad = `${key}: got ${JSON.stringify(g)}, want ${JSON.stringify(want)}`;
+      break;
+    }
+  }
+  check('geometry: golden vectors match exactly', bad === '', bad);
+  check(
+    'geometry: unknown profile gets no entry',
+    ![...geom.keys()].some((k) => k.startsWith('ghost:')),
+  );
+
+  // group extents: same cross-language contract, Python-computed over the
+  // quantized golden heads in group.heads order, asserted f64-exact
+  {
+    const { buildGroupExtents } = await import('../../shared/geometry.ts');
+    const ext = buildGroupExtents(golden.project, geom);
+    const want = (golden as unknown as { expectedExtents: Record<string, Record<string, number>> }).expectedExtents;
+    let bad = '';
+    for (const [gid, w] of Object.entries(want)) {
+      const e = ext.get(gid);
+      if (!e) { bad = `${gid} missing`; break; }
+      for (const k of ['minX', 'maxX', 'minY', 'maxY', 'minZ', 'maxZ', 'cx', 'cy', 'cz', 'maxR'] as const) {
+        if (e[k] !== w[k]) { bad = `${gid}.${k}: got ${e[k]}, want ${w[k]}`; break; }
+      }
+      if (bad) break;
+    }
+    check('geometry: group extents match the golden vectors exactly', bad === '', bad);
+    check(
+      'geometry: a dangling ref does not stretch its group extents',
+      ext.get('g-dangling')?.maxR === 0,
+      `maxR=${ext.get('g-dangling')?.maxR}`,
+    );
+  }
+
+  // compiled-profile offsets are consumed, not re-derived — same literals as
+  // the Rust twin test (compiled_profile_offsets_are_consumed_not_rederived)
+  const strip = {
+    id: 'imported-strip', manufacturer: 'T', model: 'Strip', mode: '4px', footprint: 12,
+    heads: [-0.5, -0.1667, 0.1667, 0.5].map((o) => ({ kind: 'rgb' as const, offset: o, label: '' })),
+    channels: [], beamDeg: 20, virtualDimmer: false,
+  };
+  const p2 = {
+    ...golden.project,
+    fixtures: [{ id: 's', name: 'S', profileId: 'imported-strip', universeId: 'u1', address: 1, pos: { x: 0, y: 3, z: 0 }, rotY: 0 }],
+    profiles: { 'imported-strip': strip },
+  } as unknown as Project;
+  const g2 = buildGeometry(p2);
+  check(
+    'geometry: compiled offsets consumed verbatim',
+    g2.size === 4 && g2.get('s:0')?.x === -0.5 && g2.get('s:1')?.x === -0.1667 && g2.get('s:3')?.x === 0.5 && g2.get('s:2')?.along === 0.1667,
+    JSON.stringify([...g2.entries()]),
+  );
+}
+
+// --- spatial fan (A1): twin of core/src/effects.rs fan_tests -----------------
+// Identical inputs, identical expected values, asserted f64-exact in BOTH
+// engines — the cross-language contract for the fan maths.
+{
+  const { applyEffects } = await import('../../shared/effects.ts');
+  const ext = { minX: 0, maxX: 3, minY: 2, maxY: 2, minZ: 0, maxZ: 0, cx: 1.5, cy: 2, cz: 0, maxR: 1.5 };
+  const gAt = (x: number) => ({ x, y: 2, z: 0, along: 0, row: 0, col: 0, rowT: 0, colT: 0 });
+  const base = {
+    id: 'e', target: 'dimmer', wave: 'sawUp', rate: 1, size: 1, spread: 1, width: 0.5, phase: 0,
+    bypass: false, mix: 1, distribute: 'x', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0,
+  } as import('../../shared/types.ts').Effect;
+  const dims = (e: import('../../shared/types.ts').Effect) =>
+    [0, 1, 2, 3].map((x, j) => applyEffects({ dimmer: 1 }, [e], 0, [0], j, 4, gAt(x), ext).dimmer);
+  const eq = (a: (number | undefined)[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+  check('fan: x sweep wraps at a full wavelength', eq(dims(base), [0, 0.33333333333333326, 0.6666666666666665, 0]));
+  check('fan: mirror folds ends in phase toward centre', eq(dims({ ...base, fold: 'mirror' }), [0, 0.6666666666666665, 0.6666666666666667, 0]));
+  check('fan: centre fold leads from the middle', eq(dims({ ...base, fold: 'centre' }), [0, 0.3333333333333335, 0.33333333333333326, 0]));
+  check('fan: buddy clumps adjacent heads', eq(dims({ ...base, buddy: 2 }), [0, 0, 0.5, 0.5]));
+  check('fan: parts tiles the fan', eq(dims({ ...base, parts: 2 }), [0, 0.6666666666666665, 0.33333333333333326, 0]));
+  check('fan: reverse index keeps grid spacing', eq(dims({ ...base, distribute: 'index', reverse: true }), [0.75, 0.5, 0.25, 0]));
+  check('fan: radial ripples from the centroid', eq(dims({ ...base, distribute: 'radial' }), [0, 0.33333333333333326, 0.33333333333333326, 0]));
+  check(
+    'fan: shuffle is seeded and reproducible',
+    eq(dims({ ...base, distribute: 'shuffle', seed: 42 }), [0.9707432389259338, 0.6836519397329539, 0.5080116945318878, 0.5004639013204724]),
+  );
+  const panE = { ...base, target: 'pan', wave: 'sine', size: 0.5, spread: 0, fold: 'mirror' } as import('../../shared/types.ts').Effect;
+  const pans = [0, 1, 2, 3].map((x, j) => applyEffects({}, [panE], 0.125, [0], j, 4, gAt(x), ext).pan);
+  check(
+    'fan: mirrored half counter-rotates pan',
+    eq(pans, [0.32322330470336313, 0.32322330470336313, 0.6767766952966369, 0.6767766952966369]),
+    `got ${pans.join(',')}`,
+  );
+
+  // regression: with strict t > 0.5 an even buddy grid put its far clump
+  // exactly ON 0.5 and it panned WITH the near wing
+  const buddyPans = [0, 1, 2, 3].map((x, j) => applyEffects({}, [{ ...panE, buddy: 2 }], 0.125, [0], j, 4, gAt(x), ext).pan);
+  check(
+    'fan: buddy+mirror far clump still counter-rotates',
+    eq(buddyPans, [0.32322330470336313, 0.32322330470336313, 0.6767766952966369, 0.6767766952966369]),
+    `got ${buddyPans.join(',')}`,
+  );
+
+  // regression: the inclusive spatial t = 1 wrapped onto t = 0 under chase's
+  // forced full spread, locking the two end heads together ([1,0,0,1])
+  const chaseE = { ...base, wave: 'chase', width: 0.25 } as import('../../shared/types.ts').Effect;
+  const slots = [0, 1, 2, 3].map((x, j) => applyEffects({ dimmer: 1 }, [chaseE], 0.1, [0], j, 4, gAt(x), ext).dimmer);
+  check('fan: chase deals distinct slots on a spatial fan', eq(slots, [1, 0, 0, 0]), `got ${slots.join(',')}`);
+
+  // y and z sweep their own axes — heads on a diagonal where y INCREASES with
+  // index and z DECREASES, so a transposed-axis typo cannot pass
+  const dExt = { minX: 0, maxX: 3, minY: 2, maxY: 5, minZ: 0, maxZ: 3, cx: 1.5, cy: 3.5, cz: 1.5, maxR: 2.598076211353316 };
+  const dAt = (i: number) => ({ x: i, y: 2 + i, z: 3 - i, along: 0, row: 0, col: 0, rowT: 0, colT: 0 });
+  const dRun = (distribute: 'y' | 'z') =>
+    [0, 1, 2, 3].map((j) => applyEffects({ dimmer: 1 }, [{ ...base, distribute }], 0, [0], j, 4, dAt(j), dExt).dimmer);
+  check('fan: y sweeps its own axis', eq(dRun('y'), [0, 0.33333333333333326, 0.6666666666666665, 0]));
+  check('fan: z sweeps its own axis (reversed on this rig)', eq(dRun('z'), [0, 0.6666666666666665, 0.33333333333333326, 0]));
+
+  // col basis (B1): two 4-pixel fixtures in one 8-head group — the col basis
+  // reads the per-fixture normalized colT and ignores the group index, so both
+  // fixtures run the SAME wave ("grab one strobe, every strobe is the same")
+  const colTs = [0, 0.333333, 0.666667, 1, 0, 0.333333, 0.666667, 1];
+  const cAt = (j: number) => ({ x: j, y: 2, z: 0, along: 0, row: 0, col: j % 4, rowT: 0, colT: colTs[j] });
+  const cExt = { minX: 0, maxX: 7, minY: 2, maxY: 2, minZ: 0, maxZ: 0, cx: 3.5, cy: 2, cz: 0, maxR: 3.5 };
+  const colDims = [...Array(8).keys()].map((j) =>
+    applyEffects({ dimmer: 1 }, [{ ...base, distribute: 'col' }], 0, [0], j, 8, cAt(j), cExt).dimmer);
+  check(
+    'fan: col basis fans within each fixture',
+    eq(colDims, [0, 0.3333330000000001, 0.6666669999999999, 0, 0, 0.3333330000000001, 0.6666669999999999, 0]),
+    `got ${colDims.join(',')}`,
+  );
+  check(
+    'fan: col basis gives both fixtures the identical wave',
+    colDims.slice(0, 4).every((v, i) => v === colDims[4 + i]),
+  );
+}
+
+// --- profile-head spatial repair (B1): twin of Rust de_metres/de_index ------
+{
+  const p = sanitizeProject({
+    ...demoProject(),
+    profiles: {
+      bad: {
+        id: 'bad', manufacturer: 'T', model: 'Bad', mode: 'x', footprint: 3,
+        heads: [{ kind: 'rgb', offset: Number.NaN, offsetY: Number.POSITIVE_INFINITY, row: 1.7, col: -3, label: 'px' }],
+        channels: [], beamDeg: 20, virtualDimmer: false,
+      },
+    },
+  } as unknown as Project)!;
+  const h = p.profiles!.bad.heads[0];
+  check(
+    'profile heads: malformed spatial fields repair to the Rust values',
+    h.offset === 0 && h.offsetY === undefined && h.row === 1 && h.col === 0,
+    `got offset=${h.offset} offsetY=${h.offsetY} row=${h.row} col=${h.col}`,
+  );
+}
+
+// --- auto-groups (B3 slice 1) ------------------------------------------------
+{
+  const { desiredAutoGroups, planAutoGroups, applyAutoGroups } = await import('../../ui/src/autoGroups.ts');
+  const p = sanitizeProject(demoProject())!;
+  const auto = desiredAutoGroups(p);
+  const byId = new Map(auto.map((g) => [g.id, g]));
+  check(
+    'auto-groups: one per multi-head type, none for single heads',
+    byId.has('auto-type-kam-partybar-wfs-20ch') && byId.has('auto-type-varytec-derby-st-4ch') &&
+      ![...byId.keys()].some((k) => k.includes('hazer')),
+    `got ${[...byId.keys()].join(', ')}`,
+  );
+  check(
+    'auto-groups: the type group holds every head of the type in patch order',
+    byId.get('auto-type-kam-partybar-wfs-20ch')!.heads.length === 8 &&
+      byId.get('auto-type-kam-partybar-wfs-20ch')!.heads[0].fixtureId === 'bar1',
+  );
+
+  // rig a truss with both bars on it, bar2 to the LEFT: the truss group must
+  // order along the bar, not by patch order
+  const p2 = structuredClone(p);
+  p2.props = [{ id: 't1', kind: 'trussBar', pos: { x: 0, z: 0 }, rotY: 0, size: { w: 7, h: 0.3, d: 0.3 }, y: 4 } as NonNullable<Project['props']>[number]];
+  for (const f of p2.fixtures) {
+    if (f.id === 'bar1') { f.parentId = 't1'; f.pos = { x: 1.5, y: 4, z: 0 }; }
+    if (f.id === 'bar2') { f.parentId = 't1'; f.pos = { x: -1.5, y: 4, z: 0 }; }
+  }
+  const truss = desiredAutoGroups(p2).find((g) => g.id === 'auto-truss-t1');
+  check(
+    'auto-groups: truss group orders along the bar',
+    !!truss && truss.heads.length === 8 && truss.heads[0].fixtureId === 'bar2' && truss.heads[4].fixtureId === 'bar1',
+    truss ? `first=${truss.heads[0].fixtureId}` : 'no truss group',
+  );
+
+  // regenerate honours promotion: a renamed (untagged) group is never touched
+  const p3 = structuredClone(p2);
+  applyAutoGroups(p3, planAutoGroups(p3));
+  const g = p3.groups.find((x) => x.id === 'auto-truss-t1')!;
+  delete g.auto; // operator promoted it
+  g.heads = [g.heads[0]];
+  const plan = planAutoGroups(p3);
+  check(
+    'auto-groups: a promoted group is not updated or removed by regenerate',
+    !plan.update.some((u) => u.existing.id === 'auto-truss-t1') && !plan.remove.some((x) => x.id === 'auto-truss-t1'),
+  );
+  // a STILL-TAGGED group whose truss vanished is removed on regenerate (the
+  // promoted one above is untagged and must survive even with no source)
+  const p5 = structuredClone(p2);
+  applyAutoGroups(p5, planAutoGroups(p5));
+  p5.props = [];
+  check(
+    'auto-groups: a still-tagged group with no source is removed on regenerate',
+    planAutoGroups(p5).remove.some((x) => x.id === 'auto-truss-t1'),
+  );
+
+  // sanitize: a non-string tag is dropped, matching Rust's de_opt_string
+  const bad = sanitizeProject({ ...demoProject(), groups: [{ id: 'g', name: 'G', heads: [], auto: 7 }] } as unknown as Project)!;
+  check('auto-groups: sanitize drops a non-string tag', bad.groups[0].auto === undefined);
+
+  // review regression: a PROMOTED group must also block re-creation under its
+  // old id — a duplicate group id makes the two engines resolve different
+  // memberships (Map last-wins vs iter().find() first-wins)
+  const p6 = structuredClone(p2);
+  applyAutoGroups(p6, planAutoGroups(p6));
+  const promoted = p6.groups.find((x) => x.id === 'auto-truss-t1')!;
+  delete promoted.auto;
+  const plan6 = planAutoGroups(p6);
+  check(
+    'auto-groups: a promoted id is never re-created (no duplicate ids)',
+    !plan6.create.some((g) => g.id === 'auto-truss-t1'),
+  );
+
+  // review regression: tagged names are machine-owned — a regenerate refreshes
+  // a stale generated name (renaming untags, so no operator name is at risk)
+  const p7 = structuredClone(p2);
+  applyAutoGroups(p7, planAutoGroups(p7));
+  p7.groups.find((x) => x.id === 'auto-truss-t1')!.name = 'Truss 9'; // stale
+  const plan7 = planAutoGroups(p7);
+  check(
+    'auto-groups: a stale generated name is refreshed on regenerate',
+    plan7.update.some((u) => u.existing.id === 'auto-truss-t1' && u.name === 'Truss 1'),
+  );
+}
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

@@ -45,6 +45,22 @@ pub fn project_dir() -> PathBuf {
         .join("projects")
 }
 
+/// Where downloaded and hand-imported `.gdtf` files live.
+///
+/// Beside the projects rather than inside one: a fixture library is a property
+/// of the machine, not of a show, and the same Robin Spiider serves every
+/// project on it. ROADMAP.md has promised this path since v0.4 and nothing ever
+/// created it.
+pub fn fixture_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("LIGHT_FIXTURE_DIR") {
+        return PathBuf::from(dir);
+    }
+    let projects = project_dir();
+    // dev checkout keeps it repo-local next to ./projects; the app puts it
+    // beside the projects directory in Application Support
+    projects.parent().map_or_else(|| PathBuf::from("fixtures"), |p| p.join("fixtures"))
+}
+
 pub fn project_path(dir: &PathBuf) -> PathBuf {
     file_for(dir, &current_slug(dir))
 }
@@ -106,19 +122,45 @@ pub fn unique_slug(dir: &PathBuf, name: &str) -> String {
     format!("{base}-{ts}")
 }
 
+/// slug -> (mtime, name): a project file is read only when it has changed.
+///
+/// Extracting one `name` field cost a full read + JSON parse of every project in
+/// the directory — 1.3 MB each on a real show — and it runs on every `projects`
+/// command, which every client sends on every (re)connect, on the tick thread.
+/// This engine is the only writer, so an mtime key is exact. Mirrors the
+/// nameCache in engine/persist.ts.
+static NAME_CACHE: std::sync::Mutex<
+    Option<std::collections::HashMap<String, (std::time::SystemTime, String)>>,
+> = std::sync::Mutex::new(None);
+
 pub fn list_projects(dir: &PathBuf) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = Vec::new();
     let Ok(entries) = fs::read_dir(dir) else { return out };
+    let mut guard = NAME_CACHE.lock().ok();
     for e in entries.flatten() {
         let fname = e.file_name().to_string_lossy().to_string();
         let Some(slug) = fname.strip_suffix(".project.json") else { continue };
+        let mtime = e.metadata().and_then(|m| m.modified()).ok();
+        if let (Some(g), Some(at)) = (guard.as_mut(), mtime) {
+            if let Some((cached_at, name)) = g.get_or_insert_with(Default::default).get(slug) {
+                if *cached_at == at {
+                    out.push((slug.to_string(), name.clone()));
+                    continue;
+                }
+            }
+        }
         let name = fs::read_to_string(e.path())
             .ok()
             .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
             .and_then(|v| v.get("name").and_then(|n| n.as_str()).map(String::from))
             .unwrap_or_else(|| format!("{slug} (unreadable)"));
+        if let (Some(g), Some(at)) = (guard.as_mut(), mtime) {
+            g.get_or_insert_with(Default::default)
+                .insert(slug.to_string(), (at, name.clone()));
+        }
         out.push((slug.to_string(), name));
     }
+    drop(guard);
     out.sort();
     out
 }

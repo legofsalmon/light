@@ -34,6 +34,25 @@ pub struct ResolvedParams {
     pub tilt: f64,
     pub haze: f64,
     pub fan: f64,
+    /// Beam parameters, absent until a look sets one.
+    ///
+    /// These are Option rather than f64 on purpose. A fixture's zoom, focus,
+    /// iris, frost and colour temperature all have a meaningful parked value
+    /// baked into its GDTF, and a default of 0.0 would slam every Spiider in a
+    /// saved show to its narrowest beam the moment the file was opened. None
+    /// means "nobody asked", and the channel holds whatever the profile says.
+    pub beam: BeamParams,
+}
+
+/// The optional beam parameters, kept together so adding one is a single edit
+/// in each engine rather than five.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct BeamParams {
+    pub zoom: Option<f64>,
+    pub focus: Option<f64>,
+    pub iris: Option<f64>,
+    pub frost: Option<f64>,
+    pub cto: Option<f64>,
 }
 
 impl Default for ResolvedParams {
@@ -53,6 +72,7 @@ impl Default for ResolvedParams {
             tilt: 0.5,
             haze: 0.0,
             fan: 0.0,
+            beam: BeamParams::default(),
         }
     }
 }

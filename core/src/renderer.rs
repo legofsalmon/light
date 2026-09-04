@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use crate::color::{derby_macro_for_value, derby_quantize, hsv_to_rgb, rgb_to_hsv, DERBY_MACROS};
 use crate::cprofile::{render_compiled, CompiledProfile};
-use crate::effects::apply_effects;
+use crate::effects::{apply_effects, effect_field_value, mod_wave, soft_base};
+use crate::geometry::{build_geometry, build_group_extents, GroupExtents, HeadGeom, NO_EXTENTS, NO_GEOM};
 use crate::profiles::{profile_of, HeadKind, Profile, ResolvedParams};
 use crate::state::EngineState;
 use crate::types::{clamp01, lerp, HeadSnap, LayerBlend, LayerSnap, MotorMode, Project};
@@ -65,6 +66,41 @@ const ALL_FIELDS: [Field; N_FIELDS] = [
     Field::Tilt, Field::Haze, Field::Fan, Field::MotorValue,
 ];
 
+/// Beam parameters ride a parallel track to the nine fields above because they
+/// are *optional*: a look that never mentions zoom must leave zoom alone, so
+/// there is no neutral f64 to merge from. Keeping them separate also means the
+/// existing merge is untouched and a saved show still renders byte for byte.
+const N_BEAM: usize = 5;
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BeamField {
+    Zoom = 0,
+    Focus,
+    Iris,
+    Frost,
+    Cto,
+}
+const ALL_BEAM: [BeamField; N_BEAM] =
+    [BeamField::Zoom, BeamField::Focus, BeamField::Iris, BeamField::Frost, BeamField::Cto];
+
+fn get_beam(p: &ResolvedParams, f: BeamField) -> Option<f64> {
+    match f {
+        BeamField::Zoom => p.beam.zoom,
+        BeamField::Focus => p.beam.focus,
+        BeamField::Iris => p.beam.iris,
+        BeamField::Frost => p.beam.frost,
+        BeamField::Cto => p.beam.cto,
+    }
+}
+fn set_beam(p: &mut ResolvedParams, f: BeamField, v: f64) {
+    match f {
+        BeamField::Zoom => p.beam.zoom = Some(v),
+        BeamField::Focus => p.beam.focus = Some(v),
+        BeamField::Iris => p.beam.iris = Some(v),
+        BeamField::Frost => p.beam.frost = Some(v),
+        BeamField::Cto => p.beam.cto = Some(v),
+    }
+}
+
 fn get_field(p: &ResolvedParams, f: Field) -> f64 {
     match f {
         Field::Dimmer => p.dimmer,
@@ -95,6 +131,7 @@ fn set_field(p: &mut ResolvedParams, f: Field, v: f64) {
 #[derive(Default)]
 struct Acc {
     num: [Option<(f64, f64)>; N_FIELDS], // (weighted sum, weight)
+    beam: [Option<(f64, f64)>; N_BEAM],  // as above, for the optional params
     col: Option<(f64, f64, f64, f64)>,   // (r,g,b, weight)
     motor_mode: Option<MotorMode>,
     macro_: Option<f64>,
@@ -112,14 +149,42 @@ struct CueAnchor {
     at: f64,
 }
 
+/// Per-effect phase bookkeeping so a rate change on a live look doesn't jump
+/// the waveform. `corr` is the accumulated offset; `last_rate` is the rate we
+/// last folded in. For an untouched effect `corr` stays exactly 0.0.
+struct RateCorr {
+    last_rate: f64,
+    corr: f64,
+}
+
 pub struct Renderer {
     eff_beat: f64,
+    /// TEST ONLY — when true the effect clock is frozen at eff_beat instead of
+    /// integrating, so both engines produce identical bytes on a moving effect.
+    /// Set via the LIGHT_TEST_CLOCK-gated _pinClock command; never true in a show.
+    pinned: bool,
     last_t: Option<f64>,
     /// Cue-list anchors, keyed (layer id, look id): the trigger this anchor
     /// belongs to (fade_start) and the eff_beat it started at. Keyed per
     /// layer+look so a cue-to-cue crossfade keeps the outgoing cue's phase,
     /// and anchoring at trigger time keeps both engines in the same step.
     cue_anchors: HashMap<(String, String), CueAnchor>,
+    /// Phase corrections, keyed (layer, look, part, effect). Absorbs the
+    /// discontinuity when an effect's rate is edited while its look is live,
+    /// so `beat/rate + corr` stays continuous. GC'd alongside cue_anchors.
+    rate_corr: HashMap<(String, String, String, String), RateCorr>,
+    /// Per-head world geometry, keyed like the heads map (fixture id, head).
+    /// Gen-gated: rebuilt only when the project generation moves — the first
+    /// gen-keyed cache in either renderer, so the discipline is set here:
+    /// compare by INEQUALITY (gen wraps), rebuild whole, never patch.
+    geom: HashMap<(String, usize), HeadGeom>,
+    /// Per-group spatial extents for the fan bases - same gen gate as geom.
+    extents: HashMap<String, GroupExtents>,
+    /// Modulator bindings indexed by (look id, part id) (P2) - same gen gate.
+    /// Each entry carries the modulator's array index so its per-tick value
+    /// can be looked up, and the S&H random seed stays stable.
+    mod_index: HashMap<(String, String), Vec<(crate::types::ModBinding, usize)>>,
+    geom_gen: Option<u64>,
 }
 
 /// Follow a cue-list look to its active step (one level; a step that points
@@ -175,7 +240,60 @@ fn resolve_cue<'a>(
 
 impl Renderer {
     pub fn new() -> Self {
-        Renderer { eff_beat: 0.0, last_t: None, cue_anchors: HashMap::new() }
+        Renderer {
+            eff_beat: 0.0,
+            pinned: false,
+            last_t: None,
+            cue_anchors: HashMap::new(),
+            rate_corr: HashMap::new(),
+            geom: HashMap::new(),
+            extents: HashMap::new(),
+            mod_index: HashMap::new(),
+            geom_gen: None,
+        }
+    }
+
+    /// TEST ONLY: pin the effect clock to a fixed beat and freeze integration.
+    pub fn pin_clock(&mut self, eff_beat: f64) {
+        self.eff_beat = eff_beat;
+        self.pinned = true;
+    }
+
+    /// Per-effect phase corrections for one part, aligned with `part.effects`.
+    /// When an effect's rate has changed since we last saw it, fold the jump
+    /// into `corr` so `beat/rate + corr` is continuous across the edit. For an
+    /// effect whose rate never changes this returns 0.0 for every tick, so an
+    /// untouched show renders byte-for-byte as before. A rate that is not a
+    /// positive finite number carries no continuity (the effect is inactive),
+    /// so we only re-anchor `last_rate` without touching `corr`.
+    fn effect_corr(
+        &mut self,
+        layer_id: &str,
+        look_id: &str,
+        part_id: &str,
+        effects: &[crate::types::Effect],
+    ) -> Vec<f64> {
+        let beat = self.eff_beat;
+        let map = &mut self.rate_corr;
+        effects
+            .iter()
+            .map(|e| {
+                let key = (
+                    layer_id.to_string(),
+                    look_id.to_string(),
+                    part_id.to_string(),
+                    e.id.clone(),
+                );
+                let entry = map.entry(key).or_insert(RateCorr { last_rate: e.rate, corr: 0.0 });
+                if entry.last_rate != e.rate {
+                    if entry.last_rate > 0.0 && e.rate > 0.0 {
+                        entry.corr += beat * (1.0 / entry.last_rate - 1.0 / e.rate);
+                    }
+                    entry.last_rate = e.rate;
+                }
+                entry.corr
+            })
+            .collect()
     }
 
     /// Land the effect phase on a downbeat (tap / resync).
@@ -195,11 +313,58 @@ impl Renderer {
         let beat = st.clock.beat_at(t);
         let dt = self.last_t.map_or(0.0, |lt| t - lt);
         self.last_t = Some(t);
-        // Integrated so speed-master changes never jump effect phase.
-        self.eff_beat += (dt / 60000.0) * st.clock.bpm * st.speed;
+        // Integrated so speed-master changes never jump effect phase. When the
+        // clock is test-pinned the value is held fixed so a moving effect is
+        // byte-comparable between the two engines.
+        if !self.pinned {
+            self.eff_beat += (dt / 60000.0) * st.clock.bpm * st.speed;
+        }
         if !self.eff_beat.is_finite() {
             self.eff_beat = 0.0; // never let NaN become absorbing
         }
+
+        // world geometry rebuilds only when the project changed - never per
+        // tick. Soft rides sweep here too: same discipline, and a ride whose
+        // look was deleted out from under it must not linger.
+        if self.geom_gen != Some(st.gen) {
+            self.geom = build_geometry(&st.project);
+            self.extents = build_group_extents(&st.project, &self.geom);
+            st.sweep_soft();
+            self.mod_index.clear();
+            for (mod_idx, m) in st.project.modulators.iter().enumerate() {
+                if !m.on {
+                    continue;
+                }
+                for b in &m.bindings {
+                    self.mod_index
+                        .entry((b.look_id.clone(), b.part_id.clone()))
+                        .or_default()
+                        .push((b.clone(), mod_idx));
+                }
+            }
+            self.geom_gen = Some(st.gen);
+        }
+
+        // Modulator values for THIS tick: pure functions of the shared beat,
+        // one evaluation per modulator however many bindings it fans to.
+        let mod_values: Option<Vec<f64>> = if self.mod_index.is_empty() {
+            None
+        } else {
+            Some(
+                st.project
+                    .modulators
+                    .iter()
+                    .enumerate()
+                    .map(|(i, m)| {
+                        if m.on && m.rate > 0.0 {
+                            mod_wave(m.wave, self.eff_beat / m.rate + m.phase, i)
+                        } else {
+                            0.5
+                        }
+                    })
+                    .collect(),
+            )
+        };
 
         // --- resolved params per head ---
         struct HeadInfo {
@@ -265,12 +430,103 @@ impl Renderer {
                 for part in &look.parts {
                     let Some(group) = st.project.groups.iter().find(|g| g.id == part.group_id) else { continue };
                     let n = group.heads.len();
+                    // P1: resolve the soft layer into an effective view BEFORE
+                    // the seam - stored → soft, one lookup per part, copies
+                    // only when a ride actually targets this part. The
+                    // rate-corr map reads the EFFECTIVE effects, so a soft
+                    // rate ride stays phase-continuous.
+                    // keyed by the RESOLVED look (a cue list renders its
+                    // step's look, and the ride addresses the look being
+                    // edited - the step)
+                    let patch = if st.soft.is_empty() {
+                        None
+                    } else {
+                        st.soft.get(&(look.id.clone(), part.id.clone()))
+                    };
+                    let owned_params;
+                    let eff_params: &crate::types::PartParams = match patch {
+                        Some(p2) if !p2.params.is_empty() => {
+                            let mut p = part.params.clone();
+                            for (f, v) in &p2.params {
+                                crate::state::apply_soft_param(&mut p, *f, *v);
+                            }
+                            owned_params = p;
+                            &owned_params
+                        }
+                        _ => &part.params,
+                    };
+                    let owned_effects;
+                    let eff_effects: &[crate::types::Effect] = match patch {
+                        Some(p2) if !p2.effects.is_empty() => {
+                            let mut es = part.effects.clone();
+                            for e in &mut es {
+                                if let Some(fields) = p2.effects.get(&e.id) {
+                                    for (f, v) in fields {
+                                        crate::state::apply_soft_effect(e, *f, *v);
+                                    }
+                                }
+                            }
+                            owned_effects = es;
+                            &owned_effects
+                        }
+                        _ => &part.effects,
+                    };
+                    // P2: modulator offsets ride ON TOP of stored → soft,
+                    // clamped per-field. Copies only for parts actually bound.
+                    let mod_owned_params;
+                    let mod_owned_effects;
+                    let (eff_params, eff_effects): (&crate::types::PartParams, &[crate::types::Effect]) =
+                        match mod_values
+                            .as_ref()
+                            .and_then(|mv| {
+                                self.mod_index
+                                    .get(&(look.id.clone(), part.id.clone()))
+                                    .map(|binds| (mv, binds))
+                            }) {
+                            Some((mv, binds)) => {
+                                let mut p2 = eff_params.clone();
+                                let mut es = eff_effects.to_vec();
+                                for (b, mod_idx) in binds {
+                                    let w = mv[*mod_idx];
+                                    let scale = if b.field == crate::types::SoftField::Hue { 360.0 } else { 1.0 };
+                                    let offset = (w - 0.5) * b.depth * scale;
+                                    match &b.effect_id {
+                                        Some(eid) => {
+                                            if let Some(e) = es.iter_mut().find(|x| x.id == *eid) {
+                                                if let Some(base) = effect_field_value(e, b.field) {
+                                                    if let Some(v) = crate::types::soft_clamp(b.field, base + offset) {
+                                                        crate::state::apply_soft_effect(e, b.field, v);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        None => {
+                                            let base = soft_base(&p2, b.field);
+                                            if let Some(v) = crate::types::soft_clamp(b.field, base + offset) {
+                                                crate::state::apply_soft_param(&mut p2, b.field, v);
+                                            }
+                                        }
+                                    }
+                                }
+                                mod_owned_params = p2;
+                                mod_owned_effects = es;
+                                (&mod_owned_params, mod_owned_effects.as_slice())
+                            }
+                            None => (eff_params, eff_effects),
+                        };
+                    // one lookup per part per tick, shared by every head
+                    let corr = self.effect_corr(layer_id, &look_id, &part.id, eff_effects);
+                    let ext = self.extents.get(&part.group_id).unwrap_or(&NO_EXTENTS);
                     for (j, r) in group.heads.iter().enumerate() {
                         let key = (r.fixture_id.clone(), r.head);
                         if !heads.contains_key(&key) {
                             continue;
                         }
-                        let prm = apply_effects(&part.params, &part.effects, self.eff_beat, j, n);
+                        // present in `heads` ⇒ present in geom (same enumeration
+                        // built both); NO_GEOM is defence in depth, not an
+                        // expected path
+                        let g = self.geom.get(&key).unwrap_or(&NO_GEOM);
+                        let prm = apply_effects(eff_params, eff_effects, self.eff_beat, &corr, j, n, g, ext);
                         let a = acc.entry(key).or_default();
                         let mut add_num = |field: Field, v: Option<f64>| {
                             if let Some(v) = v {
@@ -288,6 +544,18 @@ impl Renderer {
                         add_num(Field::Haze, prm.haze);
                         add_num(Field::Fan, prm.fan);
                         add_num(Field::MotorValue, prm.motor_value);
+                        let mut add_beam = |field: BeamField, v: Option<f64>| {
+                            if let Some(v) = v {
+                                let c = a.beam[field as usize].get_or_insert((0.0, 0.0));
+                                c.0 += v * w;
+                                c.1 += w;
+                            }
+                        };
+                        add_beam(BeamField::Zoom, prm.zoom);
+                        add_beam(BeamField::Focus, prm.focus);
+                        add_beam(BeamField::Iris, prm.iris);
+                        add_beam(BeamField::Frost, prm.frost);
+                        add_beam(BeamField::Cto, prm.cto);
                         if let Some(c) = prm.color {
                             let (r, g, b) = hsv_to_rgb(c.h, c.s, 1.0);
                             let col = a.col.get_or_insert((0.0, 0.0, 0.0, 0.0));
@@ -330,6 +598,23 @@ impl Renderer {
                     };
                     set_field(out, f, next);
                 }
+                for f in ALL_BEAM {
+                    let Some((sum, w)) = a.beam[f as usize] else { continue };
+                    if w <= 0.0 {
+                        continue;
+                    }
+                    let val = clamp01(sum / w);
+                    let sw = w.min(1.0);
+                    // A beam parameter is never an intensity, so layer master
+                    // and blend mode do not scale it — half master must not
+                    // mean half zoom. The first layer to speak sets the value
+                    // outright; later ones crossfade from it.
+                    let next = match get_beam(out, f) {
+                        Some(cur) => clamp01(lerp(cur, val, sw)),
+                        None => val,
+                    };
+                    set_beam(out, f, next);
+                }
                 if let Some((r, g, b, w)) = a.col {
                     if w > 0.0 {
                         let sw = w.min(1.0);
@@ -348,8 +633,10 @@ impl Renderer {
         }
 
         // drop anchors whose (layer, look) is no longer live or fading -
-        // keeps the map from growing forever as looks and layers come and go
-        if !self.cue_anchors.is_empty() {
+        // keeps the map from growing forever as looks and layers come and go.
+        // rate_corr is keyed finer (layer, look, part, effect) but is scoped to
+        // the same live/fading looks, so the same alive set gates both.
+        if !self.cue_anchors.is_empty() || !self.rate_corr.is_empty() {
             let mut alive: std::collections::HashSet<(String, String)> =
                 std::collections::HashSet::new();
             for layer in &st.project.layers {
@@ -363,6 +650,8 @@ impl Renderer {
                 }
             }
             self.cue_anchors.retain(|k, _| alive.contains(k));
+            self.rate_corr
+                .retain(|k, _| alive.contains(&(k.0.clone(), k.1.clone())));
         }
 
         // --- manual haze merges HTP so looks can only add ---
@@ -558,16 +847,31 @@ impl Renderer {
             } else {
                 0.0
             };
+            // Round to 3 decimals before it goes on the wire. These floats are
+            // previz-only — they never reach DMX — and at full shortest-round-
+            // trip precision a single mid-fade value is 17-19 characters, so the
+            // head list dominates a 129-fixture snapshot at ~556 KB/s per
+            // client. 1/1000 is past what any previz can show. Both engines
+            // round identically (all values are 0..1, so round-half matches JS),
+            // so parity holds. `ring` is already banded; rounding is a no-op.
+            let q = |v: f64| (v * 1000.0).round() / 1000.0;
             head_snaps.push(HeadSnap {
                 f: ho.key.0.clone(),
                 h: ho.key.1,
-                r, g, b, i,
-                st: o.strobe,
+                r: q(r),
+                g: q(g),
+                b: q(b),
+                i: q(i),
+                st: q(o.strobe),
                 ring,
                 mm: o.motor_mode,
-                mv: o.motor_value,
-                pan: o.pan,
-                tilt: o.tilt,
+                mv: q(o.motor_value),
+                pan: q(o.pan),
+                tilt: q(o.tilt),
+                // Only when a look is actually driving it: the previz falls
+                // back to the profile's own beam angle when this is absent,
+                // which is exactly the "parked" semantics on the DMX side.
+                zm: o.beam.zoom.map(q),
                 mc: mc.filter(|v| !v.is_empty()),
             });
         }

@@ -36,6 +36,7 @@ fn bench<F: FnMut()>(name: &str, iters: u32, mut f: F) {
 
 fn main() {
     println!("light-bench — release profile\n");
+    bench_mvr_import();
 
     let params = ResolvedParams {
         dimmer: 0.8,
@@ -104,4 +105,45 @@ fn build_synthetic_gdtf() -> Vec<u8> {
         zip.finish().unwrap();
     }
     buf
+}
+
+/// How long does importing a real MVR block the thread that drives DMX?
+///
+/// The tick budget is 25 ms. This exists because REVIEW-v1.2.2 lists
+/// "synchronous GDTF/MVR import on the engine thread" as accepted-unfixed
+/// against a ROADMAP that says nothing heavy may touch the tick path, and
+/// nobody had ever put a number on it.
+///
+/// Point LIGHT_BENCH_MVR at a .mvr to measure a real one; otherwise it uses the
+/// synthetic test fixture, which is far smaller and will flatter the result.
+pub fn bench_mvr_import() {
+    let (label, bytes) = match std::env::var("LIGHT_BENCH_MVR") {
+        Ok(p) => match std::fs::read(&p) {
+            Ok(b) => (p, b),
+            Err(e) => {
+                println!("mvr import   : cannot read {p}: {e}");
+                return;
+            }
+        },
+        Err(_) => (
+            "synthetic.mvr (set LIGHT_BENCH_MVR for a real one)".to_string(),
+            include_bytes!("../../tests/data/synthetic.mvr").to_vec(),
+        ),
+    };
+
+    let t = std::time::Instant::now();
+    let parsed = light_core::mvr::parse_mvr(&bytes);
+    let ms = t.elapsed().as_secs_f64() * 1000.0;
+    match parsed {
+        Ok(b) => println!(
+            "mvr import   : {ms:.1} ms for {} KB — {} fixtures, {} groups  [{}]\n               \
+             tick budget is 25 ms, so that is {:.0} tick(s) of DMX not sent",
+            bytes.len() / 1024,
+            b.fixtures.len(),
+            b.groups.len(),
+            label,
+            (ms / 25.0).ceil()
+        ),
+        Err(e) => println!("mvr import   : failed after {ms:.1} ms — {e}"),
+    }
 }

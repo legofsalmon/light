@@ -9,5 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 wasm-bindgen = "0.2"
-serde_json = "1"
+# float_roundtrip: match V8's correctly-rounded float parsing, same reason as
+# core/Cargo.toml — this crate parses CompiledProfile JSON re-stringified by V8.
+serde_json = { version = "1", features = ["float_roundtrip"] }
 light-core = { path = "../core", default-features = false }

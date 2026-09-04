@@ -66,14 +66,145 @@ The v0.4 roadmap milestone replaces this dance with data-driven GDTF profiles in
 - `engine/test/diff.ts` boots both engines on side ports (9901/9902) with network output disabled and compares snapshots — extend its command script when you add DMX-affecting features. It needs `cargo build -p light-core` first.
 - The Node smoke test binds UDP :6454 for the Art-Net loopback check and skips gracefully if something else (another Art-Net tool) holds the port; same for the Rust suite.
 - Effects are deterministic (integrated beat + hashed sample-and-hold), so assertions sample *off* whole beats where waveforms sit at extremes.
+- MIDI hot-plug on macOS needs a CFRunLoop pump. CoreMIDI keeps each process's
+  device list in a cache it only refreshes from notifications delivered on a run
+  loop, and the engine is a plain binary that never runs one — so the list is
+  frozen at the moment the process first touches CoreMIDI, and a controller
+  plugged in after launch is invisible until restart. Making a fresh `MidiInput`
+  does not help: the cache is per-process, not per-client. `refresh::pump()` in
+  `core/src/midi.rs` drains the pending notifications with a zero-timeout
+  `CFRunLoopRunInMode` (~16 µs) and the effect is process-wide, which is why the
+  scan thread is the only caller — `ApcOut::ensure_connection` enumerates on the
+  DMX tick thread, where blocking is not an option, and gets the corrected list
+  for free. `a_device_that_appears_after_start_becomes_visible` pins both halves;
+  it has to spawn a child process, because a virtual port created in the same
+  process is visible immediately and never exercises the notification path.
 
 ## Tauri app
 
 `src-tauri/` is a thin shell: `main.rs` spawns the engine thread and opens the window; the window is just a WS client like any browser. Icons regenerate with `npx tauri icon src-tauri/icons/icon-source.png` (source rendered from `icon.svg`). `npm run app:build` produces an ad-hoc-signed `.app`; distribution signing/notarisation is not set up yet.
 
+**`"dragDropEnabled": false` in `tauri.conf.json` is load-bearing, and JSON cannot hold the comment that says so.** It defaults to *true*, which makes Tauri install its own OS drag-drop handler on the webview; wry's handler returns `true` without falling through to `super`, so WKWebView never processes the drag and no `dragenter`/`dragover`/`drop` ever reaches the page. That kills HTML5 drag-and-drop in the shipped app while leaving it working in a browser — which is where the UI is usually tested, so the failure is invisible until someone drags a look onto a pad in the real `.app`. Nothing here uses OS file-drop, so turning it off costs nothing. Anything drag-and-drop must be checked in the built app, not only at `:5173`.
+
+## Native previz
+
+`previz/` is a Bevy app and a plain WebSocket client of the engine — it observes
+and never commands, so nothing it does can reach DMX.
+
+Working on it:
+
+- `cargo build -p light-previz` then `./target/debug/light-previz`. The dev
+  profile optimises dependencies and not our code (`[profile.dev.package."*"]`),
+  so once Bevy is cached a rebuild is **about two seconds** against five minutes
+  for release. Do all iteration there.
+- **F12 saves a PNG**, and `LIGHT_PREVIZ_SHOT=<path>` saves two automatically a
+  few seconds in. Use these rather than the OS screen recorder: they need no
+  permission and they capture the window rather than the desktop.
+- `LIGHT_PREVIZ_DIAG=1` logs frame time plus a render-state line every two
+  seconds — fixture count, live spotlights, panel lights, fog density, haze —
+  so a dark window can be diagnosed from the terminal.
+- `LIGHT_PREVIZ_CAM=yaw,pitch,dist[,tx,ty,tz]` places the camera at startup.
+  Screenshots are how you judge this thing, and without it every screenshot came
+  from the same default viewpoint — half of them framing empty air, because on
+  an arena plot the rig hangs above where the default camera looks. Setting it
+  also *claims* the camera, so the automatic first framing leaves your shot
+  alone.
+- `previz/src/quality.rs` holds every knob that trades frame time for picture
+  (MSAA, fog steps, shadow budget, exposure, flux, haze floor, beam gain,
+  adaptation, truss) as `LIGHT_PREVIZ_*` variables. They exist because a release
+  build is five minutes and a `const` is not a knob anybody turns twice.
+
+Shadow maps are dealt PER FRAME by `update::allocate_shadows`, round-robin
+across fixture groups, to the lights that are actually lit. They used to be
+handed out in patch order at scene build, which on a real rig gave every slot to
+one or two fixture types and left the rest casting nothing — measured by
+differencing shadows-on against shadows-off per group, three of the four groups
+the show actually fires changed 0.00 % of the frame. Two things make the
+per-frame version cheap, and both were assumed to be the opposite: bevy's
+shadow-pass pipeline key carries no light identity, so toggling can never cause
+a shader compile; and a light hidden with `Visibility::Hidden` is dropped by
+`extract_lights` before clustering, before the shadow count and before the atlas
+allocation, so the old budget was being reserved for darkness.
+
+Measure from a FIXED camera. The tiers read 11.5 / 20.2 / 44.2 ms from the shot
+the window now opens on and 13.9 / 31.3 / 69.8 ms from the old close default,
+for the same build — beams are fill, and fill is most of the frame time, so the
+viewpoint is worth more than most of the knobs. Any before/after number without
+`LIGHT_PREVIZ_CAM` pinned is measuring the camera.
+
+### What is drawn, and what is inferred
+
+Fixture geometry comes from the compiled profile's `FixtureForm`, which the
+operator can override per profile in the patch table. A mover is articulated —
+base, yoke, tilting barrel, lens — and the aim splits across the yoke and the
+shell, so the body swings with the beam. Everything else gets a body frame
+turned to face where its light goes, with the emitters on the front face.
+
+The band's geometry lives in `shared/figure.json` and NOTHING ELSE defines it.
+`previz/src/figure.rs` reads it with `include_str!` + serde; the three.js view
+imports it directly (`ui/src/components/figure.ts`). Change the file and both
+views change. That file exists because the two renderers were independent
+hand-copies of ~140 numbers, and the web one was still drawing an armless
+capsule pawn three commits after the native figures grew limbs.
+
+Three things are still duplicated there, deliberately and minimally: `bone`,
+`chain`, and the FNV-1a/avalanche hash that turns a prop id into a stature and a
+pose. The hash has to agree BIT FOR BIT or the same musician is a different
+height in the two windows — JavaScript has no u32, so that side is `Math.imul`
+plus `>>> 0` after every step, and `the_hash_agrees_with_the_typescript_twin`
+pins five measured pairs against it. Measure both sides; do not type the
+expected values from memory.
+
+A performer's height is inferred too, and for the same reason. A stage prop's
+`y` is structural-only — `sanitizeProject` deletes it from performers and should
+keep doing so — so `standingHeightAt` (shared/beamThrow.ts) reads the height off
+whichever riser the performer is standing inside, and `floor_height_at`
+(previz/src/scene.rs) is its twin.
+
+Those two are hand-copied into different languages with no parity test between
+them, so their CASES live in one file both sides load:
+`shared/testdata/standingHeight.json`. Add a case there and it runs in
+`engine/test/smoke.ts` and in the Rust unit tests at once. That is the only
+thing standing between the two previz windows and a slow drift apart — do not
+add a case to one side only.
+
+Truss, risers and screens live in `shared/structure.json` the same way, read by
+`previz/src/scene.rs` and `ui/src/components/Previz3D.tsx`. The lattice is a
+RATIO rule rather than a table, because a placed bar carries its own section
+from the patch while an inferred run is a fixed 0.29 m — the ratios were chosen
+to reproduce the constants the inferred runs were authored with, so that path
+still renders the same frame. A placed truss also SUPPRESSES inference
+entirely: `infer_runs` is blind to placed props, so a drawn bar and a run
+inferred from the fixtures on it are two lattices in the same air.
+
+**Truss is inferred, not imported.** The project file has no truss in it, so
+`previz/src/truss.rs` reads it off the hang: three or more fixtures sharing a
+height and a depth over at least a metre and a half. A run breaks wherever a
+hole opens up that is several times wider than the fixture spacing around it —
+which is the only rule that both keeps a sparse front truss whole and refuses to
+join two side-fill wings eighteen metres apart. `LIGHT_PREVIZ_TRUSS=0` turns it
+off; when MVR geometry import lands, real truss should replace it.
+
+Debug it by bisecting with the shader, not by reasoning at it. Returning a flat
+colour early answers "does this rasterize at all", then "did the uniform
+arrive", and so on. That is how a placeholder `lumens: 0.0` was found after an
+hour of the beams simply not existing.
+
 ## Release checklist
 
 1. `npm test` · `cargo test -p light-core` · `npm run typecheck` · `npm run test:parity` — all green.
 2. `npm run build` then `npm run app:build`.
-3. Launch the `.app`, fire a column, watch the Art-Net counter and a real node.
-4. Tag, push, update `ROADMAP.md` checkboxes.
+3. **`cargo build --release -p light-previz`.** The PREVIZ button launches a
+   PREBUILT binary (`spawn_previz` in `core/src/engine.rs`) and never compiles
+   anything, so a stale one just quietly opens old code. This cost a real
+   evening once: goalposts that had been deleted from the source were still on
+   screen, along with eight days of beam, camera and aiming fixes that had
+   never been seen. The engine now warns in its toast when the binary predates
+   `previz/src`, but only beside a source tree — a shipped app has no such
+   check, so the build has to happen here.
+4. Launch the `.app`, fire a column, watch the Art-Net counter and a real node.
+   Drag a look from the library onto a pad while you are there — HTML5
+   drag-and-drop is the one thing a browser check cannot vouch for (above).
+5. Open the previz window and fire a beam cue. It is a separate binary with its
+   own renderer and none of the suites touch it.
+6. Tag, push, update `ROADMAP.md` checkboxes.

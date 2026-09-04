@@ -68,9 +68,9 @@ export function renderImported(
     h = { handle: w.register_profile(JSON.stringify(cp)), ref: cp };
     handles.set(id, h);
   }
-  const flat = new Float64Array(heads.length * 15);
+  const flat = new Float64Array(heads.length * 20);
   heads.forEach((p, i) => {
-    const o = i * 15;
+    const o = i * 20;
     flat[o] = p.dimmer;
     flat[o + 1] = p.r;
     flat[o + 2] = p.g;
@@ -86,6 +86,13 @@ export function renderImported(
     flat[o + 12] = p.tilt;
     flat[o + 13] = p.haze;
     flat[o + 14] = p.fan;
+    // NaN is the "unset" sentinel: every real parameter value is finite, so it
+    // cannot collide with one, and it keeps the bridge a flat float array.
+    flat[o + 15] = p.zoom ?? NaN;
+    flat[o + 16] = p.focus ?? NaN;
+    flat[o + 17] = p.iris ?? NaN;
+    flat[o + 18] = p.frost ?? NaN;
+    flat[o + 19] = p.cto ?? NaN;
   });
   const bytes = w.render(h.handle, flat);
   // Never trust the length: an inconsistent profile must not RangeError the

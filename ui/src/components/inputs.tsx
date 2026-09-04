@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 
 /** Number editor that commits on blur/Enter — universe numbers route live
  *  output, so half-typed values must never leave the field. */
-export function NumInput({ value, min, max, width, onCommit }: {
+export function NumInput({ value, min, max, width, title, onCommit }: {
   value: number;
   min: number;
   max: number;
   width?: number;
+  title?: string;
   onCommit: (v: number) => void;
 }) {
   const [draft, setDraft] = useState(String(value));
@@ -25,6 +26,7 @@ export function NumInput({ value, min, max, width, onCommit }: {
     <input
       ref={ref}
       className="num"
+      title={title ?? 'commits on Enter or when the field loses focus'}
       type="number"
       min={min}
       max={max}

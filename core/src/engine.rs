@@ -25,6 +25,24 @@ pub enum EngineMsg {
     MidiPorts(Vec<String>),
     ClientConnected(ClientId),
     ClientDisconnected(ClientId),
+    /// A fixture archive, already decoded and parsed on a worker.
+    ///
+    /// Parsing an import on the tick thread costs measurably more than a tick:
+    /// a real 9.4 MB festival MVR takes 32 ms to parse, which is two frames of
+    /// DMX not sent while fixtures hold their last value. ROADMAP forbids
+    /// exactly this ("nothing heavy on the tick path… no filesystem,
+    /// network-blocking, or unbounded work. Ever"), so the work happens off the
+    /// thread and only the result — cheap to apply — comes back.
+    GdtfParsed {
+        name: String,
+        credit: Option<String>,
+        result: Result<Vec<crate::cprofile::CompiledProfile>, String>,
+    },
+    MvrParsed {
+        name: String,
+        replace: bool,
+        result: Result<crate::mvr::MvrBundle, String>,
+    },
 }
 
 pub struct EngineConfig {
@@ -88,6 +106,117 @@ impl EchoTo {
     }
 }
 
+/// Raw DMX for one client's subscribed universes.
+///
+/// Serialised from a typed struct, NOT through `json!`: that round-trips via
+/// `serde_json::Value`, whose map is a BTreeMap, so every object comes out with
+/// its keys alphabetised — which silently diverged this event's wire order from
+/// the Node engine's while the data was identical.
+#[derive(serde::Serialize)]
+struct DmxEvent<'a> {
+    #[serde(rename = "type")]
+    typ: &'static str,
+    u: std::collections::HashMap<&'a str, &'a [u8]>,
+}
+
+/// The audition head set, for the one client that asked. `heads: null` means the
+/// preview ended — without that the client would keep showing the last frame
+/// forever. Typed for the same wire-order reason as above.
+#[derive(serde::Serialize)]
+struct PreviewEvent {
+    #[serde(rename = "type")]
+    typ: &'static str,
+    heads: Option<Vec<crate::types::HeadSnap>>,
+}
+
+/// One import parses at a time, with a short queue behind it.
+///
+/// Imports run off the tick thread (they must — a 9.4 MB MVR takes 32 ms to
+/// parse) but nothing bounded how many could be in flight, and each worker
+/// holds a full copy of the archive: a client looping imports piled up threads
+/// until the process was OOM-killed.
+///
+/// A queue rather than a hard reject, because a legitimate burst is a normal
+/// flow — "rebuild from library" sends one import per file — and rejecting five
+/// of six would silently do the wrong thing. Only a flood past the queue depth
+/// is refused, and it is refused OUT LOUD.
+enum ImportJob {
+    Gdtf { name: String, data: String, credit: Option<String> },
+    Mvr { name: String, data: String, replace: bool },
+}
+
+const IMPORT_QUEUE_MAX: usize = 8;
+static IMPORTS: std::sync::Mutex<Option<(bool, std::collections::VecDeque<ImportJob>)>> =
+    std::sync::Mutex::new(None);
+
+/// Queue an import, starting it immediately if nothing else is parsing.
+/// Returns false only when the queue is full.
+fn queue_import(job: ImportJob, tx: &Sender<EngineMsg>) -> bool {
+    let Ok(mut guard) = IMPORTS.lock() else { return false };
+    let (busy, q) = guard.get_or_insert_with(|| (false, std::collections::VecDeque::new()));
+    if *busy {
+        if q.len() >= IMPORT_QUEUE_MAX {
+            return false;
+        }
+        q.push_back(job);
+        return true;
+    }
+    *busy = true;
+    spawn_import(job, tx);
+    true
+}
+
+/// A parse finished (or failed): start whatever is waiting.
+fn import_finished(tx: &Sender<EngineMsg>) {
+    let Ok(mut guard) = IMPORTS.lock() else { return };
+    let (busy, q) = guard.get_or_insert_with(|| (false, std::collections::VecDeque::new()));
+    match q.pop_front() {
+        Some(next) => spawn_import(next, tx),
+        None => *busy = false,
+    }
+}
+
+fn spawn_import(job: ImportJob, tx: &Sender<EngineMsg>) {
+    let tx = tx.clone();
+    std::thread::spawn(move || {
+        let msg = match job {
+            ImportJob::Gdtf { name, data, credit } => {
+                let result = crate::state::base64_decode(&data)
+                    .and_then(|bytes| crate::gdtf::parse_gdtf(&bytes));
+                EngineMsg::GdtfParsed { name, credit, result }
+            }
+            ImportJob::Mvr { name, data, replace } => {
+                let result = crate::state::base64_decode(&data)
+                    .and_then(|bytes| crate::mvr::parse_mvr(&bytes));
+                EngineMsg::MvrParsed { name, replace, result }
+            }
+        };
+        let _ = tx.send(msg);
+    });
+}
+
+/// Per-client transport subscriptions.
+///
+/// Deliberately NOT in EngineState: these are facts about sockets, not about
+/// the show, they never persist, and they must vanish when a client goes away.
+/// Keeping them here also means the state machine stays free of client ids.
+#[derive(Default)]
+struct Subs {
+    /// client -> universes it wants raw DMX for
+    dmx: std::collections::HashMap<ClientId, Vec<String>>,
+    /// the one client auditioning a look, if any
+    preview: Option<ClientId>,
+}
+
+impl Subs {
+    fn forget(&mut self, id: ClientId) {
+        self.dmx.remove(&id);
+        if self.preview == Some(id) {
+            self.preview = None;
+        }
+    }
+}
+
 /// Why the engine loop ended.
 ///
 /// It used to return `()`, so a clean quit and a failed bind were the same
@@ -118,6 +247,7 @@ impl std::fmt::Display for ExitReason {
 
 pub fn run(mut cfg: EngineConfig) -> ExitReason {
     let epoch = Instant::now();
+    let _ = EPOCH.set(epoch);
     let now_ms = move || epoch.elapsed().as_secs_f64() * 1000.0;
 
     let dir = persist::project_dir();
@@ -131,14 +261,20 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
     });
 
     let (tx, rx) = mpsc::channel::<EngineMsg>();
-    if let Some(ready) = cfg.on_ready.take() {
-        ready(tx.clone());
-    }
     ENGINE_PORT.store(cfg.port, std::sync::atomic::Ordering::Relaxed);
     let bc = Broadcaster::new();
     if let Err(e) = crate::server::start(cfg.port, cfg.ui_dist.clone(), tx.clone(), bc.clone()) {
         eprintln!("[light] cannot listen on :{} — is another engine running? {e}", cfg.port);
         return ExitReason::ListenFailed(format!("port {} — {e}", cfg.port));
+    }
+    // AFTER the listener is bound, not before. The shell's on_ready navigates
+    // its window to http://127.0.0.1:<port>/ under a comment saying "now the
+    // server is up" — and it used to run first, so the window raced a socket
+    // that did not exist yet and survived on event-loop timing alone. That is
+    // the same shape as the bug b04c538 was written to fix, and the result is
+    // discarded with `let _ =`, so nothing would have retried.
+    if let Some(ready) = cfg.on_ready.take() {
+        ready(tx.clone());
     }
     if cfg.with_midi {
         crate::midi::start(tx.clone());
@@ -167,6 +303,7 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
     let mut dirty_first: Option<Instant> = None;
     let mut project_echo = EchoTo::Idle;
     let mut last_echo = Instant::now();
+    let mut subs = Subs::default();
     let mut osc_log: (f64, u32) = (0.0, 0); // monitor rate-limit window
 
     // Keep the machine awake through a set — display sleep or App Nap
@@ -232,6 +369,9 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
             }
             match rx.recv_timeout(next - now) {
                 Ok(EngineMsg::Shutdown) => {
+                    // Before anything else: a previz left alive across a
+                    // self-update reconnects to the new engine on its own.
+                    reap_previz();
                     // final flush: an edit inside the autosave debounce window
                     // must survive ⌘Q
                     let slug = persist::current_slug(&dir);
@@ -245,10 +385,14 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
                     let bpm_before = state.clock.bpm;
                     let align = handle_msg(
                         msg, &mut state, &bc, &mut osc, &tx, &dir, &mut dirty_at, &mut midi_names,
-                        &mut osc_log, now_ms(), &mut project_echo,
+                        &mut osc_log, now_ms(), &mut project_echo, &mut subs,
                     );
                     if align {
                         renderer.align_phase();
+                    }
+                    // TEST ONLY: apply a pending clock pin so the next tick uses it.
+                    if let Some(v) = state.pending_pin.take() {
+                        renderer.pin_clock(v);
                     }
                     // a locally-set tempo (tap / setBpm / OSC) leads the session
                     if state.clock.bpm != bpm_before {
@@ -294,7 +438,13 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
                 // operator has dragged or typed since — their last edit of the
                 // gesture vanishing off the screen and off the rig.
                 EchoTo::Client(id) => bc.broadcast_except(id, &ev),
-                _ => bc.broadcast(&ev),
+                EchoTo::Everyone => bc.broadcast(&ev),
+                // Nothing changed — we are only here to make good a frame a
+                // backed-up client missed, which the loop above just did. The
+                // catch-all used to broadcast here, so ONE slow client meant the
+                // whole project went to EVERY client 10 times a second, and
+                // send_to re-marked that client each pass, so it never stopped.
+                EchoTo::Idle => {}
             }
             project_echo = EchoTo::Idle;
             last_echo = Instant::now();
@@ -327,6 +477,14 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
             }
         }
 
+        // Is anything actually lit? `i` is resolved intensity, already computed
+        // for this tick, so this is a scan of a vec that is in cache and one
+        // relaxed store — not a second render.
+        if res.heads.iter().any(|h| h.i > 0.0) {
+            RIG_LIT_AT_MS.store(t as u64, std::sync::atomic::Ordering::Relaxed);
+        }
+        CLIENTS.store(bc.count(), std::sync::atomic::Ordering::Relaxed);
+
         window_ticks += 1;
         if t - window_start >= 2000.0 {
             stats = EngineStats {
@@ -347,14 +505,39 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
         // Snapshots to the UI at 20 fps.
         snap_flip = !snap_flip;
         if snap_flip && bc.count() > 0 {
-            // Only when someone is actually auditioning, and only on the frames
-            // that carry a snapshot — so the show pays nothing for this the rest
-            // of the time.
-            let preview = preview_heads(&mut state, &mut preview_renderer, t);
-            let snap =
-                build_snapshot(&state, &res, t, &stats, &link, &artnet, osc.status(), preview);
+            // The snapshot is identical for every client, so it is serialised
+            // once and broadcast as one string.
+            let snap = build_snapshot(&state, &res, t, &stats, &link, &artnet, osc.status());
             if let Ok(s) = serde_json::to_string(&snap) {
                 bc.broadcast(&s);
+            }
+
+            // Raw DMX goes ONLY to clients that asked for it. Only the Output
+            // tab reads it, one universe at a time, yet it used to ride inside
+            // every snapshot — ~8 KB of the ~28 KB at arena scale, 20x a second,
+            // to the previz and the tablet as well, which never read a byte.
+            subs.dmx.retain(|_, ids| !ids.is_empty());
+            for (id, ids) in &subs.dmx {
+                let mut u = std::collections::HashMap::new();
+                for uid in ids {
+                    if let Some(buf) = res.buffers.get(uid) {
+                        u.insert(uid.as_str(), &buf[..]);
+                    }
+                }
+                if let Ok(s) = serde_json::to_string(&DmxEvent { typ: "dmx", u }) {
+                    bc.send_to(*id, s);
+                }
+            }
+
+            // The audition head set likewise goes only to whoever asked for it.
+            // Rendering it at all is already gated on someone auditioning, and
+            // only on snapshot frames, so the show pays nothing the rest of the
+            // time.
+            if let Some(owner) = subs.preview {
+                let heads = preview_heads(&mut state, &mut preview_renderer, t);
+                if let Ok(s) = serde_json::to_string(&PreviewEvent { typ: "preview", heads }) {
+                    bc.send_to(owner, s);
+                }
             }
         }
 
@@ -403,6 +586,70 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
 /// environment variable would be worse than this.
 static ENGINE_PORT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(9900);
 
+/// The previz child, kept so it can be killed on shutdown.
+///
+/// It used to be dropped on the floor. That is fine for a quit — the process
+/// dies with its parent's session — and NOT fine for a self-update: the previz
+/// client reconnects forever and never exits on disconnect, so a copy left
+/// running across an app swap silently reattaches to the NEW engine, speaking
+/// whatever protocol the OLD build had.
+static PREVIZ_CHILD: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
+
+fn hold_previz(child: std::process::Child) {
+    if let Ok(mut slot) = PREVIZ_CHILD.lock() {
+        // A previous one should already be gone, but never leak the handle.
+        if let Some(mut old) = slot.replace(child) {
+            let _ = old.kill();
+            let _ = old.wait();
+        }
+    }
+}
+
+/// Kill and reap the previz window. Called on shutdown, and safe to call when
+/// no previz was ever launched.
+pub fn reap_previz() {
+    if let Ok(mut slot) = PREVIZ_CHILD.lock() {
+        if let Some(mut child) = slot.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+/// Wall-clock ms when a head was last rendered above zero, or 0 for never.
+///
+/// One relaxed store per tick, which is the same trade ENGINE_PORT already
+/// makes. It exists so the app shell can refuse to replace itself while a rig
+/// is lit: an update that blacks out a room mid-set is worse than any bug it
+/// fixes. The grace window is the caller's to choose, because a blackout
+/// between songs must not read as "the room is empty".
+static RIG_LIT_AT_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many clients are connected right now — a browser here, a phone or a
+/// tablet on the venue WiFi. Published for the same reason as the liveness
+/// clock: someone driving the show from a tablet must not have the machine
+/// running it quit underneath them.
+static CLIENTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+pub fn client_count() -> usize {
+    CLIENTS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The tick clock's zero, published so `rig_lit_within` can read the same
+/// monotonic scale the tick writes on. `now_ms` inside `run` is a closure over
+/// an Instant and a free function cannot reach it.
+static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// True when anything was lit within `grace_ms`.
+pub fn rig_lit_within(grace_ms: u64) -> bool {
+    let at = RIG_LIT_AT_MS.load(std::sync::atomic::Ordering::Relaxed);
+    if at == 0 {
+        return false;
+    }
+    let Some(epoch) = EPOCH.get() else { return false };
+    epoch.elapsed().as_millis() as u64 <= at.saturating_add(grace_ms)
+}
+
 fn spawn_previz() -> (bool, String) {
     let port = ENGINE_PORT.load(std::sync::atomic::Ordering::Relaxed);
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
@@ -423,8 +670,20 @@ fn spawn_previz() -> (bool, String) {
             // falls back to 9900 — which, when the port dialog has moved this
             // engine, is the OTHER copy of LIGHT. Silent when it happens: previz
             // shows no connection state.
+            let stale = previz_is_stale(c);
             return match std::process::Command::new(c).env("LIGHT_PORT", port.to_string()).spawn() {
-                Ok(_) => (true, "previz launched".into()),
+                Ok(child) if stale => {
+                    hold_previz(child);
+                    (
+                    true,
+                    "previz launched — but the binary is OLDER than previz/src.                      Rebuild: cargo build --release -p light-previz"
+                        .into(),
+                )
+                }
+                Ok(child) => {
+                    hold_previz(child);
+                    (true, "previz launched".into())
+                }
                 Err(e) => (false, format!("previz failed to start: {e}")),
             };
         }
@@ -432,8 +691,41 @@ fn spawn_previz() -> (bool, String) {
     (false, "previz binary not found — build it with: cargo build --release -p light-previz".into())
 }
 
+/// True when we are in a repo checkout and the previz binary predates its own
+/// source.
+///
+/// This is not hypothetical tidiness. `spawn_previz` launches a PREBUILT
+/// binary and never compiles anything, so a checkout whose previz was last
+/// built weeks ago keeps opening weeks-old code with no indication whatsoever
+/// — the window comes up, connects, and renders a rig that is subtly wrong in
+/// every way that has been fixed since. That cost a real evening: goalposts
+/// that had been deleted from the source were still on screen, along with an
+/// eight-day-old set of beam ranges, camera clamps and aiming fixes.
+///
+/// Only meaningful beside a source tree; a packaged app has none, and a
+/// missing directory reads as "not stale" rather than nagging every launch.
+fn previz_is_stale(bin: &std::path::Path) -> bool {
+    let Ok(built) = bin.metadata().and_then(|m| m.modified()) else { return false };
+    let mut newest = None;
+    let mut stack = vec![std::path::PathBuf::from("previz/src")];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for e in entries.flatten() {
+            let path = e.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|x| x == "rs" || x == "wgsl") {
+                if let Ok(t) = e.metadata().and_then(|m| m.modified()) {
+                    newest = Some(newest.map_or(t, |n: std::time::SystemTime| n.max(t)));
+                }
+            }
+        }
+    }
+    newest.is_some_and(|src| src > built)
+}
+
 fn project_event(state: &EngineState) -> String {
-    json!({ "type": "project", "project": state.project }).to_string()
+    json!({ "type": "project", "project": state.project, "gen": state.gen }).to_string()
 }
 
 fn broadcast_projects(bc: &Broadcaster, dir: &PathBuf) {
@@ -464,6 +756,9 @@ fn apply_outcome(
     owner: Option<ClientId>,
 ) {
     if out.project_changed {
+        // Every project change advances the generation so a client's next edit
+        // carries a base the engine can check for staleness.
+        state.bump_gen();
         // Continuous controls (faders, MIDI CC) land here per input event and
         // each echo is the WHOLE project — coalesce to one per tick instead of
         // flooding every client mid fader-ride.
@@ -512,10 +807,45 @@ fn handle_msg(
     osc_log: &mut (f64, u32),
     t: f64,
     project_echo: &mut EchoTo,
+    subs: &mut Subs,
 ) -> bool {
     match msg {
         // handled by the drain loop before it reaches here
         EngineMsg::Shutdown => {}
+        // Imports are parsed on a worker and come back as GdtfParsed/MvrParsed.
+        // Intercepted here rather than in state.rs so the tick thread never sees
+        // the archive at all; state.rs keeps its own parse-and-apply arms for
+        // direct callers and tests.
+        EngineMsg::Cmd(Command::ImportGdtf { name, data, credit }, _owner) => {
+            // One import at a time. Each spawns a thread holding a full copy of
+            // the archive, and nothing capped how many: a client looping
+            // imports piled up parse threads until the process was OOM-killed.
+            // Rejecting is better than queueing — the operator gets told, and a
+            // rebuild-from-library run (which sends one import per file) simply
+            // paces itself behind the toast.
+            if !queue_import(ImportJob::Gdtf { name: name.clone(), data, credit }, tx) {
+                bc.broadcast(&json!({"type":"importResult","ok":false,
+                    "message":format!("{name}: too many imports queued — try again in a moment"),
+                    "profileIds":[]}).to_string());
+            }
+        }
+        EngineMsg::Cmd(Command::ImportMvr { name, data, replace }, _owner) => {
+            if !queue_import(ImportJob::Mvr { name: name.clone(), data, replace }, tx) {
+                bc.broadcast(&json!({"type":"importResult","ok":false,
+                    "message":format!("{name}: too many imports queued — try again in a moment"),
+                    "profileIds":[]}).to_string());
+            }
+        }
+        EngineMsg::GdtfParsed { name, credit, result } => {
+            import_finished(tx);
+            let out = state.apply_gdtf(&name, result, credit);
+            apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_echo, None);
+        }
+        EngineMsg::MvrParsed { name, replace, result } => {
+            import_finished(tx);
+            let out = state.apply_mvr_parsed(&name, result, replace, t);
+            apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_echo, None);
+        }
         EngineMsg::Cmd(cmd, owner) => {
             // project FILE commands live here — the state machine has no
             // filesystem access, mirroring the Node reference's split
@@ -523,6 +853,46 @@ fn handle_msg(
                 Command::Projects => {
                     broadcast_projects(bc, dir);
                     return false;
+                }
+                // TEST ONLY, LIGHT_TEST_CLOCK gated: pin the effect clock so a
+                // moving effect is byte-comparable between the two engines.
+                // Applied to the renderer by run() before the next tick.
+                Command::PinClock { eff_beat } => {
+                    if std::env::var("LIGHT_TEST_CLOCK").is_ok() {
+                        state.pending_pin = Some(*eff_beat);
+                    }
+                    return false;
+                }
+                // Transport-level subscription: never reaches the state machine.
+                Command::WatchDmx { universe_ids } => {
+                    if let Some(id) = owner {
+                        if universe_ids.is_empty() {
+                            subs.dmx.remove(&id);
+                        } else {
+                            subs.dmx.insert(id, universe_ids.clone());
+                        }
+                    }
+                    return false;
+                }
+                // Record WHO is auditioning so the preview head set can be sent
+                // to them alone; the look id itself still goes to the state
+                // machine below.
+                Command::PreviewLook { look_id } => {
+                    if look_id.is_none() {
+                        // One last event so the client drops the head set — it
+                        // has no other way to learn the audition is over, and
+                        // would otherwise keep drawing the last frame.
+                        if let Some(prev) = subs.preview {
+                            if let Ok(s) =
+                                serde_json::to_string(&PreviewEvent { typ: "preview", heads: None })
+                            {
+                                bc.send_to(prev, s);
+                            }
+                        }
+                        subs.preview = None;
+                    } else {
+                        subs.preview = owner;
+                    }
                 }
                 Command::NewProject { name } => {
                     let name = if name.trim().is_empty() { "Untitled" } else { name.trim() };
@@ -580,6 +950,7 @@ fn handle_msg(
                         return false;
                     }
                     persist::set_current_slug(dir, &slug);
+                    state.bump_gen(); // the name changed — new authoritative gen
                     bc.broadcast(&project_event(state));
                     bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("saved as \"{name}\"")}).to_string());
                     broadcast_projects(bc, dir);
@@ -594,12 +965,28 @@ fn handle_msg(
             // dangling cell — and the sender needs that result like everyone
             // else. The parity harness caught this: it imported a fixture and
             // then could not see the fixture it had just created.
-            let echo_owner = match &cmd {
-                Command::UpdateProject { .. } => owner,
-                _ => None,
-            };
+            let is_update = matches!(cmd, Command::UpdateProject { .. });
+            // Staleness gate: a full-project write composed against an older
+            // generation must not clobber whatever changed underneath it (a
+            // deck switch, an openProject, another client's edit). Reject it and
+            // re-sync the sender, rather than applying last-write-wins. A write
+            // with no base (a blind submitter) skips the check.
+            if let Command::UpdateProject { base_gen: Some(base), .. } = &cmd {
+                if *base != state.gen {
+                    if let Some(id) = owner {
+                        bc.send_to(id, project_event(state));
+                    }
+                    return false;
+                }
+            }
             let out = state.handle_command(cmd, t, owner);
             let align = out.align_phase;
+            // Withhold the echo from the sender only if the engine left its
+            // submission alone. ensure_decks can rewrite it — creating a deck,
+            // or repointing an activeDeckId that does not resolve — and then the
+            // sender is the ONE client that must be told, because everybody else
+            // gets the repair and it would keep re-sending the unrepaired copy.
+            let echo_owner = if is_update && !out.repaired_submission { owner } else { None };
             apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_echo, echo_owner);
             return align;
         }
@@ -635,6 +1022,10 @@ fn handle_msg(
             bc.send_to(id, json!({ "type": "midiInputs", "names": midi_names }).to_string());
         }
         EngineMsg::ClientDisconnected(gone) => {
+            // A socket that has gone away must not keep a DMX subscription or
+            // hold the audition — the next client to take that id would inherit
+            // both.
+            subs.forget(gone);
             // Release exactly what this client was holding. Waiting for the
             // last client to go was the wrong half of the trade: a tablet
             // dropping off the WiFi mid-flash left its blinder latched on
@@ -784,12 +1175,7 @@ fn build_snapshot(
     link: &crate::link::LinkSync,
     artnet: &crate::artnet::ArtnetOut,
     osc_status: Option<&'static str>,
-    preview_heads: Option<Vec<crate::types::HeadSnap>>,
 ) -> Snapshot {
-    let mut dmx = std::collections::HashMap::new();
-    for (id, buf) in &res.buffers {
-        dmx.insert(id.clone(), buf.to_vec());
-    }
     Snapshot {
         typ: "snap",
         now: t,
@@ -810,6 +1196,8 @@ fn build_snapshot(
             m.sort(); // stable wire order
             m
         },
+        soft: state.soft_entries(),
+        controls: state.control_entries(),
         identify: state.identify.clone(),
         overrides: state.overrides.values().map(|m| m.len()).sum(),
         osc_in: osc_status,
@@ -837,9 +1225,7 @@ fn build_snapshot(
         haze: state.project.settings.haze,
         haze_fan: state.project.settings.haze_fan,
         heads: res.heads.clone(),
-        preview_heads,
         layers: res.layers.clone(),
-        dmx,
         stats: stats.clone(),
     }
 }

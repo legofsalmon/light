@@ -5,7 +5,7 @@ How to operate LIGHT: looks, layers, cues, effects, and the controls that matter
 ## The mental model
 
 - A **look** is a lighting state: colour, intensity, positions, and effects for one or more fixture groups.
-- Looks live in a **grid**: rows are **layers**, columns are **cues**. The layer stack runs bottom-to-top (WASH at the bottom, STROBE on top — the UI shows the top of the stack as the top row).
+- Looks live in a **grid**: rows are **layers**, columns are **cues**. The layer stack runs bottom-to-top (WASH at the bottom, STROBE on top — the UI shows the top of the stack as the top row). Four layer rows, plus a fifth **control row** ruled off underneath them — the same shape as an APC40 mk2's clip grid.
 - Clicking a cell fires its look on that layer with a crossfade. Clicking a **column header** fires the whole column as a cue.
 - Everything time-based (effects, fades shown in beats) follows the **beat clock** — tap it, drag it, or let Resolume drive it.
 
@@ -45,6 +45,9 @@ Select a cell → the Look tab shows its editor. A look is a list of **parts**; 
 - **Dimmer** — intensity 0–100%.
 - **Colour** — hue + saturation faders plus swatches. Derbies can't mix colour: they quantise to the nearest of their 14 fixed macros ("auto"), or pick an explicit macro from the dropdown.
 - **Derby extras** — *ring blinder* toggle (the white LED ring is on/off hardware — there is no ring dimmer), *ring FX* (the ring's built-in strobe patterns), *motor* (off / static aim / rotate + speed).
+- **White** — the dedicated white emitter on an RGBW head, offered whenever
+  something in the group actually drives one. Distinct from a derby's *ring
+  blinder*, which is on/off hardware.
 - **Strobe** — shutter rate, slow → fast.
 - **Position** — pan/tilt for moving heads.
 - **Haze** — output + fan for hazer-type fixtures (merged highest-wins with the manual haze slider in the top bar).
@@ -84,6 +87,24 @@ The **speed** fader in the top bar multiplies all effect rates (0.25×–4×) wi
 3. Touch the control on your device — pad or encoder. Done; the mapping is stored in the project.
 
 Notes fire cells (note-off releases flash looks); CCs drive faders. Manage or delete mappings in the **Sync · MIDI** tab.
+
+A control in the grid's control row is learnable the same way — arm learn, click
+its fader, touch an encoder. Prefer an encoder or fader to a pad: a pad drives a
+continuous target by its velocity on press only (so a release cannot slam a macro
+to zero), which means a pad can push a control up but never bring it back down.
+
+**The APC40's eight device knobs drive the eight controls.** Load the APC40 mk2
+preset in the Sync · MIDI tab and knob *N* becomes control *N* — the control row
+shows which knob it is under each fader, read from the mappings themselves, so a
+blank there means nothing is bound yet.
+
+Two things worth knowing about that surface. The knobs are **absolute**, so the
+first move jumps the control to wherever the knob is physically sitting — the
+same pickup behaviour as the track faders on the layer masters. And in the
+APC40's generic mode the knobs are *banked* by the `[TRACK SELECTION]` buttons,
+which silently moves them to a different MIDI channel; the preset therefore binds
+all nine banks to the same eight controls, so a stray press of a track button
+cannot take your macros away mid-set.
 
 ## Saving
 
@@ -140,9 +161,82 @@ views (`band` toggles them in-app, `M` in the pop-out window), so you can judge
 how a look actually lands on people. `PREVIZ` in the top bar opens the native
 window with real beams, haze, and shadows.
 
-**Layout.** Drag the edges between the grid, bottom panel, and previz to resize
-them; the layout is remembered.
+**The native window.** It opens framed on your whole rig — however big the plot
+is and wherever it sits — and stays where you put it after that; a patch edit
+will not throw away the shot you were lining up. `1` `2` `3` are FOH, side and
+top. Moving heads are drawn as real moving heads: the yoke pans and the head
+tilts with the beam, so you can see a fixture running out of travel or turning
+to point at the audience, not just where the light lands.
+
+Truss is drawn wherever the hang implies one — three or more fixtures in a line
+at the same height and depth. It is a reading of your patch, not something the
+show file carries, so a rig that is not hung in rows will not get bars drawn
+through it.
+
+**Risers.** Drag a musician onto a riser in the 2D plan and they stand on top of
+it, kit and all — in both 3D views. There is no height to set: the previz reads
+it off the riser your performer is standing inside, so moving or resizing the
+riser moves whoever is on it. Only risers hold someone up, and standing beside
+one leaves you on the deck.
+
+**Exposure.** `auto exp` in the previz bar is eye adaptation: the view stops
+down when the rig comes up and opens back up in the quiet parts, the way your
+eyes do. It is partial, so a brighter look still reads brighter, and a blackout
+is never brightened. Switch it off to judge absolute levels or to compare two
+looks without the view re-metering between them.
+
+**Layout.** The previz is a band across the **top** of every view — stages are
+wider than they are tall, so that is the shape that reads. `Pads` / `Previz` /
+`Patch` / `All` (⌥1–⌥4) choose what sits under it:
+
+| View | Under the band | |
+|---|---|---|
+| **Pads** | the pad grid, with the **look library** and the **look editor** at the right | the audition rides the band's right edge |
+| **Patch** | the fixtures table, with the **2D plan** above it | arriving picks the plan; your previous view comes back when you leave |
+| **All** | pads and the editor tabs | |
+| **Previz** | — | full screen |
+
+Drag the edges between panels to resize them, and the layout is remembered. Each
+view has its own **hide** for the band (`▴` at the left of the previz bar, and
+the slim strip it leaves behind brings it back), so you can run a show
+full-height on the pads while the patch view keeps its plan. **preview** in the
+same bar switches the audition pane off — it is a second render, and firing a
+pad selects it, so a show run from the pads may not want it.
+
+**The look editor, on the pads view.** Rightmost column — the same editor as
+the bottom panel's Look tab, following the same selection, so you can build the
+next song without leaving the surface you perform from. `▸` folds it away. Below
+about 810px of window width only one of the two right-hand panels fits, so
+opening one folds the other; on a phone both fold and the pads keep the width.
+
+**Look library.** Bottom right of the pads view: every look in the pool,
+searchable, with a `×N` count of the pads already using it in this song. **Drag
+a row onto any pad** to point that pad at the look. Pads *share* looks — editing
+one updates every pad using it — so a drag is how the same wash reaches six
+songs. `▸` collapses the library when the grid wants the width.
+
+Dropping onto the pad a layer is **currently playing** does not change the
+stage: the engine keeps playing the look it captured when you fired it. The pad
+turns amber on screen to say so — fire it again to swap. On the APC that pad
+keeps reporting the *stage*: it stays lit in the colour of what is actually
+playing, not the colour of the look now sitting on it.
+
+**The control row.** Under the four layer rows, ruled off from them, sits a row
+of **Named Controls**. They are not looks and not effects: a control is a macro
+fader that reaches *into* whatever is playing, each of its links driving one
+parameter of one look's part between a `min` and a `max` you set. So it changes
+nothing until the looks it links to are on stage, and it rides live — the amber
+**RIDING** chip appears, and `Store` writes the positions into the show while
+`Discard` throws them away. A control with no links yet is flagged ⚠.
+
+The row is eight slots wide and the grid is capped at four layer rows for a
+reason: four layers plus the control row is exactly the 5 × 8 clip grid of an
+APC40 mk2, so what is on screen is the shape of what is under your hands. Click
+`+` on the next free slot to add a control; `edit` opens the Controls tab, where
+links, brackets and modulators live. Each fader is MIDI-learnable from the row
+itself.
 
 **On the network.** The engine serves this UI over HTTP too — open
 `http://<your-mac>:9900` on a phone or tablet on the same network to drive the
-show from the floor.
+show from the floor. On a phone the look library folds itself away so the pads
+keep the width.

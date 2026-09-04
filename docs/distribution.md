@@ -109,8 +109,22 @@ script always re-signs afterwards. If you change the bundle contents, re-sign.
 - **Windows / Linux.** Tauri and Bevy both support them and nothing in the
   engine is macOS-specific, but neither is built or tested. Windows has its own
   signing story (an EV certificate for SmartScreen, several hundred a year).
-- **Auto-update.** Tauri's updater plugin can keep an installed app current,
-  which matters once other people have it and you cannot ask them all to
-  re-download. It needs its own signing keypair, separate from Apple's.
+- **Auto-update — the check is done (`docs/updates.md`); installing is not.**
+  LIGHT tells you when a newer build exists and links to it. It does not replace
+  itself yet.
+
+  The claim that used to sit here — "it needs its own signing keypair, separate
+  from Apple's" — is true of Tauri's updater plugin and false of what was built.
+  There is no keypair, no manifest and no host: GitHub's Releases API is the
+  manifest, GitHub serves the asset, and the trust anchor is the Developer ID
+  already in `APPLE_CERTIFICATE`. A minisign key would have been a second secret
+  whose loss permanently ends the ability to update every installed copy, in
+  exchange for proving *we* signed a build where `stapler` proves *Apple*
+  notarised it.
+
+  The plugin was rejected for a concrete reason too: it emits its payload during
+  `tauri build`, which in `scripts/build-app.sh` is **before** the previz binary
+  is grafted in and before the re-sign. Its payload would be a bundle with no
+  previz and a broken seal, signed to say so.
 - **A crash reporter.** With users you cannot see, a show that dies is a bug
   report you never get.

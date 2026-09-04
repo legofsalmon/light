@@ -165,6 +165,7 @@ pub fn parse_mvr(bytes: &[u8]) -> Result<MvrBundle, String> {
         return Err("no GeneralSceneDescription.xml in archive".into());
     }
 
+    crate::gdtf::guard_xml_depth(&scene_xml)?;
     let doc = roxmltree::Document::parse(&scene_xml).map_err(|e| format!("bad XML: {e}"))?;
     let mut bundle = MvrBundle::default();
     // per gdtf filename: parsed profiles (mode name → profile id)

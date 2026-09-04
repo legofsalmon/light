@@ -29,6 +29,14 @@ pub enum Source {
     Tilt,
     Haze,
     Fan,
+    // Beam parameters. Unlike the sources above these can be *unset*: a look
+    // that says nothing about zoom must leave the zoom channel parked at the
+    // value the fixture's own GDTF nominates, not drive it to zero.
+    Zoom,
+    Focus,
+    Iris,
+    Frost,
+    Cto,
 }
 
 /// Case guard — the first matching case in a channel wins.
@@ -43,6 +51,8 @@ pub enum Cond {
     /// source <= value
     SourceBelow { source: Source, value: f64 },
     MotorModeIs { mode: MotorMode },
+    /// the source carries no value — the look never touched this parameter
+    SourceUnset { source: Source },
 }
 
 /// One slot on a banded/wheel channel (colour wheels, macro tables, gobos).
@@ -99,8 +109,113 @@ pub struct CChannel {
 #[serde(rename_all = "camelCase")]
 pub struct CHead {
     pub kind: HeadKind,
+    /// metres along the fixture's local X axis. Tolerant: the Node sanitizer
+    /// repairs a non-finite/absent spatial field to 0, and the two engines
+    /// must land on the same values or geometry diverges — so a shape Node
+    /// repairs must never fail the whole Rust project load.
+    #[serde(default, deserialize_with = "de_metres")]
     pub offset: f64,
+    /// metres along the fixture's local Y axis (up) — B1: real pixel layouts
+    /// are 2D. Defaults keep every pre-B1 save loading as a flat bar.
+    #[serde(default, deserialize_with = "de_metres", skip_serializing_if = "is_zero")]
+    pub offset_y: f64,
+    /// grid coordinates within the fixture (row 0 = top). When EVERY head of a
+    /// profile is (0, 0) — pre-B1 saves, single-row imports — the geometry
+    /// builder falls back to col = head index, one row.
+    #[serde(default, deserialize_with = "de_index", skip_serializing_if = "is_zero_usize")]
+    pub row: usize,
+    #[serde(default, deserialize_with = "de_index", skip_serializing_if = "is_zero_usize")]
+    pub col: usize,
     pub label: String,
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+fn is_zero_usize(v: &usize) -> bool {
+    *v == 0
+}
+
+/// Finite number or 0 — mirrors the Node sanitizer's profile-head repair.
+fn de_metres<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(match v.as_ref().and_then(|x| x.as_f64()) {
+        Some(n) if n.is_finite() => n,
+        _ => 0.0,
+    })
+}
+
+/// Non-negative integer or 0 (floor, clamp) — mirrors the Node sanitizer.
+fn de_index<'de, D: serde::Deserializer<'de>>(d: D) -> Result<usize, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(match v.as_ref().and_then(|x| x.as_f64()) {
+        Some(n) if n.is_finite() && n >= 0.0 => n.floor() as usize,
+        _ => 0,
+    })
+}
+
+impl CHead {
+    /// A single-row head with no vertical offset — the pre-B1 shape.
+    pub fn flat(kind: HeadKind, offset: f64, label: String) -> CHead {
+        CHead { kind, offset, offset_y: 0.0, row: 0, col: 0, label }
+    }
+}
+
+/// What SHAPE of fixture this profile describes — the box, not the emitter.
+///
+/// `HeadKind` already says what one emitter does; this says what the thing on
+/// the truss physically is, which is a different question and the one a
+/// renderer needs. A CLF Nero is a rectangular blinder plate that happens to
+/// tilt; a Robe Spiider is a moving head that happens to have nineteen pixels.
+/// Neither is knowable from the head kinds alone, and getting it wrong is
+/// visible: before this existed, every Nero in the demo show rendered as a
+/// 16 cm cube throwing a spotlight cone, when it is a 41 x 32 cm panel.
+///
+/// Deliberately short. Each variant has to earn itself by changing how the
+/// fixture is drawn or lit, not by being a category a catalogue would use.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum FixtureForm {
+    /// Yoke and head: aims, throws a cone.
+    Mover,
+    /// A single-lens can on a bracket.
+    Par,
+    /// A linear batten or pixel bar — long, thin, cells in a row.
+    Bar,
+    /// A rectangular plate: blinders, LED panels, strobe plates. An AREA
+    /// emitter, not a lens — the thing a cone is most wrong about.
+    Panel,
+    /// A single-lens strobe.
+    Strobe,
+    /// Multi-lens rotating effect.
+    Derby,
+    /// Puts haze in the air and emits nothing.
+    Hazer,
+}
+
+impl FixtureForm {
+    pub fn label(self) -> &'static str {
+        match self {
+            FixtureForm::Mover => "moving head",
+            FixtureForm::Par => "par",
+            FixtureForm::Bar => "bar / batten",
+            FixtureForm::Panel => "panel / blinder",
+            FixtureForm::Strobe => "strobe",
+            FixtureForm::Derby => "derby",
+            FixtureForm::Hazer => "hazer",
+        }
+    }
+
+    pub const ALL: [FixtureForm; 7] = [
+        FixtureForm::Mover,
+        FixtureForm::Par,
+        FixtureForm::Bar,
+        FixtureForm::Panel,
+        FixtureForm::Strobe,
+        FixtureForm::Derby,
+        FixtureForm::Hazer,
+    ];
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,9 +228,166 @@ pub struct CompiledProfile {
     pub footprint: usize,
     pub heads: Vec<CHead>,
     pub channels: Vec<CChannel>,
+    /// The BEAM angle: full cone angle, in degrees, at 50 % of axial intensity.
     pub beam_deg: f64,
+    /// The FIELD angle: full cone angle at 10 % of axial intensity — the edge
+    /// of the usable light, where the beam angle is the hot core.
+    ///
+    /// GDTF carries both and the importer used to keep whichever it found
+    /// first, which threw away the more interesting of the two: the RATIO is
+    /// the fixture's character. Around 1.2 is a hard-edged beam, around 2.0 a
+    /// soft wash, and a renderer that only knows one of them has to invent an
+    /// edge. Absent on everything imported before this and on the built-ins;
+    /// `field_deg()` supplies a middling ratio in that case.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_deg: Option<f64>,
+    /// Total luminous flux, in lumens, summed across the file's Beam elements.
+    ///
+    /// GDTF states this and the importer used to drop it, so every renderer
+    /// downstream had to guess — badly. A CLF Nero declares 18,600 lm for its
+    /// RGB plate plus 54,381 for its white strobe layer; the previz had been
+    /// giving it 9,000 from a generic bucket. Real flux is also what lets a
+    /// beam shader conserve energy across a zoom instead of inventing a curve.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lumens: Option<f64>,
+    /// Physical radius of the emitting surface, in metres.
+    ///
+    /// Small, and load bearing: a beam integral with a 1/distance-squared term
+    /// goes to infinity when the camera looks straight at a lamp, and this is
+    /// the number that stops it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beam_radius: Option<f64>,
     /// no dimmer channel exists: fold intensity into colour/white sources
     pub virtual_dimmer: bool,
+    /// Who authored the fixture definition this was compiled from.
+    ///
+    /// GDTF Share's terms require that "our status (and that of any identified
+    /// contributors) as the authors of material on our Website must always be
+    /// acknowledged", and a compiled profile travels inside the project file to
+    /// wherever the show goes. Carrying the credit with it is the one licence
+    /// condition we can satisfy unilaterally. Absent on the built-in profiles,
+    /// which nobody else wrote.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credit: Option<String>,
+
+    /// An operator's override of the inferred form. Normally absent.
+    ///
+    /// Only the OVERRIDE is stored, never the guess. Two reasons: a re-import
+    /// must not silently clobber a correction someone made by hand, and
+    /// improving the heuristic should improve every show that already exists
+    /// rather than only the ones imported afterwards. `form()` is the accessor
+    /// everything should use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub form_override: Option<FixtureForm>,
+}
+
+impl CompiledProfile {
+    /// The field angle to render with: the imported one, or a middling ratio.
+    ///
+    /// 1.55x is the middle of the range real fixtures occupy, and it is also
+    /// where a Gaussian core pinned to 50 % at the beam angle happens to land
+    /// on 10 % at the field angle — so a profile with no FieldAngle still gets
+    /// a self-consistent pair rather than an invented edge.
+    ///
+    /// Always at least the beam angle: a file claiming a field narrower than
+    /// its beam is describing something that cannot exist, and clamping beats
+    /// rendering an inside-out cone.
+    pub fn field_deg(&self) -> f64 {
+        self.field_deg.unwrap_or(self.beam_deg * 1.55).max(self.beam_deg)
+    }
+
+    /// Total flux in lumens: what the file declares, or a plausible figure for
+    /// the form when it declares nothing.
+    pub fn lumens_or_guess(&self) -> f64 {
+        if let Some(l) = self.lumens.filter(|l| l.is_finite() && *l > 0.0) {
+            return l;
+        }
+        match self.form() {
+            FixtureForm::Derby => 10_000.0,
+            FixtureForm::Hazer => 0.0,
+            FixtureForm::Mover => 16_000.0,
+            FixtureForm::Panel => 45_000.0,
+            FixtureForm::Strobe => 30_000.0,
+            FixtureForm::Bar => 24_000.0,
+            FixtureForm::Par => 9_000.0,
+        }
+    }
+
+    /// The form to draw this fixture as: the operator's override if they set
+    /// one, otherwise a guess from the profile itself.
+    pub fn form(&self) -> FixtureForm {
+        self.form_override.unwrap_or_else(|| self.infer_form())
+    }
+
+    /// Guess the form from what the profile actually says.
+    ///
+    /// Ordered, because the tests overlap. The beam angle carries most of the
+    /// signal and is the one that catches blinders: a source wider than 90 deg
+    /// has no lens worth speaking of, so it is a flood or a plate whatever else
+    /// it can do. That is what puts a CLF Nero — 123 deg, tilts, no pan — in
+    /// Panel rather than Mover, which testing it for aim first would not.
+    fn infer_form(&self) -> FixtureForm {
+        let kinds: Vec<HeadKind> = self.heads.iter().map(|h| h.kind).collect();
+        if kinds.iter().any(|k| *k == HeadKind::Hazer) {
+            return FixtureForm::Hazer;
+        }
+        if kinds.iter().any(|k| *k == HeadKind::Derby) {
+            return FixtureForm::Derby;
+        }
+        // A real moving head steers in both axes. Tilt alone is a hanging
+        // bracket, which plenty of static fixtures have.
+        if self.drives(Source::Pan) && self.drives(Source::Tilt) {
+            return FixtureForm::Mover;
+        }
+        if self.beam_deg >= 90.0 {
+            return FixtureForm::Panel;
+        }
+        // Cells spread along the fixture's own X, with no height to them: a
+        // batten. `span` is in metres, from the pixel layout.
+        if self.heads.len() >= 4 {
+            let span = self.head_span();
+            let rise = self.head_rise();
+            if span > 0.0 && rise <= span * 0.35 {
+                return FixtureForm::Bar;
+            }
+            return FixtureForm::Panel;
+        }
+        if self.drives(Source::Strobe) && !self.drives(Source::ColorR) {
+            return FixtureForm::Strobe;
+        }
+        FixtureForm::Par
+    }
+
+    /// Does any channel actually drive this source? An attribute that compiled
+    /// to no cases drives nothing, which is the whole point of the check.
+    pub fn drives(&self, want: Source) -> bool {
+        self.channels.iter().any(|ch| {
+            ch.cases.iter().any(|case| match &case.func {
+                Func::Linear { source } => *source == want,
+                _ => false,
+            })
+        })
+    }
+
+    /// Width across the cells, in metres.
+    pub fn head_span(&self) -> f64 {
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for h in &self.heads {
+            lo = lo.min(h.offset);
+            hi = hi.max(h.offset);
+        }
+        if hi >= lo { hi - lo } else { 0.0 }
+    }
+
+    /// Height across the cells, in metres.
+    pub fn head_rise(&self) -> f64 {
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for h in &self.heads {
+            lo = lo.min(h.offset_y);
+            hi = hi.max(h.offset_y);
+        }
+        if hi >= lo { hi - lo } else { 0.0 }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -137,6 +409,26 @@ fn source_value(p: &ResolvedParams, s: Source, virtual_dimmer: bool) -> f64 {
         Source::Tilt => p.tilt,
         Source::Haze => p.haze,
         Source::Fan => p.fan,
+        // 0.0 is never reached for a set parameter: a channel driven by an
+        // optional source is guarded by Cond::SourceUnset, which takes the
+        // fixed-default branch first.
+        Source::Zoom => p.beam.zoom.unwrap_or(0.0),
+        Source::Focus => p.beam.focus.unwrap_or(0.0),
+        Source::Iris => p.beam.iris.unwrap_or(0.0),
+        Source::Frost => p.beam.frost.unwrap_or(0.0),
+        Source::Cto => p.beam.cto.unwrap_or(0.0),
+    }
+}
+
+/// Whether an optional source currently carries a value.
+fn source_is_set(p: &ResolvedParams, s: Source) -> bool {
+    match s {
+        Source::Zoom => p.beam.zoom.is_some(),
+        Source::Focus => p.beam.focus.is_some(),
+        Source::Iris => p.beam.iris.is_some(),
+        Source::Frost => p.beam.frost.is_some(),
+        Source::Cto => p.beam.cto.is_some(),
+        _ => true,
     }
 }
 
@@ -147,6 +439,7 @@ fn cond_matches(c: &Cond, p: &ResolvedParams, virtual_dimmer: bool) -> bool {
         Cond::SourceAbove { source, value } => source_value(p, *source, virtual_dimmer) > *value,
         Cond::SourceBelow { source, value } => source_value(p, *source, virtual_dimmer) <= *value,
         Cond::MotorModeIs { mode } => p.motor_mode == *mode,
+        Cond::SourceUnset { source } => !source_is_set(p, *source),
     }
 }
 
@@ -298,9 +591,14 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         model: "LED Derby ST".into(),
         mode: "4 Channel".into(),
         footprint: 4,
-        heads: vec![CHead { kind: HeadKind::Derby, offset: 0.0, label: "Derby".into() }],
+        heads: vec![CHead::flat(HeadKind::Derby, 0.0, "Derby".into())],
         beam_deg: 5.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: false,
+        credit: None,
+        form_override: None,
         channels: vec![
             CChannel {
                 offsets: vec![0],
@@ -377,11 +675,11 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
     let mut kam_heads = Vec::new();
     for i in 0..4 {
         let o = i * 5;
-        kam_heads.push(CHead {
-            kind: HeadKind::Rgb,
-            offset: [-0.39, -0.13, 0.13, 0.39][i],
-            label: format!("Par {}", i + 1),
-        });
+        kam_heads.push(CHead::flat(
+            HeadKind::Rgb,
+            [-0.39, -0.13, 0.13, 0.39][i],
+            format!("Par {}", i + 1),
+        ));
         kam_channels.push(lin(o, i, &format!("Par {} Red", i + 1), Source::ColorR, 0, 255));
         kam_channels.push(lin(o + 1, i, &format!("Par {} Green", i + 1), Source::ColorG, 0, 255));
         kam_channels.push(lin(o + 2, i, &format!("Par {} Blue", i + 1), Source::ColorB, 0, 255));
@@ -397,7 +695,12 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         heads: kam_heads,
         channels: kam_channels,
         beam_deg: 15.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: false,
+        credit: None,
+        form_override: None,
     });
 
     // Generic hazer — 2CH
@@ -407,13 +710,18 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         model: "Hazer".into(),
         mode: "2 Channel".into(),
         footprint: 2,
-        heads: vec![CHead { kind: HeadKind::Hazer, offset: 0.0, label: "Hazer".into() }],
+        heads: vec![CHead::flat(HeadKind::Hazer, 0.0, "Hazer".into())],
         channels: vec![
             lin(0, 0, "Haze output", Source::Haze, 0, 255),
             lin(1, 0, "Fan speed", Source::Fan, 0, 255),
         ],
         beam_deg: 0.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: false,
+        credit: None,
+        form_override: None,
     });
 
     // Generic dimmer — 1CH
@@ -423,10 +731,15 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         model: "Dimmer".into(),
         mode: "1 Channel".into(),
         footprint: 1,
-        heads: vec![CHead { kind: HeadKind::Dimmer, offset: 0.0, label: "Dim".into() }],
+        heads: vec![CHead::flat(HeadKind::Dimmer, 0.0, "Dim".into())],
         channels: vec![lin(0, 0, "Dimmer", Source::Dimmer, 0, 255)],
         beam_deg: 25.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: false,
+        credit: None,
+        form_override: None,
     });
 
     // Generic RGB par — 3CH (virtual dimmer)
@@ -436,14 +749,19 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         model: "RGB Par".into(),
         mode: "3 Channel".into(),
         footprint: 3,
-        heads: vec![CHead { kind: HeadKind::Rgb, offset: 0.0, label: "Par".into() }],
+        heads: vec![CHead::flat(HeadKind::Rgb, 0.0, "Par".into())],
         channels: vec![
             lin(0, 0, "Red", Source::ColorR, 0, 255),
             lin(1, 0, "Green", Source::ColorG, 0, 255),
             lin(2, 0, "Blue", Source::ColorB, 0, 255),
         ],
         beam_deg: 20.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: true,
+        credit: None,
+        form_override: None,
     });
 
     // Generic RGBW par — 4CH (virtual dimmer)
@@ -453,7 +771,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         model: "RGBW Par".into(),
         mode: "4 Channel".into(),
         footprint: 4,
-        heads: vec![CHead { kind: HeadKind::Rgb, offset: 0.0, label: "Par".into() }],
+        heads: vec![CHead::flat(HeadKind::Rgb, 0.0, "Par".into())],
         channels: vec![
             lin(0, 0, "Red", Source::ColorR, 0, 255),
             lin(1, 0, "Green", Source::ColorG, 0, 255),
@@ -461,7 +779,12 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
             lin(3, 0, "White", Source::White, 0, 255),
         ],
         beam_deg: 20.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: true,
+        credit: None,
+        form_override: None,
     });
 
     // Generic moving head RGBW — 10CH, 16-bit position
@@ -471,7 +794,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         model: "Moving Head RGBW".into(),
         mode: "10 Channel".into(),
         footprint: 10,
-        heads: vec![CHead { kind: HeadKind::Mover, offset: 0.0, label: "Head".into() }],
+        heads: vec![CHead::flat(HeadKind::Mover, 0.0, "Head".into())],
         channels: vec![
             lin16([0, 1], 0, "Pan", Source::Pan),
             lin16([2, 3], 0, "Tilt", Source::Tilt),
@@ -483,8 +806,42 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
             lin(9, 0, "White", Source::White, 0, 255),
         ],
         beam_deg: 12.0,
+        field_deg: None,
+        lumens: None,
+        beam_radius: None,
         virtual_dimmer: false,
+        credit: None,
+        form_override: None,
     });
 
     out
+}
+
+#[cfg(test)]
+mod head_repair_tests {
+    use super::*;
+
+    #[test]
+    fn malformed_spatial_fields_repair_instead_of_failing_the_project() {
+        // a shape the Node sanitizer repairs must never fail the Rust load —
+        // geometry consumes these fields now, so both engines must land on
+        // the same values (finite-or-0; indices floor≥0-or-0)
+        let h: CHead = serde_json::from_str(
+            r#"{"kind":"rgb","offset":null,"offsetY":"oops","row":1.7,"col":-3,"label":"px"}"#,
+        )
+        .expect("malformed spatial fields must load");
+        assert_eq!(h.offset, 0.0);
+        assert_eq!(h.offset_y, 0.0);
+        assert_eq!(h.row, 1, "1.7 floors to 1, matching Math.floor");
+        assert_eq!(h.col, 0, "negative clamps to 0");
+    }
+
+    #[test]
+    fn good_spatial_fields_pass_through() {
+        let h: CHead = serde_json::from_str(
+            r#"{"kind":"rgb","offset":-0.25,"offsetY":0.1,"row":2,"col":5,"label":"px"}"#,
+        )
+        .unwrap();
+        assert_eq!((h.offset, h.offset_y, h.row, h.col), (-0.25, 0.1, 2, 5));
+    }
 }

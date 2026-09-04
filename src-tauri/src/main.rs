@@ -2,6 +2,12 @@
 
 use tauri::Manager;
 
+mod licence;
+mod licence_net;
+mod share;
+mod update;
+mod update_install;
+
 use std::sync::{Arc, Mutex};
 
 /// The last panic's message and backtrace, stashed by the hook below so the
@@ -135,6 +141,44 @@ fn main() {
     let tx_for_exit = Arc::clone(&engine_tx);
 
     let app = tauri::Builder::default()
+        // GDTF Share. Everything here is prep-room work that talks to the
+        // internet, so it lives in the shell and never touches the engine.
+        .manage(match share::ShareSession::new() {
+            Ok(s) => s,
+            Err(e) => {
+                log_line(&format!("GDTF Share unavailable: {e}"));
+                // A broken HTTP client must not stop the console opening — the
+                // show does not depend on it.
+                share::ShareSession::disabled()
+            }
+        })
+        .manage(licence_net::Licence::new())
+        .manage(update::Updates::new())
+        .manage(update_install::Install::new())
+        .invoke_handler(tauri::generate_handler![
+            update::update_status,
+            update::update_check_now,
+            update_install::update_progress,
+            update_install::update_download,
+            update_install::update_install,
+            update_install::update_cancel,
+            licence_net::licence_status,
+            licence_net::licence_start_trial,
+            licence_net::licence_activate,
+            licence_net::licence_heartbeat,
+            licence_net::licence_deactivate,
+            share::share_status,
+            share::share_login,
+            share::share_login_saved,
+            share::share_forget,
+            share::share_saved_user,
+            share::share_refresh,
+            share::share_search,
+            share::share_cached_count,
+            share::share_download,
+            share::library_list,
+            share::library_read,
+        ])
         .setup(move |app| {
             // The bundled UI is served over HTTP by the engine as well as
             // loaded in the window, so a phone or tablet on the same network
@@ -192,6 +236,29 @@ fn main() {
             } else {
                 None
             };
+
+            // The one licence gate in the app, and it is here rather than
+            // anywhere else on purpose: decided once, offline, from a cached
+            // token, BEFORE the engine exists. A lapsed trial means this run
+            // does not start a session — it can never mean a session already
+            // running stops, because by the time anything is lit this code has
+            // long since returned. Every other status is a banner; see
+            // Status::blocks_new_session.
+            licence_net::start_heartbeat(app.handle().clone());
+            // Before the licence gate below on purpose: a lapsed trial is
+            // exactly when the operator most wants to know a newer build
+            // exists, and this only ever sets a flag a panel can read.
+            update::start_update_check(app.handle().clone());
+
+            let gate = licence_net::startup_verdict();
+            if gate.status.blocks_new_session() {
+                log_line(&format!(
+                    "licence {:?} — not starting the engine; the window opens on the licence panel",
+                    gate.status
+                ));
+                eprintln!("[light] trial ended — start a licence in the window to run a show");
+                return Ok(());
+            }
 
             // The engine core runs on its own thread; the window is just a
             // view speaking the same WebSocket protocol as any LAN browser.
@@ -273,6 +340,7 @@ fn main() {
         .expect("error while building LIGHT");
 
     app.run(move |_handle, event| {
+        use tauri::Manager;
         if let tauri::RunEvent::ExitRequested { .. } = event {
             // Logged because this is the one way run() can end that only exists
             // in the app: Shutdown has exactly one sender, right here. Tauri
@@ -288,6 +356,26 @@ fn main() {
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(400));
+
+            // ONLY now. The swap script replaces this bundle, and it must not
+            // start until the engine has written the project — which is what
+            // the Shutdown above and this sleep are for. This is also why the
+            // install path never calls app.restart() or process::exit: both
+            // skip this arm entirely, and an update that ate the last hour of
+            // patching is worse than whatever it fixed.
+            if let Some(script) = _handle.state::<update_install::Install>().armed_script() {
+                log_line(&format!("update armed — spawning {}", script.display()));
+                let quoted = update_install::shell_quote(&script.to_string_lossy());
+                match std::process::Command::new("/bin/sh")
+                    .arg("-c")
+                    // detached: it has to outlive this process by definition
+                    .arg(format!("{quoted} >/dev/null 2>&1 &"))
+                    .spawn()
+                {
+                    Ok(_) => log_line("update: swap script running, LIGHT will reopen"),
+                    Err(e) => log_line(&format!("update: could not start the swap: {e}")),
+                }
+            }
         }
     });
 }

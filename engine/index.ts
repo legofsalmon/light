@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { Command, CompiledProfile, Snapshot } from '../shared/types.ts';
+import type { Command, CompiledProfile, HeadSnap, ServerEvent, Snapshot, SoftField } from '../shared/types.ts';
 import { WS_PORT, clamp, sanitizeProject } from '../shared/types.ts';
 import { PROFILES } from '../shared/profiles.ts';
 import { EngineState, LOCAL_CLIENT } from './state.ts';
@@ -8,6 +8,7 @@ import { ArtnetOut } from './artnet.ts';
 import { SacnOut } from './sacn.ts';
 import { OscIn, type OscMessage } from './osc.ts';
 import { Server } from './server.ts';
+import type { WebSocket } from 'ws';
 import { defaultProject } from './defaultProject.ts';
 import * as persist from './persist.ts';
 import { parseGdtfBase64, parseMvrBase64 } from './wasmProfiles.ts';
@@ -27,7 +28,35 @@ let bootWarning: string | null = null;
  *  entirely different things — exactly the case an operator re-imports to fix.
  *  Mirrors layout_sig in core/src/state.rs. */
 function layoutSig(p: CompiledProfile): string {
-  return `${p.footprint}|${p.heads.length}|${p.channels.map((c: CompiledProfile['channels'][number]) => c.name).join(',')}`;
+  // The head layout signs too (B1): since the layout editor, offsets and
+  // row/col are operator-authored state — a re-import that changes them is a
+  // replacement worth announcing. Engine-local strings, never compared across
+  // engines, so the float formatting needs no parity discipline.
+  const heads = p.heads
+    .map((h) => `${h.offset.toFixed(4)},${(h.offsetY ?? 0).toFixed(4)},${h.row ?? 0},${h.col ?? 0}`)
+    .join(';');
+  return `${p.footprint}|${p.heads.length}|${p.channels.map((c: CompiledProfile['channels'][number]) => c.name).join(',')}|${heads}`;
+}
+
+/** An operator-authored pixel layout must survive a re-import that brings no
+ *  layout of its own. The flat fallback is recognisable — every head at
+ *  (row 0, col 0) — and a stored non-flat layout on a same-shape profile is
+ *  strictly better informed, so it wins silently. A file carrying REAL parsed
+ *  geometry has non-flat heads and stays authoritative.
+ *  Mirrors preserve_authored_layout in core/src/state.rs. */
+function preserveAuthoredLayout(p: Project, incoming: CompiledProfile): void {
+  const existing = Object.hasOwn(p.profiles ?? {}, incoming.id) ? p.profiles![incoming.id] : undefined;
+  if (!existing || existing.heads.length !== incoming.heads.length) return;
+  const flat = (hs: CompiledProfile['heads']) => hs.every((h) => !(h.row ?? 0) && !(h.col ?? 0));
+  if (flat(incoming.heads) && !flat(existing.heads)) {
+    incoming.heads = incoming.heads.map((h, i) => ({
+      ...h,
+      offset: existing.heads[i].offset,
+      offsetY: existing.heads[i].offsetY,
+      row: existing.heads[i].row,
+      col: existing.heads[i].col,
+    }));
+  }
 }
 
 /** Replacing a profile that fixtures are patched to rewrites what every one of
@@ -63,6 +92,7 @@ function applyMvrBundle(p: Project, bundle: MvrBundle, replace: boolean): string
   p.profiles ??= {};
   const replaced: string[] = [];
   for (const [id, prof] of Object.entries(bundle.profiles)) {
+    preserveAuthoredLayout(p, prof);
     const note = describeProfileReplacement(p, prof);
     if (note) replaced.push(note);
     p.profiles[id] = prof;
@@ -128,7 +158,15 @@ function spawnPreviz(): [boolean, string] {
   for (const c of candidates) {
     if (fs.existsSync(c)) {
       try {
-        const child = spawn(c, [], { detached: true, stdio: 'ignore' });
+        // Tell the child which port this engine is on. It reads LIGHT_PORT
+        // from its own environment and otherwise falls back to 9900 — which,
+        // when this engine has been moved, is a DIFFERENT copy of LIGHT.
+        // Mirrors spawn_previz in core/src/engine.rs.
+        const child = spawn(c, [], {
+          detached: true,
+          stdio: 'ignore',
+          env: { ...process.env, LIGHT_PORT: String(PORT) },
+        });
         // spawn errors (EACCES, ENOENT-at-exec) arrive async — an unhandled
         // 'error' event would take down the whole engine.
         child.on('error', (e) => {
@@ -180,7 +218,7 @@ const previewRenderer = new Renderer(state);
  *  channel overrides and identify are deliberately left in force, because they
  *  are things the operator switched on and the audition should show the rig as
  *  it would really respond. Mirrors preview_heads() in core/src/engine.rs. */
-function previewHeads(t: number): { previewHeads: Snapshot['previewHeads'] } | null {
+function previewHeads(t: number): { previewHeads: HeadSnap[] } | null {
   const lookId = state.previewLook;
   if (!lookId || !Object.hasOwn(state.project.looks, lookId)) return null;
   const layer =
@@ -243,10 +281,28 @@ let projectDirty = false;
 let echoSkip: unknown = null;
 /** The socket whose command we are inside, if any. */
 let currentCommandWs: unknown = null;
+/** Whether the command currently executing changed the project — drives one
+ *  gen bump per command, matching the Rust engine. */
+let changedThisCommand = false;
+
+// Per-client transport subscriptions. Deliberately NOT on EngineState: these
+// are facts about sockets, not about the show, they never persist, and they
+// must vanish when a client goes away. Mirrors `Subs` in core/src/engine.rs.
+const dmxSubs = new Map<unknown, string[]>();
+/** the one client auditioning a look, if any */
+let previewWs: unknown = null;
 
 state.onChange = () => {
+  changedThisCommand = true;
   if (!projectDirty) echoSkip = currentCommandWs;
   else if (echoSkip !== currentCommandWs) echoSkip = null;
+  // A repaired submission must reach its sender — it holds the unrepaired copy
+  // and would re-send it forever otherwise. Fold that in HERE, at change time,
+  // not in flushProject: repairedSubmission is reset per command, and by the
+  // time the coalesced flush runs (up to 100 ms later) any command in the
+  // window could have cleared it. core/src/engine.rs bakes the decision in at
+  // command time the same way.
+  if (state.repairedSubmission) echoSkip = null;
   projectDirty = true;
   persist.saveProjectDebounced(() => state.project);
   osc.listen(state.project.sync.oscPort, state.project.sync.oscEnabled);
@@ -258,17 +314,30 @@ let lastEcho = 0;
  *  ~10/s: continuous controls dirty the project per input event and each echo
  *  is the whole project (12x the snapshot stream during a fader ride). */
 function flushProject(): void {
-  if (!projectDirty) return;
+  // Also run when a client is owed a project make-good, even if nothing changed
+  // this window — otherwise a client that missed the echo while backed up never
+  // gets it. Mirrors `project_echo != Idle || bc.has_missed()` in the Rust loop.
+  if (!projectDirty && !server.hasMissed()) return;
   const now = performance.now();
   if (now - lastEcho < 100) return;
-  projectDirty = false;
   lastEcho = now;
-  server.broadcastExcept(echoSkip, { type: 'project', project: state.project });
-  echoSkip = null;
+  const ev: ServerEvent = { type: 'project', project: state.project, gen: state.gen };
+  // Make good the project for any client skipped while backed up. Skipping is
+  // right for disposable snapshots and wrong for the project: the client would
+  // hold a stale show and write it back. `resend` re-marks a client that is
+  // still full, so this retries every window until it lands.
+  for (const ws of server.takeMissed()) server.resend(ws, ev);
+  if (projectDirty) {
+    projectDirty = false;
+    // echoSkip already accounts for a repaired submission (folded in at
+    // onChange time), so the sender that needs its repair is not skipped.
+    server.broadcastExcept(echoSkip, ev);
+    echoSkip = null;
+  }
 }
 
 server.onConnect = (ws) => {
-  server.send(ws, { type: 'project', project: state.project });
+  server.send(ws, { type: 'project', project: state.project, gen: state.gen });
   if (bootWarning) server.send(ws, { type: 'toast', ok: false, message: bootWarning });
   server.send(ws, { type: 'midiInputs', names: [] }); // Node dev engine has no native MIDI
 };
@@ -276,7 +345,11 @@ server.onConnect = (ws) => {
 // If the client holding a flash look crashes, nothing will ever release it.
 // The protocol doesn't attribute holds to clients, so release on ANY
 // disconnect: a spurious release beats a blinder latched on stage.
-server.onDisconnect = (clientId) => {
+server.onDisconnect = (clientId, ws) => {
+  // A socket that has gone must not keep a DMX subscription or hold the
+  // audition — otherwise the engine keeps serialising payloads for nobody.
+  dmxSubs.delete(ws);
+  if (previewWs === ws) previewWs = null;
   // Release exactly what this client held. Waiting for the last client to go
   // was the wrong half of the trade: a tablet dropping off the WiFi mid-flash
   // left its blinder latched on stage while the console stayed connected.
@@ -288,14 +361,55 @@ state.onLearned = (mapping) => {
 };
 
 function handleCommand(cmd: Command, _ws?: unknown, clientId: number = LOCAL_CLIENT): void {
+  // Staleness gate (mirrors core/src/engine.rs): a full-project write composed
+  // against an older generation must not clobber whatever changed underneath it
+  // — a deck switch, an openProject, another client's edit. Reject it and
+  // re-sync the sender. A write with no base (a blind submitter) skips this.
+  if (cmd.type === 'updateProject' && cmd.baseGen !== undefined && cmd.baseGen !== state.gen) {
+    if (_ws) server.send(_ws as WebSocket, { type: 'project', project: state.project, gen: state.gen });
+    return;
+  }
+  // Transport-level subscription: never reaches the state machine.
+  if (cmd.type === 'watchDmx') {
+    if (_ws) {
+      if (cmd.universeIds.length === 0) dmxSubs.delete(_ws);
+      else dmxSubs.set(_ws, cmd.universeIds);
+    }
+    return;
+  }
+  // TEST ONLY, LIGHT_TEST_CLOCK gated: pin the effect clock so a moving effect
+  // is byte-comparable between the two engines. Ignored in a show.
+  if (cmd.type === '_pinClock') {
+    if (process.env.LIGHT_TEST_CLOCK) renderer.pinClock(cmd.effBeat);
+    return;
+  }
+  // Record WHO is auditioning so the preview head set goes to them alone; the
+  // look id itself still reaches the state machine below.
+  if (cmd.type === 'previewLook') {
+    if (!cmd.lookId) {
+      // One last event so the client drops the head set — it has no other way
+      // to learn the audition is over, and would keep drawing the last frame.
+      if (previewWs) server.send(previewWs as never, { type: 'preview', heads: null });
+      previewWs = null;
+    } else {
+      previewWs = _ws ?? null;
+    }
+  }
+
   // Only an updateProject echo may be withheld from its sender: that client
   // composed the exact state. Any other command can change the project in ways
   // the sender did not compute (an import adding fixtures, sanitize repairing
   // one), and the sender needs that result like everyone else.
   currentCommandWs = cmd.type === 'updateProject' ? (_ws ?? null) : null;
+  // Reset per command; updateProject sets it if the sanitiser changed anything.
+  state.repairedSubmission = false;
+  changedThisCommand = false;
   try {
     handleCommandInner(cmd, clientId);
   } finally {
+    // One bump per project-changing command, matching the Rust engine's
+    // per-command bump so the two engines' generation counters stay in step.
+    if (changedThisCommand) state.bumpGen();
     currentCommandWs = null;
   }
 }
@@ -372,11 +486,37 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       state.releaseAllHeld();
       state.identify = null;
       state.overrides.clear();
+      state.soft.clear(); // rides are transient state; panic drops them too
+      state.controlLive.clear();
       state.project.settings.haze = 0;
       state.project.settings.hazeFan = 0; // the fan is the audible one
       state.onChange?.();
       break;
     }
+    case 'soft': {
+      // serde equivalence with the Rust engine: its Option fields read null
+      // AND absent as None, and a frame with wrong-typed fields never
+      // deserializes at all — the same bytes must produce the same state
+      const c = cmd as { lookId?: unknown; partId?: unknown; effectId?: unknown; field: SoftField; value?: unknown };
+      if (typeof c.lookId !== 'string' || typeof c.partId !== 'string') break;
+      if (c.effectId !== undefined && c.effectId !== null && typeof c.effectId !== 'string') break;
+      if (c.value !== undefined && c.value !== null && typeof c.value !== 'number') break;
+      state.setSoft(c.lookId, c.partId, c.effectId ?? undefined, c.field, (c.value as number | null | undefined) ?? null);
+      break;
+    }
+    case 'softCommit':
+      state.softCommit(); // onChange fires inside when anything was written
+      state.controlLive.clear(); // the fan-out is baked; the position is spent
+      break;
+    case 'softClear':
+      state.soft.clear();
+      state.controlLive.clear(); // a discarded fan-out has no live position
+      break;
+    case 'setControl':
+      if (typeof cmd.controlId === 'string' && typeof cmd.value === 'number') {
+        state.setControl(cmd.controlId, cmd.value);
+      }
+      break;
     case 'setChannel': {
       const ch = Math.round(cmd.channel) - 1; // protocol is 1-512
       if (ch < 0 || ch > 511) break;
@@ -469,6 +609,10 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
         state.project.profiles ??= {};
         const replacedGdtf: string[] = [];
         for (const p of profiles) {
+          // Attribution travels with the profile into the project file — a GDTF
+          // carries no author attribute, so this can only come from the source.
+          if (cmd.credit) p.credit = cmd.credit;
+          preserveAuthoredLayout(state.project, p);
           const note = describeProfileReplacement(state.project, p);
           if (note) replacedGdtf.push(note);
           state.project.profiles[p.id] = p;
@@ -627,8 +771,6 @@ function loopBody(): void {
 
   // Snapshots to the UI at 20 fps — the UI interpolates.
   if ((tickCount & 1) === 0 && server.clientCount > 0) {
-    const dmx: Record<string, number[]> = {};
-    for (const [id, buf] of res.buffers) dmx[id] = Array.from(buf);
     const snap: Snapshot = {
       type: 'snap',
       now,
@@ -640,10 +782,10 @@ function loopBody(): void {
       haze: state.project.settings.haze,
       hazeFan: state.project.settings.hazeFan,
       heads: res.heads,
-      ...(previewHeads(now) ?? {}),
       layers: res.layers,
-      dmx,
       ...(state.muted.size > 0 ? { muted: [...state.muted] } : {}),
+      ...(state.soft.size > 0 ? { soft: state.softEntries() } : {}),
+      ...(state.controlLive.size > 0 ? { controls: state.controlEntries() } : {}),
       ...(state.identify ? { identify: state.identify } : {}),
       ...((() => {
         let n = 0;
@@ -677,7 +819,27 @@ function loopBody(): void {
       })()),
       stats,
     };
+    // Identical for every client, so one serialisation, one broadcast.
     server.broadcast(snap);
+
+    // Raw DMX only to clients that asked: the Output tab reads one universe,
+    // and it used to ride in every snapshot to every client (~8 KB of ~28 KB at
+    // arena scale, 20x a second) including ones that never read a byte.
+    for (const [ws, ids] of dmxSubs) {
+      if (ids.length === 0) continue;
+      const u: Record<string, number[]> = {};
+      for (const id of ids) {
+        const buf = res.buffers.get(id);
+        if (buf) u[id] = Array.from(buf);
+      }
+      server.send(ws as never, { type: 'dmx', u });
+    }
+
+    // The audition head set goes only to whoever asked for it.
+    if (previewWs) {
+      const pv = previewHeads(now);
+      server.send(previewWs as never, { type: 'preview', heads: pv ? pv.previewHeads ?? null : null });
+    }
   }
 
 }

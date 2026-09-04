@@ -33,6 +33,22 @@ jobs:
       - name: Typecheck (engine + UI)
         run: npm run typecheck
 
+      # The Node engine interprets compiled profiles through a WASM build of the
+      # SAME Rust core (profile-wasm), so "one implementation everywhere" only
+      # holds if that WASM reflects the current source. The pkg is committed for
+      # local convenience but nothing rebuilt it — so a change to gdtf.rs or
+      # cprofile.rs (or to the hand-written bridge) could ship a stale Node
+      # interpreter and diverge silently. Rebuild it here, before the parity
+      # step below runs Node against it, so every PR exercises current source
+      # through the real bridge.
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: 'v0.15.0'
+
+      - name: Rebuild the WASM profile interpreter from current source
+        run: npm run build:wasm
+
       - name: Engine smoke tests (Node reference)
         run: npm test
 
@@ -42,5 +58,5 @@ jobs:
       - name: Build Rust engine (debug, for parity)
         run: cargo build -p light-core
 
-      - name: Differential parity (Node vs Rust, byte-identical DMX)
+      - name: Differential parity (Node-via-fresh-WASM vs Rust, byte-identical DMX)
         run: npm run test:parity

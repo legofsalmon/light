@@ -8,7 +8,13 @@ import { Fader } from './Fader.tsx';
 import { Previz2D } from './Previz2D.tsx';
 import { Previz3D } from './Previz3D.tsx';
 
-export function PrevizPanel() {
+export function PrevizPanel({ preview = true }: { preview?: boolean }) {
+  const view = useStore((s) => s.view);
+  const togglePreviz = useStore((s) => s.togglePreviz);
+  const previewPane = useStore((s) => s.previewPane);
+  const togglePreviewPane = useStore((s) => s.togglePreviewPane);
+  const autoExposure = useStore((s) => s.previzAutoExposure);
+  const toggleAutoExposure = useStore((s) => s.togglePrevizAutoExposure);
   const mode = useStore((s) => s.previzMode);
   const setMode = useStore((s) => s.setPrevizMode);
   const view2d = useStore((s) => s.previz2dView);
@@ -67,34 +73,84 @@ export function PrevizPanel() {
   return (
     <>
       <div className="previzbar">
+        {/* Leftmost, and pinned out of the scrolling region: this bar scrolls
+            horizontally with its scrollbar hidden, and in 2D on a narrow window
+            its contents overflow — an escape hatch you cannot reach is not an
+            escape hatch. Absent in the full-screen previz view, where hiding it
+            would leave nothing. */}
+        {view !== 'previz' && (
+          <button
+            className="btn small ghost pin"
+            title="hide the previz (this view only — the strip left behind brings it back)"
+            onClick={() => togglePreviz(view)}
+          >
+            ▴
+          </button>
+        )}
         <span className="label">previz</span>
         <div className="seg">
-          <button className={mode === '3d' ? 'on' : ''} onClick={() => setMode('3d')}>3D</button>
-          <button className={mode === '2d' ? 'on' : ''} onClick={() => setMode('2d')}>2D plan</button>
+          <button
+            className={mode === '3d' ? 'on' : ''}
+            title="3D stage view — what the rig looks like from the room, with beams and haze"
+            onClick={() => setMode('3d')}
+          >
+            3D
+          </button>
+          <button
+            className={mode === '2d' ? 'on' : ''}
+            title="2D plan — the drafting view: drag fixtures into place, snap them to truss, draw structure"
+            onClick={() => setMode('2d')}
+          >
+            2D plan
+          </button>
         </div>
         <div className="grow" />
+        {/* Snap acts on 2D PLAN drags and measure drives the 2D grid, but both
+            lived in the 3D-only branch — the snap button's own tooltip
+            described an action impossible in the mode the button appeared in,
+            and in 2D, where they apply, there was no control and no hint one
+            existed. Shown in both modes now. */}
+        <button
+          className={`btn small ${snapToTruss ? 'on' : 'ghost'}`}
+          title="2D plan: drag a fixture near a truss bar and it clamps on and rigs there — turn off to place freely"
+          onClick={() => setSnapToTruss(!snapToTruss)}
+        >
+          snap
+        </button>
+        <button
+          className={`btn small ${showMeasure ? 'on' : 'ghost'}`}
+          title="metre grid and dimensions — for placing structure and judging scale"
+          onClick={() => setShowMeasure(!showMeasure)}
+        >
+          measure
+        </button>
+        {/* The audition is a second renderer, and it appears whenever a pad is
+            selected — which firing one does. Worth it while building; worth
+            switching off for a show run from the pads. */}
+        {preview && (
+          <button
+            className={`btn small ${previewPane ? 'on' : 'ghost'}`}
+            title="audition pane — shows the selected look without sending it to the rig; off gives the live view the whole band"
+            onClick={togglePreviewPane}
+          >
+            preview
+          </button>
+        )}
         {mode === '3d' && (
           <>
-            <button
-              className={`btn small ${snapToTruss ? 'on' : 'ghost'}`}
-              title="drag a fixture near a truss bar and it clamps on and rigs there — turn off to place freely"
-              onClick={() => setSnapToTruss(!snapToTruss)}
-            >
-              snap
-            </button>
-            <button
-              className={`btn small ${showMeasure ? 'on' : 'ghost'}`}
-              title="metre grid and dimensions — for placing structure and judging scale"
-              onClick={() => setShowMeasure(!showMeasure)}
-            >
-              measure
-            </button>
             <button
               className={`btn small ${showBand ? 'on' : 'ghost'}`}
               title="dummy band figures for scale (native previz window: press M)"
               onClick={() => setShowBand(!showBand)}
             >
               band
+            </button>
+            <button
+              className={`btn small ${autoExposure ? 'on' : 'ghost'}`}
+              title="eye adaptation — the exposure follows how much light is on stage, the way your eyes do walking into a bright room. Partial, so a brighter look still reads brighter. Off holds a fixed exposure, for judging absolute levels."
+              onClick={toggleAutoExposure}
+            >
+              auto exp
             </button>
             <Fader label="beam viz" width={110} value={hazeViz} onChange={setHazeViz} def={0.7} variant="dim" />
           </>
@@ -139,8 +195,20 @@ export function PrevizPanel() {
               <option value="screen">screen</option>
             </select>
             <div className="seg">
-              <button className={view2d === 'plan' ? 'on' : ''} onClick={() => setView2d('plan')}>Plan</button>
-              <button className={view2d === 'front' ? 'on' : ''} onClick={() => setView2d('front')}>Front</button>
+              <button
+                className={view2d === 'plan' ? 'on' : ''}
+                title="top-down: dragging a fixture sets where it stands on the floor"
+                onClick={() => setView2d('plan')}
+              >
+                Plan
+              </button>
+              <button
+                className={view2d === 'front' ? 'on' : ''}
+                title="front elevation: dragging a fixture sets its trim HEIGHT, not its position"
+                onClick={() => setView2d('front')}
+              >
+                Front
+              </button>
             </div>
             <span className="label">
               {view2d === 'plan'
@@ -150,22 +218,25 @@ export function PrevizPanel() {
           </>
         )}
       </div>
-      <div className="previzview">{mode === '3d' ? <Previz3D /> : <Previz2D />}</div>
-      {/* The audition. Only present when something is selected, so the live view
-          keeps the whole column the rest of the time — and the second render
-          costs nothing when nobody is looking at a look. */}
-      {sel && (
-        <>
-          <div className="previzbar previewbar">
-            <span className="label">preview</span>
-            <span className="previewname">{selName ?? 'empty cell'}</span>
-            <span className="label dim">not on the rig</span>
+      <div className="previzsplit">
+        <div className="previzview">{mode === '3d' ? <Previz3D /> : <Previz2D />}</div>
+        {/* The audition, on the band's right edge. Only present when something
+            is selected, so the live view keeps the full width the rest of the
+            time — and the second render costs nothing when nobody is looking
+            at a look. */}
+        {preview && previewPane && sel && (
+          <div className="previewpane">
+            <div className="previzbar previewbar">
+              <span className="label">preview</span>
+              <span className="previewname">{selName ?? 'empty cell'}</span>
+              <span className="label dim">not on the rig</span>
+            </div>
+            <div className="previzview previewview">
+              {mode === '3d' ? <Previz3D source="preview" /> : <Previz2D source="preview" />}
+            </div>
           </div>
-          <div className="previzview previewview">
-            {mode === '3d' ? <Previz3D source="preview" /> : <Previz2D source="preview" />}
-          </div>
-        </>
-      )}
+        )}
+      </div>
     </>
   );
 }

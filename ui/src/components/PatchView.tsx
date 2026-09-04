@@ -1,14 +1,52 @@
-import React, { useEffect, useRef, useState } from 'react';
-import type { Project } from '../../../shared/types.ts';
-import { uid } from '../../../shared/types.ts';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import type { FixtureForm, Project } from '../../../shared/types.ts';
+import { FIXTURE_FORMS, inferFixtureForm, uid } from '../../../shared/types.ts';
 import { PROFILES } from '../../../shared/profiles.ts';
 import { allProfileMetas, profileMeta } from '../profileInfo.ts';
 import { createGroupFromSelection } from '../selection.ts';
 import { ScrubNumInput } from './inputs.tsx';
+import { ShareFixtures } from './ShareFixtures.tsx';
 import { useStore } from '../store.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
+import { hasUndrivenBeamChannels, isPlaceholderProfile } from '../../../shared/gdtfShare.ts';
+import { PixelLayout } from './PixelLayout.tsx';
+import { applyAutoGroups, planAutoGroups } from '../autoGroups.ts';
 import type { StageProp } from '../../../shared/types.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
+
+/** Columns worth sorting by. Position columns are deliberately absent: they are
+ *  for editing, and a table that reorders under a scrub is unusable. */
+type SortKey = 'name' | 'profile' | 'universe' | 'address' | 'channels' | 'rigged';
+
+/** A clickable column header.
+ *
+ *  Module scope, deliberately. Declared inside the component body this is a new
+ *  component TYPE on every render, so React unmounts and replaces the <th> — and
+ *  the table's pointerup (which clears the selection) re-renders between mouse
+ *  down and mouse up, destroying the element the click was going to land on.
+ *  Header clicks then do nothing at all, while a programmatic .click() works
+ *  fine, because that never triggers the re-render. */
+function SortTh({
+  k,
+  sortKey,
+  sortDir,
+  onSort,
+  children,
+  ...rest
+}: {
+  k: SortKey;
+  sortKey: SortKey;
+  sortDir: 'asc' | 'desc';
+  onSort: (k: SortKey) => void;
+  children: React.ReactNode;
+} & React.ThHTMLAttributes<HTMLTableCellElement>) {
+  return (
+    <th {...rest} className="sortable" onClick={() => onSort(k)}>
+      {children}
+      <span className="sortmark">{sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : ''}</span>
+    </th>
+  );
+}
 
 /** true when the pointer event originated inside an editing control */
 function onControl(target: EventTarget | null): boolean {
@@ -56,7 +94,14 @@ function AddressInput({ value, conflict, onCommit }: {
   onCommit: (v: number) => void;
 }) {
   const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    // Never clobber a draft mid-edit: a project echo (a second window, MIDI,
+    // OSC, an autosave round-trip) must not erase a half-typed address. Blur
+    // re-syncs. The other live-routing inputs have had this guard; this one and
+    // BeatsInput were missed.
+    if (document.activeElement !== ref.current) setDraft(String(value));
+  }, [value]);
   const commit = () => {
     const v = Math.max(1, Math.min(512, Number(draft) || 1));
     setDraft(String(v));
@@ -64,12 +109,15 @@ function AddressInput({ value, conflict, onCommit }: {
   };
   return (
     <input
+      ref={ref}
       className={`num ${conflict ? 'conflict' : ''}`}
       type="number"
       min={1}
       max={512}
       value={draft}
-      title={conflict ? 'address overlap!' : ''}
+      title={conflict
+        ? 'address overlap — another fixture already uses part of this range'
+        : 'DMX start address in this universe (1–512). Commits on Enter or blur; the channel span is shown beside it'}
       style={conflict ? { borderColor: 'var(--hot)', color: 'var(--hot)' } : undefined}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -80,22 +128,158 @@ function AddressInput({ value, conflict, onCommit }: {
   );
 }
 
+/** Fixture-form override, per PROFILE.
+ *
+ *  The importer can only guess what a fixture physically is, and the guess is
+ *  sometimes wrong in ways that show: a CLF Nero tilts, so an aim-first rule
+ *  calls it a moving head, and it has 1, 7 or 14 cells depending on mode, so a
+ *  cell-count rule calls it a bar. It is a 41 x 32 cm blinder plate in all of
+ *  them, and drawing it as a cube throwing a cone is visibly wrong.
+ *
+ *  "auto" stores nothing at all, so the inference stays live: sharpen the
+ *  heuristic and every show that never overrode anything gets the benefit,
+ *  while a hand correction survives re-importing the fixture. */
+function FormSelect(
+  { project, profileId, mutate }:
+  { project: Project; profileId: string; mutate: (fn: (p: Project) => void) => void },
+) {
+  const prof = project.profiles?.[profileId];
+  if (!prof) return <span className="label dim">—</span>;
+  const auto = inferFixtureForm(prof);
+  const autoLabel = FIXTURE_FORMS.find((x) => x.value === auto)?.label ?? auto;
+  return (
+    <select
+      className="sel"
+      style={{ width: 130 }}
+      value={prof.formOverride ?? 'auto'}
+      title={`how the previz draws and lights this fixture. Applies to every fixture on the "${prof.model}" profile. Auto reads it from the profile — beam angle, whether it steers in both axes, and how its cells are laid out.`}
+      onChange={(e) => mutate((p) => {
+        const target = p.profiles?.[profileId];
+        if (!target) return;
+        if (e.target.value === 'auto') delete target.formOverride;
+        else target.formOverride = e.target.value as FixtureForm;
+      })}
+    >
+      <option value="auto">auto — {autoLabel}</option>
+      {FIXTURE_FORMS.map((f) => (
+        <option key={f.value} value={f.value}>{f.label}</option>
+      ))}
+    </select>
+  );
+}
+
 export function PatchView() {
   const project = useStore((s) => s.project)!;
   const mutate = useStore((s) => s.mutate);
   const importMsg = useStore((s) => s.importMsg);
   const fxSel = useStore((s) => s.fxSel);
   const send = useStore((s) => s.send);
-  const muted = useStore((s) => s.snap?.muted) ?? [];
-  const unknownProfiles = useStore((s) => s.snap?.unknownProfiles) ?? [];
-  const identify = useStore((s) => s.snap?.identify) ?? null;
-  const conflicts = findConflicts(project);
-  const uniOrder = new Map(project.universes.map((u, i) => [u.id, i]));
-  const sortedFixtures = [...project.fixtures].sort(
-    (a, b) =>
-      (uniOrder.get(a.universeId) ?? 99) - (uniOrder.get(b.universeId) ?? 99) ||
-      a.address - b.address
+  // Select STABLE keys, not the arrays: snap is freshly parsed 20×/s, so
+  // `s.snap?.muted` is a new reference every frame and would re-render this
+  // 129-row table (and its O(n²) conflict scan) 20 times a second the whole
+  // time anything is muted or dark. A joined string changes only when the
+  // membership actually does.
+  const mutedKey = useStore((s) => (s.snap?.muted ?? []).join(','));
+  const unknownKey = useStore((s) => (s.snap?.unknownProfiles ?? []).join(','));
+  const muted = useMemo(() => (mutedKey ? mutedKey.split(',') : []), [mutedKey]);
+  const unknownProfiles = useMemo(() => (unknownKey ? unknownKey.split(',') : []), [unknownKey]);
+  /** Fixtures whose profile is a placeholder — an MVR that travelled without
+   *  its real fixture definitions. They are not dark, they just have a dimmer
+   *  and nothing else, which looks like a bug in the app until you know. */
+  const stubProfiles = useMemo(
+    () =>
+      new Set(
+        Object.entries(project.profiles ?? {})
+          .filter(([, pr]) => isPlaceholderProfile(pr))
+          .map(([id]) => id),
+      ),
+    [project],
   );
+  /** Profiles carrying beam channels — Zoom, Focus, Iris, Frost, CTO — that
+   *  nothing drives. The fixture works, but those parameters are missing from
+   *  the look editor with no explanation, because the editor only offers a
+   *  control when something in the group actually has that channel. It happens
+   *  to profiles compiled by an older importer, or imported from an MVR's flat
+   *  console exports: the channel is there by name with no function behind it.
+   *  Re-importing the real GDTF fixes it. Until this was surfaced the only
+   *  symptom was "why can't I set zoom?". */
+  const beamlessProfiles = useMemo(
+    () =>
+      new Set(
+        Object.entries(project.profiles ?? {})
+          .filter(([, pr]) => hasUndrivenBeamChannels(pr))
+          .map(([id]) => id),
+      ),
+    [project],
+  );
+  const identify = useStore((s) => s.snap?.identify) ?? null;
+  // O(n²) with a profileMeta allocation per pair — recompute only when the
+  // project changes, never on an unrelated re-render.
+  const conflicts = useMemo(() => findConflicts(project), [project]);
+  // The profile dropdown is identical in every row and rebuilt full metas for
+  // every built-in plus every imported profile, per row — ~5,000 metas per
+  // render at 40 profiles × 129 rows. Build the options once.
+  const profileOptions = useMemo(
+    () =>
+      allProfileMetas(project).map((pr) => (
+        <option key={pr.id} value={pr.id}>
+          {pr.imported ? '⇩ ' : ''}
+          {pr.label}
+        </option>
+      )),
+    [project],
+  );
+  const uniOrder = new Map(project.universes.map((u, i) => [u.id, i]));
+  /** Column sort. Defaults to patch order — universe then address — because
+   *  that is the order the rig is addressed in and the order you walk it. */
+  const [sortKey, setSortKey] = useState<SortKey>('address');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const onSort = (k: SortKey) => {
+    if (sortKey === k) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else {
+      setSortKey(k);
+      setSortDir('asc');
+    }
+  };
+  // Patch order — universe, then address — is the default because it is the
+  // order the rig is addressed in and the order a DIP-switch check goes in.
+  // Sorting by anything else is for finding things, not for working through
+  // them, which is why it never becomes the default.
+  const sorted = [...project.fixtures].sort((a, b) => {
+    const patchOrder = () =>
+      (uniOrder.get(a.universeId) ?? 99) - (uniOrder.get(b.universeId) ?? 99) ||
+      a.address - b.address;
+    const txt = (x: string, y: string) => x.localeCompare(y, undefined, { numeric: true });
+    let cmp = 0;
+    switch (sortKey) {
+      case 'name':
+        cmp = txt(a.name, b.name);
+        break;
+      case 'profile':
+        cmp = txt(
+          profileMeta(project, a.profileId)?.label ?? a.profileId,
+          profileMeta(project, b.profileId)?.label ?? b.profileId,
+        );
+        break;
+      case 'universe':
+        cmp = (uniOrder.get(a.universeId) ?? 99) - (uniOrder.get(b.universeId) ?? 99);
+        break;
+      case 'address':
+        cmp = 0; // patch order below already IS address order
+        break;
+      case 'channels':
+        cmp = (profileMeta(project, a.profileId)?.channels ?? 0) -
+          (profileMeta(project, b.profileId)?.channels ?? 0);
+        break;
+      case 'rigged':
+        cmp = txt(a.parentId ?? '~', b.parentId ?? '~'); // unrigged sorts last
+        break;
+    }
+    // patch order is the tiebreak for every column, so equal values stay in the
+    // order the rig is addressed rather than shuffling arbitrarily
+    return (sortDir === 'asc' ? cmp : -cmp) || patchOrder();
+  });
+  const sortedFixtures = sorted;
 
   // -- fixture selection: click / ⇧-range / ⌘-toggle / drag-marquee, shared
   //    with the 2D previz through the store's fxSel --
@@ -240,17 +424,29 @@ export function PatchView() {
   const structures = (project.props ?? [])
     .filter((pr) => isStructure(pr.kind))
     .sort((a, b) => a.pos.x - b.pos.x);
-  /** Slide a fixture along its parent, keeping its across/height offsets. */
+  /** Slide a fixture along its parent, keeping its across/height offsets.
+   *
+   *  Applies to the whole selection, like every other edit in this table — the
+   *  legend promises "edits apply to every selected row" and this was the one
+   *  control that quietly moved a single fixture. Each selected fixture is
+   *  moved by the same DELTA against its own offset, so a row of heads slides
+   *  along the bar together instead of collapsing onto one point. */
   const moveAlongParent = (fid: string, along: number) =>
     mutate((p) => {
-      const f = p.fixtures.find((y) => y.id === fid);
-      const parent = (p.props ?? []).find((pr) => pr.id === f?.parentId);
-      if (!f || !parent) return;
-      const o = offsetOnParent(f, parent);
-      const np = posFromOffset({ ...o, along }, parent);
-      f.pos.x = round2(np.x);
-      f.pos.y = round2(np.y);
-      f.pos.z = round2(np.z);
+      const lead = p.fixtures.find((y) => y.id === fid);
+      const leadParent = (p.props ?? []).find((pr) => pr.id === lead?.parentId);
+      if (!lead || !leadParent) return;
+      const delta = along - offsetOnParent(lead, leadParent).along;
+      for (const id of editTargets(fid)) {
+        const f = p.fixtures.find((y) => y.id === id);
+        const parent = (p.props ?? []).find((pr) => pr.id === f?.parentId);
+        if (!f || !parent) continue; // unrigged rows in the selection sit still
+        const o = offsetOnParent(f, parent);
+        const np = posFromOffset({ ...o, along: o.along + delta }, parent);
+        f.pos.x = round2(np.x);
+        f.pos.y = round2(np.y);
+        f.pos.z = round2(np.z);
+      }
     });
   const setRot = (fid: string, key: 'rotY' | 'rotX' | 'rotZ', deg: number) =>
     eachTarget(fid, (x) => {
@@ -305,9 +501,16 @@ export function PatchView() {
         <table className="tbl">
           <thead>
             <tr>
-              <th>Fixture</th><th>Profile</th><th>Universe</th><th>Address</th><th>Ch</th>
+              <SortTh k="name" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Fixture</SortTh>
+              <SortTh k="profile" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Profile</SortTh>
+              <th title="what shape of fixture this is — decides how the previz draws and lights it. Set on the PROFILE, so it applies to every fixture using it.">Form</th>
+              <SortTh k="universe" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Universe</SortTh>
+              <SortTh k="address" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Address</SortTh>
+              <SortTh k="channels" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Ch</SortTh>
               <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th>Tilt°</th><th>Roll°</th>
-              <th title="rigged on a stage structure — X/Y/Z above stay in room coordinates">Rigged on</th>
+              <SortTh k="rigged" sortKey={sortKey} sortDir={sortDir} onSort={onSort} title="rigged on a stage structure — X/Y/Z above stay in room coordinates">
+                Rigged on
+              </SortTh>
               {anyPan && <th title="base pan aim — a look's pan moves relative to this">Pan %</th>}
               {anyTilt && <th title="base tilt aim — a look's tilt moves relative to this">Tilt %</th>}
               <th>Live</th><th></th>
@@ -321,16 +524,21 @@ export function PatchView() {
                 <tr
                   key={f.id}
                   data-fxid={f.id}
-                  className={`${selected ? 'rowsel' : ''} ${unknownProfiles.includes(f.id) ? 'rowdark' : ''}`}
+                  className={`${selected ? 'rowsel' : ''} ${unknownProfiles.includes(f.id) ? 'rowdark' : ''} ${stubProfiles.has(f.profileId) ? 'rowstub' : ''} ${beamlessProfiles.has(f.profileId) ? 'rowbeamless' : ''}`}
                   title={
                     unknownProfiles.includes(f.id)
                       ? 'this fixture\'s profile is missing — it renders as nothing at all. Re-import the profile or pick another one.'
-                      : undefined
+                      : stubProfiles.has(f.profileId)
+                        ? 'placeholder profile: the MVR that brought this fixture in did not carry a real fixture definition, so it has a dimmer and nothing else. Fetch the real one in GDTF Share below, then set it here.'
+                        : beamlessProfiles.has(f.profileId)
+                          ? 'this profile lists beam channels (zoom, focus, iris, frost, CTO) that nothing drives, so the look editor cannot offer them. It was compiled from a thin GDTF or by an older importer — re-import the real GDTF for this fixture and the controls appear.'
+                          : undefined
                   }
                 >
                   <td>
                     <input
                       className="text"
+                      title="fixture name — shown in the plan and in group lists"
                       style={{ width: 130 }}
                       value={f.name}
                       onChange={(e) => mutate((p) => {
@@ -343,26 +551,29 @@ export function PatchView() {
                     <select
                       className="sel"
                       value={f.profileId}
-                      onChange={(e) => mutate((p) => {
-                        const x = p.fixtures.find((y) => y.id === f.id);
-                        if (x) x.profileId = e.target.value;
-                      })}
+                      title={
+                        editTargets(f.id).length > 1
+                          ? `changes the profile on all ${editTargets(f.id).length} selected fixtures`
+                          : 'fixture profile'
+                      }
+                      onChange={(e) => eachTarget(f.id, (x) => { x.profileId = e.target.value; })}
                     >
-                      {allProfileMetas(project).map((pr) => (
-                        <option key={pr.id} value={pr.id}>
-                          {pr.imported ? '⇩ ' : ''}{pr.label}
-                        </option>
-                      ))}
+                      {profileOptions}
                     </select>
+                  </td>
+                  <td>
+                    <FormSelect project={project} profileId={f.profileId} mutate={mutate} />
                   </td>
                   <td>
                     <select
                       className="sel"
                       value={f.universeId}
-                      onChange={(e) => mutate((p) => {
-                        const x = p.fixtures.find((y) => y.id === f.id);
-                        if (x) x.universeId = e.target.value;
-                      })}
+                      title={
+                        editTargets(f.id).length > 1
+                          ? `moves all ${editTargets(f.id).length} selected fixtures to that universe`
+                          : 'output universe'
+                      }
+                      onChange={(e) => eachTarget(f.id, (x) => { x.universeId = e.target.value; })}
                     >
                       {project.universes.map((u) => (
                         <option key={u.id} value={u.id}>{u.label}</option>
@@ -521,6 +732,7 @@ export function PatchView() {
                   </td>
                   <td>
                     <button
+                      title="delete this group. The fixtures stay patched; looks pointing at it lose their target."
                       className="btn small ghost"
                       onClick={() => {
                         void (async () => {
@@ -563,10 +775,15 @@ export function PatchView() {
                 rotY: 0,
               });
             })}
+            title="add one fixture at the next free address in the selected universe"
           >
             + add fixture
           </button>
-          <label className="btn small" style={{ cursor: 'pointer' }}>
+          <label
+            className="btn small"
+            style={{ cursor: 'pointer' }}
+            title="import a GDTF fixture definition, or an MVR scene (fixtures, addresses, positions and the definitions inside it). Re-importing a file replaces the stored profile."
+          >
             ⇩ import .gdtf / .mvr
             <input
               type="file"
@@ -797,18 +1014,61 @@ export function PatchView() {
       </div>
 
       <div>
-        <div className="sectionhead">Groups</div>
+        <div className="sectionhead">
+          Groups
+          <button
+            className="btn small ghost"
+            style={{ marginLeft: 10 }}
+            title="derive groups from the rig: one per fixture type, one per truss (ordered along the bar). Groups you have renamed or edited are yours and are never touched."
+            onClick={() => {
+              void (async () => {
+                const plan = planAutoGroups(project);
+                if (plan.create.length + plan.update.length + plan.remove.length === 0) {
+                  await askConfirm('Auto-groups are up to date', { body: 'Nothing to create, update or remove.', confirmLabel: 'OK' });
+                  return;
+                }
+                const lines: string[] = [];
+                if (plan.create.length) lines.push(`Create: ${plan.create.map((g) => `${g.name} (${g.heads.length})`).join(', ')}`);
+                if (plan.update.length) lines.push(`Update membership: ${plan.update.map((u) => u.existing.name).join(', ')}`);
+                if (plan.remove.length) lines.push(`Remove (source gone): ${plan.remove.map((g) => g.name).join(', ')}`);
+                const ok = await askConfirm('Regenerate auto-groups?', {
+                  body: lines.join('\n\n') + '\n\nRenamed or hand-edited groups are not auto-managed and stay untouched.',
+                  confirmLabel: 'Apply',
+                });
+                if (ok) mutate((p) => applyAutoGroups(p, planAutoGroups(p)));
+              })();
+            }}
+          >
+            ⟳ auto-groups
+          </button>
+        </div>
         {project.groups.map((g) => (
           <div key={g.id} className="row" style={{ marginBottom: 6, alignItems: 'flex-start' }}>
             <input
               className="text"
+              title="group name. Renaming a generated group does not promote it — use the pin for that"
               style={{ width: 130 }}
               value={g.name}
               onChange={(e) => mutate((p) => {
                 const x = p.groups.find((y) => y.id === g.id);
-                if (x) x.name = e.target.value;
+                if (!x) return;
+                x.name = e.target.value;
+                delete x.auto; // renamed = promoted to authored: regenerate keeps its hands off
               })}
             />
+            {g.auto !== undefined && (
+              <span
+                className="chip"
+                title="derived group — ⟳ may rewrite it; click to pin as yours (renaming or editing also promotes it)"
+                style={{ cursor: 'pointer' }}
+                onClick={() => mutate((p) => {
+                  const x = p.groups.find((y) => y.id === g.id);
+                  if (x) delete x.auto;
+                })}
+              >
+                auto
+              </span>
+            )}
             <div className="grow" style={{ lineHeight: 1.9 }}>
               {project.fixtures.flatMap((f) => {
                 const prof = profileMeta(project, f.profileId);
@@ -828,6 +1088,7 @@ export function PatchView() {
                         const idx = x.heads.findIndex((h) => h.fixtureId === f.id && h.head === hi);
                         if (idx >= 0) x.heads.splice(idx, 1);
                         else x.heads.push({ fixtureId: f.id, head: hi });
+                        delete x.auto; // edited membership = promoted to authored
                       })}
                     >
                       {on ? `${pos + 1}· ` : ''}{label}
@@ -842,7 +1103,9 @@ export function PatchView() {
               disabled={g.heads.length < 2}
               onClick={() => mutate((p) => {
                 const x = p.groups.find((y) => y.id === g.id);
-                if (x) x.heads.reverse();
+                if (!x) return;
+                x.heads.reverse();
+                delete x.auto; // edited chase order = promoted to authored
               })}
             >
               ⇄
@@ -876,13 +1139,16 @@ export function PatchView() {
         <button
           className="btn small"
           onClick={() => mutate((p) => p.groups.push({ id: uid('g'), name: `Group ${p.groups.length + 1}`, heads: [] }))}
-        >
+        
+            title="a named set of heads. Groups are what looks point at, and their order is chase order.">
           + add group
         </button>
         <div className="label" style={{ marginTop: 6 }}>chip order = chase order (first chip runs first)</div>
       </div>
 
+      <PixelLayout />
       <StageTable />
+      <ShareFixtures />
     </div>
   );
 }
@@ -1003,6 +1269,15 @@ function StageTable() {
                       mutate((p) => {
                         p.props = (p.props ?? []).filter((x) => x.id !== pr.id);
                         if (p.props.length === 0) delete p.props;
+                        // Anything rigged on it is no longer rigged on
+                        // anything: a stale parentId renders the Rigged-on
+                        // select blank (no matching option) and takes the
+                        // along-the-bar scrub with it. Positions are in room
+                        // coordinates, so the fixtures stay exactly where they
+                        // are — they simply stop having a parent.
+                        for (const f of p.fixtures) {
+                          if (f.parentId === pr.id) delete f.parentId;
+                        }
                       })
                     }
                   >

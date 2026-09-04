@@ -1,5 +1,5 @@
 //! APC40 mk2 LED feedback over native MIDI — the packaged app's mirror of
-//! `ui/src/apcFeedback.ts`. All five pad rows show the look grid (bright = the
+//! `ui/src/apcFeedback.ts`. The four upper pad rows show the look grid (bright = the
 //! playing cell, dim = available, coloured by each look's swatch), the five
 //! scene LEDs light when their layer has something to clear, and stop-all-clips
 //! blinks while blackout is armed.
@@ -112,13 +112,19 @@ fn swatch_first_plain(look: &Look) -> (u8, u8, u8) {
 
 /// note → velocity (channel 0); everything not present = off.
 /// Mirror of `computeLeds` in `ui/src/apcFeedback.ts`.
+/// 4 layer rows + 1 control row = the 5 x 8 clip grid. Mirrors APC_LAYER_ROWS
+/// in `ui/src/apcFeedback.ts`.
+const APC_LAYER_ROWS: usize = 4;
+
 fn compute_leds(state: &EngineState) -> HashMap<u8, u8> {
     let p = &state.project;
     let mut leds: HashMap<u8, u8> = HashMap::new();
 
-    // All five grid rows are layers. The bottom row used to mirror cue columns;
-    // a fifth layer is worth more than a second way to fire a cue.
-    for (row, layer) in p.layers.iter().rev().take(5).enumerate() {
+    // FOUR layer rows, not five: the fifth belongs to the control row the look
+    // grid shows underneath the layers, so the 5 x 8 surface and the screen are
+    // the same shape. (Older layouts put a fifth layer, and before that cue
+    // columns, on the bottom row — don't restore either here.)
+    for (row, layer) in p.layers.iter().rev().take(APC_LAYER_ROWS).enumerate() {
         let live = state.live.get(&layer.id);
         let base = 32 - 8 * row as i16;
         for col in 0..p.columns.len().min(8) {
@@ -129,7 +135,27 @@ fn compute_leds(state: &EngineState) -> HashMap<u8, u8> {
             let active = live.is_some_and(|lv| {
                 lv.look_id.as_deref() == Some(look_id.as_str()) && lv.col == Some(col)
             });
-            leds.insert((base + col as i16) as u8, if active { bright } else { dim });
+            // The pad can hold a look the layer is NOT playing while still
+            // being the live column — a library drag onto a live pad, where the
+            // engine keeps playing what it captured at trigger time. Dim would
+            // report "idle" on a layer that is lighting the rig, and a fixed
+            // "stale" colour collides with any look that happens to use it
+            // (white looks land on the same index). So the surface reports the
+            // STAGE: bright, in the colour of whatever is actually playing.
+            // The screen carries the nuance that the pad holds something else.
+            let stale_playing = (!active)
+                .then(|| live.filter(|lv| lv.col == Some(col)).and_then(|lv| lv.look_id.as_deref()))
+                .flatten()
+                .and_then(|id| p.looks.get(id));
+            let vel = if active {
+                bright
+            } else if let Some(playing) = stale_playing {
+                let (pr, pg, pb) = swatch_first(playing, &p.looks);
+                nearest(pr, pg, pb).0
+            } else {
+                dim
+            };
+            leds.insert((base + col as i16) as u8, vel);
         }
         // scene LED (single-colour): on when the layer has something to clear
         if live.is_some_and(|lv| lv.look_id.is_some()) {
@@ -270,6 +296,63 @@ mod tests {
         state.blackout = true;
         let leds = compute_leds(&state);
         assert_eq!(leds.get(&81).copied(), Some(2));
+    }
+
+    #[test]
+    fn a_live_column_holding_a_different_look_still_reports_the_stage() {
+        // The screen shows this as `.cell.stale`: the layer is still playing
+        // what it captured at trigger time, but the pad has been re-pointed at
+        // another look (a library drag onto a live pad). Dim would tell an
+        // operator in the dark that the layer is idle while it lights the rig.
+        let p = default_project();
+        let top_layer = p.layers.last().unwrap().id.clone();
+        let mut state = EngineState::new(p, 0.0);
+        let mut ids = state.project.looks.keys().cloned().collect::<Vec<_>>();
+        ids.sort();
+        assert!(ids.len() >= 2, "need two looks to re-point a pad");
+        let (played, swapped) = (ids[0].clone(), ids[1].clone());
+        let col = 0usize;
+
+        if let Some(layer) = state.project.layers.last_mut() {
+            layer.cells[col] = Some(played.clone());
+        }
+        state.trigger(&top_layer, col, 0.0, crate::state::LOCAL_CLIENT);
+        let playing = compute_leds(&state).get(&(32 + col as u8)).copied().unwrap_or(0);
+
+        // re-point the pad; the engine keeps playing `played`
+        if let Some(layer) = state.project.layers.last_mut() {
+            layer.cells[col] = Some(swapped);
+        }
+        let stale = compute_leds(&state).get(&(32 + col as u8)).copied().unwrap_or(0);
+        // the surface keeps reporting the stage: same bright colour as before
+        // the pad was re-pointed, because the SAME look is still playing
+        assert_eq!(stale, playing, "a re-pointed live pad must still report what is on stage");
+
+        // and an idle pad in another column stays dim, not white
+        let idle_col = 1usize;
+        if let Some(layer) = state.project.layers.last_mut() {
+            layer.cells[idle_col] = Some(played);
+        }
+        let idle = compute_leds(&state).get(&(32 + idle_col as u8)).copied().unwrap_or(0);
+        assert_ne!(idle, stale, "a pad outside the live column must read as idle");
+    }
+
+    #[test]
+    fn the_control_row_is_never_taken_by_a_fifth_layer() {
+        // The bottom row belongs to the control row the look grid draws under
+        // the layers. A project carrying a fifth layer must not light it.
+        let mut p = default_project();
+        let extra = p.layers[0].clone();
+        p.layers.insert(0, crate::types::Layer { id: "layer-fifth".into(), ..extra });
+        let mut state = EngineState::new(p, 0.0);
+        let look_id = state.project.looks.keys().next().unwrap().clone();
+        if let Some(layer) = state.project.layers.iter_mut().find(|l| l.id == "layer-fifth") {
+            layer.cells[0] = Some(look_id);
+        }
+        let leds = compute_leds(&state);
+        for note in 0u8..8 {
+            assert!(!leds.contains_key(&note), "bottom row note {note} must stay dark for controls");
+        }
     }
 
     #[test]

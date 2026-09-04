@@ -15,9 +15,12 @@ function StatusDot({ ok, label, warn, title }: { ok: boolean; label: string; war
 
 function ProjectMenu({ name }: { name: string }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const send = useStore((s) => s.send);
   const projects = useStore((s) => s.projects);
+  const snap = useStore((s) => s.snap);
   const boxRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -29,17 +32,48 @@ function ProjectMenu({ name }: { name: string }) {
     return () => window.removeEventListener('pointerdown', close);
   }, [open, send]);
 
+  // Anything currently on stage — so opening another show can warn that it goes
+  // dark, rather than doing it on a stray tap.
+  const anyLive = (snap?.layers ?? []).some((l) => !!l.lookId);
+
+  const openMenu = () => {
+    // Position the dropdown with the viewport, not the top bar: the bar is an
+    // overflow scroll container (narrow-window survival), which clips an
+    // absolutely-positioned child to its own 46px height. A fixed element
+    // computed from the button's rect escapes that box.
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 2, left: r.left });
+    setOpen((o) => !o);
+  };
+
+  const openProject = (slug: string, projName: string) => {
+    setOpen(false);
+    if (slug === projects?.current) return;
+    void (async () => {
+      if (anyLive) {
+        const ok = await askConfirm(`Open "${projName}"?`, {
+          body: 'The current show stops and the stage goes dark. You can reopen this one afterwards, but every layer will need re-firing.',
+          confirmLabel: 'Open project',
+          danger: true,
+        });
+        if (!ok) return;
+      }
+      send({ type: 'openProject', slug });
+    })();
+  };
+
   return (
     <div ref={boxRef} style={{ position: 'relative' }}>
-      <button className="btn small ghost projname" title="projects" onClick={() => setOpen((o) => !o)}>
+      <button ref={btnRef} className="btn small ghost projname" title="projects" onClick={openMenu}>
         {name} ▾
       </button>
       {open && (
         <div
           style={{
-            position: 'absolute', top: '100%', left: 0, zIndex: 40, minWidth: 220,
+            position: 'fixed', top: pos.top, left: pos.left, zIndex: 60, minWidth: 220,
             background: 'var(--panel2, #1c1c20)', border: '1px solid var(--line)',
             borderRadius: 4, padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
           }}
         >
           {(projects?.list ?? []).map((p) => (
@@ -47,10 +81,8 @@ function ProjectMenu({ name }: { name: string }) {
               key={p.slug}
               className={`btn small ghost ${p.slug === projects?.current ? 'on' : ''}`}
               style={{ justifyContent: 'flex-start', textAlign: 'left' }}
-              onClick={() => {
-                if (p.slug !== projects?.current) send({ type: 'openProject', slug: p.slug });
-                setOpen(false);
-              }}
+              title={`open “${p.name}” — the running show is saved first, and undo history does not cross projects`}
+              onClick={() => openProject(p.slug, p.name)}
             >
               {p.slug === projects?.current ? '✓ ' : ''}{p.name}
             </button>
@@ -59,6 +91,7 @@ function ProjectMenu({ name }: { name: string }) {
           <button
             className="btn small ghost"
             style={{ justifyContent: 'flex-start' }}
+            title="start an empty show — the default rig and a blank grid. The current show is saved first."
             onClick={() => {
               setOpen(false);
               void (async () => {
@@ -72,6 +105,7 @@ function ProjectMenu({ name }: { name: string }) {
           <button
             className="btn small ghost"
             style={{ justifyContent: 'flex-start' }}
+            title="save a copy under a new name and switch to it — the show you are on is left as it was"
             onClick={() => {
               setOpen(false);
               void (async () => {
@@ -102,10 +136,10 @@ function ProjectMenu({ name }: { name: string }) {
 /** The four layouts, in the order they sit on the bar. Alt-1..4 matches the
  *  position, so the shortcut is readable off the screen. */
 const VIEWS: { id: ViewMode; label: string; title: string; key: string }[] = [
-  { id: 'pads', label: 'Pads', title: 'Look grid, full screen', key: '1' },
+  { id: 'pads', label: 'Pads', title: 'Perform — previz over the pads, look library at the right', key: '1' },
   { id: 'previz', label: 'Previz', title: 'Previz, full screen', key: '2' },
-  { id: 'patch', label: 'Patch', title: 'Fixtures and patch, full screen', key: '3' },
-  { id: 'split', label: 'All', title: 'All three panels at once', key: '4' },
+  { id: 'patch', label: 'Patch', title: 'Rig — the 2D plan over the patch: drag fixtures into place', key: '3' },
+  { id: 'split', label: 'All', title: 'Build — previz over the pads and the editor', key: '4' },
 ];
 
 export function TopBar() {
@@ -159,7 +193,11 @@ export function TopBar() {
           </button>
         ))}
       </div>
-      <button className="btn small ghost" onClick={() => send({ type: 'save' })}>
+      <button
+        className="btn small ghost"
+        title="write the show to disk now (⌘S). Edits autosave about a second after you stop, so this is only for peace of mind."
+        onClick={() => send({ type: 'save' })}
+      >
         {justSaved ? 'saved ✓' : 'save'}
       </button>
       <button
@@ -204,6 +242,7 @@ export function TopBar() {
         <span className="label">bpm</span>
         <button
           className="btn small"
+          title="tap the beat — four taps sets the tempo, and every tap also lands the downbeat (keyboard: T)"
           onClick={() => {
             if (!useStore.getState().armLearn({ kind: 'tap' })) send({ type: 'tap' });
           }}
@@ -278,6 +317,48 @@ export function TopBar() {
           {snap!.overrides} override{snap!.overrides === 1 ? '' : 's'}
         </span>
       )}
+      {snap?.identify && (
+        // Identify drives a fixture to full white and overrides EVERYTHING,
+        // blackout included — so it must never be a thing you can leave on
+        // without seeing it. This chip shows it from any tab and clears it on
+        // click; blackout and 'B' will not touch it, only this or ALL STOP.
+        <span
+          className="mutedchip identifychip"
+          title="a fixture is held at full white for identify — it ignores blackout. Click to release it."
+          onClick={() => send({ type: 'identify', fixtureId: null })}
+          style={{ cursor: 'pointer' }}
+        >
+          ◎ identify: {project.fixtures.find((f) => f.id === snap.identify)?.name ?? 'fixture'}
+        </span>
+      )}
+      {(snap?.soft?.length ?? 0) > 0 && (
+        <span
+          className="chip"
+          style={{ background: 'rgba(240,166,62,0.18)', border: '1px solid var(--amber, #f0a63e)', color: 'var(--amber, #f0a63e)', fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
+          title="live soft overrides are driving the rig — Store writes them into the show, Discard drops them. Always visible here, whatever panel is open."
+        >
+          RIDING {snap!.soft!.length}
+          <button
+            className="btn small"
+            title="write these live positions into the show, so the looks keep them next time they fire (undoable)"
+            onClick={() => {
+              // capture undo locally FIRST: the commit arrives as an engine
+              // echo, which undo deliberately does not infer from
+              useStore.getState().captureUndo();
+              send({ type: 'softCommit' });
+            }}
+          >
+            Store
+          </button>
+          <button
+            className="btn small ghost"
+            title="throw the live positions away and snap back to what the looks have stored"
+            onClick={() => send({ type: 'softClear' })}
+          >
+            Discard
+          </button>
+        </span>
+      )}
       <button
         className="btn allstop"
         title="ALL STOP — blackout, clear every layer, release holds, haze and motors off"
@@ -287,7 +368,12 @@ export function TopBar() {
             confirmLabel: 'ALL STOP',
             danger: true,
           }).then((ok) => {
-            if (ok) send({ type: 'allStop' });
+            if (ok) {
+              send({ type: 'allStop' });
+              // panic also disarms ride and drops in-flight fader events, so a
+              // drag mid-gesture cannot re-create the rides just cleared
+              useStore.setState({ ride: false, rideCutAt: Date.now() });
+            }
           });
         }}
       >
@@ -295,6 +381,7 @@ export function TopBar() {
       </button>
       <button
         className={`btn blackout ${snap?.blackout ? 'hot' : ''}`}
+        title="blackout — zeroes intensity and strobe instantly and always wins, while layers keep running underneath. Press again to restore (keyboard: B)."
         onClick={() => {
           if (!useStore.getState().armLearn({ kind: 'blackout' })) send({ type: 'setBlackout', v: !snap?.blackout });
         }}

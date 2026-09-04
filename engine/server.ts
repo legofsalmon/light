@@ -21,7 +21,10 @@ export class Server {
   private httpServer: http.Server;
   private wss: WebSocketServer;
   onConnect: ((ws: WebSocket) => void) | null = null;
-  onDisconnect: ((clientId: number) => void) | null = null;
+  /** Both the id (for hold ownership) and the socket (for per-client
+   *  subscriptions, which are keyed by socket because that is what `send`
+   *  takes). Mirrors Subs::forget in core/src/engine.rs. */
+  onDisconnect: ((clientId: number, ws: WebSocket) => void) | null = null;
   private nextClientId = 1;
 
   constructor(port: number, distDir: string, onCommand: (cmd: Command, ws: WebSocket, clientId: number) => void) {
@@ -56,7 +59,7 @@ export class Server {
       // holds are attributed to this id so a disconnect releases only its own
       const clientId = this.nextClientId++;
       this.onConnect?.(ws);
-      ws.on('close', () => this.onDisconnect?.(clientId));
+      ws.on('close', () => this.onDisconnect?.(clientId, ws));
       ws.on('message', (data) => {
         let cmd: Command;
         try {
@@ -89,6 +92,33 @@ export class Server {
     });
   }
 
+  /** Clients that were skipped mid-broadcast because their send buffer was
+   *  backed up. Snapshots are disposable and skipping one is correct, but the
+   *  PROJECT echo must be made good — a client that misses it holds a stale
+   *  show and then writes it back over everyone's edits. Mirrors the missed set
+   *  in core/src/server.rs. */
+  private missed = new Set<WebSocket>();
+
+  hasMissed(): boolean {
+    return this.missed.size > 0;
+  }
+
+  /** Return the clients that missed a broadcast and clear the set. Callers
+   *  re-mark any that are still backed up via `resend`. */
+  takeMissed(): WebSocket[] {
+    const out = [...this.missed];
+    this.missed.clear();
+    return out;
+  }
+
+  /** Re-send one event (the current project) to a client that missed it,
+   *  re-marking it if it is still backed up so the next flush retries. */
+  resend(ws: WebSocket, ev: ServerEvent): void {
+    if (ws.readyState !== WebSocket.OPEN) return; // gone — drop it
+    if (ws.bufferedAmount < 1_000_000) ws.send(JSON.stringify(ev));
+    else this.missed.add(ws);
+  }
+
   send(ws: WebSocket, ev: ServerEvent): void {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(ev));
   }
@@ -103,7 +133,10 @@ export class Server {
     const s = JSON.stringify(ev);
     for (const c of this.wss.clients) {
       if (c === skip) continue;
-      if (c.readyState === WebSocket.OPEN && c.bufferedAmount < 1_000_000) c.send(s);
+      if (c.readyState !== WebSocket.OPEN) continue;
+      if (c.bufferedAmount < 1_000_000) c.send(s);
+      // backed up: record it so flushProject can make the project good
+      else this.missed.add(c);
     }
   }
 
@@ -111,8 +144,12 @@ export class Server {
     const s = JSON.stringify(ev);
     for (const c of this.wss.clients) {
       // A stalled client must not buffer unbounded snapshot backlog in the
-      // engine — skip it until it drains (snapshots are disposable).
-      if (c.readyState === WebSocket.OPEN && c.bufferedAmount < 1_000_000) c.send(s);
+      // engine — skip it until it drains (snapshots are disposable). But record
+      // the skip: the project echo that follows must be made good even though
+      // the snapshot is not.
+      if (c.readyState !== WebSocket.OPEN) continue;
+      if (c.bufferedAmount < 1_000_000) c.send(s);
+      else this.missed.add(c);
     }
   }
 

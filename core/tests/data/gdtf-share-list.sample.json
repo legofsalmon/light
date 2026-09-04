@@ -1,0 +1,3641 @@
+{
+ "result": true,
+ "list": [
+  {
+   "rid": 119729,
+   "fixture": "Robin Spiider",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-12-03  Reupload to share",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1764742840,
+   "lastModified": 1784880501,
+   "rating": "3.8",
+   "version": "1.2",
+   "uuid": "FF00403F-EEDC-4E89-8FF2-CD5976365896",
+   "modes": [
+    {
+     "name": "Mode 10 - Pattern full RGBW",
+     "dmxfootprint": 123
+    },
+    {
+     "name": "Mode 9 - Pattern full RGB",
+     "dmxfootprint": 104
+    },
+    {
+     "name": "Mode 8 - Pixel RGBW ",
+     "dmxfootprint": 110
+    },
+    {
+     "name": "Mode 7 - Pixel RGB",
+     "dmxfootprint": 91
+    },
+    {
+     "name": "Mode 6 - Pattern",
+     "dmxfootprint": 47
+    },
+    {
+     "name": "Mode 5 - Wash",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 1 - Zones",
+     "dmxfootprint": 49
+    },
+    {
+     "name": "Mode 2 - Basic",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 3 - Advanced",
+     "dmxfootprint": 33
+    },
+    {
+     "name": "Mode 4 - Full RGBW",
+     "dmxfootprint": 90
+    }
+   ],
+   "filesize": 1968113
+  },
+  {
+   "rid": 119733,
+   "fixture": "Robin iSpiider",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-12-03 Reupload to share",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1764744630,
+   "lastModified": 1769002245,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "9B811C7C-4D2C-4AD7-9EAC-3533BE07E92F",
+   "modes": [
+    {
+     "name": "Mode 10 - Pattern full RGBW",
+     "dmxfootprint": 123
+    },
+    {
+     "name": "Mode 9 - Pattern full RGB",
+     "dmxfootprint": 104
+    },
+    {
+     "name": "Mode 8 - Pixel RGBW ",
+     "dmxfootprint": 110
+    },
+    {
+     "name": "Mode 7 - Pixel RGB",
+     "dmxfootprint": 91
+    },
+    {
+     "name": "Mode 6 - Pattern",
+     "dmxfootprint": 47
+    },
+    {
+     "name": "Mode 5 - Wash",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 1 - Zones",
+     "dmxfootprint": 49
+    },
+    {
+     "name": "Mode 2 - Basic",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 3 - Advanced",
+     "dmxfootprint": 33
+    },
+    {
+     "name": "Mode 4 - Full RGBW",
+     "dmxfootprint": 90
+    }
+   ],
+   "filesize": 1964749
+  },
+  {
+   "rid": 149970,
+   "fixture": "Rivale Profile",
+   "manufacturer": "Ayrton",
+   "revision": "V1.7 Add_RDM_Personality",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1783429496,
+   "lastModified": 1783943048,
+   "rating": "3.0",
+   "version": "1.2",
+   "uuid": "159972D3-4E9C-48B2-9840-B912F7547FB9",
+   "modes": [
+    {
+     "name": "Extended_540",
+     "dmxfootprint": 65
+    },
+    {
+     "name": "Standard_540",
+     "dmxfootprint": 42
+    }
+   ],
+   "filesize": 2721160
+  },
+  {
+   "rid": 152282,
+   "fixture": "Rivale Profile",
+   "manufacturer": "Ayrton",
+   "revision": "V250626",
+   "creator": "Lars Rijsdijk",
+   "uploader": "User",
+   "description": "",
+   "creationDate": 1784972670,
+   "lastModified": 1785149838,
+   "rating": "2.0",
+   "version": "1.2",
+   "uuid": "159972D3-4E9C-48B2-9840-B912F7547FB9",
+   "modes": [
+    {
+     "name": "Extended_540",
+     "dmxfootprint": 65
+    },
+    {
+     "name": "Standard_540",
+     "dmxfootprint": 42
+    }
+   ],
+   "filesize": 2721249
+  },
+  {
+   "rid": 102834,
+   "fixture": "Robe Robin Spiider",
+   "manufacturer": "OGSON fixtures",
+   "revision": "ogi_v2",
+   "creator": "OGSON fixtures",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1751704124,
+   "lastModified": 1784038791,
+   "rating": "4.7",
+   "version": "1.2",
+   "uuid": "6B2B8FC1-F528-44F8-8F47-D7FC4EACE0EC",
+   "modes": [
+    {
+     "name": "Mode 1 - Zones",
+     "dmxfootprint": 49
+    },
+    {
+     "name": "Mode 2 - Basic",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 3 - Advanced",
+     "dmxfootprint": 33
+    },
+    {
+     "name": "Mode 4 - Full RGBW",
+     "dmxfootprint": 123
+    },
+    {
+     "name": "Mode 5 - Wash",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 6 - Pattern",
+     "dmxfootprint": 47
+    },
+    {
+     "name": "Mode 7 - Pixel RGB",
+     "dmxfootprint": 91
+    },
+    {
+     "name": "Mode 8 - Pixel RGBW ",
+     "dmxfootprint": 110
+    },
+    {
+     "name": "Mode 9 - Pattern full RGB",
+     "dmxfootprint": 104
+    },
+    {
+     "name": "Mode 10 - Pattern full RGBW",
+     "dmxfootprint": 123
+    }
+   ],
+   "filesize": 1966071
+  },
+  {
+   "rid": 48377,
+   "fixture": "ACME LYRA(XA 1000 BSWF IP)",
+   "manufacturer": "ACME",
+   "revision": "LYRA",
+   "creator": "stumps321",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1696473154,
+   "lastModified": 1769003313,
+   "rating": "5.0",
+   "version": "1.2",
+   "uuid": "E884D0F3-86DE-4668-8628-C9CDA7B152B0",
+   "modes": [
+    {
+     "name": "Mode 1  39 DMX",
+     "dmxfootprint": 39
+    },
+    {
+     "name": "Mode 2  30 DMX",
+     "dmxfootprint": 30
+    },
+    {
+     "name": "Mode 3  31 DMX",
+     "dmxfootprint": 31
+    },
+    {
+     "name": "Mode 4  22 DMX",
+     "dmxfootprint": 22
+    },
+    {
+     "name": "Mode 5  40 DMX",
+     "dmxfootprint": 40
+    }
+   ],
+   "filesize": 1307224
+  },
+  {
+   "rid": 149971,
+   "fixture": "Rivale Wash",
+   "manufacturer": "Ayrton",
+   "revision": "V1.7 Add_RDM_Personality",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1783429557,
+   "lastModified": 1783429581,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "EE8F9825-151E-449A-8549-924230953BA6",
+   "modes": [
+    {
+     "name": "Extended_540",
+     "dmxfootprint": 60
+    },
+    {
+     "name": "Standard_540",
+     "dmxfootprint": 38
+    }
+   ],
+   "filesize": 1129425
+  },
+  {
+   "rid": 119732,
+   "fixture": "Robin Spiider RGBA",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-12-03  Reupload to share",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1764744562,
+   "lastModified": 1769003800,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "2E0635CF-1046-4763-85E7-2CD53631FD20",
+   "modes": [
+    {
+     "name": "Mode 10 - Pattern full RGBA",
+     "dmxfootprint": 123
+    },
+    {
+     "name": "Mode 9 - Pattern full RGB",
+     "dmxfootprint": 104
+    },
+    {
+     "name": "Mode 8 - Pixel RGBA",
+     "dmxfootprint": 110
+    },
+    {
+     "name": "Mode 7 - Pixel RGB",
+     "dmxfootprint": 91
+    },
+    {
+     "name": "Mode 6 - Pattern",
+     "dmxfootprint": 47
+    },
+    {
+     "name": "Mode 5 - Wash",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 1 - Zones",
+     "dmxfootprint": 49
+    },
+    {
+     "name": "Mode 2 - Basic",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 3 - Advanced",
+     "dmxfootprint": 33
+    },
+    {
+     "name": "Mode 4 - Full RGBA",
+     "dmxfootprint": 90
+    }
+   ],
+   "filesize": 1959683
+  },
+  {
+   "rid": 119734,
+   "fixture": "Robin iSpiiderX",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-12-03 Reupload to share",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1764744688,
+   "lastModified": 1769003800,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "AC70980B-8E18-4355-AD16-05441F030039",
+   "modes": [
+    {
+     "name": "Mode 10 - Pattern full RGBW",
+     "dmxfootprint": 123
+    },
+    {
+     "name": "Mode 9 - Pattern full RGB",
+     "dmxfootprint": 104
+    },
+    {
+     "name": "Mode 8 - Pixel RGBW ",
+     "dmxfootprint": 110
+    },
+    {
+     "name": "Mode 7 - Pixel RGB",
+     "dmxfootprint": 91
+    },
+    {
+     "name": "Mode 6 - Pattern",
+     "dmxfootprint": 47
+    },
+    {
+     "name": "Mode 5 - Wash",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 1 - Zones",
+     "dmxfootprint": 49
+    },
+    {
+     "name": "Mode 2 - Basic",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 3 - Advanced",
+     "dmxfootprint": 33
+    },
+    {
+     "name": "Mode 4 - Full RGBW",
+     "dmxfootprint": 90
+    }
+   ],
+   "filesize": 1691417
+  },
+  {
+   "rid": 85710,
+   "fixture": "ACME LYRA (XA 1000 BSWF IP)",
+   "manufacturer": "ACME",
+   "revision": "ACME LYRA (XA 1000 BSWF IP)",
+   "creator": "ACME-Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1738908164,
+   "lastModified": 1769003562,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "FC3164C3-8E42-4576-97D1-3B978535C6A9",
+   "modes": [
+    {
+     "name": "Mode 1  39 DMX",
+     "dmxfootprint": 39
+    },
+    {
+     "name": "Mode 2  30 DMX",
+     "dmxfootprint": 30
+    },
+    {
+     "name": "Mode 3  31 DMX",
+     "dmxfootprint": 31
+    },
+    {
+     "name": "Mode 4  22 DMX",
+     "dmxfootprint": 22
+    },
+    {
+     "name": "Mode 5  40 DMX",
+     "dmxfootprint": 40
+    }
+   ],
+   "filesize": 1314113
+  },
+  {
+   "rid": 73535,
+   "fixture": "ACME LYRA BW(XA 1000 BW IP)",
+   "manufacturer": "ACME",
+   "revision": "ACME LYRA BW(XA 1000 BW IP)",
+   "creator": "ACME-Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1726304089,
+   "lastModified": 1769003481,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "086B0016-7A50-4467-8E68-711E41CE7269",
+   "modes": [
+    {
+     "name": "Mode 2 30 DMX",
+     "dmxfootprint": 30
+    },
+    {
+     "name": "Mode 1 18DMX",
+     "dmxfootprint": 18
+    }
+   ],
+   "filesize": 300585
+  },
+  {
+   "rid": 88068,
+   "fixture": "Lyrae M - MC",
+   "manufacturer": "Anolis",
+   "revision": "2025-03-03  First revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1741010635,
+   "lastModified": 1769003578,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "31AAB32D-4443-4FFA-ABC2-471BAAE01343",
+   "modes": [
+    {
+     "name": "Mode 1 RGBW 8bit",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "Mode 1 RGBA 8bit",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "Mode 2 RGB 8 bit",
+     "dmxfootprint": 3
+    },
+    {
+     "name": "Mode 3 full RGBW",
+     "dmxfootprint": 12
+    },
+    {
+     "name": "Mode 3 full RGBA",
+     "dmxfootprint": 12
+    },
+    {
+     "name": "Mode 4 White full control",
+     "dmxfootprint": 3
+    },
+    {
+     "name": "Mode 5 Reduced RGBW",
+     "dmxfootprint": 6
+    },
+    {
+     "name": "Mode 5 Reduced RGBA",
+     "dmxfootprint": 6
+    },
+    {
+     "name": "Mode 6 Reduced RGBA + white control",
+     "dmxfootprint": 8
+    },
+    {
+     "name": "Mode 6 Reduced RGBW + white control",
+     "dmxfootprint": 8
+    },
+    {
+     "name": "Mode 7 full RGBA + virtual colour wheel",
+     "dmxfootprint": 15
+    },
+    {
+     "name": "Mode 10 - RGBW Tilt control",
+     "dmxfootprint": 16
+    },
+    {
+     "name": "Mode 10 - RGBA Tilt control",
+     "dmxfootprint": 16
+    },
+    {
+     "name": "Mode 11 White selection + dim",
+     "dmxfootprint": 3
+    },
+    {
+     "name": "Mode 12 WW + CW",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "Mode 13  dimmer",
+     "dmxfootprint": 2
+    },
+    {
+     "name": "Mode 16 - Tilt control",
+     "dmxfootprint": 5
+    }
+   ],
+   "filesize": 356376
+  },
+  {
+   "rid": 88067,
+   "fixture": "Lyrae M - SC",
+   "manufacturer": "Anolis",
+   "revision": "2025-03-03  First revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1741010610,
+   "lastModified": 1769003578,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "78EF4FE9-C231-4AE5-B5EE-F75BC56E652C",
+   "modes": [
+    {
+     "name": "Mode 1 RGBW 8bit",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "Mode 1 RGBA 8bit",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "Mode 2 RGB 8 bit",
+     "dmxfootprint": 3
+    },
+    {
+     "name": "Mode 3 full RGBW",
+     "dmxfootprint": 12
+    },
+    {
+     "name": "Mode 3 full RGBA",
+     "dmxfootprint": 12
+    },
+    {
+     "name": "Mode 4 White full control",
+     "dmxfootprint": 3
+    },
+    {
+     "name": "Mode 5 Reduced RGBW",
+     "dmxfootprint": 6
+    },
+    {
+     "name": "Mode 5 Reduced RGBA",
+     "dmxfootprint": 6
+    },
+    {
+     "name": "Mode 6 Reduced RGBA + white control",
+     "dmxfootprint": 8
+    },
+    {
+     "name": "Mode 6 Reduced RGBW + white control",
+     "dmxfootprint": 8
+    },
+    {
+     "name": "Mode 7 full RGBA + virtual colour wheel",
+     "dmxfootprint": 15
+    },
+    {
+     "name": "Mode 10 - RGBW Tilt control",
+     "dmxfootprint": 16
+    },
+    {
+     "name": "Mode 10 - RGBA Tilt control",
+     "dmxfootprint": 16
+    },
+    {
+     "name": "Mode 11 White selection + dim",
+     "dmxfootprint": 3
+    },
+    {
+     "name": "Mode 12 WW + CW",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "Mode 13  dimmer",
+     "dmxfootprint": 2
+    },
+    {
+     "name": "Mode 16 - Tilt control",
+     "dmxfootprint": 5
+    }
+   ],
+   "filesize": 343348
+  },
+  {
+   "rid": 109677,
+   "fixture": "Robin Spiider",
+   "manufacturer": "LPL",
+   "revision": "Rev1_0",
+   "creator": "LPL_CONSOLES",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1756997544,
+   "lastModified": 1769003720,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "D9F6F9AF-B934-4AFC-9EA8-5245DE3CA975",
+   "modes": [
+    {
+     "name": "Mode 10 - Pattern full RGBW",
+     "dmxfootprint": 123
+    },
+    {
+     "name": "Mode 9 - Pattern full RGB",
+     "dmxfootprint": 104
+    },
+    {
+     "name": "Mode 8 - Pixel RGBW ",
+     "dmxfootprint": 110
+    },
+    {
+     "name": "Mode 7 - Pixel RGB",
+     "dmxfootprint": 91
+    },
+    {
+     "name": "Mode 6 - Pattern",
+     "dmxfootprint": 47
+    },
+    {
+     "name": "Mode 5 - Wash",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 1 - Zones",
+     "dmxfootprint": 49
+    },
+    {
+     "name": "Mode 2 - Basic",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 3 - Advanced",
+     "dmxfootprint": 33
+    },
+    {
+     "name": "Mode 4 - Full RGBW",
+     "dmxfootprint": 90
+    }
+   ],
+   "filesize": 1958833
+  },
+  {
+   "rid": 110374,
+   "fixture": "Rivale Profile",
+   "manufacturer": "LPL",
+   "revision": "Rev1_0",
+   "creator": "LPL_CONSOLES",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1757599442,
+   "lastModified": 1769003725,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "15A759C6-419E-4527-8A4A-53207F221F35",
+   "modes": [
+    {
+     "name": "Extended_540",
+     "dmxfootprint": 65
+    },
+    {
+     "name": "Standard_540",
+     "dmxfootprint": 42
+    }
+   ],
+   "filesize": 2897731
+  },
+  {
+   "rid": 148599,
+   "fixture": "Robe Robin Spiider",
+   "manufacturer": "Black Light Design",
+   "revision": "20260627a",
+   "creator": "bld_jac",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1782551416,
+   "lastModified": 1782551476,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "35574C14-44AC-4AAB-9A29-415244830933",
+   "modes": [
+    {
+     "name": "Mode 1 - Zones",
+     "dmxfootprint": 49
+    },
+    {
+     "name": "Mode 2 - Basic",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 3 - Advanced",
+     "dmxfootprint": 33
+    },
+    {
+     "name": "Mode 4 - Full RGBW",
+     "dmxfootprint": 123
+    },
+    {
+     "name": "Mode 5 - Wash",
+     "dmxfootprint": 27
+    },
+    {
+     "name": "Mode 6 - Pattern",
+     "dmxfootprint": 47
+    },
+    {
+     "name": "Mode 7 - Pixel RGB",
+     "dmxfootprint": 91
+    },
+    {
+     "name": "Mode 8 - Pixel RGBW ",
+     "dmxfootprint": 110
+    },
+    {
+     "name": "Mode 9 - Pattern full RGB",
+     "dmxfootprint": 104
+    },
+    {
+     "name": "Mode 10 - Pattern full RGBW",
+     "dmxfootprint": 123
+    }
+   ],
+   "filesize": 1955428
+  },
+  {
+   "rid": 150527,
+   "fixture": "Rivale Profile Custom 1",
+   "manufacturer": "User",
+   "revision": "rivaleCustomUser",
+   "creator": "Jerald",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1783790422,
+   "lastModified": 1783790483,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "9F8B3D52-BF28-4089-BD2B-8629F819B7DD",
+   "modes": [
+    {
+     "name": "Extended_540",
+     "dmxfootprint": 65
+    },
+    {
+     "name": "Standard_540",
+     "dmxfootprint": 42
+    }
+   ],
+   "filesize": 2722120
+  },
+  {
+   "rid": 57362,
+   "fixture": "Robin 100 LEDBeam",
+   "manufacturer": "Robe Lighting",
+   "revision": "2024-02-09  3D models with robe color revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1707470046,
+   "lastModified": 1769003361,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "F74CAC5F-1BEA-4195-8B75-F9E466A0B802",
+   "modes": [
+    {
+     "name": "Mode 1 Three LED Zones 16bit",
+     "dmxfootprint": 35
+    },
+    {
+     "name": "Mode 2 Beam light 16bit",
+     "dmxfootprint": 19
+    },
+    {
+     "name": "Mode 3 Beam light 8bit",
+     "dmxfootprint": 14
+    },
+    {
+     "name": "Mode 4 Macro colors 8bit",
+     "dmxfootprint": 9
+    },
+    {
+     "name": "Mode 5 Three LED Zones at the end 16bit",
+     "dmxfootprint": 35
+    },
+    {
+     "name": "Mode 6 Compatible with LW600 mode 1",
+     "dmxfootprint": 37
+    }
+   ],
+   "filesize": 681977
+  },
+  {
+   "rid": 149953,
+   "fixture": "MagicPanel FX",
+   "manufacturer": "Ayrton",
+   "revision": "V2.7 Add_RDM_Personality",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1783427992,
+   "lastModified": 1783428021,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "D20698F0-142D-49EF-A284-1F4EA61BCBD7",
+   "modes": [
+    {
+     "name": "Extended",
+     "dmxfootprint": 118
+    },
+    {
+     "name": "Standard",
+     "dmxfootprint": 22
+    },
+    {
+     "name": "Basic",
+     "dmxfootprint": 19
+    }
+   ],
+   "filesize": 776754
+  },
+  {
+   "rid": 133912,
+   "fixture": "MagicBlade FX",
+   "manufacturer": "Ayrton",
+   "revision": "V2.91 Fix_3D_Vectorwork",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1773798523,
+   "lastModified": 1773807163,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "26415B57-5E6F-4241-BA12-ACD9E13D8643",
+   "modes": [
+    {
+     "name": "Extended",
+     "dmxfootprint": 46
+    },
+    {
+     "name": "Standard",
+     "dmxfootprint": 22
+    },
+    {
+     "name": "Basic",
+     "dmxfootprint": 19
+    }
+   ],
+   "filesize": 735549
+  },
+  {
+   "rid": 144763,
+   "fixture": "Robin SilverScan",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-05-29 Control channel fix",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1780036380,
+   "lastModified": 1780036386,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "E61EB1E1-78AE-4977-96CB-045A04831AFF",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard",
+     "dmxfootprint": 32
+    },
+    {
+     "name": "Mode 2 - Compatible with Viva",
+     "dmxfootprint": 26
+    }
+   ],
+   "filesize": 2735922
+  },
+  {
+   "rid": 116608,
+   "fixture": "Robin Esprite",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-11-07 Personality RDM number revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1762518903,
+   "lastModified": 1769003774,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "ED22065C-2C72-43FE-BA36-A81D53D0250D",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 bit",
+     "dmxfootprint": 49
+    },
+    {
+     "name": "Mode 2 - Reduced 8 bit",
+     "dmxfootprint": 42
+    },
+    {
+     "name": "Mode 3 - Standard 16 bit + green correction",
+     "dmxfootprint": 50
+    },
+    {
+     "name": "Mode 4 - Reduced 8 bit + green correction",
+     "dmxfootprint": 43
+    },
+    {
+     "name": "Mode 5 - Enhanced gobo control",
+     "dmxfootprint": 51
+    }
+   ],
+   "filesize": 6581580
+  },
+  {
+   "rid": 138392,
+   "fixture": "Robin MegaPointe",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-04-13 Shutter channel sets revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1776068063,
+   "lastModified": 1785218487,
+   "rating": "3.3",
+   "version": "1.2",
+   "uuid": "E3BD5003-C35C-4C69-AD69-E63ECF0FFB6B",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 - bit",
+     "dmxfootprint": 39
+    },
+    {
+     "name": "Mode 2 - Reduced 8 - bit",
+     "dmxfootprint": 34
+    }
+   ],
+   "filesize": 3049526
+  },
+  {
+   "rid": 60193,
+   "fixture": "Robin 800X LEDWash",
+   "manufacturer": "Robe Lighting",
+   "revision": "2024-03-25  3D models update  Wiring revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1711367919,
+   "lastModified": 1785824575,
+   "rating": "2.0",
+   "version": "1.2",
+   "uuid": "D1673E63-5289-4F71-B127-38580D39EEE6",
+   "modes": [
+    {
+     "name": "Mode 1 Extended with all zones 16bit",
+     "dmxfootprint": 38
+    },
+    {
+     "name": "Mode 2 Reduced RGBW 16bit",
+     "dmxfootprint": 22
+    },
+    {
+     "name": "Mode 3 Reduced RGBW 8bit",
+     "dmxfootprint": 16
+    },
+    {
+     "name": "Mode 4 Limited macro colors 8bit",
+     "dmxfootprint": 11
+    },
+    {
+     "name": "Mode 5 Extended all zones at the end 16bit",
+     "dmxfootprint": 38
+    },
+    {
+     "name": "Mode 6 All zones without shaper 16bit",
+     "dmxfootprint": 37
+    }
+   ],
+   "filesize": 1678415
+  },
+  {
+   "rid": 75307,
+   "fixture": "Robin Viva CMY",
+   "manufacturer": "Robe Lighting",
+   "revision": "2024-10-08  3D models revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1728392638,
+   "lastModified": 1769003504,
+   "rating": "5.0",
+   "version": "1.2",
+   "uuid": "BEB8B97D-FF49-4FBE-A834-9BE2C7BC689B",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 bit",
+     "dmxfootprint": 32
+    },
+    {
+     "name": "Mode 2 - Reduced 8 bit",
+     "dmxfootprint": 26
+    }
+   ],
+   "filesize": 2428761
+  },
+  {
+   "rid": 99778,
+   "fixture": "Robin SuperSpikie",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-06-11  Pan tilt continuous physical data revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1749635846,
+   "lastModified": 1769003658,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "E9594C30-AB04-4A3C-9225-F0780893806B",
+   "modes": [
+    {
+     "name": "Mode 1 Full",
+     "dmxfootprint": 31
+    }
+   ],
+   "filesize": 2528505
+  },
+  {
+   "rid": 119736,
+   "fixture": "Robin Tetra2",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-12-03 Reupload to share",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1764744823,
+   "lastModified": 1787149295,
+   "rating": "3.0",
+   "version": "1.2",
+   "uuid": "5A7B5195-AF40-4BDA-A658-CBAA98DFF9C0",
+   "modes": [
+    {
+     "name": "Mode 6-Pattern full RGBW",
+     "dmxfootprint": 128
+    },
+    {
+     "name": "Mode 5-Pattern full RGB",
+     "dmxfootprint": 110
+    },
+    {
+     "name": "Mode 4-Pixel RGBW",
+     "dmxfootprint": 115
+    },
+    {
+     "name": "Mode 3-Pixel RGB",
+     "dmxfootprint": 97
+    },
+    {
+     "name": "Mode 2-Pattern",
+     "dmxfootprint": 56
+    },
+    {
+     "name": "Mode 1-Wash",
+     "dmxfootprint": 34
+    }
+   ],
+   "filesize": 975613
+  },
+  {
+   "rid": 149945,
+   "fixture": "Khamsin",
+   "manufacturer": "Ayrton",
+   "revision": "V12.3 Add_RDM_Personality",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1783427530,
+   "lastModified": 1783427541,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "4B9CC2AC-8EEC-45A6-AF75-928E745744A7",
+   "modes": [
+    {
+     "name": "Extended_540",
+     "dmxfootprint": 64
+    },
+    {
+     "name": "Standard_540",
+     "dmxfootprint": 42
+    },
+    {
+     "name": "Basic_540",
+     "dmxfootprint": 40
+    }
+   ],
+   "filesize": 2390128
+  },
+  {
+   "rid": 2294,
+   "fixture": "ACME XP-260 BEAM",
+   "manufacturer": "ACME",
+   "revision": "ACME XP-260 BEAM",
+   "creator": "ACME-Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1578877778,
+   "lastModified": 1769003146,
+   "rating": "3.7",
+   "version": "1.0",
+   "uuid": "AC939BB5-2963-4CE3-9B80-95E57001B56E",
+   "modes": [
+    {
+     "name": "Mode 1 16 DMX",
+     "dmxfootprint": 16
+    },
+    {
+     "name": "Mode 2 13 DMX",
+     "dmxfootprint": 13
+    }
+   ],
+   "filesize": 2395047
+  },
+  {
+   "rid": 149944,
+   "fixture": "Karif",
+   "manufacturer": "Ayrton",
+   "revision": "V2.5 Add_RDM_Personality",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1783427443,
+   "lastModified": 1783427481,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "C501563B-D95B-4245-BD84-271867EE1C47",
+   "modes": [
+    {
+     "name": "Extended_540",
+     "dmxfootprint": 46
+    },
+    {
+     "name": "Standard_540",
+     "dmxfootprint": 34
+    },
+    {
+     "name": "Extended_Low_540",
+     "dmxfootprint": 40
+    },
+    {
+     "name": "Standard_Low_540",
+     "dmxfootprint": 30
+    }
+   ],
+   "filesize": 3105239
+  },
+  {
+   "rid": 133725,
+   "fixture": "MagicDot R",
+   "manufacturer": "Ayrton",
+   "revision": "V2.23 New_SVG",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1773712493,
+   "lastModified": 1773795798,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "10466B85-6349-465C-A5FA-8FF6F2A0183B",
+   "modes": [
+    {
+     "name": "Standard",
+     "dmxfootprint": 17
+    }
+   ],
+   "filesize": 410690
+  },
+  {
+   "rid": 40026,
+   "fixture": "MediaSpinner 100 AT",
+   "manufacturer": "Robe Lighting",
+   "revision": "2023-05-16  Wiring object revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1684228214,
+   "lastModified": 1769003266,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "B3F44AFF-E466-431C-954B-8C5855C32BE6",
+   "modes": [
+    {
+     "name": "Standard Mode",
+     "dmxfootprint": 4
+    }
+   ],
+   "filesize": 399448
+  },
+  {
+   "rid": 36315,
+   "fixture": "PATT 2013",
+   "manufacturer": "Robe Lighting",
+   "revision": "2023-03-10  Geometry and wiring object reivison",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1678431052,
+   "lastModified": 1769003249,
+   "rating": "3.0",
+   "version": "1.2",
+   "uuid": "F5B07246-A49C-4CB5-9704-EA8FA1D6E70C",
+   "modes": [
+    {
+     "name": "Needs external dimmer - mode with virtual channels",
+     "dmxfootprint": 0
+    },
+    {
+     "name": "Needs external dimmer - mode with 8 bit dimmer channel",
+     "dmxfootprint": 1
+    },
+    {
+     "name": "Needs external dimmer - mode with 16 bit dimmer channel 1",
+     "dmxfootprint": 2
+    }
+   ],
+   "filesize": 1077458
+  },
+  {
+   "rid": 143810,
+   "fixture": "Robin LEDBeam 150 FW RGBA",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-05-22 Control channel update",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1779437321,
+   "lastModified": 1779437358,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "8B3A0F4B-5D42-4FAC-8A15-91694AEF5F38",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 - bit",
+     "dmxfootprint": 22
+    },
+    {
+     "name": "Mode 2 - Reduced 8 - bit",
+     "dmxfootprint": 16
+    }
+   ],
+   "filesize": 747112
+  },
+  {
+   "rid": 143809,
+   "fixture": "Robin LEDBeam 150 RGBA",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-05-22 Control channel update",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1779437271,
+   "lastModified": 1779437298,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "3F156B69-158A-4648-9585-C034B79D97C9",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 - bit",
+     "dmxfootprint": 22
+    },
+    {
+     "name": "Mode 2 - Reduced 8 - bit",
+     "dmxfootprint": 16
+    }
+   ],
+   "filesize": 746622
+  },
+  {
+   "rid": 43311,
+   "fixture": "Robin ParFect 150 RGBW",
+   "manufacturer": "Robe Lighting",
+   "revision": "2023-07-14  Tilt revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1689331985,
+   "lastModified": 1769003279,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "1E30291F-96BD-41BE-B632-1EA1E491294D",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 - bit",
+     "dmxfootprint": 17
+    },
+    {
+     "name": "Mode 2 - Reduced 8 - bit",
+     "dmxfootprint": 11
+    }
+   ],
+   "filesize": 596211
+  },
+  {
+   "rid": 43464,
+   "fixture": "Robin ParFect 150 FW RGBW",
+   "manufacturer": "Robe Lighting",
+   "revision": "2023-07-17  3D models revision  Wiring objects revision  Tilt revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1689593570,
+   "lastModified": 1769003279,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "D0E34EEF-08B8-4573-9B15-D8685B58B83E",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 - bit",
+     "dmxfootprint": 17
+    },
+    {
+     "name": "Mode 2 - Reduced 8 - bit",
+     "dmxfootprint": 11
+    }
+   ],
+   "filesize": 596965
+  },
+  {
+   "rid": 143814,
+   "fixture": "Robin LEDBeam 150 RGBW",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-05-22 Control channel update",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1779437459,
+   "lastModified": 1784880315,
+   "rating": "4.0",
+   "version": "1.2",
+   "uuid": "D1380BEC-6A50-4023-AA33-A5BFF7629E59",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 - bit",
+     "dmxfootprint": 22
+    },
+    {
+     "name": "Mode 2 - Reduced 8 - bit",
+     "dmxfootprint": 16
+    }
+   ],
+   "filesize": 747469
+  },
+  {
+   "rid": 137926,
+   "fixture": "Robin ParFect 150 RGBA",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-04-09 Mode 3 added",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1775731749,
+   "lastModified": 1775731764,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "34256C03-78B4-44DA-A9AB-BAFB2EACB3B6",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 - bit",
+     "dmxfootprint": 17
+    },
+    {
+     "name": "Mode 2 - Reduced 8 - bit",
+     "dmxfootprint": 11
+    },
+    {
+     "name": "Mode 3 - RGBA",
+     "dmxfootprint": 8
+    }
+   ],
+   "filesize": 644879
+  },
+  {
+   "rid": 137927,
+   "fixture": "Robin ParFect 150 FW RGBA",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-04-09 Mode 3 added",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1775731787,
+   "lastModified": 1775731824,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "3BE17BF1-F0B4-4A2B-AFD0-D2DAD944F302",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 - bit",
+     "dmxfootprint": 17
+    },
+    {
+     "name": "Mode 2 - Reduced 8 - bit",
+     "dmxfootprint": 11
+    },
+    {
+     "name": "Mode 3 - RGBA",
+     "dmxfootprint": 8
+    }
+   ],
+   "filesize": 644392
+  },
+  {
+   "rid": 119741,
+   "fixture": "Robin Tarrantula",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-12-03  Reupload to share",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1764747180,
+   "lastModified": 1769003800,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "2FAF8A74-1CDD-4894-817F-79FD093C6128",
+   "modes": [
+    {
+     "name": "Mode 6-Pattern full RGBW",
+     "dmxfootprint": 196
+    },
+    {
+     "name": "Mode 5-Pattern full RGB",
+     "dmxfootprint": 159
+    },
+    {
+     "name": "Mode 4-Pixel RGBW",
+     "dmxfootprint": 183
+    },
+    {
+     "name": "Mode 3-Pixel RGB",
+     "dmxfootprint": 146
+    },
+    {
+     "name": "Mode 2-Pattern",
+     "dmxfootprint": 48
+    },
+    {
+     "name": "Mode 1-Wash",
+     "dmxfootprint": 28
+    }
+   ],
+   "filesize": 1651662
+  },
+  {
+   "rid": 135703,
+   "fixture": "Robin BMFL Spot",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-03-27 Color macro open slot revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1774599440,
+   "lastModified": 1774599449,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "1FE500B2-6CDC-40DD-AC68-20A47694FF2F",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 bit",
+     "dmxfootprint": 41
+    },
+    {
+     "name": "Mode 2 - Reduced 8 bit ",
+     "dmxfootprint": 33
+    }
+   ],
+   "filesize": 3838242
+  },
+  {
+   "rid": 151548,
+   "fixture": "Robin T1 PC",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-07-20 Color control channel update",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1784551391,
+   "lastModified": 1784551407,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "813870FD-D997-497B-9FD1-F6C861D5B5EA",
+   "modes": [
+    {
+     "name": "Mode 1 - CMY",
+     "dmxfootprint": 35
+    },
+    {
+     "name": "Mode 1 - RGB",
+     "dmxfootprint": 35
+    },
+    {
+     "name": "Mode 2 - Reduced CMY",
+     "dmxfootprint": 24
+    },
+    {
+     "name": "Mode 2 - Reduced RGB",
+     "dmxfootprint": 24
+    },
+    {
+     "name": "Mode 3 - RGBAL",
+     "dmxfootprint": 39
+    }
+   ],
+   "filesize": 1429279
+  },
+  {
+   "rid": 151549,
+   "fixture": "Robin T1 Fresnel",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-07-20 Color Control channel update",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1784552704,
+   "lastModified": 1784552727,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "681CD12F-CF51-4227-89FD-722FE8D497E0",
+   "modes": [
+    {
+     "name": "Mode 1 - CMY",
+     "dmxfootprint": 35
+    },
+    {
+     "name": "Mode 1 - RGB",
+     "dmxfootprint": 35
+    },
+    {
+     "name": "Mode 2 - Reduced CMY",
+     "dmxfootprint": 24
+    },
+    {
+     "name": "Mode 2 - Reduced RGB",
+     "dmxfootprint": 24
+    },
+    {
+     "name": "Mode 3 - RGBAL",
+     "dmxfootprint": 39
+    }
+   ],
+   "filesize": 1439382
+  },
+  {
+   "rid": 3679,
+   "fixture": "ACME BW-14 FC II",
+   "manufacturer": "ACME",
+   "revision": "ACME BW-14 FC II",
+   "creator": "ACME-Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1584404201,
+   "lastModified": 1769003147,
+   "rating": "N/A",
+   "version": "1.0",
+   "uuid": "A2F6C013-E050-411A-8319-C2FBB64544FB",
+   "modes": [
+    {
+     "name": "Mode 1 7 DMX",
+     "dmxfootprint": 7
+    },
+    {
+     "name": "Mode 2 6 DMX",
+     "dmxfootprint": 6
+    },
+    {
+     "name": "Mode 3 5 DMX",
+     "dmxfootprint": 5
+    },
+    {
+     "name": "Mode 4 4 DMX",
+     "dmxfootprint": 4
+    }
+   ],
+   "filesize": 106771
+  },
+  {
+   "rid": 3680,
+   "fixture": "ACME BW-545",
+   "manufacturer": "ACME",
+   "revision": "ACME BW-545",
+   "creator": "ACME-Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1584404278,
+   "lastModified": 1769003147,
+   "rating": "N/A",
+   "version": "1.0",
+   "uuid": "A908B635-3CEA-43FC-96D6-8B85FC187ED3",
+   "modes": [
+    {
+     "name": "Mode 1 7 DMX",
+     "dmxfootprint": 7
+    },
+    {
+     "name": "Mode 2 6 DMX",
+     "dmxfootprint": 6
+    },
+    {
+     "name": "Mode 3 5 DMX",
+     "dmxfootprint": 5
+    },
+    {
+     "name": "Mode 4 4 DMX",
+     "dmxfootprint": 4
+    }
+   ],
+   "filesize": 113339
+  },
+  {
+   "rid": 116798,
+   "fixture": "Robin Esprite FS",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-11-10  Personality RDM number revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1762761259,
+   "lastModified": 1769003775,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "E1E97FEA-4D9E-482D-84AB-C6E83E48A569",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 bit",
+     "dmxfootprint": 49
+    },
+    {
+     "name": "Mode 2 - Reduced 8 bit",
+     "dmxfootprint": 42
+    },
+    {
+     "name": "Mode 3 - Standard 16 bit + green correction",
+     "dmxfootprint": 50
+    },
+    {
+     "name": "Mode 4 - Reduced 8 bit + green correction",
+     "dmxfootprint": 43
+    },
+    {
+     "name": "Mode 5 - Enhanced gobo control",
+     "dmxfootprint": 51
+    }
+   ],
+   "filesize": 6825007
+  },
+  {
+   "rid": 143811,
+   "fixture": "Robin LEDBeam 150 FW RGBW",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-05-22 Control channel update",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1779437343,
+   "lastModified": 1779437358,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "7AE4C53A-8E93-4FCC-AE05-5FD36121CE2C",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 - bit",
+     "dmxfootprint": 22
+    },
+    {
+     "name": "Mode 2 - Reduced 8 - bit",
+     "dmxfootprint": 16
+    }
+   ],
+   "filesize": 747306
+  },
+  {
+   "rid": 116621,
+   "fixture": "Robin iPointe",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-11-07  Personality RDM number revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1762520538,
+   "lastModified": 1769003774,
+   "rating": "5.0",
+   "version": "1.2",
+   "uuid": "A7A87C68-F9CA-4894-B307-78B7838006C9",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 - bit",
+     "dmxfootprint": 39
+    },
+    {
+     "name": "Mode 2 - Reduced 8 - bit",
+     "dmxfootprint": 34
+    }
+   ],
+   "filesize": 3400803
+  },
+  {
+   "rid": 149930,
+   "fixture": "Diablo",
+   "manufacturer": "Ayrton",
+   "revision": "V2.6 Add_RDM_Personality",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1783426550,
+   "lastModified": 1783426581,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "DCE7AA4F-2147-4B6A-9607-15A09D692A6F",
+   "modes": [
+    {
+     "name": "Extended_540_S",
+     "dmxfootprint": 56
+    },
+    {
+     "name": "Standard_540_S",
+     "dmxfootprint": 36
+    },
+    {
+     "name": "Basic_540_S",
+     "dmxfootprint": 34
+    }
+   ],
+   "filesize": 2245432
+  },
+  {
+   "rid": 86174,
+   "fixture": "Robin DL7S Profile",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-02-12  Framing shutter rotation fix  3D models revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1739361429,
+   "lastModified": 1769003565,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "C9F1E863-8A41-4899-9A32-FB3E71A1A9B5",
+   "modes": [
+    {
+     "name": "Mode 1 - RGB",
+     "dmxfootprint": 51
+    },
+    {
+     "name": "Mode 2 - RGB reduced",
+     "dmxfootprint": 42
+    },
+    {
+     "name": "Mode 3 - 7 colors",
+     "dmxfootprint": 59
+    },
+    {
+     "name": "Mode 4 - 7 colors reduced",
+     "dmxfootprint": 46
+    },
+    {
+     "name": "Mode 1 - CMY",
+     "dmxfootprint": 51
+    },
+    {
+     "name": "Mode 2 - CMY",
+     "dmxfootprint": 42
+    }
+   ],
+   "filesize": 4146072
+  },
+  {
+   "rid": 135708,
+   "fixture": "Robin BMFL FollowSpot",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-03-27 Color macro open slot revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1774599694,
+   "lastModified": 1784880293,
+   "rating": "2.0",
+   "version": "1.2",
+   "uuid": "3011BF1D-1705-4D79-A5C9-945418E8E776",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 bit",
+     "dmxfootprint": 33
+    },
+    {
+     "name": "Mode 2 - Reduced 8 bit",
+     "dmxfootprint": 27
+    }
+   ],
+   "filesize": 1448786
+  },
+  {
+   "rid": 3956,
+   "fixture": "ACME MP-300Z",
+   "manufacturer": "ACME",
+   "revision": "ACME MP-300Z",
+   "creator": "ACME-Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1585188829,
+   "lastModified": 1769003148,
+   "rating": "5.0",
+   "version": "1.0",
+   "uuid": "8BDECEAE-37AA-4806-9575-6492E54B6F57",
+   "modes": [
+    {
+     "name": "Mode 1 8 DMX",
+     "dmxfootprint": 8
+    },
+    {
+     "name": "Mode 2 6 DMX",
+     "dmxfootprint": 6
+    },
+    {
+     "name": "Mode 3 5 DMX",
+     "dmxfootprint": 5
+    }
+   ],
+   "filesize": 104455
+  },
+  {
+   "rid": 135709,
+   "fixture": "Robin BMFL FollowSpot LT",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-03-27 Color macro open slot revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1774599737,
+   "lastModified": 1774599749,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "1B8F51CC-27FA-4C76-9B88-3463D8633E66",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 bit",
+     "dmxfootprint": 33
+    },
+    {
+     "name": "Mode 2 - Reduced 8 bit",
+     "dmxfootprint": 27
+    }
+   ],
+   "filesize": 1506801
+  },
+  {
+   "rid": 135704,
+   "fixture": "Robin BMFL Wash",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-03-27 Color macro open slot revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1774599499,
+   "lastModified": 1774599509,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "D7A0726B-9E75-44ED-9A05-292B1648AC1F",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 bit",
+     "dmxfootprint": 25
+    },
+    {
+     "name": "Mode 2 - Reduced 8 bit",
+     "dmxfootprint": 21
+    }
+   ],
+   "filesize": 1465007
+  },
+  {
+   "rid": 135706,
+   "fixture": "Robin BMFL WashBeam",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-03-27 Color macro open slot revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1774599605,
+   "lastModified": 1774599629,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "8F468525-A7B9-4972-888B-272016F70CC2",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 bit",
+     "dmxfootprint": 48
+    },
+    {
+     "name": "Mode 2 - Reduced",
+     "dmxfootprint": 41
+    }
+   ],
+   "filesize": 2555513
+  },
+  {
+   "rid": 135524,
+   "fixture": "Robin BMFL Blade",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-03-26 Color macro empty wheel slots revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1774516321,
+   "lastModified": 1774516348,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "7F8C97FD-5A4A-403F-9486-A3A06FBFF570",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 bit",
+     "dmxfootprint": 49
+    },
+    {
+     "name": "Mode 2 - Standard 8 bit",
+     "dmxfootprint": 42
+    }
+   ],
+   "filesize": 3721926
+  },
+  {
+   "rid": 135705,
+   "fixture": "Robin BMFL Wash XF",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-03-27 Color macro open slot revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1774599558,
+   "lastModified": 1774599569,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "F0E59181-CCFA-4ABC-AA85-BBF79AFACE5C",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16 bit",
+     "dmxfootprint": 34
+    },
+    {
+     "name": "Mode 2 - Reduced 8 bit",
+     "dmxfootprint": 30
+    }
+   ],
+   "filesize": 1490400
+  },
+  {
+   "rid": 4267,
+   "fixture": "ACME XP-5000SZ NF",
+   "manufacturer": "ACME",
+   "revision": "ACME XP-5000SZ NF",
+   "creator": "ACME-Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1586482359,
+   "lastModified": 1769003148,
+   "rating": "N/A",
+   "version": "1.0",
+   "uuid": "BA56E19E-5B71-4822-AEA3-08E392F8C25C",
+   "modes": [
+    {
+     "name": "Mode 1 26 DMX",
+     "dmxfootprint": 26
+    },
+    {
+     "name": "Mode  2 28 DMX",
+     "dmxfootprint": 28
+    }
+   ],
+   "filesize": 666110
+  },
+  {
+   "rid": 149939,
+   "fixture": "Ghibli",
+   "manufacturer": "Ayrton",
+   "revision": "V2.4 Add_RDM_Personality",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1783427101,
+   "lastModified": 1783427121,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "2E7392E6-03F5-423B-85C0-7A1B4BBB99CD",
+   "modes": [
+    {
+     "name": "Extended_540",
+     "dmxfootprint": 58
+    },
+    {
+     "name": "Standard_540",
+     "dmxfootprint": 38
+    },
+    {
+     "name": "Basic_540",
+     "dmxfootprint": 36
+    }
+   ],
+   "filesize": 2489349
+  },
+  {
+   "rid": 149960,
+   "fixture": "Mistral",
+   "manufacturer": "Ayrton",
+   "revision": "V2.3 Add_RDM_Personality",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1783428325,
+   "lastModified": 1783428381,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "B202AAD1-2AB8-4750-AD77-A01EECDA5F75",
+   "modes": [
+    {
+     "name": "Extended_540",
+     "dmxfootprint": 39
+    },
+    {
+     "name": "Standard_540",
+     "dmxfootprint": 28
+    },
+    {
+     "name": "Basic_540",
+     "dmxfootprint": 26
+    }
+   ],
+   "filesize": 2667252
+  },
+  {
+   "rid": 4875,
+   "fixture": "ACME XP-1000SZ",
+   "manufacturer": "ACME",
+   "revision": "ACME XP-1000SZ",
+   "creator": "ACME-Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1588578894,
+   "lastModified": 1769003149,
+   "rating": "N/A",
+   "version": "1.0",
+   "uuid": "CCE075C7-C4B2-4CFD-9D41-871946316A32",
+   "modes": [
+    {
+     "name": "Mode 1 26 DMX",
+     "dmxfootprint": 26
+    },
+    {
+     "name": "Mode 2 34 DMX",
+     "dmxfootprint": 34
+    },
+    {
+     "name": "Mode 3 28 DMX",
+     "dmxfootprint": 28
+    },
+    {
+     "name": "Mode 4 24 DMX",
+     "dmxfootprint": 24
+    },
+    {
+     "name": "Mode 5 21 DMX",
+     "dmxfootprint": 21
+    }
+   ],
+   "filesize": 1972454
+  },
+  {
+   "rid": 4877,
+   "fixture": "ACME XP-1000SZ C",
+   "manufacturer": "ACME",
+   "revision": "ACME XP-1000SZ C",
+   "creator": "ACME-Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1588579362,
+   "lastModified": 1769003149,
+   "rating": "N/A",
+   "version": "1.0",
+   "uuid": "C5844404-351D-4426-A1E7-825FCD197DCB",
+   "modes": [
+    {
+     "name": "Mode 1 21 DMX",
+     "dmxfootprint": 21
+    }
+   ],
+   "filesize": 1813359
+  },
+  {
+   "rid": 4879,
+   "fixture": "ACME XP-1000SZ T",
+   "manufacturer": "ACME",
+   "revision": "ACME XP-1000SZ T",
+   "creator": "ACME-Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1588579508,
+   "lastModified": 1769003149,
+   "rating": "N/A",
+   "version": "1.0",
+   "uuid": "E27DA892-BE75-4F5A-94AE-C59D4A4958D0",
+   "modes": [
+    {
+     "name": "Mode 1 26 DMX",
+     "dmxfootprint": 26
+    },
+    {
+     "name": "Mode 2 34 DMX",
+     "dmxfootprint": 34
+    },
+    {
+     "name": "Mode 3 28 DMX",
+     "dmxfootprint": 28
+    },
+    {
+     "name": "Mode 4 24 DMX",
+     "dmxfootprint": 24
+    },
+    {
+     "name": "Mode 5 21 DMX",
+     "dmxfootprint": 21
+    }
+   ],
+   "filesize": 1971316
+  },
+  {
+   "rid": 119735,
+   "fixture": "Robin Tetra1",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-12-03 Reupload to share",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1764744768,
+   "lastModified": 1769003800,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "980DB5C1-7315-47BA-9AE7-BF841B62FFA8",
+   "modes": [
+    {
+     "name": "Mode 6 Pattern full RGBW",
+     "dmxfootprint": 81
+    },
+    {
+     "name": "Mode 5 - Pattern full RGB",
+     "dmxfootprint": 72
+    },
+    {
+     "name": "Mode 4 - Pixel RGBW",
+     "dmxfootprint": 68
+    },
+    {
+     "name": "Mode 3 - Pixel RGB",
+     "dmxfootprint": 59
+    },
+    {
+     "name": "Mode 2 - Pattern",
+     "dmxfootprint": 45
+    },
+    {
+     "name": "Mode 1 - Wash",
+     "dmxfootprint": 25
+    }
+   ],
+   "filesize": 830278
+  },
+  {
+   "rid": 97310,
+   "fixture": "Robin DL4S Profile",
+   "manufacturer": "Robe Lighting",
+   "revision": "2025-05-20  Tilt physical values revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1747720650,
+   "lastModified": 1769003643,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "499B1A8A-D5F4-45E6-A8D7-4BB99BB18E1F",
+   "modes": [
+    {
+     "name": "Mode 1 RGBW",
+     "dmxfootprint": 47
+    },
+    {
+     "name": "Mode 1 CMY",
+     "dmxfootprint": 47
+    },
+    {
+     "name": "Mode 2 RGBW Reduced",
+     "dmxfootprint": 38
+    },
+    {
+     "name": "Mode 2 CMY Reduced",
+     "dmxfootprint": 38
+    },
+    {
+     "name": "Mode 3 RGBW Minimal",
+     "dmxfootprint": 36
+    },
+    {
+     "name": "Mode 3 CMY Minimal",
+     "dmxfootprint": 36
+    }
+   ],
+   "filesize": 2244838
+  },
+  {
+   "rid": 149928,
+   "fixture": "Bora",
+   "manufacturer": "Ayrton",
+   "revision": "V2.3 Add_RDM_Personality",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1783426192,
+   "lastModified": 1783426221,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "909FFF22-C13F-4FB0-ADF6-021DF77890E0",
+   "modes": [
+    {
+     "name": "Extended_540",
+     "dmxfootprint": 52
+    },
+    {
+     "name": "Standard_540",
+     "dmxfootprint": 32
+    },
+    {
+     "name": "Basic_540",
+     "dmxfootprint": 30
+    }
+   ],
+   "filesize": 613784
+  },
+  {
+   "rid": 149947,
+   "fixture": "Levante",
+   "manufacturer": "Ayrton",
+   "revision": "V2.3 Add_RDM_Personality",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1783427670,
+   "lastModified": 1783427721,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "E119B052-ECC0-4C1B-83BC-1477B3A78BB1",
+   "modes": [
+    {
+     "name": "Extended_540",
+     "dmxfootprint": 50
+    },
+    {
+     "name": "Standard_540",
+     "dmxfootprint": 31
+    },
+    {
+     "name": "Basic_540",
+     "dmxfootprint": 29
+    }
+   ],
+   "filesize": 602034
+  },
+  {
+   "rid": 30472,
+   "fixture": "Robin 300X LEDWash",
+   "manufacturer": "Robe Lighting",
+   "revision": "2022-11-10  DMX Input adjustment",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1668120679,
+   "lastModified": 1769003229,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "B21CDC43-451A-4C8C-9ACA-31FA78C28CDC",
+   "modes": [
+    {
+     "name": "Mode 1 Extended with all zones 16bit",
+     "dmxfootprint": 37
+    },
+    {
+     "name": "Mode 2 Reduced RGBW 16bit",
+     "dmxfootprint": 21
+    },
+    {
+     "name": "Mode 3 Reduced RGBW 8bit",
+     "dmxfootprint": 15
+    },
+    {
+     "name": "Mode 4 Limited macro colors 8bit",
+     "dmxfootprint": 10
+    },
+    {
+     "name": "Mode 5 Extended all zones at the end 16bit",
+     "dmxfootprint": 37
+    }
+   ],
+   "filesize": 964766
+  },
+  {
+   "rid": 60184,
+   "fixture": "Robin 300 LEDWash",
+   "manufacturer": "Robe Lighting",
+   "revision": "2024-03-25  Zoom range fix",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1711363224,
+   "lastModified": 1769003382,
+   "rating": "3.5",
+   "version": "1.2",
+   "uuid": "D738BFE5-4300-4E4E-8FD1-21A2A80CD405",
+   "modes": [
+    {
+     "name": "Mode 1 Extended with all zones 16bit",
+     "dmxfootprint": 37
+    },
+    {
+     "name": "Mode 2 Reduced  RGBW 16bit",
+     "dmxfootprint": 21
+    },
+    {
+     "name": "Mode 3 Reduced RGBW 8bit",
+     "dmxfootprint": 15
+    },
+    {
+     "name": "Mode 4 Limited macro colors 8bit",
+     "dmxfootprint": 10
+    },
+    {
+     "name": "Mode 5 Extended all zones at the end 16bit",
+     "dmxfootprint": 37
+    }
+   ],
+   "filesize": 960657
+  },
+  {
+   "rid": 60186,
+   "fixture": "Robin 600 LEDWash",
+   "manufacturer": "Robe Lighting",
+   "revision": "2024-03-25  Zoom range fix",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1711363241,
+   "lastModified": 1769003382,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "1C8C3DB6-A31F-4220-BD67-99035290B312",
+   "modes": [
+    {
+     "name": "Mode 1 Extended with all zones 16bit",
+     "dmxfootprint": 37
+    },
+    {
+     "name": "Mode 2 Reduced RGBW Wash 16bit",
+     "dmxfootprint": 21
+    },
+    {
+     "name": "Mode 3 Reduced RGBW Wash 8bit",
+     "dmxfootprint": 15
+    },
+    {
+     "name": "Mode 4 Limited macro colors 8bit",
+     "dmxfootprint": 10
+    },
+    {
+     "name": "Mode 5 Extended all zones at the end 16bit",
+     "dmxfootprint": 37
+    },
+    {
+     "name": "Mode 6 Extended all zones 8bit",
+     "dmxfootprint": 25
+    }
+   ],
+   "filesize": 1519175
+  },
+  {
+   "rid": 57382,
+   "fixture": "Robin 600X LEDWash",
+   "manufacturer": "Robe Lighting",
+   "revision": "2024-02-09  3D models with robe colors revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1707481928,
+   "lastModified": 1769003362,
+   "rating": "3.5",
+   "version": "1.2",
+   "uuid": "E45DA792-D888-441D-9E05-D8F0F5D7E263",
+   "modes": [
+    {
+     "name": "Mode 1 Extended with all zones 16bit",
+     "dmxfootprint": 37
+    },
+    {
+     "name": "Mode 2 Reduced RGBW Wash 16bit",
+     "dmxfootprint": 21
+    },
+    {
+     "name": "Mode 3 Reduced RGBW Wash 8bit",
+     "dmxfootprint": 15
+    },
+    {
+     "name": "Mode 4 Limited macro colors 8bit",
+     "dmxfootprint": 10
+    },
+    {
+     "name": "Mode 5 Extended all zones at the end 16bit",
+     "dmxfootprint": 37
+    },
+    {
+     "name": "Mode 6 Extended all zones 8bit",
+     "dmxfootprint": 24
+    }
+   ],
+   "filesize": 1523785
+  },
+  {
+   "rid": 33436,
+   "fixture": "Robin MiniMe",
+   "manufacturer": "Robe Lighting",
+   "revision": "2023-01-24  3D models simplification",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1674575919,
+   "lastModified": 1769003239,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "92D02B9C-0B03-4B00-975B-7B58D84C94B4",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard",
+     "dmxfootprint": 24
+    }
+   ],
+   "filesize": 3544750
+  },
+  {
+   "rid": 151546,
+   "fixture": "Robin T1 Profile",
+   "manufacturer": "Robe Lighting",
+   "revision": "2026-07-20 Color Control channel update 2",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1784550353,
+   "lastModified": 1784550387,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "F067E11C-F3E9-485B-B60D-5A15580DC6B0",
+   "modes": [
+    {
+     "name": "Mode 1 - CMY",
+     "dmxfootprint": 49
+    },
+    {
+     "name": "Mode 1 - RGB",
+     "dmxfootprint": 49
+    },
+    {
+     "name": "Mode 2 - Reduced CMY",
+     "dmxfootprint": 33
+    },
+    {
+     "name": "Mode 2 - Reduced RGB",
+     "dmxfootprint": 33
+    },
+    {
+     "name": "Mode 3 - RGBAL",
+     "dmxfootprint": 53
+    }
+   ],
+   "filesize": 4296111
+  },
+  {
+   "rid": 149938,
+   "fixture": "Eurus",
+   "manufacturer": "Ayrton",
+   "revision": "V2.7 Add_RDM_Personality",
+   "creator": "AyrtonDigitalLighting",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1783427005,
+   "lastModified": 1783427061,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "AE9A256A-A35D-4B4C-9347-4974227836AC",
+   "modes": [
+    {
+     "name": "Extended_540",
+     "dmxfootprint": 62
+    },
+    {
+     "name": "Standard_540",
+     "dmxfootprint": 41
+    },
+    {
+     "name": "Basic_540",
+     "dmxfootprint": 39
+    }
+   ],
+   "filesize": 2392469
+  },
+  {
+   "rid": 62416,
+   "fixture": "Robin MiniPointe",
+   "manufacturer": "Robe Lighting",
+   "revision": "2024-04-23  Gobo channels revision",
+   "creator": "Robe Lighting s.r.o.",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1713880960,
+   "lastModified": 1769003395,
+   "rating": "2.5",
+   "version": "1.2",
+   "uuid": "0EA0F6C7-B695-4BCE-A25A-1B42D5215C7A",
+   "modes": [
+    {
+     "name": "Mode 1 - Standard 16bit",
+     "dmxfootprint": 22
+    },
+    {
+     "name": "Mode 2 - Reduced 8 bit",
+     "dmxfootprint": 17
+    },
+    {
+     "name": "Mode 3 - Extended 16 bit",
+     "dmxfootprint": 27
+    }
+   ],
+   "filesize": 1612713
+  },
+  {
+   "rid": 346,
+   "fixture": "LED RGB8",
+   "manufacturer": "Generic",
+   "revision": "Updated fixture type to GDTF 1.0",
+   "creator": "dmueller",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1553700175,
+   "lastModified": 1769003145,
+   "rating": "2.8",
+   "version": "1.0",
+   "uuid": "467D16E2-689F-420C-9334-332CF6DA4ECD",
+   "modes": [
+    {
+     "name": "Default",
+     "dmxfootprint": 3
+    }
+   ],
+   "filesize": 5175
+  },
+  {
+   "rid": 91231,
+   "fixture": "V2000W II",
+   "manufacturer": "Terbly",
+   "revision": "Corrected all rotation channel defaults",
+   "creator": "GoldenSea",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1743039802,
+   "lastModified": 1769003597,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "BFFC36B4-5EF4-4F9C-8A03-80966559304A",
+   "modes": [
+    {
+     "name": "Standard",
+     "dmxfootprint": 18
+    },
+    {
+     "name": "Extended",
+     "dmxfootprint": 26
+    }
+   ],
+   "filesize": 480567
+  },
+  {
+   "rid": 92473,
+   "fixture": "P12 Profile WW",
+   "manufacturer": "JB-Lighting",
+   "revision": "V_2_00",
+   "creator": "JB-Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1744019346,
+   "lastModified": 1769003605,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "CF2214AB-91F7-4E36-AB91-925DFA908F56",
+   "modes": [
+    {
+     "name": "Profile Mode 1 (42 ch) Frame Mode AB",
+     "dmxfootprint": 42
+    },
+    {
+     "name": "Profile Mode 2 (63 ch) Frame Mode AB",
+     "dmxfootprint": 63
+    },
+    {
+     "name": "Profile Mode 1 (42 ch) Frame Mode MA",
+     "dmxfootprint": 42
+    },
+    {
+     "name": "Profile Mode 2 (63 ch) Frame Mode MA",
+     "dmxfootprint": 63
+    },
+    {
+     "name": "Profile Mode 1 (42 ch) Frame Mode AB 70%",
+     "dmxfootprint": 42
+    },
+    {
+     "name": "Profile Mode 2 (63 ch) Frame Mode AB 70%",
+     "dmxfootprint": 63
+    },
+    {
+     "name": "Profile Mode 1 (42 ch) Frame Mode MA 70%",
+     "dmxfootprint": 42
+    },
+    {
+     "name": "Profile Mode 2 (63 ch) Frame Mode MA 70%",
+     "dmxfootprint": 63
+    }
+   ],
+   "filesize": 1898495
+  },
+  {
+   "rid": 18300,
+   "fixture": "FINE 440 BSW ENHA",
+   "manufacturer": "Fine Art",
+   "revision": "20211025",
+   "creator": "kolei.hu",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1635120691,
+   "lastModified": 1769179557,
+   "rating": "N/A",
+   "version": "1.1",
+   "uuid": "3DFE3E8B-F1EC-4CF6-922D-DBE2F5D17A1E",
+   "modes": [
+    {
+     "name": "STND",
+     "dmxfootprint": 30
+    },
+    {
+     "name": "16BT",
+     "dmxfootprint": 34
+    },
+    {
+     "name": "EXTN",
+     "dmxfootprint": 34
+    }
+   ],
+   "filesize": 1046618
+  },
+  {
+   "rid": 27628,
+   "fixture": "Lightcard",
+   "manufacturer": "Jack Dartford",
+   "revision": "V2.4",
+   "creator": "jackdartford",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1661939062,
+   "lastModified": 1769003214,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "E5B4CC58-16EA-4C96-8F05-C4FA46FC1065",
+   "modes": [
+    {
+     "name": "16bit",
+     "dmxfootprint": 0
+    }
+   ],
+   "filesize": 16125
+  },
+  {
+   "rid": 48238,
+   "fixture": "Paladin Cube",
+   "manufacturer": "Elation",
+   "revision": "23-02-10 First Release",
+   "creator": "Elation",
+   "uploader": "Manuf.",
+   "description": "The PALADIN CUBE™ is a compact and powerful outdoor floodlight for a wide variety of applications. Using 9x15W RGBW cells it provides a total output of up to 3,200 lumens. Certified to IP65 it features a rugged design with a solid build quality, eliminating the need to worry about dust and water ingress. IP rated connections make it an ideal product to illuminate large areas of any outdoor event with vibrant and powerful colors. It can be operated standing on the floor or be hung in any orientation using the provided omega brackets. Available cell control and strobe features make the PALADIN CUBE also a versatile effects fixture or audience blinder.",
+   "creationDate": 1696268192,
+   "lastModified": 1769003313,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "E999BC75-3BAA-40FC-9A1D-9DAB8BC3E55A",
+   "modes": [
+    {
+     "name": "Extended +Cells 32CH",
+     "dmxfootprint": 32
+    },
+    {
+     "name": "Cells+Dim 26CH",
+     "dmxfootprint": 26
+    },
+    {
+     "name": "Cells 24CH",
+     "dmxfootprint": 24
+    },
+    {
+     "name": "Extended 16CH",
+     "dmxfootprint": 16
+    },
+    {
+     "name": "16bit Dim 10CH",
+     "dmxfootprint": 10
+    },
+    {
+     "name": "16bit 8CH",
+     "dmxfootprint": 8
+    },
+    {
+     "name": "8bit 4CH",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "RGB 3CH",
+     "dmxfootprint": 3
+    },
+    {
+     "name": "HSI-Ext 10CH",
+     "dmxfootprint": 10
+    },
+    {
+     "name": "HSI 4CH",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "HSI+Cells 17CH",
+     "dmxfootprint": 17
+    }
+   ],
+   "filesize": 493162
+  },
+  {
+   "rid": 85479,
+   "fixture": "Maverick Storm 2 BeamWash",
+   "manufacturer": "Chauvet Professional",
+   "revision": "P/T Phys Values Inverted - Matches ma3d",
+   "creator": "menemeth",
+   "uploader": "User",
+   "description": "",
+   "creationDate": 1738692462,
+   "lastModified": 1782753933,
+   "rating": "4.0",
+   "version": "1.2",
+   "uuid": "3E52B14F-B8F0-4250-8407-FD1A502600FC",
+   "modes": [
+    {
+     "name": "Single Control: Basic 31ch",
+     "dmxfootprint": 31
+    },
+    {
+     "name": "Single Control: Standard 143ch",
+     "dmxfootprint": 143
+    },
+    {
+     "name": "Single Control: Advanced 263ch",
+     "dmxfootprint": 263
+    },
+    {
+     "name": "Single Control: Tour 325ch",
+     "dmxfootprint": 325
+    },
+    {
+     "name": "Single Control: Basic2 37ch",
+     "dmxfootprint": 37
+    },
+    {
+     "name": "Single Control: Busking 19Ch",
+     "dmxfootprint": 19
+    },
+    {
+     "name": "Single Control: Basic3 37Ch",
+     "dmxfootprint": 37
+    },
+    {
+     "name": "Dual Control Mode Movement: Advanced 45ch",
+     "dmxfootprint": 45
+    },
+    {
+     "name": "Dual Control Mode Movement: Standard 34ch",
+     "dmxfootprint": 34
+    },
+    {
+     "name": "Dual Control Mode Movement: Basic 11ch",
+     "dmxfootprint": 11
+    },
+    {
+     "name": "Dual Control Mode Pixels Advanced 224ch",
+     "dmxfootprint": 224
+    },
+    {
+     "name": "Dual Control Mode Pixels: Standard 112ch",
+     "dmxfootprint": 112
+    },
+    {
+     "name": "Dual Control Mode Pixels: Basic 93ch",
+     "dmxfootprint": 93
+    }
+   ],
+   "filesize": 2184845
+  },
+  {
+   "rid": 38425,
+   "fixture": "F2 D V1-5",
+   "manufacturer": "Cameo",
+   "revision": "Firmware_1.5_GDTF_V1.2_incl._Barndoor",
+   "creator": "Cameo",
+   "uploader": "Manuf.",
+   "description": "Daylight LED Fresnel Spot Light\r\n\r\n- Daylight LED Fresnel with 5,400 K colour temperature and 15,000 lm output\r\n- Perfect replacement for conventional 1 kW Fresnels\r\n- Faithful colour reproduction, CRI rating of 96, TLCI of 97\r\n- Continuously variable zoom for 15° to 40° beam spread\r\n- 16-bit dimming with 4 selectable curves and adjustable response\r\n- Super efficient heat pipe cooling and temperature controlled fan for optimum operation\r\n- RDM enabled\r\n- Selectable PWM frequencies up to 25 kHz\r\n- Flicker-free and silent operation, ideal for TV, film and theatre applications\r\n- Includes 8-way barn door and gel frame",
+   "creationDate": 1681294927,
+   "lastModified": 1769003257,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "AF795C4D-C758-42AD-97B0-F84105B7DEDE",
+   "modes": [
+    {
+     "name": "5CH",
+     "dmxfootprint": 5
+    },
+    {
+     "name": "4CH",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "3CH",
+     "dmxfootprint": 3
+    },
+    {
+     "name": "2CH Strobe",
+     "dmxfootprint": 2
+    },
+    {
+     "name": "2CH 16Bit",
+     "dmxfootprint": 2
+    },
+    {
+     "name": "1CH",
+     "dmxfootprint": 1
+    }
+   ],
+   "filesize": 953246
+  },
+  {
+   "rid": 92166,
+   "fixture": "JDC Line 1000",
+   "manufacturer": "GLP",
+   "revision": "20250404_JDCLine1000_byRG_prelimV1",
+   "creator": "German Light Products",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1743695722,
+   "lastModified": 1769003603,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "935170CD-6BEB-443F-84B8-EEC744652C29",
+   "modes": [
+    {
+     "name": "Mode 1 RGBW Strobe (32ch)",
+     "dmxfootprint": 32
+    },
+    {
+     "name": "Mode 2 W Strobe + RGB Strobe (68ch)",
+     "dmxfootprint": 68
+    },
+    {
+     "name": "Mode 3 W Strobe  RGB Pixel (168ch)",
+     "dmxfootprint": 168
+    },
+    {
+     "name": "Mode 4 W + RGB Strobe + W Pixel (94ch)",
+     "dmxfootprint": 94
+    },
+    {
+     "name": "Mode 5 Multipix (196ch)",
+     "dmxfootprint": 196
+    },
+    {
+     "name": "Mode 6 Multipix Advanced (316ch)",
+     "dmxfootprint": 316
+    },
+    {
+     "name": "Mode 7 Multipix Quadpix (76ch)",
+     "dmxfootprint": 76
+    }
+   ],
+   "filesize": 852005
+  },
+  {
+   "rid": 49563,
+   "fixture": "Q7",
+   "manufacturer": "SGM Light",
+   "revision": "BETA 1.1",
+   "creator": "LordOrange",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1698142547,
+   "lastModified": 1782566712,
+   "rating": "2.8",
+   "version": "1.2",
+   "uuid": "9B293A60-AA9A-41DA-9741-2B876C193084",
+   "modes": [
+    {
+     "name": "3Ch",
+     "dmxfootprint": 3
+    },
+    {
+     "name": "4Ch",
+     "dmxfootprint": 4
+    }
+   ],
+   "filesize": 1190878
+  },
+  {
+   "rid": 57836,
+   "fixture": "Vertex System",
+   "manufacturer": "Ioversal",
+   "revision": "20240218",
+   "creator": "ioversal",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1708270825,
+   "lastModified": 1769003365,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "CD541AFA-B074-4C0F-8514-B32084DD775C",
+   "modes": [
+    {
+     "name": "Basic",
+     "dmxfootprint": 6
+    }
+   ],
+   "filesize": 59110
+  },
+  {
+   "rid": 92232,
+   "fixture": "Solaframe Theater",
+   "manufacturer": "High End Systems",
+   "revision": "michael",
+   "creator": "mfaucon@legrandr.com",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1743762764,
+   "lastModified": 1785941925,
+   "rating": "2.5",
+   "version": "1.2",
+   "uuid": "B3C7B4A6-1D51-49BF-AFA3-1E071D878CCC",
+   "modes": [
+    {
+     "name": "Mode0",
+     "dmxfootprint": 48
+    }
+   ],
+   "filesize": 328538
+  },
+  {
+   "rid": 74496,
+   "fixture": "Rush MH6",
+   "manufacturer": "Martin Professional",
+   "revision": "working",
+   "creator": "ronin",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1727352252,
+   "lastModified": 1769003497,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "5754B184-7BF2-46EE-8298-FAD883F9254F",
+   "modes": [
+    {
+     "name": "Default",
+     "dmxfootprint": 14
+    }
+   ],
+   "filesize": 646274
+  },
+  {
+   "rid": 72548,
+   "fixture": "MiniMax",
+   "manufacturer": "MDG",
+   "revision": "Release_1.0",
+   "creator": "MDG Fog Generators",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1725200696,
+   "lastModified": 1769003475,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "56AE06C1-0096-8000-95BF-0C420B0ADF3D",
+   "modes": [
+    {
+     "name": "Mode 0",
+     "dmxfootprint": 2
+    }
+   ],
+   "filesize": 1404770
+  },
+  {
+   "rid": 72082,
+   "fixture": "ACME CHAMPAGNE (AM1 WW)",
+   "manufacturer": "ACME",
+   "revision": "ACME CHAMPAGNE (AM1 WW)",
+   "creator": "ACME-Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1724737880,
+   "lastModified": 1769003473,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "AA1AF3C9-A345-4FB9-A11B-1801253E3490",
+   "modes": [
+    {
+     "name": "Mode 3 10 DMX",
+     "dmxfootprint": 10
+    },
+    {
+     "name": "Mode 2 9 DMX",
+     "dmxfootprint": 9
+    },
+    {
+     "name": "Mode 1 7 DMX",
+     "dmxfootprint": 7
+    }
+   ],
+   "filesize": 573124
+  },
+  {
+   "rid": 74405,
+   "fixture": "Solaris UrbanColor 1x16 RGBW 35deg",
+   "manufacturer": "Solaris",
+   "revision": "v2.13 - MFR Release",
+   "creator": "Solaris",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1727290336,
+   "lastModified": 1769003492,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "0765D3FA-C9B6-42D6-9833-6FF648392F5B",
+   "modes": [
+    {
+     "name": "RGBW 1pix8b (4ch)",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "RGBW 1pix16b (8ch)",
+     "dmxfootprint": 8
+    },
+    {
+     "name": "RGBW 2pix8b (8ch)",
+     "dmxfootprint": 8
+    },
+    {
+     "name": "RGBW 2pix16b (16 ch)",
+     "dmxfootprint": 16
+    },
+    {
+     "name": "RGBW 4pix8b (16ch)",
+     "dmxfootprint": 16
+    },
+    {
+     "name": "RGBW 4pix16b (32ch)",
+     "dmxfootprint": 32
+    },
+    {
+     "name": "RGB 1pix8b (3ch)",
+     "dmxfootprint": 3
+    },
+    {
+     "name": "RGB 1pix16b (6ch)",
+     "dmxfootprint": 6
+    },
+    {
+     "name": "RGB 2pix8b (6ch)",
+     "dmxfootprint": 6
+    },
+    {
+     "name": "RGB 2pix16b (12 ch)",
+     "dmxfootprint": 12
+    },
+    {
+     "name": "RGB 4pix8b (12ch)",
+     "dmxfootprint": 12
+    },
+    {
+     "name": "RGB 4pix16b (24ch)",
+     "dmxfootprint": 24
+    }
+   ],
+   "filesize": 562974
+  },
+  {
+   "rid": 80332,
+   "fixture": "ParKolor 60DW",
+   "manufacturer": "Starway",
+   "revision": "V1-00",
+   "creator": "StarWay_Official",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1733491950,
+   "lastModified": 1769003529,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "A59BF875-C090-47D8-AD02-5FE992429280",
+   "modes": [
+    {
+     "name": "9CH",
+     "dmxfootprint": 9
+    },
+    {
+     "name": "6CH CCT",
+     "dmxfootprint": 6
+    },
+    {
+     "name": "6CH",
+     "dmxfootprint": 6
+    },
+    {
+     "name": "4CH CCT",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "5CH",
+     "dmxfootprint": 5
+    },
+    {
+     "name": "3CH CCT",
+     "dmxfootprint": 3
+    },
+    {
+     "name": "4CH",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "2CH Dim 16Bit",
+     "dmxfootprint": 2
+    },
+    {
+     "name": "1CH Dim 8Bit",
+     "dmxfootprint": 1
+    }
+   ],
+   "filesize": 729004
+  },
+  {
+   "rid": 121336,
+   "fixture": "TA200CZ PRO",
+   "manufacturer": "Eagle Lite",
+   "revision": "Version 1",
+   "creator": "Eagle Lite",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1765885028,
+   "lastModified": 1769003810,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "8269239A-6A16-40C5-B7F8-156EA46B23D9",
+   "modes": [
+    {
+     "name": "2 Channel Mode",
+     "dmxfootprint": 2
+    },
+    {
+     "name": "13 ch Mode",
+     "dmxfootprint": 13
+    },
+    {
+     "name": "8 Channel Mode",
+     "dmxfootprint": 8
+    }
+   ],
+   "filesize": 489471
+  },
+  {
+   "rid": 89304,
+   "fixture": "DMH-75",
+   "manufacturer": "Futurelight",
+   "revision": "pm-173612032025",
+   "creator": "umpi_",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1741797371,
+   "lastModified": 1769003585,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "8143DB73-0920-4609-BB70-C806A77FA950",
+   "modes": [
+    {
+     "name": "Extended",
+     "dmxfootprint": 18
+    },
+    {
+     "name": "Standard",
+     "dmxfootprint": 16
+    },
+    {
+     "name": "Basic 16bit",
+     "dmxfootprint": 18
+    },
+    {
+     "name": "Basic 8bit",
+     "dmxfootprint": 12
+    }
+   ],
+   "filesize": 311443
+  },
+  {
+   "rid": 94507,
+   "fixture": "House Cornice",
+   "manufacturer": "Fun_known_Set",
+   "revision": "ver1",
+   "creator": "dvvlite",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1745435714,
+   "lastModified": 1769003627,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "3BE8DED6-64B9-44C3-BB02-FD303CC079A2",
+   "modes": [
+    {
+     "name": "Default",
+     "dmxfootprint": 0
+    }
+   ],
+   "filesize": 11547
+  },
+  {
+   "rid": 98103,
+   "fixture": "Layout grouping",
+   "manufacturer": "Flashforme",
+   "revision": "1st Edition",
+   "creator": "Flashforme",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1748349173,
+   "lastModified": 1769003648,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "AEF56C66-EC39-4897-B5E0-B9F487E59E93",
+   "modes": [
+    {
+     "name": "Standard",
+     "dmxfootprint": 0
+    }
+   ],
+   "filesize": 2555
+  },
+  {
+   "rid": 103232,
+   "fixture": "Hector MHPS - 600",
+   "manufacturer": "stagetronix",
+   "revision": "Ver 1",
+   "creator": "Joy26",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1752043217,
+   "lastModified": 1769003681,
+   "rating": "1.0",
+   "version": "1.2",
+   "uuid": "4BD8F807-AA8C-4DBA-8CAC-A2CBC28D6B86",
+   "modes": [
+    {
+     "name": "Standard Mode",
+     "dmxfootprint": 18
+    }
+   ],
+   "filesize": 845633
+  },
+  {
+   "rid": 114938,
+   "fixture": "V20",
+   "manufacturer": "CKC Lighting",
+   "revision": "Revision 1",
+   "creator": "CKC Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1761288052,
+   "lastModified": 1769003763,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "F32673DC-8D12-40E9-AD0F-E039B8B656FF",
+   "modes": [
+    {
+     "name": "Standard 38CH",
+     "dmxfootprint": 38
+    },
+    {
+     "name": "Extend 54CH",
+     "dmxfootprint": 54
+    }
+   ],
+   "filesize": 1285697
+  },
+  {
+   "rid": 111116,
+   "fixture": "Luminex LumiCore",
+   "manufacturer": "Lazza",
+   "revision": "V01_SwitchModeTested",
+   "creator": "alelzzrn",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1758147668,
+   "lastModified": 1769003730,
+   "rating": "5.0",
+   "version": "1.2",
+   "uuid": "F84D8995-7534-C928-DA44-9209C9E98F2F",
+   "modes": [
+    {
+     "name": "Switch",
+     "dmxfootprint": 1
+    },
+    {
+     "name": "Backup",
+     "dmxfootprint": 1
+    },
+    {
+     "name": "X-Fade",
+     "dmxfootprint": 1
+    },
+    {
+     "name": "Play",
+     "dmxfootprint": 1
+    }
+   ],
+   "filesize": 409867
+  },
+  {
+   "rid": 116059,
+   "fixture": "ARC W100",
+   "manufacturer": "CKC Lighting",
+   "revision": "Revision 2",
+   "creator": "CKC Lighting",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1762171216,
+   "lastModified": 1769003770,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "1175268A-2188-44EA-84C0-D6C7FF2174EF",
+   "modes": [
+    {
+     "name": "14CH",
+     "dmxfootprint": 14
+    },
+    {
+     "name": "8CH",
+     "dmxfootprint": 8
+    }
+   ],
+   "filesize": 582726
+  },
+  {
+   "rid": 121245,
+   "fixture": "Rainfall Pro",
+   "manufacturer": "Sparktacular",
+   "revision": "Fixed default purge channel to off",
+   "creator": "tgentilhomme",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1765819809,
+   "lastModified": 1769003809,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "1AA95DC1-498F-44B9-A540-A92FA405F08C",
+   "modes": [
+    {
+     "name": "4 Channel",
+     "dmxfootprint": 4
+    }
+   ],
+   "filesize": 256968
+  },
+  {
+   "rid": 127416,
+   "fixture": "LUX STROBE BAR FG",
+   "manufacturer": "Pro Lux",
+   "revision": "rev1",
+   "creator": "PROLUX",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1770195468,
+   "lastModified": 1770196586,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "F81ED291-AE1D-4606-8721-8A38707EB11D",
+   "modes": [
+    {
+     "name": "Mode 1 7DMX",
+     "dmxfootprint": 7
+    },
+    {
+     "name": "Mode 2 15DMX",
+     "dmxfootprint": 13
+    },
+    {
+     "name": "21ch",
+     "dmxfootprint": 21
+    },
+    {
+     "name": "Mode 4 39DMX",
+     "dmxfootprint": 39
+    },
+    {
+     "name": "Mode 5 112DMX",
+     "dmxfootprint": 112
+    },
+    {
+     "name": "Mode 6 16DMX",
+     "dmxfootprint": 16
+    },
+    {
+     "name": "Mode 7 33DMX",
+     "dmxfootprint": 33
+    },
+    {
+     "name": "Mode 8 65DMX",
+     "dmxfootprint": 65
+    },
+    {
+     "name": "Mode 9 68DMX",
+     "dmxfootprint": 68
+    },
+    {
+     "name": "Mode 10 117DMX",
+     "dmxfootprint": 117
+    }
+   ],
+   "filesize": 654866
+  },
+  {
+   "rid": 134469,
+   "fixture": "Double Sharpy_Beam Moving Head",
+   "manufacturer": "Kimu",
+   "revision": "Revision 9",
+   "creator": "BKF_Events",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1773999774,
+   "lastModified": 1774252060,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "513B7E5A-13A3-49AC-8E55-EB63E86D7C47",
+   "modes": [
+    {
+     "name": "Beam",
+     "dmxfootprint": 87
+    }
+   ],
+   "filesize": 1106355
+  },
+  {
+   "rid": 140684,
+   "fixture": "IPLED32CDLWD",
+   "manufacturer": "Sagitter",
+   "revision": "29/04/26 UPDATE RDM",
+   "creator": "Sagitter",
+   "uploader": "Manuf.",
+   "description": null,
+   "creationDate": 1777468349,
+   "lastModified": 1777468384,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "BD684A6D-0F00-491B-8F1B-2D0B7D0707F7",
+   "modes": [
+    {
+     "name": "96Ch",
+     "dmxfootprint": 96
+    },
+    {
+     "name": "48Ch",
+     "dmxfootprint": 48
+    },
+    {
+     "name": "16 Ch",
+     "dmxfootprint": 16
+    },
+    {
+     "name": "11 Ch",
+     "dmxfootprint": 11
+    },
+    {
+     "name": "10 Ch",
+     "dmxfootprint": 10
+    },
+    {
+     "name": "6 Ch",
+     "dmxfootprint": 6
+    }
+   ],
+   "filesize": 109193
+  },
+  {
+   "rid": 144053,
+   "fixture": "Performer Profile Zoom 150 Q6",
+   "manufacturer": "Showtec",
+   "revision": "TR16",
+   "creator": "mgjbz",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1779617007,
+   "lastModified": 1779617044,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "4A28C9B9-6B32-4174-B1A4-2B7963F240F6",
+   "modes": [
+    {
+     "name": "20ch TR16",
+     "dmxfootprint": 20
+    }
+   ],
+   "filesize": 23102
+  },
+  {
+   "rid": 149629,
+   "fixture": "Iridium Arc Par 7z",
+   "manufacturer": "Iridium",
+   "revision": "20241107NoMeas",
+   "creator": "Maxpierrr",
+   "uploader": "User",
+   "description": null,
+   "creationDate": 1783253085,
+   "lastModified": 1783253120,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "4D620248-1992-417F-94D2-2291E405B724",
+   "modes": [
+    {
+     "name": "12 channel",
+     "dmxfootprint": 12
+    },
+    {
+     "name": "14 channel",
+     "dmxfootprint": 14
+    },
+    {
+     "name": "2 channel",
+     "dmxfootprint": 2
+    },
+    {
+     "name": "4 channel",
+     "dmxfootprint": 4
+    },
+    {
+     "name": "8 channel",
+     "dmxfootprint": 8
+    }
+   ],
+   "filesize": 932349
+  },
+  {
+   "rid": 155957,
+   "fixture": "Attack CombiStrobe RGBcWwW",
+   "manufacturer": "BeamZ",
+   "revision": "rev100a RELEASE",
+   "creator": "beamz",
+   "uploader": "Manuf.",
+   "description": "",
+   "creationDate": 1786968808,
+   "lastModified": 1786969275,
+   "rating": "N/A",
+   "version": "1.2",
+   "uuid": "8D07CE77-8C4A-4953-A8A8-1B82B62F68BF",
+   "modes": [
+    {
+     "name": "112 Ch Pixel + Virtual Dimmer",
+     "dmxfootprint": 112
+    },
+    {
+     "name": "112 Ch Pixel",
+     "dmxfootprint": 112
+    },
+    {
+     "name": "11 Ch Ext",
+     "dmxfootprint": 11
+    },
+    {
+     "name": "5 Ch RGB_wW_cW",
+     "dmxfootprint": 5
+    }
+   ],
+   "filesize": 393544
+  }
+ ]
+}

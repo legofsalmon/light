@@ -1,0 +1,48 @@
+{
+  "_": "Truss, risers and screens, shared by both previz renderers. previz/src/scene.rs reads this with include_str! + serde; ui/src/components/Previz3D.tsx imports it directly. Same reason as shared/figure.json: the two views had drifted, and here it was the WEB that was richer \u2014 it drew a truss lattice, a two-tone riser and a framed screen while the native view drew all four kinds as one plain box. Lengths metres, angles radians.",
+  "materials": {
+    "truss": {
+      "color": "#757580",
+      "roughness": 0.5,
+      "metallic": 0.3
+    },
+    "skirt": {
+      "color": "#191920",
+      "roughness": 0.95,
+      "metallic": 0.0
+    },
+    "deck": {
+      "color": "#2b2b33",
+      "roughness": 0.88,
+      "metallic": 0.0
+    },
+    "screen": {
+      "color": "#0d0d12",
+      "roughness": 0.6,
+      "metallic": 0.0
+    }
+  },
+  "_materials": "Truss metallic is 0.30, not the 0.75 the web used. A metal's colour is what it reflects and neither scene has an environment map, so 0.75 renders as a black bar in the native window.",
+  "truss": {
+    "chordRatio": 0.08621,
+    "webRatio": 0.62,
+    "bayRatio": 1.7241,
+    "minChord": 0.012
+  },
+  "_truss": "A lattice RULE rather than a table, because a placed truss carries its own section from the patch while an inferred run is a fixed 0.29 m. Ratios are relative to the section: chord radius = section * chordRatio (0.025 at 0.29, the value the inferred runs were authored with, so that path renders identically), web member radius = chord * webRatio, and one bay per section * bayRatio (0.5 m at 0.29). Four chords at the section corners; zigzag webbing on the two vertical faces and the underside \u2014 a real truss webs all four, but nobody is ever above the top one \u2014 plus a vertical rung at each node, which is what stops the zigzag reading as a lightning bolt.",
+  "riser": {
+    "deckThickness": 0.05
+  },
+  "_riser": "A skirt the full height with a deck slab forming its TOP. The slab's top face must stay exactly at y + size.h and must not overhang the skirt: buildOccluders, standingHeightAt and floor_height_at all treat a riser as one box from y to y + h with no notion of sub-parts, so a slab sitting proud silently desyncs beam cutting from where a performer's feet are put. Centring the slab ON y + h is exactly the 25 mm bug fixed in bd67d28.",
+  "screen": {
+    "bezel": 0.08,
+    "faceDepth": 0.4,
+    "faceProud": 0.004
+  },
+  "_screen": "A dark face inside a frame, both staying INSIDE the declared box so the beam occluder and the plan hit-test \u2014 which both take w x h x d as truth \u2014 are not lying. bezel is how far the face is inset in w and h; faceDepth is the fraction of depth the face occupies; faceProud is how far its front stands ahead of the frame's. That last one is not styling: give them the same front plane and they z-fight into a dithered mess.",
+  "trussLegFoot": {
+    "spread": 2.2,
+    "thickness": 0.04
+  },
+  "_trussLegFoot": "A base plate under a standing leg, spread x its section."
+}

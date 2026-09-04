@@ -9,6 +9,14 @@ export type HeadDef = {
   kind: HeadKind;
   /** metres along the fixture's local X axis (for multi-head bars) */
   offset: number;
+  /** metres along the fixture's local Y axis (up) — pixel layouts are 2D.
+   *  Absent on every built-in (they are flat bars); imported profiles carry
+   *  real values once B1 parses or the layout editor writes them. */
+  offsetY?: number;
+  /** grid coordinates within the fixture; when every head of a profile is
+   *  (0, 0) the geometry builder falls back to col = head index, one row */
+  row?: number;
+  col?: number;
 };
 
 /** Fully-resolved per-head parameters after the layer merge — profile input.
@@ -28,6 +36,13 @@ export type ResolvedParams = {
   tilt: number;
   haze: number;
   fan: number;
+  /** Beam parameters, null until a look sets one. Null means "nobody asked",
+   *  and the channel holds whatever the fixture's profile parks it at. */
+  zoom: number | null;
+  focus: number | null;
+  iris: number | null;
+  frost: number | null;
+  cto: number | null;
 };
 
 export function defaultResolved(): ResolvedParams {
@@ -35,6 +50,7 @@ export function defaultResolved(): ResolvedParams {
     dimmer: 0, r: 1, g: 1, b: 1, white: 0, ringFx: 0, strobe: 0,
     motorMode: 'off', motorValue: 0, macro: null, pan: 0.5, tilt: 0.5,
     haze: 0, fan: 0,
+    zoom: null, focus: null, iris: null, frost: null, cto: null,
   };
 }
 

@@ -1,7 +1,65 @@
 use std::collections::HashMap;
 
 use crate::clock::BeatClock;
-use crate::types::{clamp, clamp01, Command, MidiAction, MidiMapping, MidiType, Project};
+use crate::types::{
+    clamp, clamp01, soft_clamp, Command, MidiAction, MidiMapping, MidiType, Project, SoftField,
+    SoftSnap,
+};
+
+/// Soft overrides for one (look, part): part-level fields plus per-effect
+/// fields. Grouped so the renderer resolves a whole part with one lookup.
+#[derive(Debug, Clone, Default)]
+pub struct SoftPatch {
+    pub params: HashMap<SoftField, f64>,
+    pub effects: HashMap<String, HashMap<SoftField, f64>>,
+}
+
+/// Route one soft part-field onto PartParams. Hue/Sat address the colour
+/// components, creating the colour with the other component at its default
+/// (s 1 / h 0) when the look never set one. Mirrors applySoftParam in
+/// engine/state.ts — identical routing or stored shows diverge.
+pub fn apply_soft_param(params: &mut crate::types::PartParams, field: SoftField, v: f64) {
+    match field {
+        SoftField::Hue => {
+            let s = params.color.map_or(1.0, |c| c.s);
+            params.color = Some(crate::types::ColorHS { h: v, s });
+        }
+        SoftField::Sat => {
+            let h = params.color.map_or(0.0, |c| c.h);
+            params.color = Some(crate::types::ColorHS { h, s: v });
+        }
+        SoftField::Dimmer => params.dimmer = Some(v),
+        SoftField::White => params.white = Some(v),
+        SoftField::RingFx => params.ring_fx = Some(v),
+        SoftField::Strobe => params.strobe = Some(v),
+        SoftField::MotorValue => params.motor_value = Some(v),
+        SoftField::Pan => params.pan = Some(v),
+        SoftField::Tilt => params.tilt = Some(v),
+        SoftField::Haze => params.haze = Some(v),
+        SoftField::Fan => params.fan = Some(v),
+        SoftField::Zoom => params.zoom = Some(v),
+        SoftField::Focus => params.focus = Some(v),
+        SoftField::Iris => params.iris = Some(v),
+        SoftField::Frost => params.frost = Some(v),
+        SoftField::Cto => params.cto = Some(v),
+        // effect-only fields never reach a params patch (set_soft routes)
+        SoftField::Rate | SoftField::Size | SoftField::Spread | SoftField::Width
+        | SoftField::Phase | SoftField::Mix => {}
+    }
+}
+
+/// Route one soft effect-field onto an Effect.
+pub fn apply_soft_effect(e: &mut crate::types::Effect, field: SoftField, v: f64) {
+    match field {
+        SoftField::Rate => e.rate = v,
+        SoftField::Size => e.size = v,
+        SoftField::Spread => e.spread = v,
+        SoftField::Width => e.width = v,
+        SoftField::Phase => e.phase = v,
+        SoftField::Mix => e.mix = v,
+        _ => {}
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct LayerLive {
@@ -84,7 +142,41 @@ mod uid_tests {
 /// engines cannot disagree the way a structural f64 compare would.
 fn layout_sig(p: &crate::cprofile::CompiledProfile) -> String {
     let names: Vec<&str> = p.channels.iter().map(|c| c.name.as_str()).collect();
-    format!("{}|{}|{}", p.footprint, p.heads.len(), names.join(","))
+    // The head layout signs too (B1): since the layout editor, offsets and
+    // row/col are operator-authored state — a re-import that changes them is a
+    // replacement worth announcing. Engine-local strings, never compared
+    // across engines, so the float formatting needs no parity discipline.
+    let heads: Vec<String> = p
+        .heads
+        .iter()
+        .map(|h| format!("{:.4},{:.4},{},{}", h.offset, h.offset_y, h.row, h.col))
+        .collect();
+    format!("{}|{}|{}|{}", p.footprint, p.heads.len(), names.join(","), heads.join(";"))
+}
+
+/// An operator-authored pixel layout must survive a re-import that brings no
+/// layout of its own. The flat fallback is recognisable — every head at
+/// (row 0, col 0) — and a stored non-flat layout on a same-shape profile is
+/// strictly better informed than that, so it wins, silently (nothing is
+/// lost, so there is nothing to warn about). A file that carries REAL parsed
+/// geometry has non-flat heads and stays authoritative — re-importing a
+/// corrected file must still correct, and describe_profile_replacement
+/// announces the layout change.
+fn preserve_authored_layout(project: &Project, incoming: &mut crate::cprofile::CompiledProfile) {
+    let Some(existing) = project.profiles.get(&incoming.id) else { return };
+    if existing.heads.len() != incoming.heads.len() {
+        return;
+    }
+    let flat =
+        |hs: &[crate::cprofile::CHead]| hs.iter().all(|h| h.row == 0 && h.col == 0);
+    if flat(&incoming.heads) && !flat(&existing.heads) {
+        for (inc, ex) in incoming.heads.iter_mut().zip(&existing.heads) {
+            inc.offset = ex.offset;
+            inc.offset_y = ex.offset_y;
+            inc.row = ex.row;
+            inc.col = ex.col;
+        }
+    }
 }
 
 /// Replacing a profile that fixtures are patched to rewrites what every one of
@@ -139,11 +231,19 @@ pub struct Outcome {
     pub launch_previz: bool,
     /// tap/resync: land the effect phase on a downbeat
     pub align_phase: bool,
+    /// the engine rewrote an updateProject it was given, so the client that
+    /// sent it is now holding something different from what the engine has
+    pub repaired_submission: bool,
 }
 
 /// Minimal base64 decode (standard alphabet, padding optional) — the import
 /// path only; not worth a dependency.
-fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
+///
+/// Public so the app shell's Share downloader can test that what it encodes is
+/// exactly what this decodes. The two halves of that trip are written by hand
+/// in two crates; a known-answer test on one side proves nothing about the
+/// other.
+pub fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
     const ALPHA: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut rev = [255u8; 256];
     for (i, &c) in ALPHA.iter().enumerate() {
@@ -189,7 +289,24 @@ pub struct EngineState {
     pub preview_look: Option<String>,
     /// universe id -> channel(0-511) -> value. Raw override, applied last.
     pub overrides: HashMap<String, HashMap<usize, u8>>,
+    /// P1 soft overrides: live rides over stored look data, keyed
+    /// (look id, part id) and grouped per part so the renderer resolves a
+    /// whole part with ONE lookup. Runtime-only — SoftCommit writes them into
+    /// the project, SoftClear/AllStop/project switch drops them.
+    pub soft: HashMap<(String, String), SoftPatch>,
+    /// Live Named Control positions (P3). Runtime-only; the STORED position
+    /// is Control.value in the project. Cleared with the soft layer.
+    pub control_live: HashMap<String, f64>,
     pub learn_target: Option<MidiAction>,
+    /// TEST ONLY — a pending effect-clock pin (LIGHT_TEST_CLOCK gated), consumed
+    /// by the engine loop before the next tick. Not show state; never persisted.
+    pub pending_pin: Option<f64>,
+    /// Monotonic project generation. Bumped on every change to the project, and
+    /// echoed to clients, which quote it back as updateProject.base_gen so a
+    /// stale full-project write (composed before a deck switch, a project open,
+    /// or another client's edit) can be rejected instead of clobbering the newer
+    /// state. Runtime-only — never saved, never reset on load.
+    pub gen: u64,
 }
 
 impl EngineState {
@@ -205,16 +322,35 @@ impl EngineState {
             identify: None,
             preview_look: None,
             overrides: HashMap::new(),
+            soft: HashMap::new(),
+            control_live: HashMap::new(),
             learn_target: None,
+            gen: 1,
+            pending_pin: None,
         };
         st.ensure_decks();
         st.reconcile();
         st
     }
 
+    /// Advance the project generation. Called wherever the project content
+    /// changes, so the value clients quote back always reflects the latest
+    /// authoritative state.
+    pub fn bump_gen(&mut self) {
+        self.gen = self.gen.wrapping_add(1);
+    }
+
     /// Older projects have no pages — the current grid becomes deck 1, and
     /// the active deck id must always resolve. Mirrors the Node sanitiser.
-    fn ensure_decks(&mut self) {
+    /// Returns true if it CHANGED the project.
+    ///
+    /// That matters beyond bookkeeping: an updateProject echo is withheld from
+    /// the client that sent it, on the grounds that the client already holds
+    /// that state. It does not, if this rewrote it — and then every other client
+    /// learns about the repair while the one holding the wrong copy does not,
+    /// and re-sends the unrepaired version on its next edit.
+    fn ensure_decks(&mut self) -> bool {
+        let mut changed = false;
         if self.project.decks.is_empty() {
             let cells: HashMap<String, Vec<Option<String>>> = self
                 .project
@@ -229,6 +365,7 @@ impl EngineState {
                 cells,
             });
             self.project.active_deck_id = Some("deck-1".into());
+            changed = true;
         }
         let active_ok = self
             .project
@@ -238,7 +375,9 @@ impl EngineState {
             .unwrap_or(false);
         if !active_ok {
             self.project.active_deck_id = Some(self.project.decks[0].id.clone());
+            changed = true;
         }
+        changed
     }
 
     /// Switch the active grid page: store the current cells into the outgoing
@@ -301,7 +440,15 @@ impl EngineState {
             .position(|d| Some(&d.id) == self.project.active_deck_id.as_ref())
             .unwrap_or(0) as i32;
         let n = self.project.decks.len() as i32;
-        let j = ((i + dir) % n + n) % n;
+        // CLAMP, do not wrap. The APC bank arrows are an eyes-off control: one
+        // press too many at the last song used to land silently on song 1, and
+        // with Resolume follow-columns armed the next column launch fires the
+        // opener's looks. Every console clamps here. Mirrored in
+        // engine/state.ts and in the UI's [ / ] handler.
+        let j = (i + dir).clamp(0, n - 1);
+        if j == i {
+            return false; // already at the end — nothing moved
+        }
         let id = self.project.decks[j as usize].id.clone();
         self.switch_deck(&id, t)
     }
@@ -468,7 +615,7 @@ impl EngineState {
             let continuous = matches!(
                 action,
                 MidiAction::LayerMaster { .. } | MidiAction::Grand | MidiAction::Speed | MidiAction::Haze
-            );
+             | MidiAction::Control { .. });
             if kind == MidiType::Note && continuous && !is_note_on {
                 continue;
             }
@@ -537,6 +684,11 @@ impl EngineState {
             }
             MidiAction::DeckNext => pressed && self.deck_step(1, t),
             MidiAction::DeckPrev => pressed && self.deck_step(-1, t),
+            MidiAction::Control { control_id } => {
+                let id = control_id.clone();
+                self.set_control(&id, value);
+                false
+            }
         }
     }
 
@@ -555,22 +707,255 @@ impl EngineState {
     /// stop it, because the renderer's blackout branch deliberately leaves haze
     /// alone. The fan goes with it — it runs independently of the haze level
     /// and it is the audible one.
+    /// Store profiles a worker has already compiled from a .gdtf.
+    ///
+    /// Cheap: a HashMap insert per DMX mode. The expensive half — base64 decode
+    /// and XML parse — happens off the tick thread.
+    pub fn apply_gdtf(
+        &mut self,
+        name: &str,
+        parsed: Result<Vec<crate::cprofile::CompiledProfile>, String>,
+        credit: Option<String>,
+    ) -> Outcome {
+        let mut out = Outcome::default();
+        match parsed {
+            Ok(profiles) => {
+                let ids: Vec<String> = profiles.iter().map(|p| p.id.clone()).collect();
+                let mut replaced: Vec<String> = Vec::new();
+                for mut p in profiles {
+                    // Attribution travels with the profile into the project
+                    // file — see CompiledProfile::credit.
+                    p.credit = credit.clone();
+                    preserve_authored_layout(&self.project, &mut p);
+                    if let Some(note) = describe_profile_replacement(&self.project, &p) {
+                        replaced.push(note);
+                    }
+                    self.project.profiles.insert(p.id.clone(), p);
+                }
+                out.project_changed = true;
+                let mut msg = format!("{name}: imported {} mode(s)", ids.len());
+                for note in &replaced {
+                    msg.push_str(&format!(" · {note}"));
+                }
+                out.import_result = Some((true, msg, ids));
+            }
+            Err(e) => out.import_result = Some((false, format!("{name}: {e}"), vec![])),
+        }
+        out
+    }
+
+    /// Apply an MVR scene a worker has already parsed.
+    pub fn apply_mvr_parsed(
+        &mut self,
+        name: &str,
+        parsed: Result<crate::mvr::MvrBundle, String>,
+        replace: bool,
+        t: f64,
+    ) -> Outcome {
+        let mut out = Outcome::default();
+        match parsed {
+            Ok(bundle) => {
+                let n = self.apply_mvr(bundle, replace, t);
+                out.project_changed = true;
+                out.import_result = Some((true, format!("{name}: {n}"), vec![]));
+            }
+            Err(e) => out.import_result = Some((false, format!("{name}: {e}"), vec![])),
+        }
+        out
+    }
+
+    /// Ingest one soft override (P1). Validates the address against the
+    /// CURRENT project and clamps the value at the door, so the renderer never
+    /// meets a dangling or out-of-range ride. value None clears the entry.
+    /// Mirrors setSoft in engine/state.ts.
+    pub fn set_soft(
+        &mut self,
+        look_id: &str,
+        part_id: &str,
+        effect_id: Option<&str>,
+        field: SoftField,
+        value: Option<f64>,
+    ) -> bool {
+        let Some(look) = self.project.looks.get(look_id) else { return false };
+        let Some(part) = look.parts.iter().find(|pt| pt.id == part_id) else { return false };
+        if let Some(eid) = effect_id {
+            if !part.effects.iter().any(|e| e.id == eid) {
+                return false;
+            }
+        }
+        let key = (look_id.to_string(), part_id.to_string());
+        match value {
+            None => {
+                let Some(patch) = self.soft.get_mut(&key) else { return false };
+                if let Some(eid) = effect_id {
+                    if let Some(ef) = patch.effects.get_mut(eid) {
+                        ef.remove(&field);
+                        if ef.is_empty() {
+                            patch.effects.remove(eid);
+                        }
+                    }
+                } else {
+                    patch.params.remove(&field);
+                }
+                if patch.params.is_empty() && patch.effects.is_empty() {
+                    self.soft.remove(&key);
+                }
+                true
+            }
+            Some(raw) => {
+                let Some(v) = soft_clamp(field, raw) else { return false };
+                let patch = self.soft.entry(key).or_default();
+                if let Some(eid) = effect_id {
+                    patch.effects.entry(eid.to_string()).or_default().insert(field, v);
+                } else {
+                    patch.params.insert(field, v);
+                }
+                true
+            }
+        }
+    }
+
+    /// Flat view of the live rides, for the snapshot. Sorted for a stable
+    /// wire order (HashMap iteration is arbitrary).
+    pub fn soft_entries(&self) -> Vec<SoftSnap> {
+        let mut out: Vec<SoftSnap> = Vec::new();
+        for ((look_id, part_id), patch) in &self.soft {
+            for (field, value) in &patch.params {
+                out.push(SoftSnap {
+                    look_id: look_id.clone(),
+                    part_id: part_id.clone(),
+                    effect_id: None,
+                    field: *field,
+                    value: *value,
+                });
+            }
+            for (effect_id, fields) in &patch.effects {
+                for (field, value) in fields {
+                    out.push(SoftSnap {
+                        look_id: look_id.clone(),
+                        part_id: part_id.clone(),
+                        effect_id: Some(effect_id.clone()),
+                        field: *field,
+                        value: *value,
+                    });
+                }
+            }
+        }
+        out.sort_by(|a, b| {
+            (&a.look_id, &a.part_id, &a.effect_id, format!("{:?}", a.field))
+                .cmp(&(&b.look_id, &b.part_id, &b.effect_id, format!("{:?}", b.field)))
+        });
+        out
+    }
+
+    /// Store: write every soft value into the project, then clear. Returns
+    /// whether anything was written (→ gen bump + broadcast). Mirrors
+    /// softCommit in engine/state.ts — identical field routing or the two
+    /// engines' stored shows diverge.
+    pub fn soft_commit(&mut self) -> bool {
+        let mut changed = false;
+        let soft = std::mem::take(&mut self.soft);
+        for ((look_id, part_id), patch) in soft {
+            let Some(look) = self.project.looks.get_mut(&look_id) else { continue };
+            let Some(part) = look.parts.iter_mut().find(|pt| pt.id == part_id) else { continue };
+            for (field, v) in patch.params {
+                apply_soft_param(&mut part.params, field, v);
+                changed = true;
+            }
+            for (effect_id, fields) in patch.effects {
+                let Some(e) = part.effects.iter_mut().find(|x| x.id == effect_id) else { continue };
+                for (field, v) in fields {
+                    apply_soft_effect(e, field, v);
+                    changed = true;
+                }
+            }
+        }
+        changed
+    }
+
+    /// Move a Named Control (P3): resolve every link through the soft layer.
+    /// Each link maps v (0..1) onto its bracket min + (max − min)·v; the soft
+    /// door clamps per-field, so a bracket cannot push a parameter out of
+    /// range. Dangling links are skipped — they stay inspectable in the
+    /// control's data. Mirrors setControl in engine/state.ts.
+    pub fn set_control(&mut self, control_id: &str, value: f64) -> bool {
+        if !value.is_finite() {
+            return false;
+        }
+        let v = clamp01(value);
+        let Some(control) = self.project.controls.iter().find(|c| c.id == control_id) else {
+            return false;
+        };
+        let links: Vec<crate::types::ControlLink> = control.links.clone();
+        for l in links {
+            let mapped = l.min + (l.max - l.min) * v;
+            self.set_soft(&l.look_id, &l.part_id, l.effect_id.as_deref(), l.field, Some(mapped));
+        }
+        self.control_live.insert(control_id.to_string(), v);
+        true
+    }
+
+    /// Live control positions for the snapshot — only those that moved.
+    pub fn control_entries(&self) -> Vec<crate::types::ControlSnap> {
+        let mut out: Vec<crate::types::ControlSnap> = self
+            .control_live
+            .iter()
+            .map(|(id, value)| crate::types::ControlSnap { id: id.clone(), value: *value })
+            .collect();
+        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out
+    }
+
+    /// Drop rides whose look/part/effect no longer exists — called from the
+    /// renderer's gen-gated rebuild, so every project change sweeps exactly
+    /// once, in both engines, with the same discipline as the geometry cache.
+    pub fn sweep_soft(&mut self) {
+        // deleted controls must not stream stale live positions in snapshots
+        if !self.control_live.is_empty() {
+            let controls = &self.project.controls;
+            self.control_live.retain(|id, _| controls.iter().any(|c| c.id == *id));
+        }
+        if self.soft.is_empty() {
+            return;
+        }
+        let project = &self.project;
+        self.soft.retain(|(look_id, part_id), patch| {
+            let Some(look) = project.looks.get(look_id) else { return false };
+            let Some(part) = look.parts.iter().find(|pt| pt.id == *part_id) else { return false };
+            patch
+                .effects
+                .retain(|eid, _| part.effects.iter().any(|e| e.id == *eid));
+            !patch.params.is_empty() || !patch.effects.is_empty()
+        });
+    }
+
     pub fn replace_project(&mut self, p: Project) {
         self.project = p;
         self.ensure_decks();
         self.live.clear();
         self.overrides.clear();
+        self.soft.clear(); // rides belong to the show they were ridden in
+        self.control_live.clear();
         self.identify = None;
         self.muted.clear();
         self.preview_look = None;
         self.project.settings.haze = 0.0;
         self.project.settings.haze_fan = 0.0;
+        // A wholesale swap is the biggest project change there is — advance the
+        // generation so any in-flight edit composed against the old show is seen
+        // as stale and rejected rather than written over the new one.
+        self.bump_gen();
     }
 
-    pub fn update_project(&mut self, p: Project) {
+    /// Returns true if the engine CHANGED what it was given — in which case the
+    /// sender needs the echo it would otherwise be spared. `reconcile` only
+    /// prunes live state and never touches the project, so `ensure_decks` is
+    /// the only thing here that can rewrite a submission.
+    pub fn update_project(&mut self, p: Project) -> bool {
         self.project = p;
-        self.ensure_decks();
+        let repaired = self.ensure_decks();
         self.reconcile();
+        repaired
     }
 
     fn reconcile(&mut self) {
@@ -607,7 +992,8 @@ impl EngineState {
             let _ = t;
         }
         let mut replaced: Vec<String> = Vec::new();
-        for (id, p) in bundle.profiles {
+        for (id, mut p) in bundle.profiles {
+            preserve_authored_layout(&self.project, &mut p);
             if let Some(note) = describe_profile_replacement(&self.project, &p) {
                 replaced.push(note);
             }
@@ -681,6 +1067,7 @@ impl EngineState {
                     id: uid("g"),
                     name: g.name.clone(),
                     heads,
+                    auto: None, // MVR groups are the file's authored layers, not derived
                 });
             }
         }
@@ -763,9 +1150,27 @@ impl EngineState {
                 self.release_all_held(t, None);
                 self.identify = None;
                 self.overrides.clear();
+                self.soft.clear(); // rides are transient state; panic drops them too
+                self.control_live.clear();
                 self.project.settings.haze = 0.0;
                 self.project.settings.haze_fan = 0.0; // the fan is the audible one
                 out.project_changed = true;
+            }
+            Command::Soft { look_id, part_id, effect_id, field, value } => {
+                self.set_soft(&look_id, &part_id, effect_id.as_deref(), field, value);
+            }
+            Command::SoftCommit => {
+                if self.soft_commit() {
+                    out.project_changed = true;
+                }
+                self.control_live.clear(); // the fan-out is baked; position spent
+            }
+            Command::SoftClear => {
+                self.soft.clear();
+                self.control_live.clear(); // a discarded fan-out has no live position
+            }
+            Command::SetControl { control_id, value } => {
+                self.set_control(&control_id, value);
             }
             Command::SetChannel { universe_id, channel, value } => {
                 // protocol is 1-512
@@ -801,8 +1206,16 @@ impl EngineState {
                 self.project.settings.haze_fan = clamp01(v);
                 out.project_changed = true;
             }
-            Command::UpdateProject { project } => {
-                self.update_project(*project);
+            // Handled in engine.rs before the state machine ever sees them;
+            // these arms exist only for exhaustiveness.
+            Command::WatchDmx { .. } => {}
+            Command::PinClock { .. } => {}
+            Command::UpdateProject { project, base_gen: _ } => {
+                // base_gen is a transport-layer concern (staleness rejection in
+                // engine.rs); by the time a command reaches the state machine it
+                // has been accepted. If the engine repaired what arrived, the
+                // sender is the one client that must NOT be spared the echo.
+                out.repaired_submission = self.update_project(*project);
                 out.project_changed = true;
             }
             Command::SwitchDeck { deck_id } => {
@@ -816,40 +1229,19 @@ impl EngineState {
                 out.learned = midi_out.learned;
             }
             Command::Learn { action } => self.learn_target = action,
-            Command::ImportGdtf { name, data } => {
-                let result = base64_decode(&data).and_then(|bytes| crate::gdtf::parse_gdtf(&bytes));
-                match result {
-                    Ok(profiles) => {
-                        let ids: Vec<String> = profiles.iter().map(|p| p.id.clone()).collect();
-                        let mut replaced: Vec<String> = Vec::new();
-                        for p in profiles {
-                            if let Some(note) = describe_profile_replacement(&self.project, &p) {
-                                replaced.push(note);
-                            }
-                            self.project.profiles.insert(p.id.clone(), p);
-                        }
-                        out.project_changed = true;
-                        let mut msg = format!("{name}: imported {} mode(s)", ids.len());
-                        for note in &replaced {
-                            msg.push_str(&format!(" · {note}"));
-                        }
-                        out.import_result = Some((true, msg, ids));
-                    }
-                    Err(e) => {
-                        out.import_result = Some((false, format!("{name}: {e}"), vec![]));
-                    }
-                }
+            // Parse-and-apply, for direct callers and tests. The engine loop
+            // never reaches this: it intercepts the command, parses on a worker
+            // and calls apply_gdtf with the result, because parsing a real MVR
+            // costs two ticks of DMX.
+            Command::ImportGdtf { name, data, credit } => {
+                let parsed =
+                    base64_decode(&data).and_then(|bytes| crate::gdtf::parse_gdtf(&bytes));
+                return self.apply_gdtf(&name, parsed, credit);
             }
             Command::ImportMvr { name, data, replace } => {
-                let result = base64_decode(&data).and_then(|bytes| crate::mvr::parse_mvr(&bytes));
-                match result {
-                    Ok(bundle) => {
-                        let n = self.apply_mvr(bundle, replace, t);
-                        out.project_changed = true;
-                        out.import_result = Some((true, format!("{name}: {n}"), vec![]));
-                    }
-                    Err(e) => out.import_result = Some((false, format!("{name}: {e}"), vec![])),
-                }
+                let parsed =
+                    base64_decode(&data).and_then(|bytes| crate::mvr::parse_mvr(&bytes));
+                return self.apply_mvr_parsed(&name, parsed, replace, t);
             }
             Command::LaunchPreviz => out.launch_previz = true,
             Command::Save => out.save_requested = true,

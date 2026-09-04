@@ -17,6 +17,35 @@ not speed).
 | Previz frame | ≤ 8.3 ms | ProMotion 120 Hz; ≥ 60 fps mandatory |
 | GDTF import | interactive (< 100 ms/file) | import-time only, never on the tick path |
 
+## 2026-08-20 — motion engine complete (P4→P2)
+
+The full per-tick resolution stack — stored → soft → modulation, spatial fan,
+per-part rate-corr — measured on the Node REFERENCE engine (the ship Rust
+engine benches faster on every prior comparison):
+
+| Bench | Result | Notes |
+|---|---|---|
+| Node tick: demo rig + 2-binding LFO + soft ride + x-distribute fan + fx layer | **18.1 µs** | 0.07 % of the 25 ms budget; soft/mod resolution copies only parts actually ridden/bound |
+
+Verdict: the whole motion engine costs well under one percent of a tick at
+rig scale; no hot-path work needed before the per-head scaling items already
+noted in parked-work §4.
+
+## 2026-08-20 — B2 geometry builder (motion engine)
+
+Per-head world positions (`shared/geometry.ts` / `core/src/geometry.rs`),
+gen-gated in each renderer — rebuilt on project change only, one hash lookup
+per head per tick otherwise:
+
+| Bench | Result | Notes |
+|---|---|---|
+| build_geometry, demo rig (13 fixtures) | 1.4 µs (node) / 1.9 µs (rust) | full rebuild |
+| build_geometry, 100 partybars (400 heads) | 33.8 µs (node) / 37.9 µs (rust) | 0.15 % of the tick budget even if it rebuilt EVERY tick |
+
+Verdict: rebuild-at-fader-ride-rate (gen bumps per project-changing command) is
+free at any plausible rig size; no rebuild throttle needed. Reproduce with
+`cargo test -p light-core --test geobench -- --ignored --nocapture`.
+
 ## 2026-08-14 — previz shadow budget (large-rig cliff)
 
 Every shadow-casting spotlight costs its own depth pass, and the previz was
@@ -139,3 +168,31 @@ double the required refresh rate.
 2. Run on the reference machine, release profile, mains power.
 3. Add a dated section at the top with the numbers, the load description, and
    a one-line verdict against the budget table.
+
+## MVR import — why it moved off the tick thread
+
+Measured on an M-series Mac, release profile, against a real festival scene
+(`ATN 26 - Mainstage.mvr`, 9.4 MB, 129 fixtures, 12,810 scene objects):
+
+| | |
+|---|---|
+| `parse_mvr` | **32.3 ms** |
+| tick budget | 25 ms |
+| cost if run on the tick thread | **2 frames of DMX not sent** |
+
+That is fixtures holding their last value for ~50 ms, mid-show, because someone
+imported a scene. `ROADMAP.md` forbids it in as many words — "nothing heavy on
+the tick path… no filesystem, network-blocking, or unbounded work. Ever" — and
+`REVIEW-v1.2.2.md` had it recorded as accepted-but-unfixed with no number
+against it. This is the number.
+
+The engine now intercepts `importGdtf`/`importMvr`, parses on a worker, and
+sends the result back as `GdtfParsed`/`MvrParsed`. Only the apply half runs on
+the tick thread, and `applying_a_parsed_import_is_cheap` in `core/tests/smoke.rs`
+holds it under 5 ms.
+
+Reproduce with:
+
+```
+LIGHT_BENCH_MVR=/path/to/scene.mvr cargo run --release -p light-core --bin light-bench
+```

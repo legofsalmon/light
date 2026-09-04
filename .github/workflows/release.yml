@@ -10,11 +10,24 @@ permissions:
 
 jobs:
   build-macos:
-    name: build LIGHT.app (macOS, universal)
+    name: build LIGHT.app (macOS)
     runs-on: macos-latest
-    # a universal build compiles Bevy twice; 45 min was not enough from a cold
-    # cache and the job was cancelled mid-bundle after every test had passed
+    # A universal build compiles Bevy TWICE and came in at 84 minutes for
+    # v1.2.2 — against this cap, on a smaller tree. One slice halves the Rust
+    # work; the cap stays where it is because a cold cache is still the case to
+    # survive, and headroom costs nothing when it is not used.
     timeout-minutes: 90
+    env:
+      # The one place the architecture is decided. build-app.sh already reads
+      # LIGHT_TARGET (it is what `npm run app:build:native` sets) and every path
+      # below derives from it, so going back to universal-apple-darwin is this
+      # line plus the toolchain targets — not five hardcoded paths to miss one of.
+      #
+      # Apple Silicon only, deliberately: it halves the build and every tester
+      # for this beta is on one. Note what it costs — an arm64 bundle does not
+      # run on an Intel Mac at all. Rosetta translates x86_64 to arm64, never
+      # the other way.
+      LIGHT_TARGET: aarch64-apple-darwin
     steps:
       - uses: actions/checkout@v4
 
@@ -25,9 +38,9 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          # a universal bundle needs BOTH slices; without the x86_64 target the
-          # build fails late, after the full test suite has already run
-          targets: aarch64-apple-darwin, x86_64-apple-darwin
+          # Must match LIGHT_TARGET above. A missing target fails late, after
+          # the full test suite has already run.
+          targets: aarch64-apple-darwin
 
       - uses: Swatinem/rust-cache@v2
 
@@ -90,7 +103,32 @@ jobs:
       - name: Differential parity (Node vs Rust)
         run: cargo build -p light-core && npm run test:parity
 
-      - name: Build the app (universal; signed + notarised when secrets exist)
+      - name: App shell tests (licence + updater)
+        # ui/dist first: tauri.conf.json declares it a bundle resource, so
+        # tauri-build refuses to run the build script without it — and the
+        # build script is what stamps LIGHT_VERSION. Nothing has produced it at
+        # this point in a clean checkout; locally it is always just sitting
+        # there from the last build, which is exactly why this only failed in
+        # CI. `npm run app:build` below regenerates it anyway, and a vite build
+        # is seconds.
+        #
+        # Not in ci.yml: that runs on ubuntu-latest and a Tauri app needs
+        # webkit2gtk to compile there. macOS is the only platform this app is
+        # built for anyway.
+        #
+        # After parity, not before: parity is the check the two-engine design
+        # rests on, and a failure here used to skip it entirely.
+        run: |
+          npm run build
+          cargo test -p light-app
+          # These tests compile the whole app in DEBUG, several GB, on top of a
+          # release build that has already compiled Bevy. The release bundle
+          # lives under target/$LIGHT_TARGET, so this is safe to drop — and the
+          # dmg step later needs room to copy an 80 MB bundle and compress it.
+          rm -rf target/debug
+          df -h /
+
+      - name: Build the app (signed + notarised when secrets exist)
         # With no secrets set these are empty and the bundler falls back to the
         # ad-hoc signature — same output as before. Add a Developer ID cert and
         # an app-specific password as repo secrets and the SAME build starts
@@ -119,14 +157,25 @@ jobs:
 
       - name: Report how the bundle was signed
         run: |
-          codesign -dv --verbose=2 target/universal-apple-darwin/release/bundle/macos/LIGHT.app 2>&1 | \
+          codesign -dv --verbose=2 "target/$LIGHT_TARGET/release/bundle/macos/LIGHT.app" 2>&1 | \
             grep -E 'Authority|TeamIdentifier|Signature|flags' || true
           echo "--- notarisation ticket (absent on ad-hoc builds) ---"
-          xcrun stapler validate target/universal-apple-darwin/release/bundle/macos/LIGHT.app || \
+          if xcrun stapler validate "target/$LIGHT_TARGET/release/bundle/macos/LIGHT.app"; then
+            echo "stapled"
+          elif [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
+            # Fatal on a tag, and this is why: LIGHT.zip below is the payload
+            # the in-app updater offers, and every installed copy verifies the
+            # Apple anchor before swapping. An unstapled release does not
+            # inconvenience one downloader — it publishes an update nobody can
+            # take, which is an update channel that dies silently.
+            echo "::error::not stapled — refusing to publish a release no installed copy could update to"
+            exit 1
+          else
             echo "not stapled — first launch needs the Privacy & Security > Open Anyway step"
+          fi
 
       - name: Zip the bundle (ditto preserves signatures)
-        run: ditto -c -k --keepParent target/universal-apple-darwin/release/bundle/macos/LIGHT.app LIGHT.zip
+        run: ditto -c -k --keepParent "target/$LIGHT_TARGET/release/bundle/macos/LIGHT.app" LIGHT.zip
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -142,14 +191,19 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          # A tag with a hyphen is a prerelease by semver's own rule
+          # (v1.3.0-beta.1), and GitHub then keeps it off /releases/latest — so
+          # the landing page's one-click link cannot start handing a beta to
+          # people who wanted the shipping build.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             LIGHT.zip
-            target/universal-apple-darwin/release/bundle/macos/LIGHT-*.dmg
-            target/universal-apple-darwin/release/bundle/macos/LIGHT.dmg
+            target/${{ env.LIGHT_TARGET }}/release/bundle/macos/LIGHT-*.dmg
+            target/${{ env.LIGHT_TARGET }}/release/bundle/macos/LIGHT.dmg
           generate_release_notes: true
           body: |
-            **LIGHT for macOS** — universal (Apple Silicon + Intel), signed
-            with a Developer ID and notarised by Apple.
+            **LIGHT for macOS** — Apple Silicon, signed with a Developer ID
+            and notarised by Apple. This build does **not** run on an Intel Mac.
 
             Open the .dmg, drag LIGHT to Applications, double-click it. macOS
             confirms once that it came from the internet; there is no

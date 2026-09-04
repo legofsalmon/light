@@ -11,6 +11,104 @@ use std::io::{Cursor, Read};
 use crate::cprofile::{CChannel, CHead, CompiledProfile, Cond, Func, FuncCase, Source, WheelSet};
 use crate::profiles::HeadKind;
 
+/// Deepest element nesting we will hand to roxmltree. Its tree construction and
+/// drop recurse, overflowing the stack on the order of ten thousand levels deep
+/// — a hard SIGABRT the panic hook cannot catch — so a crafted `.mvr` or
+/// `.gdtf` from an untrusted LAN client (or a corrupt file) could kill the
+/// engine on import. Real scenes and fixtures nest a handful of levels; this
+/// bound is orders of magnitude of headroom, verified in one linear byte pass
+/// that never itself recurses. Both roxmltree parse sites (GDTF here, MVR in
+/// `mvr.rs`) go through `guard_xml_depth` first.
+const MAX_XML_DEPTH: i32 = 512;
+
+/// Refuse XML nested deeper than [`MAX_XML_DEPTH`] before roxmltree ever sees
+/// it. Conservative by construction: it counts element open/close depth and
+/// steps over comments, CDATA, processing instructions and declarations so
+/// their contents cannot be mistaken for structure. Miscounting can only make
+/// it stricter (reject a valid-but-absurd file), never let a bomb through.
+pub(crate) fn guard_xml_depth(xml: &str) -> Result<(), String> {
+    let b = xml.as_bytes();
+    let n = b.len();
+    let find = |from: usize, needle: &[u8]| -> Option<usize> {
+        if from > n || needle.is_empty() || from + needle.len() > n {
+            return None;
+        }
+        b[from..].windows(needle.len()).position(|w| w == needle).map(|p| p + from)
+    };
+    let mut i = 0usize;
+    let mut depth: i32 = 0;
+    while i < n {
+        if b[i] != b'<' {
+            i += 1;
+            continue;
+        }
+        if b[i..].starts_with(b"<!--") {
+            match find(i + 4, b"-->") {
+                Some(j) => i = j + 3,
+                None => break,
+            }
+        } else if b[i..].starts_with(b"<![CDATA[") {
+            match find(i + 9, b"]]>") {
+                Some(j) => i = j + 3,
+                None => break,
+            }
+        } else if b.get(i + 1) == Some(&b'!') {
+            // DOCTYPE / declaration — step to its '>' (best effort)
+            match find(i + 2, b">") {
+                Some(j) => i = j + 1,
+                None => break,
+            }
+        } else if b.get(i + 1) == Some(&b'?') {
+            match find(i + 2, b"?>") {
+                Some(j) => i = j + 2,
+                None => break,
+            }
+        } else if b.get(i + 1) == Some(&b'/') {
+            depth -= 1;
+            match find(i + 2, b">") {
+                Some(j) => i = j + 1,
+                None => break,
+            }
+        } else {
+            // an opening tag; scan to its unquoted '>' noting self-closing '/>'
+            let mut j = i + 1;
+            let mut quote: u8 = 0;
+            let mut last_nonspace: u8 = 0;
+            let mut end = None;
+            while j < n {
+                let c = b[j];
+                if quote != 0 {
+                    if c == quote {
+                        quote = 0;
+                    }
+                } else if c == b'"' || c == b'\'' {
+                    quote = c;
+                } else if c == b'>' {
+                    end = Some(j);
+                    break;
+                }
+                if !c.is_ascii_whitespace() {
+                    last_nonspace = c;
+                }
+                j += 1;
+            }
+            if last_nonspace != b'/' {
+                depth += 1;
+                if depth > MAX_XML_DEPTH {
+                    return Err(format!(
+                        "XML nested deeper than {MAX_XML_DEPTH} levels — refused as malformed"
+                    ));
+                }
+            }
+            match end {
+                Some(j) => i = j + 1,
+                None => break,
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn parse_gdtf(bytes: &[u8]) -> Result<Vec<CompiledProfile>, String> {
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| format!("not a zip: {e}"))?;
     let mut xml = String::new();
@@ -59,6 +157,7 @@ struct WheelDef {
 }
 
 fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
+    guard_xml_depth(xml)?;
     let doc = roxmltree::Document::parse(xml).map_err(|e| format!("bad XML: {e}"))?;
     let ft = doc
         .descendants()
@@ -66,6 +165,10 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
         .ok_or("no FixtureType element")?;
     let manufacturer = ft.attribute("Manufacturer").unwrap_or("Unknown").to_string();
     let model = ft.attribute("Name").unwrap_or("Imported fixture").to_string();
+    // A GDTF FixtureType carries no author attribute, so a hand-imported file
+    // has no credit to record. The Share download path knows the uploader and
+    // sets it there — see CompiledProfile::credit.
+    let credit: Option<String> = None;
 
     // wheels (for Color1 etc.)
     let wheels: Vec<WheelDef> = ft
@@ -86,16 +189,44 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
         })
         .collect();
 
-    // beam physicals
-    let beam_deg = ft
-        .descendants()
-        .find(|n| n.has_tag_name("Beam"))
-        .and_then(|b| {
-            b.attribute("BeamAngle")
-                .or(b.attribute("FieldAngle"))
-                .and_then(|v| v.parse::<f64>().ok())
-        })
-        .unwrap_or(15.0);
+    // the Geometries tree — pixel fixtures carry per-pixel Position matrices
+    let geometries = ft.descendants().find(|n| n.has_tag_name("Geometries"));
+
+    // Beam physicals. Both angles, not whichever turns up first: BeamAngle is
+    // the 50 % core and FieldAngle the 10 % edge, and their RATIO is what tells
+    // a hard-edged beam from a soft wash. Keeping only one threw that away.
+    let beam_node = ft.descendants().find(|n| n.has_tag_name("Beam"));
+    let angle = |name: &str| {
+        beam_node
+            .and_then(|b| b.attribute(name))
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|v| v.is_finite() && *v > 0.0 && *v < 360.0)
+    };
+    let beam_deg = angle("BeamAngle").or_else(|| angle("FieldAngle")).unwrap_or(15.0);
+    // Only worth storing when it says something the beam angle did not.
+    let field_deg = angle("FieldAngle").filter(|f| *f > beam_deg * 1.001);
+
+    // Flux is SUMMED across every Beam the file declares, because a fixture
+    // with more than one is describing layers of itself, not alternatives: a
+    // CLF Nero has an 18,600 lm RGB plate and a 54,381 lm white strobe, and
+    // what lands in the room is both. Dropping this was making every renderer
+    // downstream guess.
+    let lumens = {
+        let total: f64 = ft
+            .descendants()
+            .filter(|n| n.has_tag_name("Beam"))
+            .filter_map(|b| b.attribute("LuminousFlux"))
+            .filter_map(|v| v.parse::<f64>().ok())
+            .filter(|v| v.is_finite() && *v > 0.0)
+            .sum();
+        (total > 0.0).then_some(total)
+    };
+    // The emitting surface, in metres. Tiny, and the thing that keeps a
+    // 1/r-squared beam integral finite when the camera looks at the lamp.
+    let beam_radius = beam_node
+        .and_then(|b| b.attribute("BeamRadius"))
+        .and_then(|v| v.parse::<f64>().ok())
+        .filter(|v| v.is_finite() && *v > 0.0 && *v < 2.0);
 
     let mut out = Vec::new();
     for mode in ft.descendants().filter(|n| n.has_tag_name("DMXMode")) {
@@ -153,16 +284,47 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
                 func: Func::Linear { source: src },
             };
 
+            // A beam parameter the operator has not touched must sit where the
+            // fixture's own definition parks it — a Spiider opens at DMX 128,
+            // and driving its zoom to 0 the moment a show loads would narrow
+            // every head in the rig. So: hold the default while unset, sweep
+            // the channel once a look sets it.
+            let optional = |src: Source| {
+                vec![
+                    FuncCase {
+                        cond: Cond::SourceUnset { source: src },
+                        dmx_from: default,
+                        dmx_to: default,
+                        func: Func::Fixed { value: default },
+                    },
+                    FuncCase {
+                        cond: Cond::Always,
+                        dmx_from: 0,
+                        dmx_to: max_dmx,
+                        func: Func::Linear { source: src },
+                    },
+                ]
+            };
+
             match attr_name.as_str() {
-                "Dimmer" => {
+                // Indexed forms count. GDTF writes `Dimmer` on a single-instance
+                // geometry and `Dimmer1`, `Dimmer2`… when it is indexed — the
+                // same convention this match already honours for `Shutter1`,
+                // `Focus1` and `Frost1`/`Frost2`. Dimmer, Pan and Tilt were
+                // exact-match only, so a file using the indexed spelling
+                // compiled to channels that drive NOTHING: a fixture that never
+                // lights and never moves, with no error anywhere. A real show
+                // had 49 blinders dark for exactly this (`Dimmer1`) and a
+                // 65-channel pixel dimmer array with them.
+                a if indexed_base(a) == "Dimmer" => {
                     has_dimmer = true;
                     cases.push(simple(Source::Dimmer));
                 }
-                "Pan" => {
+                a if indexed_base(a) == "Pan" => {
                     has_pan = true;
                     cases.push(simple(Source::Pan));
                 }
-                "Tilt" => {
+                a if indexed_base(a) == "Tilt" => {
                     has_tilt = true;
                     cases.push(simple(Source::Tilt));
                 }
@@ -209,6 +371,16 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
                         });
                     }
                 }
+                // Beam shaping. All continuous and monotonic on every fixture
+                // that has them, which is what makes them safe to expose as a
+                // plain 0..1 fader and to ramp from an effect.
+                "Zoom" => cases.extend(optional(Source::Zoom)),
+                "Focus1" | "Focus" => cases.extend(optional(Source::Focus)),
+                "Iris" => cases.extend(optional(Source::Iris)),
+                "Frost1" | "Frost2" | "Frost" => cases.extend(optional(Source::Frost)),
+                // CTO warms a white; CTB is the same axis the other way, so it
+                // rides the same parameter rather than earning its own fader.
+                "CTO" | "CTB" | "CTC" => cases.extend(optional(Source::Cto)),
                 a if a.starts_with("Color") && !a.contains("Add") && !a.contains("RGB") => {
                     // colour wheel: match by wheel name from the function, else first wheel
                     let wheel = functions
@@ -244,7 +416,7 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
 
         // Multi-pixel fixtures (strips, bars): synthesize one head per pixel
         // group so the previz shows a strip and chases can run across it.
-        let head_count = synthesize_heads(&mut channels, &chan_geom, &chan_color);
+        let (head_count, head_geoms) = synthesize_heads(&mut channels, &chan_geom, &chan_color);
 
         if channels.is_empty() {
             continue;
@@ -257,16 +429,23 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             HeadKind::Dimmer
         };
         let heads: Vec<CHead> = if head_count > 1 {
-            let width = if head_count >= 4 { 1.0 } else { 0.3 * head_count as f64 };
-            (0..head_count)
-                .map(|i| CHead {
-                    kind: HeadKind::Rgb,
-                    offset: (i as f64 / (head_count - 1) as f64 - 0.5) * width,
-                    label: format!("Px {}", i + 1),
-                })
-                .collect()
+            // Real positions from the file when authored (B1); the even-spaced
+            // fabrication stays as the fallback for flat console exports and
+            // zeroed geometry (the CLF Nero case).
+            parse_pixel_layout(geometries, &head_geoms, head_count).unwrap_or_else(|| {
+                let width = if head_count >= 4 { 1.0 } else { 0.3 * head_count as f64 };
+                (0..head_count)
+                    .map(|i| {
+                        CHead::flat(
+                            HeadKind::Rgb,
+                            (i as f64 / (head_count - 1) as f64 - 0.5) * width,
+                            format!("Px {}", i + 1),
+                        )
+                    })
+                    .collect()
+            })
         } else {
-            vec![CHead { kind, offset: 0.0, label: model.clone() }]
+            vec![CHead::flat(kind, 0.0, model.clone())]
         };
         let slug: String = format!("{manufacturer}-{model}-{mode_name}")
             .to_lowercase()
@@ -282,7 +461,12 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             heads,
             channels,
             beam_deg,
+            field_deg,
+            lumens,
+            beam_radius,
             virtual_dimmer: !has_dimmer,
+            credit: credit.clone(),
+            form_override: None,
         });
     }
     if out.is_empty() {
@@ -384,12 +568,14 @@ fn wheel_sets_from_functions(
 /// attributes that each carry colour channels (well-formed pixel fixtures).
 /// Strategy 2: repeated colour cycles — every repeated red channel starts a
 /// new pixel. Non-colour channels stay on head 0 (globals). Returns the head
-/// count (1 = leave single-head).
+/// count (1 = leave single-head) and, for strategy 1, the per-head geometry
+/// NAME — the key into the Geometries tree that may carry the pixel's real
+/// position (strategy 2 heads have no geometry identity; empty vec).
 fn synthesize_heads(
     channels: &mut [CChannel],
     geoms: &[String],
     colors: &[Option<char>],
-) -> usize {
+) -> (usize, Vec<String>) {
     // Strategy 1: geometry grouping
     let mut geom_order: Vec<&String> = Vec::new();
     for (g, c) in geoms.iter().zip(colors) {
@@ -403,13 +589,14 @@ fn synthesize_heads(
                 ch.head = pos;
             }
         }
-        return geom_order.len();
+        let names = geom_order.iter().map(|g| (*g).clone()).collect();
+        return (geom_order.len(), names);
     }
 
     // Strategy 2: repeated colour cycles (e.g. R,G,B,R,G,B,…)
     let reds = colors.iter().filter(|c| **c == Some('r')).count();
     if reds < 2 {
-        return 1;
+        return (1, Vec::new());
     }
     let mut head: isize = -1;
     let mut seen_in_head: Vec<char> = Vec::new();
@@ -422,5 +609,252 @@ fn synthesize_heads(
         seen_in_head.push(c);
         ch.head = head.max(0) as usize;
     }
-    (head + 1).max(1) as usize
+    ((head + 1).max(1) as usize, Vec::new())
+}
+
+/// A GDTF Matrix attribute: 3×3 rotation rows plus a translation, row-vector
+/// convention (world = local·R + t). The wire format is four brace groups;
+/// the translation is the first three values of the FOURTH group under both
+/// 4×4-row-major and u/v/w/o spellings seen in the wild.
+struct GMat {
+    r: [[f64; 3]; 3],
+    t: [f64; 3],
+}
+
+/// `Dimmer3` -> `Dimmer`. Strips a trailing run of ASCII digits so an indexed
+/// GDTF attribute matches its base name. Deliberately narrow: it is applied
+/// only to the attributes whose arms opt into it, so `Effects1Rate`,
+/// `Color1` and friends keep their own meanings.
+fn indexed_base(attr: &str) -> &str {
+    let base = attr.trim_end_matches(|c: char| c.is_ascii_digit());
+    if base.is_empty() { attr } else { base }
+}
+
+fn parse_matrix(s: &str) -> Option<GMat> {
+    let groups: Vec<Vec<f64>> = s
+        .split('}')
+        .filter(|g| !g.trim().is_empty())
+        .map(|g| {
+            g.trim_start_matches(|c: char| c == '{' || c.is_whitespace())
+                .split(',')
+                .filter_map(|v| v.trim().parse::<f64>().ok())
+                .collect()
+        })
+        .collect();
+    if groups.len() != 4 || groups.iter().any(|g| g.len() < 3) {
+        return None;
+    }
+    let mut r = [[0.0; 3]; 3];
+    for (i, row) in r.iter_mut().enumerate() {
+        for (j, v) in row.iter_mut().enumerate() {
+            *v = groups[i][j];
+        }
+    }
+    Some(GMat { r, t: [groups[3][0], groups[3][1], groups[3][2]] })
+}
+
+fn gmat_apply(m: &GMat, p: [f64; 3]) -> [f64; 3] {
+    // row-vector: p' = p·R + t
+    [
+        p[0] * m.r[0][0] + p[1] * m.r[1][0] + p[2] * m.r[2][0] + m.t[0],
+        p[0] * m.r[0][1] + p[1] * m.r[1][1] + p[2] * m.r[2][1] + m.t[1],
+        p[0] * m.r[0][2] + p[1] * m.r[1][2] + p[2] * m.r[2][2] + m.t[2],
+    ]
+}
+
+/// Origin of the named geometry in the fixture's frame: (0,0,0) run through
+/// its own Position and every ancestor's up to the Geometries root. Any
+/// geometry-typed element counts (Geometry, GeometryReference, Beam, …) —
+/// pixel fixtures use GeometryReference instances, each with its own matrix.
+fn geometry_origin(geometries: roxmltree::Node, name: &str) -> Option<[f64; 3]> {
+    let node = geometries
+        .descendants()
+        .find(|n| n.is_element() && n.attribute("Name") == Some(name))?;
+    let mut p = [0.0f64; 3];
+    let mut cur = node;
+    loop {
+        if cur == geometries {
+            break;
+        }
+        if let Some(m) = cur.attribute("Position").and_then(parse_matrix) {
+            p = gmat_apply(&m, p);
+        }
+        match cur.parent() {
+            Some(parent) if parent.is_element() => cur = parent,
+            _ => break,
+        }
+    }
+    Some(p)
+}
+
+/// Real pixel positions from the Geometries tree, when the file carries them.
+/// Returns None when any head's geometry is missing, a position is
+/// non-finite, or the layout is degenerate (all pixels at one point — flat
+/// console exports write exactly this); the caller then keeps the synthesized
+/// evenly-spaced fallback, so a well-formed import can never get WORSE.
+fn parse_pixel_layout(
+    geometries: Option<roxmltree::Node>,
+    head_geoms: &[String],
+    head_count: usize,
+) -> Option<Vec<CHead>> {
+    let geometries = geometries?;
+    if head_geoms.len() != head_count || head_count < 2 {
+        return None;
+    }
+    let mut px: Vec<(f64, f64)> = Vec::with_capacity(head_count);
+    for name in head_geoms {
+        if name.is_empty() {
+            return None;
+        }
+        let p = geometry_origin(geometries, name)?;
+        if !p.iter().all(|v| v.is_finite()) {
+            return None;
+        }
+        // GDTF is Z-up: X stays the fixture's local X, Z becomes local Y (up);
+        // depth (GDTF Y) is dropped - a pixel face is planar
+        px.push((p[0], p[2]));
+    }
+    // Centre the layout FIRST: LIGHT treats fixture.pos as the visual centre,
+    // and centring first makes the unit heuristic below depend on the
+    // fixture's physical extent rather than where the author happened to put
+    // the geometry origin.
+    let n = px.len() as f64;
+    let cx = px.iter().map(|p| p.0).sum::<f64>() / n;
+    let cy = px.iter().map(|p| p.1).sum::<f64>() / n;
+    for p in &mut px {
+        p.0 -= cx;
+        p.1 -= cy;
+    }
+    // Degenerate (all pixels at one point): the flat-export signature.
+    let span_raw = px.iter().fold(0.0f64, |m, &(x, y)| m.max(x.abs()).max(y.abs()));
+    if span_raw < 1e-4 {
+        return None;
+    }
+    // Unit heuristic: the spec says metres, console exports have shipped mm;
+    // no fixture face is 5 m wide, so a centred extent above 5 is millimetres.
+    if span_raw > 5.0 {
+        for p in &mut px {
+            p.0 *= 0.001;
+            p.1 *= 0.001;
+        }
+    }
+    // A span still over 5 m is wrong under EITHER unit reading — refuse it
+    // and keep the synthesized fallback rather than a 100 m-wide "fixture".
+    let span = px.iter().fold(0.0f64, |m, &(x, y)| m.max(x.abs()).max(y.abs()));
+    if span > 5.0 {
+        return None;
+    }
+    // Rows: sort top-down, then break where the gap between CONSECUTIVE
+    // vertical values exceeds 5 mm (single-linkage — a tilted bar whose y
+    // drifts gradually stays ONE row instead of fragmenting at every 5 mm of
+    // cumulative drift). Cols run in x order WITHIN each row, re-sorted after
+    // clustering so sub-tolerance jitter cannot scramble the chase direction.
+    let mut order: Vec<usize> = (0..px.len()).collect();
+    order.sort_by(|&a, &b| {
+        px[b].1
+            .partial_cmp(&px[a].1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(px[a].0.partial_cmp(&px[b].0).unwrap_or(std::cmp::Ordering::Equal))
+    });
+    let mut rows: Vec<Vec<usize>> = Vec::new();
+    let mut prev_y = px[order[0]].1;
+    for &i in &order {
+        if rows.is_empty() || (prev_y - px[i].1) > 0.005 {
+            rows.push(Vec::new());
+        }
+        prev_y = px[i].1;
+        rows.last_mut().unwrap().push(i);
+    }
+    let mut row_of = vec![0usize; px.len()];
+    let mut col_of = vec![0usize; px.len()];
+    for (r, members) in rows.iter_mut().enumerate() {
+        members.sort_by(|&a, &b| {
+            px[a].0
+                .partial_cmp(&px[b].0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.cmp(&b)) // deterministic on exact x ties
+        });
+        for (c, &i) in members.iter().enumerate() {
+            row_of[i] = r;
+            col_of[i] = c;
+        }
+    }
+    Some(
+        (0..px.len())
+            .map(|i| CHead {
+                kind: HeadKind::Rgb,
+                offset: px[i].0,
+                offset_y: px[i].1,
+                row: row_of[i],
+                col: col_of[i],
+                label: head_geoms[i].clone(),
+            })
+            .collect(),
+    )
+}
+
+#[cfg(test)]
+mod depth_guard_tests {
+    use super::guard_xml_depth;
+
+    fn chain(open: &str, close: &str, n: usize) -> String {
+        let mut s = String::from("<root>");
+        for _ in 0..n {
+            s.push_str(open);
+        }
+        for _ in 0..n {
+            s.push_str(close);
+        }
+        s.push_str("</root>");
+        s
+    }
+
+    #[test]
+    fn accepts_shallow_and_flat() {
+        assert!(guard_xml_depth("<a><b/><c>x</c></a>").is_ok());
+        // 5000 flat siblings are only depth 2 — must not be refused
+        let mut s = String::from("<root>");
+        for _ in 0..5000 {
+            s.push_str("<f/>");
+        }
+        s.push_str("</root>");
+        assert!(guard_xml_depth(&s).is_ok());
+    }
+
+    #[test]
+    fn refuses_a_deep_chain() {
+        assert!(guard_xml_depth(&chain("<g>", "</g>", 100)).is_ok());
+        assert!(guard_xml_depth(&chain("<g>", "</g>", 600)).is_err());
+    }
+
+    #[test]
+    fn self_closing_tags_do_not_accumulate_depth() {
+        // 2000 self-closing siblings stay at depth 1, well under the limit
+        let mut s = String::from("<root>");
+        for _ in 0..2000 {
+            s.push_str("<f a=\"1\"/>");
+        }
+        s.push_str("</root>");
+        assert!(guard_xml_depth(&s).is_ok());
+    }
+
+    #[test]
+    fn structure_inside_comments_and_cdata_is_ignored() {
+        let mut s = String::from("<root><!-- ");
+        for _ in 0..2000 {
+            s.push_str("<g>");
+        }
+        s.push_str(" --><![CDATA[");
+        for _ in 0..2000 {
+            s.push_str("<g>");
+        }
+        s.push_str("]]></root>");
+        assert!(guard_xml_depth(&s).is_ok(), "fake tags in comments/CDATA must not count");
+    }
+
+    #[test]
+    fn quoted_gt_does_not_close_a_tag() {
+        // the '>' inside the attribute value must not be read as the tag end
+        assert!(guard_xml_depth("<a b=\"x &gt; y\"><c d='p>q'/></a>").is_ok());
+    }
 }

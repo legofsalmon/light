@@ -2,13 +2,19 @@
 //! engine's WebSocket protocol. It observes, never controls: volumetric
 //! beams, haze-coupled fog, bloom, and a glossy stage floor.
 
+mod beam;
+mod beam_halfres;
 mod camera;
 mod protocol;
+mod quality;
 mod scene;
+mod figure;
 mod state;
+mod truss;
 mod update;
 
 use bevy::prelude::*;
+use bevy::window::WindowResolution;
 use std::sync::Mutex;
 
 fn main() {
@@ -22,33 +28,62 @@ fn main() {
             bevy::diagnostic::LogDiagnosticsPlugin::default(),
         ));
     }
+    let quality = quality::Quality::from_env();
     app
         .insert_resource(ClearColor(Color::srgb(0.016, 0.016, 0.022)))
-        .insert_resource(AmbientLight {
+        // 0.19: AmbientLight became a per-camera Component; the scene-wide
+        // default it used to be is GlobalAmbientLight.
+        .insert_resource(GlobalAmbientLight {
             color: Color::srgb(0.65, 0.7, 0.9),
-            brightness: 35.0,
+            brightness: quality.ambient,
             ..default()
         })
         .insert_resource(protocol::WsReceiver(Mutex::new(rx)))
+        .insert_resource(quality)
         .insert_resource(state::Live::default())
         .insert_resource(camera::Orbit::default())
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "LIGHT · Previz".into(),
-                resolution: (1380.0f32, 860.0f32).into(),
+                // LIGHT_PREVIZ_SIZE=WxH — for measuring whether a change is
+                // fill-bound. Frame time that scales with pixel count is a
+                // fragment-shading cost and half-resolution rendering will
+                // help; frame time that does not is somewhere else entirely.
+                resolution: {
+                    let (w, h) = std::env::var("LIGHT_PREVIZ_SIZE")
+                        .ok()
+                        .and_then(|v| {
+                            let (a, b) = v.split_once('x')?;
+                            Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+                        })
+                        .unwrap_or((1380u32, 860u32));
+                    WindowResolution::new(w, h)
+                },
                 ..default()
             }),
             ..default()
         }))
-        .add_systems(Startup, (scene::setup_stage, camera::setup_camera))
+        .add_plugins(bevy::post_process::auto_exposure::AutoExposurePlugin)
+        .add_plugins(beam::BeamMaterialPlugin)
+        .add_plugins(beam_halfres::BeamHalfResPlugin { scale: quality.beam_scale })
+        // A rig is not a game level. Bevy sizes its GPU light-clustering lists
+        // for a handful of lights; an arena plot is 153 spot lights, and on the
+        // first frame that they all land in view Bevy logs "the scene lighting
+        // may have been corrupted for a few frames" and resizes — twice, on
+        // this rig, every run. Start big enough that it never has to.
+        .add_systems(Startup, (widen_light_clusters, scene::setup_stage, camera::setup_camera))
         .add_systems(
             Update,
             (
                 update::drain_ws,
                 scene::rebuild_fixtures,
                 update::apply_live,
+                update::apply_panel_lights,
+                update::allocate_shadows,
+                update::reflect_connection,
                 update::diag_state,
                 update::auto_screenshot,
+                update::key_screenshot,
                 scene::toggle_band,
                 camera::orbit_camera,
             )
@@ -57,3 +92,12 @@ fn main() {
         .run();
 }
 
+/// See the note at the call site: pre-size the light-clustering lists for a
+/// rig rather than for a game level.
+fn widen_light_clusters(settings: Option<ResMut<bevy::light::cluster::GlobalClusterSettings>>) {
+    let Some(mut settings) = settings else { return };
+    if let Some(gpu) = settings.gpu_clustering.as_mut() {
+        gpu.initial_z_slice_list_capacity = gpu.initial_z_slice_list_capacity.max(8192);
+        gpu.initial_index_list_capacity = gpu.initial_index_list_capacity.max(524_288);
+    }
+}

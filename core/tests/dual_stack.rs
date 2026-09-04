@@ -16,7 +16,7 @@
 use light_core::engine::EngineMsg;
 use light_core::server::{start, Broadcaster};
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::time::Duration;
 
 /// Send a bare HTTP request and return the status line, or None if the peer
@@ -53,6 +53,27 @@ fn serves_both_ip_families() {
     // The one that regressed. On Linux `::` is dual-stack and collides with
     // the v4 wildcard, so the bind returns None and ::1 is served by the v4
     // socket anyway — either way a response is required.
+    //
+    // Unless the host has no IPv6 at all, which is the case on GitHub's
+    // ubuntu-latest runners: ::1 is simply unreachable there and this asserted
+    // `got None` on every CI run from 2026-08-19 onward. That is not this
+    // server failing, and the cost of pretending otherwise was high — the step
+    // after this one is the differential parity check, so a red test here meant
+    // main had NO parity coverage for six weeks.
+    //
+    // Same shape as the Art-Net loopback test skipping when :6454 is held: say
+    // plainly what was not exercised rather than assert something the host
+    // cannot answer. macOS always has ::1, and macOS is where the regression
+    // happened and where the release is built, so the assertion still runs
+    // exactly where it matters.
+    if TcpListener::bind("[::1]:0").is_err() {
+        eprintln!(
+            "SKIPPED the IPv6 half: this host has no usable ::1 loopback. \
+             The IPv4 half above still ran."
+        );
+        return;
+    }
+
     let v6 = head(SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], port)));
     assert!(
         v6.as_deref().is_some_and(|l| l.starts_with("HTTP/1.1")),

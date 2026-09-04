@@ -1,11 +1,15 @@
-import type { HeadRef, HeadSnap, LayerSnap, MotorMode } from '../shared/types.ts';
+import type { HeadRef, HeadSnap, LayerSnap, LookPart, MotorMode } from '../shared/types.ts';
 import { clamp, lerp } from '../shared/types.ts';
 import type { HeadKind, ResolvedParams } from '../shared/profiles.ts';
 import { PROFILES, defaultResolved } from '../shared/profiles.ts';
 import { renderImported } from './wasmProfiles.ts';
-import { applyEffects } from '../shared/effects.ts';
+import { applyEffects, modWave, softBase } from '../shared/effects.ts';
+import { NO_EXTENTS, NO_GEOM, buildGeometry, buildGroupExtents, type GroupExtents, type HeadGeom } from '../shared/geometry.ts';
 import { DERBY_MACROS, derbyMacroForValue, derbyQuantize, hsvToRgb, rgbToHsv } from '../shared/color.ts';
 import type { EngineState } from './state.ts';
+import { applySoftEffect, applySoftParam } from './state.ts';
+import type { Effect, ModBinding, PartParams, SoftField } from '../shared/types.ts';
+import { softClamp } from '../shared/types.ts';
 
 // Fixtures whose render already threw once. A bad fixture must not be able to
 // spam the log at 40 Hz, and it must not be able to take the tick down either.
@@ -14,8 +18,18 @@ const brokenFixtures = new Set<string>();
 type NumField = 'dimmer' | 'white' | 'ringFx' | 'strobe' | 'pan' | 'tilt' | 'haze' | 'fan' | 'motorValue';
 const NUM_FIELDS: NumField[] = ['dimmer', 'white', 'ringFx', 'strobe', 'pan', 'tilt', 'haze', 'fan', 'motorValue'];
 
+// Beam parameters ride a parallel track to the fields above because they are
+// OPTIONAL: a look that never mentions zoom must leave zoom alone, so there is
+// no neutral value to merge from. Keeping them separate also leaves the
+// existing merge untouched, so a saved show still renders byte for byte.
+// Mirrors BeamField/ALL_BEAM in core/src/renderer.rs — order is not load
+// bearing here, but keeping the two lists identical is how they stay in step.
+type BeamField = 'zoom' | 'focus' | 'iris' | 'frost' | 'cto';
+const BEAM_FIELDS: BeamField[] = ['zoom', 'focus', 'iris', 'frost', 'cto'];
+
 type Acc = {
   num: Partial<Record<NumField, { v: number; w: number }>>;
+  beam: Partial<Record<BeamField, { v: number; w: number }>>;
   col: { r: number; g: number; b: number; w: number } | null;
   motorMode: MotorMode | null;
   macro: number | undefined;
@@ -31,6 +45,10 @@ export type TickResult = {
 export class Renderer {
   /** Effect-time in beats, integrated so speed-master changes never jump phase. */
   private effBeat = 0;
+  /** TEST ONLY — when true the effect clock is frozen so a moving effect is
+   *  byte-comparable between the two engines. Set via the LIGHT_TEST_CLOCK-gated
+   *  _pinClock command; never true in a show. */
+  private pinned = false;
   private lastT: number | null = null;
   private st: EngineState;
   /** Cue-list anchors, keyed "layerId lookId" (space-joined; neither id can
@@ -39,9 +57,57 @@ export class Renderer {
    *  keeps the outgoing cue's phase, and anchoring at trigger time keeps the
    *  two engines in the same step. */
   private cueAnchors = new Map<string, { fadeStart: number; at: number }>();
+  /** Phase corrections, keyed "layerId lookId partId effectId": absorbs the
+   *  discontinuity when an effect's rate is edited while its look is live, so
+   *  `beat/rate + corr` stays continuous. lastRate is the rate we last folded
+   *  in. For an untouched effect corr stays exactly 0. GC'd with cueAnchors. */
+  private rateCorr = new Map<string, { lastRate: number; corr: number }>();
+  /** Per-head world geometry, keyed like the heads map ("fixtureId:head").
+   *  Gen-gated: rebuilt only when the project generation moves — the first
+   *  gen-keyed cache in either renderer, so the discipline is set here: compare
+   *  by INEQUALITY (gen wraps), rebuild whole, never patch. */
+  private geom: Map<string, HeadGeom> = new Map();
+  /** Per-group spatial extents for the fan bases — same gen gate as geom. */
+  private extents: Map<string, GroupExtents> = new Map();
+  /** Modulator bindings indexed by JSON [lookId, partId] (P2) — same gen gate.
+   *  Each entry carries the modulator's array index so its per-tick value can
+   *  be looked up, and the S&H random seed stays stable. */
+  private modIndex: Map<string, (ModBinding & { modIdx: number })[]> = new Map();
+  private geomGen = -1; // st.gen starts at 1 and wraps at 32 bits; never -1
 
   constructor(st: EngineState) {
     this.st = st;
+  }
+
+  /** TEST ONLY: pin the effect clock to a fixed beat and freeze integration. */
+  pinClock(effBeat: number): void {
+    this.effBeat = effBeat;
+    this.pinned = true;
+  }
+
+  /** Per-effect phase corrections for one part, aligned with `part.effects`.
+   *  When an effect's rate has changed since we last saw it, fold the jump
+   *  into corr so `beat/rate + corr` is continuous across the edit. An effect
+   *  whose rate never changes yields 0 every tick, so an untouched show renders
+   *  byte-for-byte as before. A non-positive rate carries no continuity (the
+   *  effect is inactive), so we only re-anchor lastRate without touching corr. */
+  private effectCorr(layerId: string, lookId: string, partId: string, effects: Effect[]): number[] {
+    const beat = this.effBeat;
+    return effects.map((e) => {
+      const key = `${layerId} ${lookId} ${partId} ${e.id}`;
+      let entry = this.rateCorr.get(key);
+      if (!entry) {
+        entry = { lastRate: e.rate, corr: 0 };
+        this.rateCorr.set(key, entry);
+      }
+      if (entry.lastRate !== e.rate) {
+        if (entry.lastRate > 0 && e.rate > 0) {
+          entry.corr += beat * (1 / entry.lastRate - 1 / e.rate);
+        }
+        entry.lastRate = e.rate;
+      }
+      return entry.corr;
+    });
   }
 
   /** Land the effect phase on a downbeat (tap / resync). */
@@ -96,7 +162,7 @@ export class Renderer {
   /** Drop anchors whose (layer, look) is no longer live or fading - keeps
    *  the map from growing forever as looks and layers come and go. */
   private pruneCueAnchors(): void {
-    if (this.cueAnchors.size === 0) return;
+    if (this.cueAnchors.size === 0 && this.rateCorr.size === 0) return;
     const alive = new Set<string>();
     for (const layer of this.st.project.layers) {
       const live = this.st.layerLive(layer.id);
@@ -106,6 +172,12 @@ export class Renderer {
     for (const key of this.cueAnchors.keys()) {
       if (!alive.has(key)) this.cueAnchors.delete(key);
     }
+    // rateCorr keys are "layer look part effect" - the first two tokens are the
+    // same (layer, look) scope, so the same alive set gates both maps.
+    for (const key of this.rateCorr.keys()) {
+      const sp = key.indexOf(' ', key.indexOf(' ') + 1);
+      if (!alive.has(key.slice(0, sp))) this.rateCorr.delete(key);
+    }
   }
 
   tick(t: number): TickResult {
@@ -114,8 +186,40 @@ export class Renderer {
     const beat = st.clock.beatAt(t);
     const dt = this.lastT === null ? 0 : t - this.lastT;
     this.lastT = t;
-    this.effBeat += (dt / 60000) * st.clock.bpm * st.speed;
+    if (!this.pinned) this.effBeat += (dt / 60000) * st.clock.bpm * st.speed;
     if (!Number.isFinite(this.effBeat)) this.effBeat = 0; // never let NaN become absorbing
+
+    // world geometry rebuilds only when the project changed — never per tick.
+    // Soft rides sweep here too: same discipline, and a ride whose look was
+    // deleted out from under it must not linger as a dangling address.
+    if (this.geomGen !== st.gen) {
+      this.geom = buildGeometry(p);
+      this.extents = buildGroupExtents(p, this.geom);
+      st.sweepSoft();
+      this.modIndex = new Map();
+      (p.modulators ?? []).forEach((m, modIdx) => {
+        if (!m.on) return;
+        for (const b of m.bindings) {
+          const key = JSON.stringify([b.lookId, b.partId]);
+          let list = this.modIndex.get(key);
+          if (!list) {
+            list = [];
+            this.modIndex.set(key, list);
+          }
+          list.push({ ...b, modIdx });
+        }
+      });
+      this.geomGen = st.gen;
+    }
+
+    // Modulator values for THIS tick: pure functions of the shared beat, one
+    // evaluation per modulator however many bindings it fans to.
+    let modValues: number[] | null = null;
+    if (this.modIndex.size > 0) {
+      modValues = (p.modulators ?? []).map((m, i) =>
+        m.on && m.rate > 0 ? modWave(m.wave, this.effBeat / m.rate + m.phase, i) : 0.5,
+      );
+    }
 
     // --- resolved params per head, starting from profile defaults ---
     const heads = new Map<string, ResolvedParams>();
@@ -151,16 +255,74 @@ export class Renderer {
         const look = this.resolveCue(src.lookId, layer.id, src.incoming ? live.fadeStart : -1);
         if (!look) continue;
         for (const part of look.parts) {
-          const refs = groupHeads.get(part.groupId) ?? [];
+          // skip a dangling-group part BEFORE touching effectCorr, exactly as
+          // the Rust renderer does — running the corr bookkeeping for a part
+          // Rust never reaches would accumulate rate corrections here only,
+          // and the two engines would render different phases if the group
+          // ever reappeared under the same id mid-look
+          const refs = groupHeads.get(part.groupId);
+          if (!refs) continue;
           const n = refs.length;
+          // P1: resolve the soft layer into an effective view BEFORE the
+          // seam — stored → soft, one lookup per part, copies only when a
+          // ride actually targets this part. The rate-corr map reads the
+          // EFFECTIVE effects, so a soft rate ride stays phase-continuous.
+          // keyed by the RESOLVED look (a cue list renders its step's look,
+          // and the ride addresses the look being edited — the step)
+          const patch = st.soft.size > 0 ? st.soft.get(JSON.stringify([look.id, part.id])) : undefined;
+          let effParams = part.params;
+          if (patch && patch.params.size > 0) {
+            effParams = { ...part.params, color: part.params.color ? { ...part.params.color } : undefined };
+            for (const [field, v] of patch.params) applySoftParam(effParams, field, v);
+          }
+          let effEffects = part.effects;
+          if (patch && patch.effects.size > 0) {
+            effEffects = part.effects.map((e) => {
+              const fields = patch.effects.get(e.id);
+              if (!fields) return e;
+              const c = { ...e };
+              for (const [field, v] of fields) applySoftEffect(c, field, v);
+              return c;
+            });
+          }
+          // P2: modulator offsets ride ON TOP of stored → soft, clamped
+          // per-field. Copies are forced only for parts actually bound.
+          const modBinds = modValues ? this.modIndex.get(JSON.stringify([look.id, part.id])) : undefined;
+          if (modBinds && modValues) {
+            // copy EVERY entry unconditionally: after a soft-effect patch,
+            // effEffects is a new ARRAY whose un-ridden entries are still the
+            // STORED Effect objects — an identity guard on the array missed
+            // that and applySoftEffect corrupted the show in place
+            effParams = { ...effParams, color: effParams.color ? { ...effParams.color } : undefined };
+            effEffects = effEffects.map((e) => ({ ...e }));
+            for (const b of modBinds) {
+              const w = modValues[b.modIdx];
+              const offset = (w - 0.5) * b.depth * (b.field === 'hue' ? 360 : 1);
+              if (b.effectId !== undefined) {
+                const e = effEffects.find((x) => x.id === b.effectId);
+                if (!e) continue;
+                const v = softClamp(b.field, (e as unknown as Record<string, number>)[b.field] + offset);
+                if (v !== null) applySoftEffect(e, b.field, v);
+              } else {
+                const v = softClamp(b.field, softBase(effParams, b.field) + offset);
+                if (v !== null) applySoftParam(effParams, b.field, v);
+              }
+            }
+          }
+          // one lookup per part per tick, shared by every head
+          const corr = this.effectCorr(layer.id, src.lookId, part.id, effEffects);
+          const ext = this.extents.get(part.groupId) ?? NO_EXTENTS;
           for (let j = 0; j < n; j++) {
             const ref = refs[j];
             const key = `${ref.fixtureId}:${ref.head}`;
             if (!heads.has(key)) continue;
-            const prm = applyEffects(part.params, part.effects, this.effBeat, j, n);
+            // present in `heads` ⇒ present in geom (same enumeration built
+            // both); NO_GEOM is defence in depth, not an expected path
+            const g = this.geom.get(key) ?? NO_GEOM;
+            const prm = applyEffects(effParams, effEffects, this.effBeat, corr, j, n, g, ext);
             let a = acc.get(key);
             if (!a) {
-              a = { num: {}, col: null, motorMode: null, macro: undefined };
+              a = { num: {}, beam: {}, col: null, motorMode: null, macro: undefined };
               acc.set(key, a);
             }
             const addNum = (field: NumField, v: number | undefined) => {
@@ -178,6 +340,14 @@ export class Renderer {
             addNum('haze', prm.haze);
             addNum('fan', prm.fan);
             addNum('motorValue', prm.motorValue);
+            const acr = a;
+            const addBeam = (field: BeamField, v: number | undefined) => {
+              if (v === undefined) return;
+              const c = acr.beam[field] ?? (acr.beam[field] = { v: 0, w: 0 });
+              c.v += v * src.w;
+              c.w += src.w;
+            };
+            for (const f of BEAM_FIELDS) addBeam(f, prm[f]);
             if (prm.color) {
               const [r, g, b] = hsvToRgb(prm.color.h, prm.color.s, 1);
               const c = a.col ?? (a.col = { r: 0, g: 0, b: 0, w: 0 });
@@ -211,6 +381,17 @@ export class Renderer {
           } else {
             out[f] = clamp(lerp(out[f], isIntensity ? val * m : val, sw));
           }
+        }
+        for (const f of BEAM_FIELDS) {
+          const c = a.beam[f];
+          if (!c || c.w <= 0) continue;
+          const val = clamp(c.v / c.w);
+          const sw = Math.min(1, c.w);
+          // A beam parameter is never an intensity, so layer master and blend
+          // mode do not scale it — half master must not mean half zoom. The
+          // first layer to speak sets it; later ones crossfade from there.
+          const cur = out[f];
+          out[f] = cur === null ? val : clamp(lerp(cur, val, sw));
         }
         if (a.col && a.col.w > 0) {
           const sw = Math.min(1, a.col.w);
@@ -395,12 +576,19 @@ export class Renderer {
         r = g = b = 0.85;
       }
       const ring = o.white >= 0.5 ? 1 : o.ringFx > 0.01 ? 0.5 : 0;
+      // Round to 3 decimals before the wire — previz-only floats at full
+      // precision are 17-19 chars each and dominate the snapshot. Identical to
+      // core/src/renderer.rs (all values 0..1, so Math.round matches Rust's
+      // round-half-away-from-zero), so parity holds.
+      const q = (v: number): number => Math.round(v * 1000) / 1000;
       const snap: HeadSnap = {
         f: ho.fixtureId, h: ho.head,
-        r, g, b, i,
-        st: o.strobe, ring, mm: o.motorMode, mv: o.motorValue,
-        pan: o.pan, tilt: o.tilt,
+        r: q(r), g: q(g), b: q(b), i: q(i),
+        st: q(o.strobe), ring, mm: o.motorMode, mv: q(o.motorValue),
+        pan: q(o.pan), tilt: q(o.tilt),
       };
+      // only when a look drives it — absent keeps the profile's beam angle
+      if (o.zoom !== null) snap.zm = q(o.zoom);
       if (mc && mc.length) snap.mc = mc;
       return snap;
     });

@@ -4,6 +4,10 @@ import { uid } from '../../../shared/types.ts';
 import { NumInput, ScrubNumInput, TextField, UnicastInput } from './inputs.tsx';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
+import { LicencePanel } from './LicencePanel.tsx';
+import { licenceAvailable } from '../licence.ts';
+import { UpdatePanel } from './UpdatePanel.tsx';
+import { updateAvailable } from '../update.ts';
 
 const METER_W = 1024;
 const METER_H = 88;
@@ -48,7 +52,7 @@ function DmxMeters({
   onPick: (ch: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const data = useStore((s) => s.snap?.dmx[universeId]);
+  const data = useStore((s) => s.dmx[universeId]);
   const project = useStore((s) => s.project)!;
   const [hover, setHover] = useState<number | null>(null);
   const spans = useMemo(() => spansFor(project, universeId), [project, universeId]);
@@ -214,6 +218,7 @@ function ChannelCheck({
         />
         <input
           type="range"
+          title="scrub this channel's level — takes effect only while the channel is overridden"
           min={0}
           max={255}
           value={value}
@@ -234,12 +239,22 @@ function ChannelCheck({
         <button
           className="btn small ghost"
           title="flash the channel to full while held down"
-          onMouseDown={() => send({ type: 'setChannel', universeId, channel, value: 255 })}
-          onMouseUp={() => {
+          // Pointer events, not mouse events. Touch browsers synthesise the
+          // mouse pair as a burst AFTER the tap, so on the FOH tablet the flash
+          // came and went inside one frame and the channel never visibly moved
+          // — reading as a dead fixture during a channel check, which is the
+          // one job this control exists for. Every other press-and-hold in the
+          // app (flash pads, faders) is already pointer-based.
+          style={{ touchAction: 'none' }}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            send({ type: 'setChannel', universeId, channel, value: 255 });
+          }}
+          onPointerUp={() => {
             const held = overrides[channel];
             send({ type: 'setChannel', universeId, channel, value: held ?? null });
           }}
-          onMouseLeave={() => {
+          onPointerCancel={() => {
             const held = overrides[channel];
             send({ type: 'setChannel', universeId, channel, value: held ?? null });
           }}
@@ -260,7 +275,8 @@ function ChannelCheck({
               send({ type: 'clearChannelOverrides' });
               setOverrides(() => ({}));
             }}
-          >
+          
+            title="drop every held flash look — the safety net if a held pad or note is stuck on">
             release all
           </button>
         </div>
@@ -328,6 +344,17 @@ export function OutputView() {
     if (meterUniverse !== meterU) setMeterU(meterUniverse);
   }, [meterUniverse, meterU]);
 
+  // Raw DMX is opt-in per client: this tab is the only thing that reads it, and
+  // only one universe at a time. Subscribing here (and unsubscribing on the way
+  // out) is what keeps ~8 KB a frame off every other client — the previz, the
+  // FOH tablet — that never looks at a byte of it.
+  const send = useStore((s) => s.send);
+  useEffect(() => {
+    if (!meterUniverse) return;
+    send({ type: 'watchDmx', universeIds: [meterUniverse] });
+    return () => send({ type: 'watchDmx', universeIds: [] });
+  }, [meterUniverse, send]);
+
   return (
     <div className="col" style={{ gap: 14 }}>
       <div>
@@ -350,29 +377,39 @@ export function OutputView() {
               return (
                 <tr key={u.id}>
                   <td>
-                    <TextField className="text" style={{ width: 140 }} entityId={u.id} value={u.label} onCommit={(v) => editU((x) => (x.label = v))} />
+                    <TextField className="text" title="universe label — for your own reference; it is not sent anywhere" style={{ width: 140 }} entityId={u.id} value={u.label} onCommit={(v) => editU((x) => (x.label = v))} />
                   </td>
                   <td>
-                    <button className={`btn small ${u.artnet ? 'on' : ''}`} onClick={() => editU((x) => (x.artnet = !x.artnet))}>
+                    <button
+                      className={`btn small ${u.artnet ? 'on' : ''}`}
+                      title="send this universe over Art-Net. Off means the console runs normally and this universe reaches no fixtures."
+                      onClick={() => editU((x) => (x.artnet = !x.artnet))}
+                    >
                       {u.artnet ? 'on' : 'off'}
                     </button>
                   </td>
                   <td>
                     <NumInput
                       value={u.artnetUniverse}
+                      title="Art-Net port-address (0–32767) this universe is sent on — must match what the node expects"
                       min={0}
                       max={32767}
                       onCommit={(v) => editU((x) => (x.artnetUniverse = v))}
                     />
                   </td>
                   <td>
-                    <button className={`btn small ${u.sacn ? 'on' : ''}`} onClick={() => editU((x) => (x.sacn = !x.sacn))}>
+                    <button
+                      className={`btn small ${u.sacn ? 'on' : ''}`}
+                      title="send this universe over sACN (E1.31). Art-Net and sACN can run at the same time."
+                      onClick={() => editU((x) => (x.sacn = !x.sacn))}
+                    >
                       {u.sacn ? 'on' : 'off'}
                     </button>
                   </td>
                   <td>
                     <NumInput
                       value={u.sacnUniverse}
+                      title="sACN universe number (1–63999) this universe is sent on"
                       min={1}
                       max={63999}
                       onCommit={(v) => editU((x) => (x.sacnUniverse = v))}
@@ -423,7 +460,8 @@ export function OutputView() {
               unicast: null,
             });
           })}
-        >
+        
+            title="another DMX universe: 512 channels with its own Art-Net/sACN destination">
           + add universe
         </button>
       </div>
@@ -447,7 +485,7 @@ export function OutputView() {
       <div>
         <div className="row" style={{ marginBottom: 6 }}>
           <div className="sectionhead" style={{ margin: 0, border: 'none', padding: 0 }}>DMX monitor</div>
-          <select className="sel" value={meterUniverse} onChange={(e) => setMeterU(e.target.value)}>
+          <select className="sel" title="which universe the channel meters below are showing" value={meterUniverse} onChange={(e) => setMeterU(e.target.value)}>
             {project.universes.map((u) => (
               <option key={u.id} value={u.id}>{u.label}</option>
             ))}
@@ -474,6 +512,23 @@ export function OutputView() {
           pick={pick}
         />
       </div>
+
+      {/* Gated out here, not just inside the panel: the panel returns null
+          without a Tauri bridge, but a bare sectionhead over nothing is what a
+          browser and the LAN tablet were left looking at. */}
+      {updateAvailable() && (
+        <div>
+          <div className="sectionhead">Updates</div>
+          <UpdatePanel />
+        </div>
+      )}
+
+      {licenceAvailable() && (
+        <div>
+          <div className="sectionhead">Licence</div>
+          <LicencePanel />
+        </div>
+      )}
     </div>
   );
 }

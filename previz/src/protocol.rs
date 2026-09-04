@@ -42,6 +42,19 @@ pub struct PropLite {
     pub pos: PropPosLite,
     #[serde(default)]
     pub rot_y: Option<f32>,
+    /// structural kinds only, metres — w across, h tall, d deep (before rotY)
+    #[serde(default)]
+    pub size: Option<PropSizeLite>,
+    /// structural kinds only — height of the base off the floor
+    #[serde(default)]
+    pub y: Option<f32>,
+}
+
+#[derive(Deserialize, Clone, Copy, Debug)]
+pub struct PropSizeLite {
+    pub w: f32,
+    pub h: f32,
+    pub d: f32,
 }
 
 #[derive(Deserialize, Clone, Copy, Debug)]
@@ -57,8 +70,50 @@ pub struct ProjectLite {
     #[serde(default)]
     pub props: Vec<PropLite>,
     /// imported (GDTF-compiled) profiles — needed for head layout + beam angle
-    #[serde(default)]
+    #[serde(default, deserialize_with = "profiles_lenient")]
     pub profiles: std::collections::HashMap<String, light_core::cprofile::CompiledProfile>,
+}
+
+/// Deserialize profiles ONE AT A TIME, skipping any that fail.
+///
+/// A CompiledProfile embeds the engine's strict enum contract (Cond / Func /
+/// Source, internally tagged, with no `#[serde(other)]` fallback). Serde
+/// tolerates unknown *fields* but not unknown *variants*, and ProjectLite's
+/// parse is all-or-nothing — so a previz binary one build behind the engine
+/// (the bundled .app ships its own) failed EVERY project message and rendered a
+/// permanently empty demo stage. The only clue was an eprintln, which goes to
+/// /dev/null in a bundle, and snapshots still parsed so nothing looked broken.
+///
+/// One unreadable profile should cost one fixture's beam metadata, not the
+/// stage. Fixtures whose profile is skipped fall back to built-in metadata.
+fn profiles_lenient<'de, D>(
+    d: D,
+) -> Result<std::collections::HashMap<String, light_core::cprofile::CompiledProfile>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: std::collections::HashMap<String, serde_json::Value> =
+        std::collections::HashMap::deserialize(d)?;
+    let mut out = std::collections::HashMap::with_capacity(raw.len());
+    let mut skipped: Vec<String> = Vec::new();
+    for (id, v) in raw {
+        match serde_json::from_value::<light_core::cprofile::CompiledProfile>(v) {
+            Ok(p) => {
+                out.insert(id, p);
+            }
+            Err(e) => {
+                eprintln!("[previz] profile '{id}' unreadable, skipped: {e}");
+                skipped.push(id);
+            }
+        }
+    }
+    if !skipped.is_empty() {
+        eprintln!(
+            "[previz] {} profile(s) skipped — those fixtures fall back to built-in beam metadata",
+            skipped.len()
+        );
+    }
+    Ok(out)
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -85,6 +140,16 @@ pub struct HeadLite {
     pub tilt: f32,
     #[serde(default)]
     pub mc: Option<Vec<[u8; 3]>>,
+    /// Live zoom, 0..1, present only while a look is actively driving it —
+    /// absent means "parked, keep the profile's own angle" (see
+    /// `core/src/renderer.rs`, which skip-serializes it).
+    ///
+    /// This window is the one the docs send people to for judging beam
+    /// geometry, and until now it was the one place zoom could not be seen:
+    /// the field was on the wire and simply never parsed, so both the shaft and
+    /// the floor pool stayed frozen at the profile angle.
+    #[serde(default)]
+    pub zm: Option<f32>,
 }
 
 fn default_mm() -> String {

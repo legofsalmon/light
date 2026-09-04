@@ -145,13 +145,30 @@ pub fn start(
         let bc = bc.clone();
         let dist = dist.clone();
         std::thread::spawn(move || {
+            // One OS thread per connection with no ceiling: a port scan or a
+            // misbehaving client can spawn threads until the process dies, and
+            // a half-open socket holds one through the peek loop. A real show
+            // is the app, the previz and a tablet or two — this is far above
+            // that and far below anything that hurts.
+            const MAX_CLIENTS: usize = 32;
+            let live = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
             for stream in l.incoming() {
                 let Ok(stream) = stream else { continue };
+                if live.load(std::sync::atomic::Ordering::Relaxed) >= MAX_CLIENTS {
+                    // Drop it rather than queueing: an accepted-but-unserved
+                    // socket looks alive to the client and never answers.
+                    eprintln!("[server] refusing connection — {MAX_CLIENTS} already open");
+                    drop(stream);
+                    continue;
+                }
+                live.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let tx = tx.clone();
                 let bc = bc.clone();
                 let dist = dist.clone();
+                let live2 = live.clone();
                 std::thread::spawn(move || {
                     let _ = handle_conn(stream, dist, tx, bc);
+                    live2.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                 });
             }
         });
@@ -233,11 +250,32 @@ fn handle_ws(stream: TcpStream, tx: Sender<EngineMsg>, bc: Broadcaster) -> std::
         }
         // poll inbound
         match ws.read() {
-            Ok(Message::Text(t)) => {
-                if let Ok(cmd) = serde_json::from_str::<Command>(&t) {
+            Ok(Message::Text(t)) => match serde_json::from_str::<Command>(&t) {
+                Ok(cmd) => {
                     let _ = tx.send(EngineMsg::Cmd(cmd, Some(id)));
                 }
-            }
+                // Never silently. A frame the engine cannot read used to vanish
+                // with no log, no reply and no toast — which is indistinguishable
+                // from the rig ignoring you, and is exactly the "controls
+                // silently not reaching the rig" failure this project treats as
+                // its worst. The type is enough to identify it without dumping
+                // an entire project into a log line.
+                Err(e) => {
+                    let kind = serde_json::from_str::<serde_json::Value>(&t)
+                        .ok()
+                        .and_then(|v| v.get("type").and_then(|x| x.as_str()).map(str::to_string))
+                        .unwrap_or_else(|| "unreadable".to_string());
+                    eprintln!("[server] rejected a \"{kind}\" command from client {id}: {e}");
+                    let _ = ws.send(Message::Text(
+                        serde_json::json!({
+                            "type": "toast",
+                            "ok": false,
+                            "message": format!("the engine could not read a \"{kind}\" command — it was not applied"),
+                        })
+                        .to_string(),
+                    ));
+                }
+            },
             Ok(Message::Close(_)) => break,
             Ok(_) => {}
             Err(tungstenite::Error::Io(ref e))
