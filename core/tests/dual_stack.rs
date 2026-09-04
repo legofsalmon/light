@@ -50,26 +50,35 @@ fn serves_both_ip_families() {
         "IPv4 must answer, got {v4:?}"
     );
 
-    // The one that regressed. On Linux `::` is dual-stack and collides with
-    // the v4 wildcard, so the bind returns None and ::1 is served by the v4
-    // socket anyway — either way a response is required.
+    // The one that regressed — where the host can serve it at all.
     //
-    // Unless the host has no IPv6 at all, which is the case on GitHub's
-    // ubuntu-latest runners: ::1 is simply unreachable there and this asserted
-    // `got None` on every CI run from 2026-08-19 onward. That is not this
-    // server failing, and the cost of pretending otherwise was high — the step
-    // after this one is the differential parity check, so a red test here meant
-    // main had NO parity coverage for six weeks.
+    // `start` takes the v4 wildcard first and then tries `::` best-effort. On
+    // macOS IPV6_V6ONLY defaults on, so `::` is a separate socket and binds:
+    // that is the case this test exists for, because `localhost` resolves to
+    // ::1 first and the app window dials it. On Linux `::` is dual-stack and
+    // collides with the v4 wildcard already held, so the bind returns None and
+    // NOTHING serves ::1 — server.rs says exactly this and calls it
+    // best-effort.
     //
-    // Same shape as the Art-Net loopback test skipping when :6454 is held: say
-    // plainly what was not exercised rather than assert something the host
-    // cannot answer. macOS always has ::1, and macOS is where the regression
-    // happened and where the release is built, so the assertion still runs
-    // exactly where it matters.
-    if TcpListener::bind("[::1]:0").is_err() {
+    // So this assertion is a macOS guarantee, not a universal one. It asserted
+    // it universally, failed on every Linux CI run from 2026-08-19, and — worse
+    // than a red test — the parity step sits behind it in ci.yml, so main went
+    // six weeks with no differential parity coverage at all.
+    //
+    // An earlier attempt at this skipped when `[::1]:0` could not be bound.
+    // That was the wrong probe and it never fired: the runner has IPv6 loopback
+    // perfectly well. The question is not whether the host HAS v6, it is
+    // whether `::` can be taken while the v4 wildcard is held — which is
+    // precisely what `start` does, so probe that.
+    let collides = {
+        let scratch = TcpListener::bind(("0.0.0.0", 0)).expect("a scratch v4 port");
+        let p = scratch.local_addr().expect("addr").port();
+        TcpListener::bind(("::", p)).is_err()
+    };
+    if collides {
         eprintln!(
-            "SKIPPED the IPv6 half: this host has no usable ::1 loopback. \
-             The IPv4 half above still ran."
+            "SKIPPED the IPv6 half: on this host `::` collides with the v4 wildcard, so \
+             server.rs cannot take it and ::1 is served by nothing. The IPv4 half ran."
         );
         return;
     }
