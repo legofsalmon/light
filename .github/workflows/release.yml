@@ -100,14 +100,27 @@ jobs:
       - name: Rust core tests
         run: cargo test -p light-core
 
-      - name: App shell tests (licence + updater)
-        # Not in ci.yml: that runs on ubuntu-latest and a Tauri app needs
-        # webkit2gtk to compile there, which the Linux job does not install.
-        # macOS is the only platform this app is built for anyway.
-        run: cargo test -p light-app
-
       - name: Differential parity (Node vs Rust)
         run: cargo build -p light-core && npm run test:parity
+
+      - name: App shell tests (licence + updater)
+        # ui/dist first: tauri.conf.json declares it a bundle resource, so
+        # tauri-build refuses to run the build script without it — and the
+        # build script is what stamps LIGHT_VERSION. Nothing has produced it at
+        # this point in a clean checkout; locally it is always just sitting
+        # there from the last build, which is exactly why this only failed in
+        # CI. `npm run app:build` below regenerates it anyway, and a vite build
+        # is seconds.
+        #
+        # Not in ci.yml: that runs on ubuntu-latest and a Tauri app needs
+        # webkit2gtk to compile there. macOS is the only platform this app is
+        # built for anyway.
+        #
+        # After parity, not before: parity is the check the two-engine design
+        # rests on, and a failure here used to skip it entirely.
+        run: |
+          npm run build
+          cargo test -p light-app
 
       - name: Build the app (signed + notarised when secrets exist)
         # With no secrets set these are empty and the bundler falls back to the
