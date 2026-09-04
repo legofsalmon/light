@@ -115,9 +115,26 @@ ln -s /Applications "$DMG_DIR/Applications"
 # nothing else — notarised, stapled, and unshippable, with no way to tell why.
 # A few lines of progress in the log is a cheap price for a failure that says
 # what it was.
-df -h "$(dirname "$BUNDLE")" | tail -1
-if ! hdiutil create -volname "LIGHT ${VERSION}" -srcfolder "$DMG_DIR" -ov -format UDZO "$DMG_OUT"; then
-  echo "hdiutil failed to build the dmg (exit $?)" >&2
+# Size the image EXPLICITLY, with headroom.
+#
+# `-srcfolder` alone makes hdiutil estimate the size, and its estimate is too
+# tight for this bundle: v1.3.0-beta.4 failed with "hdiutil: create failed - No
+# space left on device" against a host that had 91 GiB free, because the thing
+# that ran out was the IMAGE — the copy died part-way through ui-dist. It is
+# marginal rather than always-wrong, which is why beta.3 failed once and then
+# succeeded on a retry and looked transient.
+#
+# UDZO compresses the result, so headroom in the intermediate image costs
+# nothing in the published dmg.
+SRC_K="$(du -sk "$DMG_DIR" | cut -f1)"
+IMG_K=$(( SRC_K + SRC_K / 2 + 65536 ))   # +50% and +64 MB
+echo "    staging $(( SRC_K / 1024 )) MB -> image $(( IMG_K / 1024 )) MB"
+if ! hdiutil create -volname "LIGHT ${VERSION}" -srcfolder "$DMG_DIR" \
+       -size "${IMG_K}k" -ov -format UDZO "$DMG_OUT"; then
+  status=$?
+  # $? inside `if !` reports the negation, not hdiutil — capture it first or
+  # the log says "exit 0" for a failure, which is what the last one did.
+  echo "hdiutil failed to build the dmg (exit $status)" >&2
   df -h "$(dirname "$BUNDLE")" >&2
   exit 1
 fi
