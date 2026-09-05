@@ -104,6 +104,10 @@ GDTFs embedded.
 
 Roughly in order of expected value:
 
+> The competitive backlog — every Lightkey gap with a verified status, effort
+> and the subsystems it touches — is [docs/feature-backlog.md](docs/feature-backlog.md).
+> Several lines below are superseded by it (Link and APC feedback have shipped).
+
 - **Ableton Link** tempo sync (Arena supports Link natively; removes the OSC
   tempo dependency).
 - **Cue-lists / chasers per cell** — a cell that steps through looks on beats
