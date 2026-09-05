@@ -163,6 +163,7 @@ fn main() {
             update_install::update_install,
             update_install::update_cancel,
             licence_net::licence_status,
+            licence_net::licence_relaunch,
             licence_net::licence_start_trial,
             licence_net::licence_activate,
             licence_net::licence_heartbeat,
@@ -251,12 +252,12 @@ fn main() {
             update::start_update_check(app.handle().clone());
 
             let gate = licence_net::startup_verdict();
-            if gate.status.blocks_new_session() {
+            if licence::blocks_new_session(gate.status, licence_net::public_key_configured()) {
                 log_line(&format!(
                     "licence {:?} — not starting the engine; the window opens on the licence panel",
                     gate.status
                 ));
-                eprintln!("[light] trial ended — start a licence in the window to run a show");
+                eprintln!("[light] no usable licence — the window opens on the licence screen");
                 return Ok(());
             }
 

@@ -687,8 +687,18 @@ pub fn update_progress(install: State<'_, Install>) -> InstallProgress {
 pub async fn update_download(
     install: State<'_, Install>,
     updates: State<'_, crate::update::Updates>,
+    licence: State<'_, crate::licence_net::Licence>,
 ) -> Result<InstallProgress, String> {
     let release = updates.available().ok_or("there is no update to download")?;
+    // A bought licence owns the app forever; only newer BUILDS lapse. Refuse
+    // here rather than downloading 26 MB and refusing at the swap.
+    let maint_until = licence.verdict().claims.map(|c| c.maint_until);
+    if !crate::update::entitled_to(&release, maint_until) {
+        return Err(
+            "that build was released after your update window ended — renewing lets you install it"
+                .into(),
+        );
+    }
     if let Err(e) = stage(&install, &release).await {
         install.set_stage("failed");
         // Never leave a half-unpacked bundle where the next attempt would find

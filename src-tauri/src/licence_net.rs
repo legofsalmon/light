@@ -13,7 +13,7 @@
 //! 3. **Nothing here stops a running show.** The only gate is at session start
 //!    and it is `main.rs` that applies it, once, before the engine thread.
 
-use crate::licence::{check, Claims, Status, Verdict};
+use crate::licence::{blocks_new_session, check, Claims, Status, Verdict};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
@@ -21,6 +21,9 @@ use tauri::State;
 
 const BASE: &str = "https://letissier.ie";
 const PRODUCT: &str = "light";
+/// Where an operator signs in to move a seat between machines. The panel sends
+/// them here rather than trying to resolve a duplicate activation in-app.
+pub const MANAGE_URL: &str = "https://letissier.ie/account";
 const KEYCHAIN_SERVICE: &str = "ie.letissier.light.licence";
 const TOKEN_ACCOUNT: &str = "token";
 const KEY_ACCOUNT: &str = "key";
@@ -232,6 +235,18 @@ pub struct LicenceStatus {
     pub configured: bool,
     pub build_date: i64,
     pub blocks_new_session: bool,
+    /// Where to go to release a seat held by another machine.
+    pub manage_url: &'static str,
+}
+
+/// Relaunch after the gate has been satisfied.
+///
+/// Safe here in a way it is NOT on the update path: when the gate blocked, the
+/// engine was never started, so there is no project in memory and nothing to
+/// flush. `update_install` must never use this.
+#[tauri::command]
+pub fn licence_relaunch(app: tauri::AppHandle) {
+    app.restart();
 }
 
 #[tauri::command]
@@ -243,7 +258,8 @@ pub fn licence_status(licence: State<'_, Licence>) -> LicenceStatus {
         claims: v.claims,
         configured: public_key_configured(),
         build_date: BUILD_DATE,
-        blocks_new_session: v.status.blocks_new_session(),
+        blocks_new_session: blocks_new_session(v.status, public_key_configured()),
+        manage_url: MANAGE_URL,
     }
 }
 
@@ -380,7 +396,7 @@ mod tests {
     /// unlicensed rather than refusing to open.
     #[test]
     fn a_licence_that_cannot_be_read_never_locks_the_console() {
-        assert!(!startup_verdict().status.blocks_new_session());
+        assert!(!blocks_new_session(startup_verdict().status, false));
     }
 
     #[test]

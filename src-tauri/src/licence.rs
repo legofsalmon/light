@@ -74,14 +74,43 @@ pub enum Status {
     Invalid,
 }
 
-impl Status {
-    /// The one place the product decides what a status *costs*. Only a lapsed
-    /// trial stops a new session starting; everything else is a banner, because
-    /// a console that refuses to light a rig over a lease is worse than an
-    /// unlicensed one. Nothing here can touch a session already running.
-    pub fn blocks_new_session(self) -> bool {
-        matches!(self, Status::Expired)
+/// The one place the product decides what a status *costs*.
+///
+/// This started as "only a lapsed trial blocks", which was wrong in a way that
+/// only shows up once you use it: with no licence at all the status is
+/// `Invalid`, `Invalid` did not block, and so **starting a trial was strictly
+/// worse than never starting one** — honest users got three days, everyone else
+/// got forever. The trial was a punishment for engaging with it.
+///
+/// What blocks, and why each one:
+///
+/// - `Invalid` — no licence, or one that will not verify. First launch opens on
+///   the licence screen. This is what makes the trial the way IN rather than a
+///   countdown you opt into.
+/// - `Expired` — the trial is over. That is the whole meaning of a trial.
+/// - `WrongMachine` — the token belongs to another machine. Copying a token is
+///   the obvious way around any of this, so leaving it open would undo the rest;
+///   the panel sends them to the account page to release the other seat.
+///
+/// What deliberately does NOT block:
+///
+/// - `UpdateRequired` — a bought licence is permanent; only the *update
+///   entitlement* lapses. Being outside it costs you newer builds, never the app
+///   you paid for. The updater enforces that, not this.
+/// - `CheckInRequired` — a paying customer on a lease that lapsed, usually
+///   because they have been offline. The service's own guidance is that this
+///   asks for a heartbeat rather than ending anything.
+///
+/// And none of it can touch a session already running: the only caller is
+/// `main.rs`, once, before the engine thread exists.
+pub fn blocks_new_session(status: Status, key_configured: bool) -> bool {
+    // A build that cannot verify anything must never lock the console. Without
+    // this, shipping a build with no signing key would brick every copy of it,
+    // silently, and look exactly like a licensing decision.
+    if !key_configured {
+        return false;
     }
+    matches!(status, Status::Invalid | Status::Expired | Status::WrongMachine)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -250,20 +279,45 @@ mod tests {
         );
     }
 
-    /// Only the lapsed trial costs anything, and it costs a *new* session. This
-    /// is the app's rule, not the service's — see `docs/licensing-integration.md`.
+    /// The rule that was wrong, pinned so it cannot drift back.
     #[test]
-    fn nothing_but_a_dead_trial_stops_a_session_starting() {
+    fn having_no_licence_blocks_just_like_a_dead_trial() {
+        // The bug: Invalid did not block, so never starting a trial gave you
+        // unlimited use and starting one gave you three days.
+        assert!(blocks_new_session(Status::Invalid, true), "no licence must not run forever");
+        assert!(blocks_new_session(Status::Expired, true), "a finished trial is finished");
+        assert!(blocks_new_session(Status::WrongMachine, true), "a copied token must not work");
+    }
+
+    /// A bought licence is permanent. Only the update entitlement expires, and
+    /// being outside it costs newer builds rather than the app.
+    #[test]
+    fn a_paid_licence_is_never_taken_away() {
+        assert!(
+            !blocks_new_session(Status::UpdateRequired, true),
+            "outside the update window still owns the app"
+        );
+        assert!(
+            !blocks_new_session(Status::CheckInRequired, true),
+            "a lapsed lease asks for a heartbeat, it does not end a licence"
+        );
+        assert!(!blocks_new_session(Status::Active, true));
+    }
+
+    /// A build that cannot verify must never lock anyone out — otherwise
+    /// shipping without a key bricks every copy and looks deliberate.
+    #[test]
+    fn a_build_that_cannot_verify_locks_nobody_out() {
         for s in [
             Status::Active,
             Status::UpdateRequired,
             Status::CheckInRequired,
+            Status::Expired,
             Status::WrongMachine,
             Status::Invalid,
         ] {
-            assert!(!s.blocks_new_session(), "{s:?} must not stop the console opening");
+            assert!(!blocks_new_session(s, false), "{s:?} blocked with no verifying key");
         }
-        assert!(Status::Expired.blocks_new_session());
     }
 
     #[test]

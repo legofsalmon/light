@@ -49,7 +49,10 @@ export type LicenceStatus = {
   /** false on a build made before the signing key was configured */
   configured: boolean;
   buildDate: number;
+  /** true when this copy will not start a session until a licence is sorted */
   blocksNewSession: boolean;
+  /** where to sign in and move a seat between machines */
+  manageUrl: string;
 };
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -65,6 +68,10 @@ export const licenceActivate = (key: string, label: string) =>
   call<LicenceStatus>('licence_activate', { key, label });
 export const licenceHeartbeat = () => call<LicenceStatus>('licence_heartbeat');
 export const licenceDeactivate = () => call<LicenceStatus>('licence_deactivate');
+
+/** Restart so the engine starts. Only valid after the gate is satisfied —
+ *  nothing is running at that point, so there is nothing to lose. */
+export const licenceRelaunch = () => call<void>('licence_relaunch');
 
 /** What the operator is told, per state. Deliberately plain: only one of these
  *  is the operator's problem, and only one stops a session starting. */
@@ -83,7 +90,8 @@ export function describe(s: LicenceStatus): { title: string; detail: string; ton
     case 'update_required':
       return {
         title: 'Update window ended',
-        detail: 'This build is newer than your maintenance covers. It keeps running — renewing gets you newer builds.',
+        detail:
+          'The app is yours and keeps working. What has lapsed is access to builds released since — renewing gets you those.',
         tone: 'warn',
       };
     case 'check_in_required':
@@ -95,16 +103,21 @@ export function describe(s: LicenceStatus): { title: string; detail: string; ton
     case 'expired':
       return {
         title: 'Trial ended',
-        detail: 'Your trial has run out. A show already running is never interrupted, but LIGHT will not start a new session until this is sorted.',
+        detail: 'Your trial has run out. Enter a licence key to carry on.',
         tone: 'bad',
       };
     case 'wrong_machine':
       return {
         title: 'Licensed to another machine',
-        detail: 'This licence was activated elsewhere. Activate it here to move the seat.',
-        tone: 'warn',
+        detail:
+          'This licence is activated on a different machine. Sign in to your account to release that seat, then activate here.',
+        tone: 'bad',
       };
     case 'invalid':
-      return { title: 'No licence', detail: 'Start a trial or enter a licence key.', tone: 'warn' };
+      return {
+        title: 'No licence',
+        detail: 'Start a trial or enter a licence key.',
+        tone: 'warn',
+      };
   }
 }

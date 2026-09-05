@@ -17,7 +17,8 @@
     "build:wasm": "cd profile-wasm && wasm-pack build --target nodejs --out-dir pkg",
     "test:parity": "cargo build -p light-core --bins && node engine/test/diff.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p ui/tsconfig.json --noEmit",
-    "app:build:native": "LIGHT_TARGET=aarch64-apple-darwin bash scripts/build-app.sh"
+    "app:build:native": "LIGHT_TARGET=aarch64-apple-darwin bash scripts/build-app.sh",
+    "dev:ui": "vite ui --port 5178"
   },
   "dependencies": {
     "react": "^19.1.0",

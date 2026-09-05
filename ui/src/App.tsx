@@ -8,6 +8,8 @@ import { BottomPanel } from './components/BottomPanel.tsx';
 import { PrevizPanel } from './components/PrevizPanel.tsx';
 import { LookLibrary } from './components/LookLibrary.tsx';
 import { EditorPane } from './components/EditorPane.tsx';
+import { LicenceGate } from './components/LicenceGate.tsx';
+import { licenceAvailable, licenceStatus, type LicenceStatus } from './licence.ts';
 
 /** Keeps one crashing region from blanking the whole console mid-show: the
  *  grid, masters, and blackout survive a previz or editor exception. */
@@ -92,6 +94,14 @@ export function App() {
   useEffect(() => {
     const t = setTimeout(() => setStalled(true), 8000);
     return () => clearTimeout(t);
+  }, []);
+  // Asked once, over the Tauri bridge rather than the socket, so it answers
+  // even though no engine is listening. A browser or the LAN tablet has no
+  // bridge and never sees a gate — they are not the machine running the show.
+  const [gate, setGate] = useState<LicenceStatus | null>(null);
+  useEffect(() => {
+    if (!licenceAvailable()) return;
+    licenceStatus().then(setGate).catch(() => setGate(null));
   }, []);
   // The previz rides across the top of every view (rigs are wider than tall);
   // each view remembers its own hide state, and the full-screen previz view is
@@ -195,6 +205,11 @@ export function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // Ahead of the splash on purpose. When the licence gate is closed the engine
+  // was never started, so "connecting to engine…" would be true and useless —
+  // the reason it will never connect is the thing worth showing.
+  if (gate?.blocksNewSession) return <LicenceGate />;
 
   if (!hasProject) {
     return (

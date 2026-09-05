@@ -142,6 +142,10 @@ pub struct Release {
     pub size: u64,
     pub prerelease: bool,
     pub page_url: String,
+    /// When GitHub published it, unix seconds. Compared against the licence's
+    /// `maintUntil`: a bought licence owns the app forever but only entitles
+    /// builds released inside its update window.
+    pub published_at: i64,
 }
 
 #[derive(Deserialize)]
@@ -164,7 +168,34 @@ struct GhRelease {
     #[serde(default)]
     html_url: String,
     #[serde(default)]
+    published_at: Option<String>,
+    #[serde(default)]
     assets: Vec<GhAsset>,
+}
+
+/// `2026-09-05T12:34:56Z` to unix seconds. Hand-rolled because pulling a date
+/// crate into a console for one field is not a trade worth making, and the
+/// shape GitHub emits is fixed.
+fn unix_from_iso(s: &str) -> Option<i64> {
+    let b = s.as_bytes();
+    if b.len() < 20 || b[4] != b'-' || b[7] != b'-' || b[10] != b'T' {
+        return None;
+    }
+    let n = |a: usize, z: usize| s.get(a..z)?.parse::<i64>().ok();
+    let (y, m, d) = (n(0, 4)?, n(5, 7)?, n(8, 10)?);
+    let (hh, mm, ss) = (n(11, 13)?, n(14, 16)?, n(17, 19)?);
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    // days from civil, Howard Hinnant's algorithm
+    let y2 = if m <= 2 { y - 1 } else { y };
+    let era = if y2 >= 0 { y2 } else { y2 - 399 } / 400;
+    let yoe = y2 - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    Some(days * 86_400 + hh * 3600 + mm * 60 + ss)
 }
 
 /// Pick the best release this copy should be offered, or None.
@@ -188,6 +219,7 @@ pub fn best(json: &str, current: &Version) -> Option<Release> {
                 size: asset.size,
                 prerelease: r.prerelease,
                 page_url: r.html_url,
+                published_at: r.published_at.as_deref().and_then(unix_from_iso).unwrap_or(0),
             })
         })
         .filter(|r| current.is_prerelease() || !r.version.is_prerelease())
@@ -291,6 +323,11 @@ pub fn start_update_check(app: tauri::AppHandle) {
 pub struct UpdateStatus {
     pub current: String,
     pub available: Option<Release>,
+    /// False when the offer exists but sits outside the licence's update
+    /// window. The app stays yours; newer builds are what lapses.
+    pub entitled: bool,
+    /// The update entitlement deadline from the licence, for the panel to name.
+    pub maint_until: Option<i64>,
     pub note: Option<String>,
     pub releases_url: &'static str,
     /// True when this copy is on a prerelease, so the panel can say that it is
@@ -298,11 +335,33 @@ pub struct UpdateStatus {
     pub on_prerelease: bool,
 }
 
+/// Is this release inside the licence's update window?
+///
+/// A bought licence owns the app permanently; `maintUntil` is the date after
+/// which newly RELEASED builds are no longer included. So the comparison is the
+/// release's publication date against that deadline — not today's date, which
+/// would revoke builds the customer was entitled to when they appeared.
+pub fn entitled_to(release: &Release, maint_until: Option<i64>) -> bool {
+    match maint_until {
+        // no licence claims to read: nothing to withhold on
+        None => true,
+        Some(m) => release.published_at <= m,
+    }
+}
+
 #[tauri::command]
-pub fn update_status(updates: State<'_, Updates>) -> UpdateStatus {
+pub fn update_status(
+    updates: State<'_, Updates>,
+    licence: State<'_, crate::licence_net::Licence>,
+) -> UpdateStatus {
+    let maint_until = licence.verdict().claims.map(|c| c.maint_until);
+    let available = updates.found.lock().ok().and_then(|v| v.clone());
+    let entitled = available.as_ref().map(|r| entitled_to(r, maint_until)).unwrap_or(true);
     UpdateStatus {
         current: CURRENT.to_string(),
-        available: updates.found.lock().ok().and_then(|v| v.clone()),
+        entitled,
+        maint_until,
+        available,
         note: updates.note.lock().ok().and_then(|v| v.clone()),
         releases_url: RELEASES_URL,
         on_prerelease: Version::parse(CURRENT).map(|v| v.is_prerelease()).unwrap_or(false),
@@ -311,7 +370,10 @@ pub fn update_status(updates: State<'_, Updates>) -> UpdateStatus {
 
 /// Check now, because the operator asked. Same call, no timer.
 #[tauri::command]
-pub async fn update_check_now(updates: State<'_, Updates>) -> Result<UpdateStatus, String> {
+pub async fn update_check_now(
+    updates: State<'_, Updates>,
+    licence: State<'_, crate::licence_net::Licence>,
+) -> Result<UpdateStatus, String> {
     let current = Version::parse(CURRENT).ok_or("this build has no readable version")?;
     let body = fetch().await?;
     let found = best(&body, &current);
@@ -321,7 +383,7 @@ pub async fn update_check_now(updates: State<'_, Updates>) -> Result<UpdateStatu
     if let Ok(mut slot) = updates.note.lock() {
         *slot = None;
     }
-    Ok(update_status(updates))
+    Ok(update_status(updates, licence))
 }
 
 #[cfg(test)]
@@ -486,5 +548,47 @@ mod tests {
                 r["tag_name"]
             );
         }
+    }
+
+    fn rel(published: i64) -> Release {
+        let mut r = best(&feed(), &v("1.0.0")).expect("a release");
+        r.published_at = published;
+        r
+    }
+
+    /// The rule the licence model turns on: buying the app keeps the app. What
+    /// lapses is the entitlement to builds RELEASED after the window closed.
+    #[test]
+    fn the_update_window_is_about_the_release_date_not_today() {
+        let maint = 1_800_000_000;
+        assert!(entitled_to(&rel(maint - 1), Some(maint)), "released inside the window");
+        assert!(entitled_to(&rel(maint), Some(maint)), "released exactly at the deadline");
+        assert!(!entitled_to(&rel(maint + 1), Some(maint)), "released after it");
+        // With no readable licence there is nothing to withhold on — the gate
+        // for that case is the session gate, not this.
+        assert!(entitled_to(&rel(maint + 999_999), None));
+    }
+
+    /// GitHub's timestamps, since a wrong parse here would silently withhold
+    /// every update or none of them.
+    #[test]
+    fn github_timestamps_parse_to_the_right_instant() {
+        assert_eq!(unix_from_iso("1970-01-01T00:00:00Z"), Some(0));
+        assert_eq!(unix_from_iso("2026-09-05T00:00:00Z"), Some(1_788_566_400));
+        assert_eq!(unix_from_iso("2000-02-29T12:00:00Z"), Some(951_825_600), "leap day");
+        // ordering is what actually matters, whatever the epoch arithmetic
+        assert!(unix_from_iso("2026-09-05T12:00:00Z") > unix_from_iso("2026-09-05T11:59:59Z"));
+        assert!(unix_from_iso("2027-01-01T00:00:00Z") > unix_from_iso("2026-12-31T23:59:59Z"));
+        for bad in ["", "not a date", "2026-09-05", "20260905T000000Z", "2026-13-05T00:00:00Z"] {
+            assert!(unix_from_iso(bad).is_none(), "accepted {bad:?}");
+        }
+    }
+
+    /// Every real release must carry a parseable date, or the entitlement check
+    /// silently reads them all as epoch 0 and lets everything through.
+    #[test]
+    fn the_real_feed_has_usable_publication_dates() {
+        let r = best(REAL, &v("1.2.0")).expect("an offer");
+        assert!(r.published_at > 1_700_000_000, "no publication date: {}", r.published_at);
     }
 }
