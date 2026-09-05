@@ -447,28 +447,27 @@ mod tests {
 
     #[test]
     fn the_real_feed_parses_and_respects_the_channel() {
-        // A stable copy is NOT dragged onto the beta, even though the beta is
-        // the newest thing published.
-        assert!(
-            best(REAL, &v("1.2.2")).is_none(),
-            "a stable copy must not be offered v1.3.0-beta.2"
-        );
-        // An older stable copy is offered the newest STABLE.
+        // A stable copy is NOT dragged onto a beta, even though the betas are
+        // the newest things published.
         let r = best(REAL, &v("1.2.0")).expect("1.2.0 should be offered something");
-        assert_eq!(r.version.raw, "v1.2.2");
+        assert_eq!(r.version.raw, "v1.2.2", "a stable copy must be offered the newest STABLE");
         assert!(!r.prerelease);
         assert!(r.asset_url.ends_with("/LIGHT.zip"), "wrong asset: {}", r.asset_url);
         assert!(r.size > 1_000_000, "size looks wrong: {}", r.size);
+        assert!(best(REAL, &v("1.2.2")).is_none(), "the newest stable is offered nothing");
 
-        // A copy on the beta channel IS offered the beta — the case that
-        // decides whether the people testing v1.3.0-beta.2 ever hear about
-        // beta.3.
-        let r = best(REAL, &v("1.2.2-beta.1")).expect("a beta copy should be offered the beta");
-        assert_eq!(r.version.raw, "v1.3.0-beta.2");
+        // The case the whole channel rule exists for, and the one the in-app
+        // update test depends on: a copy on beta.3 must be offered beta.4.
+        let r = best(REAL, &v("1.3.0-beta.3")).expect("beta.3 should be offered beta.4");
+        assert_eq!(r.version.raw, "v1.3.0-beta.4");
         assert!(r.prerelease);
+        assert!(r.asset_url.ends_with("/LIGHT.zip"));
+
+        // Older betas walk forward to the newest beta, not to the newest stable.
+        assert_eq!(best(REAL, &v("1.3.0-beta.2")).unwrap().version.raw, "v1.3.0-beta.4");
 
         // And the newest build is offered nothing.
-        assert!(best(REAL, &v("1.3.0-beta.2")).is_none());
+        assert!(best(REAL, &v("1.3.0-beta.4")).is_none());
     }
 
     /// Every release ever published carries the asset, so an updater shipped

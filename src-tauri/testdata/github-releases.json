@@ -1,5 +1,53 @@
 [
  {
+  "tag_name": "v1.3.0-beta.4",
+  "draft": false,
+  "prerelease": true,
+  "html_url": "https://github.com/legofsalmon/light/releases/tag/v1.3.0-beta.4",
+  "body": "**LIGHT for macOS** \u2014 Apple Silicon, signed with a Developer ID\nand notarised by Apple. This build does **not** run on an Intel Mac.\n\nOpen the .dmg, drag LIGHT to Applications, double-click it. macOS\n",
+  "assets": [
+   {
+    "name": "LIGHT-1.3.0-beta.4.dmg",
+    "browser_download_url": "https://github.com/legofsalmon/light/releases/download/v1.3.0-beta.4/LIGHT-1.3.0-beta.4.dmg",
+    "size": 30516251
+   },
+   {
+    "name": "LIGHT.dmg",
+    "browser_download_url": "https://github.com/legofsalmon/light/releases/download/v1.3.0-beta.4/LIGHT.dmg",
+    "size": 30516251
+   },
+   {
+    "name": "LIGHT.zip",
+    "browser_download_url": "https://github.com/legofsalmon/light/releases/download/v1.3.0-beta.4/LIGHT.zip",
+    "size": 26148130
+   }
+  ]
+ },
+ {
+  "tag_name": "v1.3.0-beta.3",
+  "draft": false,
+  "prerelease": true,
+  "html_url": "https://github.com/legofsalmon/light/releases/tag/v1.3.0-beta.3",
+  "body": "**LIGHT for macOS** \u2014 Apple Silicon, signed with a Developer ID\nand notarised by Apple. This build does **not** run on an Intel Mac.\n\nOpen the .dmg, drag LIGHT to Applications, double-click it. macOS\n",
+  "assets": [
+   {
+    "name": "LIGHT-1.3.0-beta.3.dmg",
+    "browser_download_url": "https://github.com/legofsalmon/light/releases/download/v1.3.0-beta.3/LIGHT-1.3.0-beta.3.dmg",
+    "size": 30507045
+   },
+   {
+    "name": "LIGHT.dmg",
+    "browser_download_url": "https://github.com/legofsalmon/light/releases/download/v1.3.0-beta.3/LIGHT.dmg",
+    "size": 30507045
+   },
+   {
+    "name": "LIGHT.zip",
+    "browser_download_url": "https://github.com/legofsalmon/light/releases/download/v1.3.0-beta.3/LIGHT.zip",
+    "size": 26148145
+   }
+  ]
+ },
+ {
   "tag_name": "v1.3.0-beta.2",
   "draft": false,
   "prerelease": true,
