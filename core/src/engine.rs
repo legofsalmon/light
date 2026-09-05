@@ -897,7 +897,10 @@ fn handle_msg(
                 Command::NewProject { name } => {
                     let name = if name.trim().is_empty() { "Untitled" } else { name.trim() };
                     let slug = persist::unique_slug(dir, name);
-                    let mut fresh = crate::defaults::default_project();
+                    // blank, NOT default_project(): that one is the shipped
+                    // demo show and doubles as the first-launch project, so
+                    // this used to create a renamed copy of a 20-song set.
+                    let mut fresh = crate::defaults::blank_project();
                     fresh.name = name.to_string();
                     // flush the outgoing project under its OWN slug first —
                     // an edit inside the autosave debounce window must not

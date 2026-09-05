@@ -10,6 +10,7 @@ import { LookLibrary } from './components/LookLibrary.tsx';
 import { EditorPane } from './components/EditorPane.tsx';
 import { LicenceGate } from './components/LicenceGate.tsx';
 import { licenceAvailable, licenceStatus, type LicenceStatus } from './licence.ts';
+import { AdminModal } from './components/AdminModal.tsx';
 
 /** Keeps one crashing region from blanking the whole console mid-show: the
  *  grid, masters, and blackout survive a previz or editor exception. */
@@ -98,6 +99,7 @@ export function App() {
   // Asked once, over the Tauri bridge rather than the socket, so it answers
   // even though no engine is listening. A browser or the LAN tablet has no
   // bridge and never sees a gate — they are not the machine running the show.
+  const [admin, setAdmin] = useState(false);
   const [gate, setGate] = useState<LicenceStatus | null>(null);
   useEffect(() => {
     if (!licenceAvailable()) return;
@@ -254,7 +256,7 @@ export function App() {
             : 'ENGINE OFFLINE — reconnecting… nothing you press is reaching the rig'}
         </div>
       )}
-      <Region name="top bar"><TopBar /></Region>
+      <Region name="top bar"><TopBar onOpenAdmin={() => setAdmin(true)} /></Region>
       {/* Unmounted, not hidden — for the collapsed band too. A previz left
           mounted behind another panel keeps its requestAnimationFrame loop and
           its WebGL context running for a view nobody is looking at — on a
@@ -337,6 +339,7 @@ export function App() {
           <Region name="bottom panel"><BottomPanel /></Region>
         </div>
       )}
+      {admin && <AdminModal onClose={() => setAdmin(false)} />}
       <DialogHost />
     </div>
   );

@@ -142,7 +142,7 @@ const VIEWS: { id: ViewMode; label: string; title: string; key: string }[] = [
   { id: 'split', label: 'All', title: 'Build — previz over the pads and the editor', key: '4' },
 ];
 
-export function TopBar() {
+export function TopBar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
   const snap = useStore((s) => s.snap);
   const project = useStore((s) => s.project)!;
   const connected = useStore((s) => s.connected);
@@ -455,6 +455,20 @@ export function TopBar() {
           }
         />
       </div>
+
+      {/* Pinned, not just last. .topbar is a hidden-scrollbar scroll container,
+          so anything appended at the right end is the first thing to slide out
+          of reach on a laptop — with no scrollbar to hint it is there. The view
+          switcher was moved left for exactly this reason; sticky keeps the cog
+          on the visible edge instead. */}
+      <button
+        className="btn ghost cog"
+        title="settings — updates, licence"
+        aria-label="settings"
+        onClick={onOpenAdmin}
+      >
+        ⚙
+      </button>
     </div>
   );
 }

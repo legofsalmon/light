@@ -210,10 +210,21 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
                 Front
               </button>
             </div>
-            <span className="label">
-              {view2d === 'plan'
-                ? 'drag to place · ⌥-drag rotate · ⇧-click / drag-box select'
-                : 'drag to set height · ⇧-click / drag-box select'}
+            {/* Both hints sit in the SAME grid cell, so the box is always as wide
+                as the longer one. Sized by content, the plan hint is ~72px
+                longer than the front one — and because everything here is
+                right-aligned behind a .grow spacer, that shoved the Plan/Front
+                buttons sideways on every toggle, out from under the cursor that
+                had just pressed them. Reserving the max needs no measured
+                constant, so editing either string cannot quietly bring the jump
+                back. */}
+            <span className="label hint2d">
+              <span className={view2d === 'plan' ? undefined : 'ghost'}>
+                drag to place · ⌥-drag rotate · ⇧-click / drag-box select
+              </span>
+              <span className={view2d === 'front' ? undefined : 'ghost'}>
+                drag to set height · ⇧-click / drag-box select
+              </span>
             </span>
           </>
         )}

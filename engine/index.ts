@@ -9,7 +9,7 @@ import { SacnOut } from './sacn.ts';
 import { OscIn, type OscMessage } from './osc.ts';
 import { Server } from './server.ts';
 import type { WebSocket } from 'ws';
-import { defaultProject } from './defaultProject.ts';
+import { defaultProject, blankProject } from './defaultProject.ts';
 import * as persist from './persist.ts';
 import { parseGdtfBase64, parseMvrBase64 } from './wasmProfiles.ts';
 import { spawn } from 'node:child_process';
@@ -551,7 +551,10 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
     case 'newProject': {
       const name = cmd.name.trim() || 'Untitled';
       const slug = persist.uniqueSlug(name);
-      const fresh = sanitizeProject(defaultProject())!;
+      // blank, NOT defaultProject(): that one is the shipped demo show and
+      // doubles as the first-launch project, so this used to create a renamed
+      // copy of a 20-song set.
+      const fresh = sanitizeProject(blankProject())!;
       fresh.name = name;
       // flush the outgoing project under its OWN slug first — an edit inside
       // the autosave debounce window must not vanish with the switch

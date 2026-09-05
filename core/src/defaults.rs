@@ -11,6 +11,22 @@ pub fn default_project() -> Project {
         .expect("embedded default project must parse")
 }
 
+/// A genuinely empty show, for `New project`.
+///
+/// Separate from `default_project` because that one is ALSO the first-launch
+/// project: emptying it would boot a fresh install into a black, contentless
+/// app. "New project" used to call it, which is why creating one handed you a
+/// copy of the 20-song demo with a different name — no rig cleared, no decks
+/// cleared, nothing cleared but the title.
+///
+/// What survives is the GRID, not the show: two universes to patch into, four
+/// empty layers, eight named columns and one empty deck. Eight blank headers
+/// and no layers would be a worse start than the demo it replaces.
+pub fn blank_project() -> Project {
+    serde_json::from_str(include_str!("../../shared/blankProject.json"))
+        .expect("embedded blank project must parse")
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -28,5 +44,50 @@ mod tests {
         for (i, l) in p.layers.iter().enumerate() {
             assert_eq!(l.name, format!("Layer {}", i + 1));
         }
+    }
+
+    /// The bug: "New project" called default_project(), so it handed you the
+    /// 20-song demo with a new name. Nothing was cleared — not the decks the
+    /// report was about, and not the rig either.
+    #[test]
+    fn a_new_project_is_actually_empty() {
+        let b = super::blank_project();
+        assert!(b.fixtures.is_empty(), "a new project must not inherit a rig");
+        assert!(b.looks.is_empty(), "…or 190 looks");
+        assert!(b.groups.is_empty());
+        assert!(b.props.as_deref().unwrap_or_default().is_empty(), "…or the demo's staging");
+        assert!(b.midi.is_empty(), "…or someone else's MIDI mappings");
+        assert!(b.profiles.is_empty());
+    }
+
+    /// What a blank project keeps is the GRID. Eight blank headers and no
+    /// layers would be a worse start than the demo it replaces.
+    #[test]
+    fn a_new_project_keeps_a_usable_grid() {
+        let b = super::blank_project();
+        let d = super::default_project();
+        assert_eq!(b.layers.len(), d.layers.len(), "layers are structure, not content");
+        assert!(b.layers.iter().all(|l| l.cells.iter().all(|c| c.is_none())), "cells must be empty");
+        assert_eq!(b.columns.len(), d.columns.len());
+        assert_eq!(b.universes.len(), d.universes.len(), "a rig needs somewhere to patch");
+        assert_eq!(b.decks.len(), 1, "exactly one empty deck, not none and not twenty");
+        assert_eq!(b.active_deck_id.as_deref(), Some("deck-1"));
+        assert!(
+            b.decks[0].cells.values().all(|c| c.iter().all(|x| x.is_none())),
+            "the deck must be empty too — this is the reported bug"
+        );
+    }
+
+    /// Both engines embed the same file, so "blank" cannot mean two things.
+    #[test]
+    fn the_blank_project_has_the_same_shape_as_the_default() {
+        let b: serde_json::Value =
+            serde_json::from_str(include_str!("../../shared/blankProject.json")).unwrap();
+        let d: serde_json::Value =
+            serde_json::from_str(include_str!("../../shared/defaultProject.json")).unwrap();
+        let (bk, dk) = (b.as_object().unwrap(), d.as_object().unwrap());
+        let mut missing: Vec<&String> = dk.keys().filter(|k| !bk.contains_key(*k)).collect();
+        missing.sort();
+        assert!(missing.is_empty(), "blank project is missing fields: {missing:?}");
     }
 }

@@ -907,6 +907,24 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
   padding: 16px 18px 14px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
 }
+/* The settings modal holds whole panels rather than a sentence, so it needs
+   room and a scroll — .modal has neither a max-height nor an overflow, and
+   would push past the veil's padding. */
+.modal.wide { width: min(680px, 100%); max-height: 80vh; overflow-y: auto; }
+
+/* Sticky so the cog stays on the visible right edge of a bar that scrolls
+   horizontally with no scrollbar to reveal what has slid off it. */
+.topbar .btn.cog {
+  flex: 0 0 auto;
+  position: sticky;
+  right: 0;
+  background: var(--panel);
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 8px;
+}
+.topbar .btn.cog:hover { background: var(--raise); }
+
 .modaltitle { font-size: 13px; color: var(--text); margin-bottom: 6px; }
 .modalbody { font-size: 12px; color: var(--text-dim); line-height: 1.5; white-space: pre-line; }
 .modalrow { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
@@ -949,6 +967,19 @@ button:disabled:hover {
 .previzbar::-webkit-scrollbar { display: none; }
 .previzbar .seg, .previzbar .btn, .previzbar select { flex: 0 0 auto; }
 .previzbar .label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The 2D hint changes with the view, and its box must not. Both strings are
+   rendered into one grid cell with the inactive one hidden, so the width is the
+   longer of the two whichever is showing — the toggle beside it then cannot
+   move. Children keep the ellipsis so a narrow bar still degrades as before. */
+.previzbar .label.hint2d { display: grid; }
+.previzbar .label.hint2d > span {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.previzbar .label.hint2d > .ghost { visibility: hidden; }
 .tabbody .row, .editorbody .row { flex-wrap: wrap; }
 .tabbody .row .btn, .tabbody .row .sel,
 .editorbody .row .btn, .editorbody .row .sel { flex: 0 0 auto; }

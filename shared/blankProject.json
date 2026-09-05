@@ -1,0 +1,180 @@
+{
+ "version": 1,
+ "name": "Untitled",
+ "universes": [
+  {
+   "id": "u1",
+   "label": "Art-Net node (U1)",
+   "artnetUniverse": 1,
+   "sacnUniverse": 1,
+   "artnet": true,
+   "sacn": false,
+   "unicast": null
+  },
+  {
+   "id": "u0",
+   "label": "Octostrips (U0)",
+   "artnetUniverse": 0,
+   "sacnUniverse": 1,
+   "artnet": true,
+   "sacn": false,
+   "unicast": null
+  }
+ ],
+ "fixtures": [],
+ "groups": [],
+ "props": [],
+ "looks": {},
+ "layers": [
+  {
+   "id": "layer-wash",
+   "name": "Layer 1",
+   "blend": "normal",
+   "master": 1,
+   "cells": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "fade": 0.6
+  },
+  {
+   "id": "layer-derby",
+   "name": "Layer 2",
+   "blend": "normal",
+   "master": 1,
+   "cells": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "fade": 0.4
+  },
+  {
+   "id": "layer-fx",
+   "name": "Layer 3",
+   "blend": "multiply",
+   "master": 1,
+   "cells": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "fade": 0.3
+  },
+  {
+   "id": "layer-strobe",
+   "name": "Layer 4",
+   "blend": "htp",
+   "master": 1,
+   "cells": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "fade": 0.05
+  }
+ ],
+ "columns": [
+  "Intro",
+  "Build",
+  "Break",
+  "Drop",
+  "Bridge",
+  "Peak",
+  "Outro",
+  "Blackout"
+ ],
+ "midi": [],
+ "sync": {
+  "oscEnabled": true,
+  "oscPort": 7700,
+  "followColumns": true,
+  "bpmFromOsc": true,
+  "linkEnabled": false
+ },
+ "settings": {
+  "haze": 0.0,
+  "hazeFan": 0.35
+ },
+ "profiles": {},
+ "decks": [
+  {
+   "id": "deck-1",
+   "name": "Song 1",
+   "columns": [
+    "Intro",
+    "Build",
+    "Break",
+    "Drop",
+    "Bridge",
+    "Peak",
+    "Outro",
+    "Blackout"
+   ],
+   "cells": {
+    "layer-wash": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-derby": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-fx": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "layer-strobe": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  }
+ ],
+ "activeDeckId": "deck-1"
+}
