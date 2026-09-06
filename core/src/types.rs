@@ -1256,6 +1256,11 @@ pub struct Snapshot {
     pub link: Option<LinkSnap>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub midi_clock: Option<MidiClockSnap>,
+    /// The MIDI port LIGHT publishes under its own name, so a DAW can send to
+    /// the console with nothing to set up. Absent when it could not be
+    /// published, and in the browser, which has none to publish.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub midi_port: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artnet_nodes: Option<Vec<ArtnetNodeSnap>>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -741,6 +741,10 @@ export type Snapshot = {
    *  ticks are being followed, absent while nothing is arriving, which is what
    *  makes "waiting" different from "following the Deck". */
   midiClock?: { on: boolean; source?: string };
+  /** The MIDI port LIGHT publishes under its own name, so a DAW can send to the
+   *  console with nothing to set up. Absent when it could not be published, and
+   *  in the browser, which has no native MIDI to publish. */
+  midiPort?: string;
   /** live soft overrides (P1) — present only while something is ridden, so
    *  the UI can draw dual-state faders and offer Store/Discard */
   soft?: { lookId: string; partId: string; effectId?: string; field: SoftField; value: number }[];

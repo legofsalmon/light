@@ -31,6 +31,10 @@ pub enum EngineMsg {
     /// different question (what time is it) asked 48 times a second.
     MidiClock(u8, u64, std::sync::Arc<str>),
     MidiPorts(Vec<String>),
+    /// The port LIGHT publishes under its own name came up, and is called this.
+    /// Sent once; absent means it could not be published and the UI must not
+    /// offer it.
+    MidiOwnPort(String),
     ClientConnected(ClientId),
     ClientDisconnected(ClientId),
     /// A fixture archive, already decoded and parsed on a worker.
@@ -301,6 +305,7 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
     // every boot — crate::output.
     let mut gate = crate::output::OutputGate::new();
     let mut midi_clock = crate::midi_clock::MidiClock::new();
+    let mut own_midi_port: Option<String> = None;
     // ...and which frame, when the operator is editing a look with the rig up.
     let mut freeze = crate::output::FreezeHold::new();
     let mut osc = OscIn::new();
@@ -399,6 +404,7 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
                     let align = handle_msg(
                         msg, &mut state, &bc, &mut osc, &tx, &dir, &mut dirty_at, &mut midi_names,
                         &mut osc_log, now_ms(), &mut project_echo, &mut subs, &mut midi_clock,
+                        &mut own_midi_port,
                     );
                     if align {
                         renderer.align_phase();
@@ -553,7 +559,8 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
             // The snapshot is identical for every client, so it is serialised
             // once and broadcast as one string.
             let snap =
-                build_snapshot(&state, &res, t, &stats, &link, &midi_clock, &artnet, osc.status());
+                build_snapshot(&state, &res, t, &stats, &link, &midi_clock,
+                    own_midi_port.as_deref(), &artnet, osc.status());
             if let Ok(s) = serde_json::to_string(&snap) {
                 bc.broadcast(&s);
             }
@@ -878,6 +885,7 @@ fn handle_msg(
     project_echo: &mut EchoTo,
     subs: &mut Subs,
     midi_clock: &mut crate::midi_clock::MidiClock,
+    own_midi_port: &mut Option<String>,
 ) -> bool {
     match msg {
         // handled by the drain loop before it reaches here
@@ -1093,6 +1101,7 @@ fn handle_msg(
         // here: it keeps reading the room either way, so switching it on is
         // instant rather than a beat and a half of silence.
         EngineMsg::MidiClock(status, stamp, port) => midi_clock.on_message(status, stamp, &port),
+        EngineMsg::MidiOwnPort(name) => *own_midi_port = Some(name),
         EngineMsg::MidiPorts(names) => {
             *midi_names = names;
             bc.broadcast(&json!({ "type": "midiInputs", "names": midi_names }).to_string());
@@ -1255,6 +1264,7 @@ fn build_snapshot(
     stats: &EngineStats,
     link: &crate::link::LinkSync,
     midi_clock: &crate::midi_clock::MidiClock,
+    own_midi_port: Option<&str>,
     artnet: &crate::artnet::ArtnetOut,
     osc_status: Option<&'static str>,
 ) -> Snapshot {
@@ -1277,6 +1287,7 @@ fn build_snapshot(
                 None
             },
         }),
+        midi_port: own_midi_port.map(str::to_string),
         artnet_nodes: if artnet.poll_status() != "off"
             || state.project.universes.iter().any(|u| u.artnet)
         {

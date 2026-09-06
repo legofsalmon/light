@@ -67,18 +67,27 @@ controller pad, in the next 40 Hz frame. Nothing in LIGHT needs enabling: the
 app connects to **every** CoreMIDI input it finds and rescans for new ones, so a
 virtual bus is just another controller as far as the mapping is concerned.
 
-**One-time setup on the Mac.** Open *Audio MIDI Setup* (in Applications ▸
-Utilities), choose *Window ▸ Show MIDI Studio*, and double-click **IAC Driver**.
-Tick *Device is online*, and add a bus if there is none. The bus appears to
-every app on the Mac as both an input and an output, named for the device and
-the bus together — "IAC Driver Bus 1", say. Open **Sync · MIDI** in LIGHT and
-you should see it listed under *inputs*; if it is not there, the driver is
-offline or the bus has not been added.
+**There is nothing to set up.** While the app is running it publishes a MIDI
+port of its own called **LIGHT**, so it is already in your DAW's list of MIDI
+outputs. Point a track at it, put notes on the track, then in LIGHT arm MIDI
+LEARN, click the pad you want, and play the note. That is the whole recipe — the
+mapping stores in the project like any other. Beat clock sent to the same port
+drives the tempo, and the beat clock button names *LIGHT* as its source.
 
-**Then, in the DAW**, set a MIDI track's output to that bus and put notes on it.
-**In LIGHT**, arm MIDI LEARN, click the pad you want, and play the note from the
-DAW. That is the whole recipe — the mapping stores in the project like any
-other.
+The port exists only while the app is running, so start LIGHT before you go
+looking for it in the DAW. It is a destination, not a source: it appears where
+your DAW lists MIDI **outputs**, and LIGHT never lists it among its own inputs
+because the console would only be talking to itself.
+
+**If you would rather use an IAC bus** — routing to several apps at once, or
+keeping the DAW's output pointed somewhere stable across restarts — that still
+works, and it is the only option in a browser session, where LIGHT has no native
+MIDI to publish. Open *Audio MIDI Setup* (in Applications ▸ Utilities), choose
+*Window ▸ Show MIDI Studio*, and double-click **IAC Driver**. Tick *Device is
+online*, and add a bus if there is none. The bus appears to every app on the Mac
+as both an input and an output, named for the device and the bus together — "IAC
+Driver Bus 1", say. It will show up under *inputs* in LIGHT's **Sync · MIDI**
+tab; if it does not, the driver is offline or the bus has not been added.
 
 Two things to know before you build a show on it.
 

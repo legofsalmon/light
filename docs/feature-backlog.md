@@ -629,32 +629,53 @@ hand-authored path. Duplicate is deliberately absent until then: a copy you
 cannot change is not worth a button. The groundwork it needed is now in place —
 a bad edit can no longer take the project down with it.
 
-### 17 · DAW-fired cues — ◧ S slice half shipped 2026-09-06 (docs); the virtual port, M and XL still open
-**Touches:** shared/types.ts, core, engine, parity, ui, docs
+### 17 · DAW-fired cues — ◧ S slice shipped 2026-09-06; M and XL still open
+**Touches:** core, docs
 **Was — undocumented but working:** the native engine connects every CoreMIDI
 input, so a MIDI clip on an IAC bus fires a pad or column like an APC pad, in
-the next 40 Hz frame.
+the next 40 Hz frame. But the operator had to build that bus first, in a utility
+most people have never opened.
 
-**Shipped: the documentation half of S.** `docs/resolume-and-midi.md` now has
-the one-time Audio MIDI Setup recipe, the DAW-side routing, and the two things
-that will bite somebody who builds a show on it, both verified against the code
-rather than assumed:
+**Shipped: S, both halves.**
+
+*The port.* `core/src/midi.rs` publishes a virtual CoreMIDI **destination**
+named `LIGHT` for the life of the MIDI thread, so the console is already in a
+DAW's output list with nothing to configure. Notes fire pads and beat clock
+drives the tempo through it, and the follower reports the source as *LIGHT*.
+
+**The self-attachment risk this entry used to claim does not exist, and the
+claim was wrong.** macOS lists sources and destinations separately: a virtual
+destination appears in other apps' `MidiOutput` enumeration and never in this
+process's own `MidiInput::ports()`, so the engine cannot connect to itself.
+Measured, not reasoned about — `--example virtprobe` prints both lists either
+side of creating one. The surface scanner *does* enumerate destinations, but it
+matches on "apc40" and "apc mini", so it passes `LIGHT` over. Creation is on the
+existing MIDI thread, never the tick, and a failure is logged and ignored: every
+real input still works and the IAC route is untouched.
+
+The message handler is now one function shared by real ports and the virtual
+one, so a DAW sending clock to `LIGHT` is followed exactly the way a CDJ on a
+USB cable is. Five tests cover it without touching CoreMIDI, including the one
+that matters: the offset that moves a driver timestamp onto the engine's clock
+leaves the *intervals* — which are the tempo — untouched.
+
+Snapshot carries `midiPort` — the port's NAME, present only when it actually
+came up — so Sync ▸ MIDI can name it without claiming a port that failed to
+publish, and the browser (which has none) simply does not show the line.
+
+*The docs.* `docs/resolume-and-midi.md` leads with the port, keeps the IAC
+recipe for routing to several apps and for browser sessions (no native MIDI to
+publish there), and states the two things that will bite somebody, both checked
+against the code:
 - A mapping is `MidiAction::Cell { layer_id, col }` — a **position**, and each
   song has its own page at that position, so the same note fires a different
   look after a song switch.
-- There is no timeline lock. Beat clock now gives tempo and a downbeat on a
-  transport start (#10), but **song position pointer and MTC are still unread**,
-  so starting mid-song gives tempo without position. The stated design intent
-  (v1.2.2 review, road item 04) is that timecode arrives through Arena's column
-  follow, and the docs now say so rather than leaving it implied.
+- No timeline lock. Beat clock gives tempo and a downbeat on transport start
+  (#10), but **song position pointer and MTC are unread**, so starting mid-song
+  gives tempo without position. The stated design intent (v1.2.2 review, road
+  item 04) is that timecode arrives through Arena's column follow, and the docs
+  now say so rather than leaving it implied.
 
-**Still open in S: publishing a virtual "LIGHT" input port**, so a DAW can send
-to LIGHT without the operator creating an IAC bus. `midir`'s `VirtualInput` does
-this in a few lines (`--example surfacesink` uses it), but LIGHT's own input
-scanner enumerates every CoreMIDI source, so it needs a guard against connecting
-to its own port — otherwise the engine attaches to itself. Not hard, but it is a
-behaviour change at startup rather than a docs fix, which is why it is not in
-this slice.
 **M:** transport-locked downbeat/arm via SPP, plus a fire-by-look-id or
 song-qualified action so DAW notes survive song switches (parity on the
 effBeat/resync path). **XL:** a Lightkey-class DAW plugin.

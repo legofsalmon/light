@@ -115,6 +115,15 @@ export function SyncView() {
           <div className="grow" />
           <span className="label" style={{ fontFamily: 'var(--mono)' }}>{lastMidi ?? ''}</span>
         </div>
+        {snap?.midiPort && (
+          <div className="prose">
+            A DAW on this Mac needs no bus of its own. LIGHT publishes a MIDI port called{' '}
+            <b>{snap.midiPort}</b> while it is running, so it is already in the DAW's list of MIDI
+            outputs — point a track at it and learn a pad from a note. Beat clock sent there
+            drives the tempo too. It is a destination, not an input, which is why it is not listed
+            above.
+          </div>
+        )}
 
         <div className="sectionhead" style={{ marginTop: 10 }}>Beat clock</div>
         <div className="row">
