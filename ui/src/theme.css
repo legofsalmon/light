@@ -1400,3 +1400,58 @@ button.warnchip { background: none; cursor: pointer; }
 /* pulled down: the one state worth spotting from across a room */
 .subcell.down { border-color: var(--color-status-nudge); }
 .subcell.down .label { color: var(--color-status-nudge); }
+
+/* ---------- the colour picker (backlog #15) ----------
+   Angle is hue, distance from the middle is saturation. Two gradients rather
+   than a canvas: nothing reads pixels back, because the hue and saturation of
+   a click are geometry, and geometry is exact. */
+.colourpop {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-8);
+  background: var(--panel2);
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-menu);
+}
+.huedisc {
+  position: relative;
+  width: 168px; /* not a token: wants a Size variable in Figma — literal so the picker could ship */
+  height: 168px; /* not a token: pairs with the width above */
+  border-radius: 50%;
+  cursor: crosshair;
+  touch-action: none;
+  /* Angle is hue, distance from the middle is saturation. */
+  background: radial-gradient(circle closest-side, #fff, rgba(255, 255, 255, 0) 100%), conic-gradient(from 0deg, #f00, #ff0 60deg, #0f0 120deg, #0ff 180deg, #00f 240deg, #f0f 300deg, #f00 360deg); /* not a token: the hue wheel is physics, not palette — the same seven stops as the hue fader */
+}
+.huedisc:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.huemark {
+  position: absolute;
+  width: 14px; /* not a token: pairs with the disc above, same Figma gap */
+  height: 14px; /* not a token: pairs with the disc above */
+  margin-left: -7px; /* not a token: half the marker, to centre it on the point */
+  margin-top: -7px; /* not a token: half the marker */
+  border-radius: 50%;
+  border: 2px solid var(--grey-white); /* not a token: a hairline ring */
+  box-shadow: 0 0 0 1px var(--grey-0);
+  pointer-events: none;
+}
+.huecurrent {
+  width: var(--size-swatch-current);
+  height: var(--size-swatch-current);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line2);
+  flex-shrink: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.swatch.tint {
+  width: var(--size-swatch);
+  height: var(--size-swatch);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line2);
+  cursor: pointer;
+}

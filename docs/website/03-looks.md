@@ -59,13 +59,23 @@ bracket keys — are instant.
 A look is a list of **parts**. Each part points at one fixture group and carries:
 
 - **Dimmer** — intensity.
-- **Colour** — hue and saturation, plus swatches. Fixtures that cannot mix
-  colour quantise to their nearest fixed colour slot.
+- **Colour** — hue and saturation faders, twelve swatches, and the colour chip
+  at the end of the row, which opens the **picker**: a disc where the angle is
+  hue and the distance from the middle is saturation, so "a bit more amber than
+  that" is one move rather than two. It carries a hex field (brightness is
+  ignored — intensity is the dimmer's job) and a warm-to-cool row of tints at
+  the saturations a white actually reads at on a rig. Arrow keys walk the disc.
+  Everything it sets goes out the same way a swatch does, so a colour you are
+  nudging stays nudged. Fixtures that cannot mix colour quantise to their
+  nearest fixed colour slot.
 - **White** — the dedicated white emitter on an RGBW head. Offered when
   something in the group actually drives one.
 - **Position** — pan and tilt, offered when something in the group has the
   channels for it.
-- **Beam** — zoom, focus, beam size, soften, warmth. Each offered only if a fixture in
+- **Beam** — zoom, focus, beam size, soften, warmth. Warmth reads in **Kelvin**
+  where the fixture's own definition states its range and every fixture in the
+  group agrees on it; otherwise it stays a percentage rather than inventing a
+  number. Each offered only if a fixture in
   the group has it. Absent means the look says nothing about that parameter and
   the fixture keeps whatever its profile parks it at — not that it is zero.
 - **Gobo** and **prism** — a slot picker built from the fixture's own wheel

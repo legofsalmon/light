@@ -890,3 +890,48 @@ fn an_absurd_or_zero_travel_is_ignored_rather_than_drawn() {
     assert_eq!(p.tilt_deg, None, "nor is one no yoke could make");
     assert_eq!((p.pan_travel(), p.tilt_travel()), (540.0, 270.0));
 }
+
+// ---------------------------------------------------------------------------
+// Warmth in Kelvin: the fixture states the temperature at each end, which is
+// the difference between a fader reading "43%" and one reading "3200K"
+// (backlog #15).
+
+#[test]
+fn the_warmth_range_comes_from_the_file_in_wire_order() {
+    // A Spiider runs 8000 K at the low end down to 2700 at the high one. NOT
+    // sorted: which end is warm is the half of this a fader label needs.
+    let xml = fixture_xml(
+        "",
+        r#"<DMXChannel DMXBreak="1" Offset="2" Geometry="Base"><LogicalChannel Attribute="CTO">
+             <ChannelFunction Attribute="CTO" DMXFrom="0/1" PhysicalFrom="8000" PhysicalTo="2700"/></LogicalChannel></DMXChannel>"#,
+    );
+    let p = parse_gdtf(&zipped(&xml)).expect("parses").remove(0);
+    assert_eq!(p.cto_k, Some((8000.0, 2700.0)));
+}
+
+#[test]
+fn a_warmth_range_no_lamp_could_have_is_ignored() {
+    for (from, to) in [("0", "0"), ("6500", "6500"), ("1", "5"), ("50000", "2700")] {
+        let xml = fixture_xml(
+            "",
+            &format!(
+                r#"<DMXChannel DMXBreak="1" Offset="2" Geometry="Base"><LogicalChannel Attribute="CTO">
+                     <ChannelFunction Attribute="CTO" DMXFrom="0/1" PhysicalFrom="{from}" PhysicalTo="{to}"/></LogicalChannel></DMXChannel>"#
+            ),
+        );
+        let p = parse_gdtf(&zipped(&xml)).expect("parses").remove(0);
+        assert_eq!(p.cto_k, None, "{from} to {to} should not have been believed");
+    }
+}
+
+#[test]
+fn a_fixture_that_says_nothing_about_kelvin_offers_none() {
+    // The fader then reads as a percentage rather than inventing a number.
+    let xml = fixture_xml(
+        "",
+        r#"<DMXChannel DMXBreak="1" Offset="2" Geometry="Base"><LogicalChannel Attribute="CTO">
+             <ChannelFunction Attribute="CTO" DMXFrom="0/1" Default="0/1"/></LogicalChannel></DMXChannel>"#,
+    );
+    let p = parse_gdtf(&zipped(&xml)).expect("parses").remove(0);
+    assert_eq!(p.cto_k, None);
+}

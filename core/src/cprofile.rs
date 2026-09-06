@@ -296,6 +296,11 @@ pub struct CompiledProfile {
     pub pan_deg: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tilt_deg: Option<f64>,
+    /// Colour temperature at each end of the warmth channel, low DMX first,
+    /// straight from the file. Absent where the fixture does not say, and the
+    /// warmth fader then reads as a percentage rather than inventing Kelvin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cto_k: Option<(f64, f64)>,
     /// `COMPILER_VERSION` of the importer that wrote this; 0 on anything
     /// compiled before the stamp existed, which is exactly what it should say.
     #[serde(default)]
@@ -670,6 +675,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         virtual_dimmer: false,
         pan_deg: None,
         tilt_deg: None,
+        cto_k: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
@@ -775,6 +781,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         virtual_dimmer: false,
         pan_deg: None,
         tilt_deg: None,
+        cto_k: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
@@ -799,6 +806,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         virtual_dimmer: false,
         pan_deg: None,
         tilt_deg: None,
+        cto_k: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
@@ -820,6 +828,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         virtual_dimmer: false,
         pan_deg: None,
         tilt_deg: None,
+        cto_k: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
@@ -845,6 +854,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         virtual_dimmer: true,
         pan_deg: None,
         tilt_deg: None,
+        cto_k: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
@@ -871,6 +881,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         virtual_dimmer: true,
         pan_deg: None,
         tilt_deg: None,
+        cto_k: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
@@ -901,6 +912,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         virtual_dimmer: false,
         pan_deg: None,
         tilt_deg: None,
+        cto_k: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,

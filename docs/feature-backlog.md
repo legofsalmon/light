@@ -458,16 +458,43 @@ the 2D plan fits and draws the outline, the in-app 3D floor and grids fit,
 the native previz fits its room and frames its camera to the set stage
 (`room_for`); the Rig view's Stage section has the size row (auto / set).
 
-### 15 · Colour picker: wheel, Kelvin, palette — ◧ partial — S / M
-**Touches:** ui (+ shared/core/engine/parity for a palette or Kelvin-labelled CTO)
-**Today:** hue fader + saturation fader + 12 hard-coded swatches; a raw 0..1
-CTO fader on fixtures that have one (no Kelvin, no effect on RGB mixing).
-**Slices:** S — a 2-D hue/sat wheel and hex/RGB entry emitting the same
-`ColorHS`, routed through `setP` so rides keep working. S — warm/cool swatches
-resolving to `{h,s}` (does not touch the RGBW white emitter; making CCT drive
-white is a renderer change, M). M — per-look or per-project palette (schema
-field both engines must round-trip). M — Kelvin-labelled CTO from GDTF range
-metadata.
+### 15 · Colour picker: wheel, Kelvin, palette — ◧ wheel, tints and Kelvin shipped 2026-09-06; palette still open
+**Touches:** ui, shared/types.ts, core (Kelvin metadata only)
+**Shipped: both S slices and the Kelvin M.**
+
+`ui/src/components/ColourWheel.tsx` — the colour chip at the end of the colour
+row opens a disc: angle is hue, distance from the middle is saturation, centre
+is white. Hex entry beside it (brightness discarded on purpose — intensity is
+the dimmer's job, and a dark hex would otherwise dim the part as well as colour
+it), and a warm-to-cool tint row at the saturations a white actually reads at.
+Arrow keys walk the disc; shift steps coarser.
+
+The disc is two CSS gradients, not a canvas: nothing reads pixels back, because
+the hue and saturation of a click are geometry, and geometry is exact where
+sampling a rendered gradient would be a guess about somebody's colour
+management.
+
+Everything — swatch, tint, disc drag, hex — now goes through one `setColour`,
+which is the road the swatches already took: with a nudge armed, or the colour
+already nudged, it goes through the soft layer, or the click looks dead while
+quietly rewriting the stored show. That was one duplicated rule before and is
+now none.
+
+**Kelvin:** the importer reads `PhysicalFrom/To` off the CTO channel into
+`CompiledProfile.cto_k`, kept in WIRE order rather than sorted because which
+end is warm is the useful half. The warmth fader reads Kelvin only when every
+fixture in the group that has the channel states the same range — two heads
+with different ranges would make one number a lie about the other, and a
+percentage is at least honestly vague. Bounded to 1000–20000 K so a stray unit
+in a file cannot put 6 K on a fader. Real files agree: Lyra 6500→2800,
+Rivale 6500→2900, Spiider 8000→2700.
+
+**Still open: the palette M** — per-look or per-project stored colours, which
+is a schema field both engines must round-trip. Nothing here forecloses it.
+
+**Debt:** the disc and its marker are the only sizes in `theme.css` without a
+Size variable, marked `/* not a token: … */` rather than blocking on a Figma
+round-trip. Worth adding next time the design file is open.
 
 ### 16 · In-app fixture profile editor — ◧ partial — M (MVP) / L (trustworthy)
 **Touches:** ui, shared/types.ts (sanitize), core (lenient load), parity, docs

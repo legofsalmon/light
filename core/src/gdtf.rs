@@ -242,6 +242,9 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
         // part of the room.
         let mut pan_deg: Option<f64> = None;
         let mut tilt_deg: Option<f64> = None;
+        // Kelvin at DMX low and DMX high, in that order — not sorted, because
+        // which end is warm is the useful half of the answer.
+        let mut cto_k: Option<(f64, f64)> = None;
         let mut has_rgb = false;
         let mut has_dimmer = false;
 
@@ -469,7 +472,13 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
                 "Frost1" | "Frost2" | "Frost" => cases.extend(optional(Source::Frost)),
                 // CTO warms a white; CTB is the same axis the other way, so it
                 // rides the same parameter rather than earning its own fader.
-                "CTO" | "CTB" | "CTC" => cases.extend(optional(Source::Cto)),
+                "CTO" | "CTB" | "CTC" => {
+                    // The file states the Kelvin at each end (a Spiider runs
+                    // 8000 to 2700), which is the difference between a fader
+                    // reading "43%" and one reading "3200K".
+                    cto_k = cto_k.or_else(|| kelvin_ends(&functions));
+                    cases.extend(optional(Source::Cto));
+                }
                 a if a.starts_with("Color") && !a.contains("Add") && !a.contains("RGB") => {
                     // colour wheel: match by wheel name from the function, else first wheel
                     let wheel = functions
@@ -556,6 +565,7 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             virtual_dimmer: !has_dimmer,
             pan_deg,
             tilt_deg,
+            cto_k,
             compiler: COMPILER_VERSION,
             credit: credit.clone(),
             form_override: None,
@@ -565,6 +575,20 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
         return Err("no usable DMX modes found".into());
     }
     Ok(out)
+}
+
+/// The colour temperature at each end of a CTO channel, low DMX first.
+///
+/// Kept in wire order rather than sorted: a Lyra runs 6500 down to 2800 and a
+/// hypothetical fixture could run the other way, and "which end is warm" is
+/// the half of this a fader label needs. Bounded to temperatures a lamp can
+/// actually be, so a file with a stray unit does not put 6 K on a fader.
+fn kelvin_ends(functions: &[roxmltree::Node]) -> Option<(f64, f64)> {
+    let f = functions.first()?;
+    let from: f64 = f.attribute("PhysicalFrom")?.trim().parse().ok()?;
+    let to: f64 = f.attribute("PhysicalTo")?.trim().parse().ok()?;
+    let ok = |v: f64| v.is_finite() && (1000.0..=20000.0).contains(&v);
+    (ok(from) && ok(to) && (from - to).abs() > 1.0).then_some((from, to))
 }
 
 /// Total travel in degrees across a Pan or Tilt channel's functions, from

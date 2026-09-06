@@ -294,6 +294,7 @@ mod tests {
             virtual_dimmer: false,
             pan_deg: None,
             tilt_deg: None,
+            cto_k: None,
             compiler: 0,
             credit: None,
             form_override: None,

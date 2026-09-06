@@ -546,6 +546,11 @@ export type CompiledProfile = {
    *  `invertPan`, because the file describes the fixture's axes, not the room's. */
   panDeg?: number;
   tiltDeg?: number;
+  /** Colour temperature at each end of the warmth channel, low DMX first,
+   *  straight from the fixture's own definition. Absent where it does not
+   *  say, and the warmth fader then reads as a percentage rather than
+   *  inventing Kelvin. Not sorted: which end is warm is the useful half. */
+  ctoK?: [number, number];
   /** Which importer wrote this profile — COMPILER_VERSION at the time. A
    *  project stores compiled profiles, so an old one keeps whatever the
    *  compiler understood the day it was imported; the Rig view offers a

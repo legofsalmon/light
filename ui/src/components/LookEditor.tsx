@@ -4,8 +4,9 @@ import { EFFECT_TARGETS, SHAPE_KINDS, STROBE_MODES, uid } from '../../../shared/
 import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
 import { type HeadKind } from '../../../shared/profiles.ts';
 import { TextField } from './inputs.tsx';
-import { BEAM_FADERS, BEAM_LABELS, BEAM_PARAMS, type BeamCaps, type BeamParam, noBeamCaps, profileMeta } from '../profileInfo.ts';
+import { BEAM_FADERS, BEAM_LABELS, BEAM_PARAMS, type BeamCaps, type BeamParam, type ProfileMeta, noBeamCaps, profileMeta } from '../profileInfo.ts';
 import { SHAPE_LABEL, TARGET_LABEL } from '../labels.ts';
+import { ColourWheel } from './ColourWheel.tsx';
 import { FxPicker } from './FxPicker.tsx';
 import type { FxFactoryPreset } from '../fxLibrary.ts';
 import { hasUndrivenBeamChannels } from '../../../shared/gdtfShare.ts';
@@ -128,7 +129,18 @@ function groupBeamCaps(project: Project, groupId: string): BeamCaps {
   return out;
 }
 
-type GroupOptics = { gobos: string[]; prisms: string[]; strobeModes: StrobeMode[] };
+type GroupOptics = { gobos: string[]; prisms: string[]; strobeModes: StrobeMode[]; ctoK?: [number, number] };
+
+/** Kelvin at each end of the warmth fader for this group — only when every
+ *  fixture in it that HAS a warmth channel states the same range. Two heads
+ *  with different ranges would make one number a lie about the other, and a
+ *  percentage is at least honestly vague. */
+function groupKelvin(metas: (ProfileMeta | null)[]): [number, number] | undefined {
+  const ranges = metas.map((m) => m?.ctoK).filter((k): k is [number, number] => !!k);
+  if (ranges.length === 0) return undefined;
+  const [a, b] = ranges[0];
+  return ranges.every((r) => r[0] === a && r[1] === b) ? [a, b] : undefined;
+}
 
 /** The wheel slots and shutter patterns something in this group can take.
  *  Slot names come from the first fixture that has the wheel — a slot is an
@@ -147,6 +159,12 @@ function groupOptics(project: Project, groupId: string): GroupOptics {
     for (const m of meta.strobeModes) if (!out.strobeModes.includes(m)) out.strobeModes.push(m);
   }
   out.strobeModes = STROBE_MODES.filter((m) => out.strobeModes.includes(m));
+  out.ctoK = groupKelvin(
+    (group.heads ?? []).map((ref) => {
+      const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
+      return fixture ? profileMeta(project, fixture.profileId) : null;
+    }),
+  );
   return out;
 }
 
@@ -533,10 +551,27 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
     else edit(fallback);
   };
 
+  /** Set the part's colour, from wherever the click came from.
+   *
+   *  A swatch, a tint and a drag on the disc are all a hue+sat PAIR, and all
+   *  three have to take the same road: with a nudge armed, or the colour
+   *  already nudged, it goes through the soft layer — otherwise the click
+   *  looks dead, because the nudge wins on the rig, while it quietly
+   *  rewrites the stored show underneath. */
+  const setColour = (h: number, sat: number): void => {
+    if (ride || softFor('hue') !== undefined || softFor('sat') !== undefined) {
+      send({ type: 'soft', lookId, partId: part.id, field: 'hue', value: h });
+      send({ type: 'soft', lookId, partId: part.id, field: 'sat', value: sat });
+    } else edit((pt) => (pt.params.color = { h, s: sat }));
+  };
+
+  const [wheel, setWheel] = useState(false);
+  const colourChip = React.useRef<HTMLButtonElement>(null);
+
   /** One optional 0..1 parameter: enable, label, fader. Beam shaping and the
    *  two optics rotations share it. The middle is the default because on a
    *  rotate band the middle is stopped and on a zoom it is the mid throw. */
-  const beamRow = (k: BeamParam) => (
+  const beamRow = (k: BeamParam, kelvin?: [number, number]) => (
     <div className="paramrow" key={k}>
       <Enable
         on={prm[k] !== undefined}
@@ -549,7 +584,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
           value={softFor(k) ?? prm[k] ?? 0.5}
           def={0.5}
           onChange={(v) => setP(k, v, (pt) => (pt.params[k] = v))}
-          fmt={pct}
+          fmt={kelvin ? (v) => `${Math.round((kelvin[0] + (kelvin[1] - kelvin[0]) * v) / 50) * 50}K` : pct}
           width={180}
           variant="dim"
         />
@@ -665,24 +700,28 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
                       title="set this colour"
                       style={{ background: rgbHex(r, g, b) }}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
-                      onClick={() => {
-                        // a swatch IS a hue+sat pair: with ride armed or the
-                        // colour already ridden it must go through the soft
-                        // layer, or the click looks dead (soft wins on the
-                        // rig) while silently rewriting the stored show
-                        if (ride || softFor('hue') !== undefined || softFor('sat') !== undefined) {
-                          send({ type: 'soft', lookId, partId: part.id, field: 'hue', value: sw.h });
-                          send({ type: 'soft', lookId, partId: part.id, field: 'sat', value: sw.s });
-                        } else edit((pt) => (pt.params.color = { ...sw }));
-                      }}
+                      onClick={() => setColour(sw.h, sw.s)}
                     />
                   );
                 })}
               </div>
-              <i
-                style={{ width: 20, height: 20, borderRadius: 3, border: '1px solid var(--line2)', flexShrink: 0,
-                  background: prm.color ? rgbHex(...hsvToRgb(prm.color.h, prm.color.s, 1)) : 'var(--swatch-neutral)' }}
+              <button
+                ref={colourChip}
+                className="huecurrent"
+                title="open the colour picker — the disc is hue round and saturation out from the middle"
+                aria-label="open the colour picker"
+                style={{ background: prm.color ? rgbHex(...hsvToRgb(prm.color.h, prm.color.s, 1)) : 'var(--swatch-neutral)' }}
+                onClick={() => setWheel((v) => !v)}
               />
+              {wheel && (
+                <ColourWheel
+                  h={softFor('hue') ?? prm.color?.h ?? 0}
+                  s={softFor('sat') ?? prm.color?.s ?? 1}
+                  anchor={colourChip}
+                  onPick={setColour}
+                  onClose={() => setWheel(false)}
+                />
+              )}
             </div>
           </div>
         )}
@@ -826,7 +865,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
             </span>
           </div>
         )}
-        {BEAM_FADERS.filter((k) => beamCaps[k]).map((k) => beamRow(k))}
+        {BEAM_FADERS.filter((k) => beamCaps[k]).map((k) => beamRow(k, k === 'cto' ? optics.ctoK : undefined))}
 
         {/* Optics: each wheel's slot picker, then its rotation where the
             fixture has one. A slot is an index into the fixture's own wheel,

@@ -38,6 +38,9 @@ export type ProfileMeta = {
    *  against, so "50%" can be shown as an angle. */
   panDeg: number;
   tiltDeg: number;
+  /** Kelvin at each end of the warmth channel, low DMX first; absent where the
+   *  fixture's definition does not say, and the fader stays a percentage. */
+  ctoK?: [number, number];
   imported: boolean;
 };
 
@@ -199,6 +202,7 @@ function computeProfileMeta(project: Project | null, id: string): ProfileMeta | 
       beamDeg: c.beamDeg,
       panDeg: c.panDeg && c.panDeg > 0 ? c.panDeg : 540,
       tiltDeg: c.tiltDeg && c.tiltDeg > 0 ? c.tiltDeg : 270,
+      ctoK: c.ctoK,
       imported: true,
     };
   }
