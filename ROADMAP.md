@@ -119,7 +119,9 @@ Roughly in order of expected value:
 - **Project schema versioning + migrations** (forward-compatible saves).
 - **WS auth token** for LAN control surfaces (tablet remotes) on untrusted
   networks.
-- **Undo/redo** across project edits.
+- **Undo/redo** across project edits — shipped: one engine-side history
+  shared by every client (`undo`/`redo` commands, `history` event); live state
+  (masters, nudges, song switches) stays out by design.
 - **Pixel mapping** for the Octostrips as a LIGHT-side alternative to
   Arena-native control — pixel effects (waves, gradients, chases) on fixture
   groups at 40 Hz, which the Rust core has abundant headroom for.

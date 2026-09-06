@@ -789,7 +789,7 @@ export function PatchView() {
           <label
             className="btn small"
             style={{ cursor: 'pointer' }}
-            title="import a GDTF fixture definition, or an MVR scene (fixtures, addresses, positions and the definitions inside it). Re-importing a file replaces the stored profile, and that cannot be undone."
+            title="import a GDTF fixture definition, or an MVR scene (fixtures, addresses, positions and the definitions inside it). Re-importing a file replaces the stored profile; undo puts the old one back."
           >
             ⇩ import .gdtf / .mvr
             <input
@@ -814,7 +814,7 @@ export function PatchView() {
                     { value: 'replace', label: 'Replace everything', danger: true },
                   ], {
                     body:
-                      'Merge adds the scene’s fixtures to the current patch. Replace clears the patch, groups, and looks first — that cannot be undone.\n\n' +
+                      'Merge adds the scene’s fixtures to the current patch. Replace clears the patch, groups and looks first — undo brings them back.\n\n' +
                       'Either way the scene’s addressing wins for the fixtures it brings in, and any universe the scene needs is created with its output switched OFF. Turn those on in Output once you have checked the addresses.',
                   }).then((choice) => {
                     if (!choice) return;

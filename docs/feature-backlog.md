@@ -38,7 +38,8 @@ These block more than one item and are product calls, not engineering.
    against the "comes up dark and safe" promise. Runtime-only is recommended
    (#6).
 5. **Undo scope.** Engine-side project journal only, or live state (masters,
-   rides) too. Project-only is the reliability-safe slice (#12).
+   rides) too. Project-only is the reliability-safe slice (#12) — decided and
+   shipped 2026-09-06: live state stays out, and an undo keeps it.
 
 ---
 
@@ -226,7 +227,7 @@ mode; `midi.ts` currently requests `sysex: false`). L each — X-Touch (Mackie:
 motor faders, scribble strips). The full claim is XL.
 `ROADMAP.md:111` "MIDI feedback (APC/Launchpad)" is stale for the APC40.
 
-### 12 · Engine-side undo — ◧ partial — L (XL with live state)
+### 12 · Engine-side undo — ◼ shipped 2026-09-06 (project journal; live state out by decision 5)
 **Touches:** shared/types.ts, core, engine, parity, ui, docs
 **Today:** a 30-deep UI-side stack fed only by the UI's own edit path; engine
 echoes are deliberately not captured (inferring them from diffs caused
@@ -241,6 +242,14 @@ one history; a multi-client policy (is B's edit undoable by A; are APC deck
 switches steps; does undoing an import release live looks); parity cases.
 Masters/overrides/rides are live state, not the document — scope them out.
 `ROADMAP.md:118` "Undo/redo" already means this; reconcile rather than duplicate.
+**Shipped:** both engines keep a 100-deep journal of before-images (`history`
+/ `redo` in `EngineState`), fed by every accepted `updateProject` (named by
+the client's `label`, coalesced across a drag by `coalesce` — same client only,
+never across an undo), GDTF/MVR imports, Keep on a nudge and a learned MIDI
+mapping. `undo`/`redo` commands restore for every client and keep the live
+page, masters, haze and Link; a `history` event carries the depths and the
+names for the buttons. Song switches are navigation, not steps. Parity cases
+in `engine/test/diff.ts`; unit tests in both engines.
 
 ### 13 · Lock mode for a floor tablet — ⬜ absent — M (UI) / L (enforced)
 **Touches:** ui, src-tauri, docs (+ core/engine/shared/parity for enforcement)
@@ -419,5 +428,5 @@ column-follow inherits it).
 ## Stale roadmap lines this list supersedes
 
 `ROADMAP.md:107` Ableton Link (shipped) · `:111` MIDI feedback for the APC40
-(shipped; Launchpad still open, #11) · `:118` undo/redo (UI-side shipped;
+(shipped; Launchpad still open, #11) · `:118` undo/redo (engine-side shipped;
 engine-side is #12) · `:81` fixture library directory (exists; unseeded, #2).

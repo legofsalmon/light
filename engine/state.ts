@@ -53,8 +53,24 @@ export function applySoftEffect(e: import('../shared/types.ts').Effect, field: S
   }
 }
 
+/** One step of the engine's undo history: the project as it was BEFORE the
+ *  edit named by `label` (review M16, backlog #12). Mirrors HistoryEntry in
+ *  core/src/state.rs. */
+export type HistoryEntry = { label: string; project: Project };
+/** Steps kept — each is a whole project, which bounds the memory. */
+export const HISTORY_CAP = 100;
+
 export class EngineState {
   project: Project;
+  /** Undo history: the project before each recorded edit, newest last. One
+   *  history per engine — every client shares it, whoever made the edit. */
+  history: HistoryEntry[] = [];
+  /** Steps undone and not yet redone; the next recorded edit drops them. */
+  redone: HistoryEntry[] = [];
+  /** Who opened the newest step, when it was a client's project write — only
+   *  that client's next write may coalesce into it. */
+  private lastPushOwner: number | null = null;
+  onHistory: (() => void) | null = null; // the history changed → `history` event
   live = new Map<string, LayerLive>();
   /** Silenced fixtures — a stuck or dead unit is taken out of the show
    *  without touching the patch (which would re-fan every chase). Transient:
@@ -169,11 +185,32 @@ export class EngineState {
     const decks = this.project.decks ?? [];
     const target = decks.find((d) => d.id === deckId);
     if (!target || deckId === this.project.activeDeckId) return false;
-    const current = decks.find((d) => d.id === this.project.activeDeckId);
-    if (current) {
-      current.columns = [...this.project.columns];
-      current.cells = Object.fromEntries(this.project.layers.map((l) => [l.id, [...l.cells]]));
-    }
+    EngineState.storePage(this.project);
+    this.project.activeDeckId = deckId;
+    this.loadPage();
+    // Held flashes must not survive a page change: the cell they were taken
+    // from is swapped out, so the note-off can never find them again and the
+    // blinder stays lit for the rest of the show.
+    this.releaseAllHeld();
+    this.notify();
+    return true;
+  }
+
+  /** Write the live page (columns and every layer's cells) into its deck, so
+   *  the project carries every song complete. switchDeck does it for the
+   *  outgoing deck; a history snapshot needs it for the active one. */
+  static storePage(p: Project): void {
+    const current = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
+    if (!current) return;
+    current.columns = [...p.columns];
+    current.cells = Object.fromEntries(p.layers.map((l) => [l.id, [...l.cells]]));
+  }
+
+  /** Load the active deck's columns and cells into the live grid — the second
+   *  half of switchDeck, shared with the history restore. */
+  private loadPage(): void {
+    const target = (this.project.decks ?? []).find((d) => d.id === this.project.activeDeckId);
+    if (!target) return;
     this.project.columns = [...target.columns];
     for (const l of this.project.layers) {
       const cells = [...(target.cells[l.id] ?? [])];
@@ -181,13 +218,111 @@ export class EngineState {
       cells.length = this.project.columns.length;
       l.cells = cells;
     }
-    this.project.activeDeckId = deckId;
-    // Held flashes must not survive a page change: the cell they were taken
-    // from is swapped out, so the note-off can never find them again and the
-    // blinder stays lit for the rest of the show.
-    this.releaseAllHeld();
-    this.notify();
+  }
+
+  // --- undo history (review M16, backlog #12). One history per engine, fed by
+  // every recorded edit whoever made it. Steps hold the project BEFORE the
+  // edit; what is played rather than edited — song switches, masters, haze,
+  // nudges, blackout — is not a step and is kept when a step is undone.
+  // Mirrors core/src/state.rs; the parity suite holds the two to it.
+
+  /** The project as a history entry holds it: a copy with the live page
+   *  stored into its deck. */
+  snapshot(): Project {
+    const p = structuredClone(this.project);
+    EngineState.storePage(p);
+    return p;
+  }
+
+  private pushEntry(project: Project, label: string): void {
+    this.history.push({ label, project });
+    if (this.history.length > HISTORY_CAP) this.history.shift();
+    this.redone.length = 0;
+    this.onHistory?.();
+  }
+
+  /** Record the state before an edit that is not a client's project write —
+   *  an import, a Keep, a learned mapping. Never coalesces. */
+  record(label: string): void {
+    this.pushEntry(this.snapshot(), label);
+    this.lastPushOwner = null;
+  }
+
+  /** Record the state before a client's project write. `coalesce` is the
+   *  client saying this write continues its previous one (a drag): the open
+   *  step keeps its snapshot and its name — but only if that step is this
+   *  client's and nothing was undone since. Returns whether a step opened. */
+  recordEdit(label: string, owner: number, coalesce: boolean): boolean {
+    if (coalesce && this.redone.length === 0 && this.lastPushOwner === owner && this.history.length > 0) return false;
+    this.pushEntry(this.snapshot(), label);
+    this.lastPushOwner = owner;
     return true;
+  }
+
+  /** A step opened for a write the sanitiser then refused: take it back. */
+  dropLastEntry(): void {
+    this.history.pop();
+    this.lastPushOwner = null;
+    this.onHistory?.();
+  }
+
+  /** Put a history snapshot back as the project, keeping what is live rather
+   *  than edited: the page the operator is on (a song switch is navigation),
+   *  the layer masters, the haze and the Link switch. The snapshot's copy of
+   *  the current page is loaded into the grid, so an edit made on song 1 is
+   *  undone even while song 2 is up. */
+  private restore(p: Project): void {
+    p.activeDeckId = this.project.activeDeckId;
+    for (const l of p.layers) {
+      const now = this.project.layers.find((x) => x.id === l.id);
+      if (now) l.master = now.master;
+    }
+    p.settings.haze = this.project.settings.haze;
+    p.settings.hazeFan = this.project.settings.hazeFan;
+    p.sync.linkEnabled = this.project.sync.linkEnabled;
+    // the page may not exist in the snapshot (undoing "new song" while on it)
+    if (!(p.decks ?? []).some((d) => d.id === p.activeDeckId)) p.activeDeckId = p.decks?.[0]?.id;
+    this.project = sanitizeProject(p) ?? p;
+    this.loadPage();
+    this.reconcile();
+    this.lastPushOwner = null;
+    this.notify();
+  }
+
+  /** Step back. False when there is nothing to undo. */
+  undo(): boolean {
+    const entry = this.history.pop();
+    if (!entry) return false;
+    this.redone.push({ label: entry.label, project: this.snapshot() });
+    this.restore(entry.project);
+    this.onHistory?.();
+    return true;
+  }
+
+  /** Step forward again. False when there is nothing to redo. */
+  redo(): boolean {
+    const entry = this.redone.pop();
+    if (!entry) return false;
+    this.history.push({ label: entry.label, project: this.snapshot() });
+    if (this.history.length > HISTORY_CAP) this.history.shift();
+    this.restore(entry.project);
+    this.onHistory?.();
+    return true;
+  }
+
+  clearHistory(): void {
+    this.history.length = 0;
+    this.redone.length = 0;
+    this.lastPushOwner = null;
+    this.onHistory?.();
+  }
+
+  undoLabel(): string | null {
+    return this.history.at(-1)?.label ?? null;
+  }
+
+  redoLabel(): string | null {
+    return this.redone.at(-1)?.label ?? null;
   }
 
   deckStep(dir: 1 | -1): void {
@@ -257,6 +392,7 @@ export class EngineState {
         action: this.learnTarget,
       };
       this.learnTarget = null;
+      this.record('map a MIDI control');
       this.project.midi.push(mapping);
       this.notify();
       this.onLearned?.(mapping);
@@ -370,6 +506,7 @@ export class EngineState {
     const clean = sanitizeProject(p);
     if (!clean) return;
     this.project = clean;
+    this.clearHistory(); // history belongs to the show it was made in
     this.live.clear();
     this.overrides.clear();
     this.soft.clear(); // rides belong to the show they were ridden in
@@ -445,6 +582,7 @@ export class EngineState {
    *  soft_commit in core/src/state.rs — the two engines must apply the
    *  identical field routing or their stored shows diverge. */
   softCommit(): boolean {
+    const before = this.snapshot();
     let changed = false;
     for (const patch of this.soft.values()) {
       const { lookId, partId } = patch;
@@ -465,7 +603,11 @@ export class EngineState {
       }
     }
     this.soft.clear();
-    if (changed) this.onChange?.();
+    if (changed) {
+      this.pushEntry(before, 'keep the nudged values');
+      this.lastPushOwner = null;
+      this.onChange?.();
+    }
     return changed;
   }
 
@@ -502,12 +644,12 @@ export class EngineState {
    *  rewrite a submission; here the whole sanitiser can. */
   repairedSubmission = false;
 
-  updateProject(p: Project): void {
+  updateProject(p: Project): boolean {
     const before = JSON.stringify(p);
     const clean = sanitizeProject(p);
     if (!clean) {
       console.error('[state] rejected malformed project update');
-      return;
+      return false;
     }
     // sanitizeProject mutates in place and returns the same object, so the
     // comparison has to be against the string taken before the call
@@ -515,6 +657,7 @@ export class EngineState {
     this.project = clean;
     this.reconcile();
     this.notify();
+    return true;
   }
 
   private reconcile(): void {

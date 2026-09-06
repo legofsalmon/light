@@ -120,12 +120,13 @@ under the same conventions and are in `tokens.json`:
   outline still shows). Dialogs focus the safe button and keep Tab inside.
 - Fields commit on blur or Enter, never per keystroke: fixture name, group name
   (renaming a generated group makes it yours), look fade.
-- Undo says what it will revert: every history entry carries a name, derived
-  from what the edit changed (`ui/src/editNames.ts`, in the app's own words —
-  "rename song “Intro”", "move “Spot 3”", "place “Acid Bed” on Layer 2") unless
-  the call site gives one. The tooltip reads "undo <name> (⌘Z)"; with nothing
-  to undo it says what undo cannot reach — imports, song switches, nudges,
-  masters. Anything that cannot be undone says so where it is offered.
+- Undo says what it will revert: every step of the engine's history carries a
+  name, derived from what the edit changed (`ui/src/editNames.ts`, in the
+  app's own words — "rename song “Intro”", "move “Spot 3”", "place “Acid Bed”
+  on Layer 2") unless the call site gives one, and sent with the write. The
+  history is the engine's, shared by every screen; the tooltip reads "undo
+  <name> (⌘Z)", and with nothing to undo it says what is a step and what is
+  played instead — song switches, masters, nudges.
 
 ## Language
 

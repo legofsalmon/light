@@ -113,11 +113,11 @@ type Store = {
   dismissToast: (id: number) => void;
   /** known project files on the engine's disk (for the project menu) */
   projects: { current: string; list: { slug: string; name: string }[] } | null;
-  /** undo depth available (for button/menu state) */
+  /** The engine's history, as the buttons see it — one history for every
+   *  client (`history` event). Depth for the button state, name for the
+   *  tooltip: what ⌘Z will revert / ⇧⌘Z restore, in the operator's words. */
   undoDepth: number;
   redoDepth: number;
-  /** What ⌘Z will revert / ⇧⌘Z restore, in the operator's words — "rename
-   *  song", "move “Spot 3”" (review M16). null when there is nothing. */
   undoLabel: string | null;
   redoLabel: string | null;
   /** P1 ride mode: numeric look-editor controls send soft overrides instead of
@@ -128,10 +128,6 @@ type Store = {
    *  moment so a fader drag in flight cannot re-create the rides the panic
    *  just cleared, NOR silently rewrite the stored show mid-gesture */
   rideCutAt: number;
-  /** Snapshot the current project into undo history — for engine-side commits
-   *  the UI initiates (Store on a ride), which arrive as echoes that undo
-   *  deliberately does not capture. Bypasses the drag-coalescing window. */
-  captureUndo: (label?: string) => void;
 
   send: (cmd: Command) => void;
   /** Clone-mutate-commit a project edit; optimistic locally, authoritative echo follows. */
@@ -253,17 +249,17 @@ function wsSend(msg: string): void {
   while (pending.length > 50) pending.shift();
 }
 
-// --- undo history: snapshots taken ONLY at the mutate() choke point — this
-// window's own edits. Engine-originated changes (imports, APC deck switches,
-// fader/CC commands) are deliberately NOT captured: inferring them from echo
-// diffs proved unsafe (review: cross-project overwrites, fader floods).
-// Every snapshot is tagged with the project slug it belongs to; a slug
-// mismatch clears history instead of ever sending another project's state.
-const UNDO_CAP = 30;
-type HistoryEntry = { slug: string | null; project: Project; label: string };
-const undoStack: HistoryEntry[] = [];
-const redoStack: HistoryEntry[] = [];
-let lastPushAt = 0;
+// --- undo history lives in the ENGINE (review M16, backlog #12): one history
+// for every client, fed by every recorded edit whoever made it — a ⌘Z here
+// steps the same show back as a ⌘Z on the tablet, and the buttons follow the
+// `history` event. What this window keeps is the name of the gesture it is in
+// the middle of, so a fader drag reaches the engine as one step called "fade
+// of Layer 2" rather than forty.
+const GESTURE_MS = 800;
+/** The edit gesture in progress: its name, and whether its first write has
+ *  gone out — every later write of the gesture asks the engine to coalesce. */
+let gesture: { label: string; sent: boolean } | null = null;
+let lastEditAt = 0;
 /** current project slug per the engine's `projects` events; null until known */
 let currentSlug: string | null = null;
 
@@ -279,40 +275,15 @@ let lastGen = 0;
 /** Send a full-project write stamped with the base it was composed against, and
  *  optimistically advance the local generation. All updateProject sends go
  *  through here so the base is never forgotten. */
-function sendProjectUpdate(send: (cmd: Command) => void, project: Project): void {
+function sendProjectUpdate(
+  send: (cmd: Command) => void,
+  project: Project,
+  step: { label?: string; coalesce?: boolean } = {},
+): void {
   const base = lastGen;
   lastGen = (base + 1) >>> 0;
-  send({ type: 'updateProject', project, baseGen: base });
+  send({ type: 'updateProject', project, baseGen: base, ...step });
 }
-
-function clearHistory(): void {
-  undoStack.length = 0;
-  redoStack.length = 0;
-  lastPushAt = 0;
-}
-
-/** `label` is called only when an entry is actually pushed — a coalesced
- *  push keeps the name of the edit that opened its window. */
-function pushUndo(p: Project, force: boolean, label: () => string): void {
-  const now = Date.now();
-  // pushes within 800 ms coalesce into the earlier snapshot — a continuous
-  // drag lands as one step (rapid distinct edits may merge too; the cap on
-  // surprise is the 800 ms window). `force` is for deliberate one-shot
-  // captures (Keep on a nudge) that must never be swallowed by the window.
-  if (!force && now - lastPushAt < 800) return;
-  lastPushAt = now;
-  undoStack.push({ slug: currentSlug, project: structuredClone(p), label: label() });
-  if (undoStack.length > UNDO_CAP) undoStack.shift();
-  redoStack.length = 0;
-}
-
-/** the history as the UI sees it: depths for the buttons, names for their tooltips */
-const hist = () => ({
-  undoDepth: undoStack.length,
-  redoDepth: redoStack.length,
-  undoLabel: undoStack.at(-1)?.label ?? null,
-  redoLabel: redoStack.at(-1)?.label ?? null,
-});
 
 let projectWriteTimer: ReturnType<typeof setTimeout> | null = null;
 let projectWriteFirst = 0;
@@ -362,25 +333,6 @@ function cancelProjectWrite(): boolean {
  *  So: revert the document, stay on the page actually being run. Within one song
  *  the snapshot still applies whole, which is what makes cell edits undo
  *  normally — only a cross-song apply is rewritten. */
-function keepCurrentPage(entry: Project, cur: Project): Project {
-  if (entry.activeDeckId === cur.activeDeckId) return entry;
-  return {
-    ...entry,
-    activeDeckId: cur.activeDeckId,
-    columns: [...cur.columns],
-    decks: cur.decks,
-    layers: entry.layers.map((l) => {
-      const now = cur.layers.find((x) => x.id === l.id);
-      return now ? { ...l, cells: [...now.cells] } : l;
-    }),
-  };
-}
-
-/** entry usable only if it provably belongs to the current project */
-function entryUsable(e: HistoryEntry | undefined): e is HistoryEntry {
-  return !!e && e.slug !== null && e.slug === currentSlug;
-}
-
 export const useStore = create<Store>()((set, get) => ({
   connected: false,
   engineStalled: false,
@@ -435,33 +387,32 @@ export const useStore = create<Store>()((set, get) => ({
   ride: false,
   rideCutAt: 0,
   setRide: (on) => set({ ride: on }),
-  captureUndo: (label = 'the last edit') => {
-    const p = get().project;
-    if (!p) return;
-    pushUndo(p, true, () => label);
-    set(hist());
-  },
-
   mutate: (fn, label) => {
     const cur = get().project;
     if (!cur) return;
     const next = structuredClone(cur);
     fn(next);
-    // named after the fact: the difference says what fn did, unless the
-    // caller already said
-    pushUndo(cur, false, () => label ?? describeEdit(cur, next));
-    set({ project: next, ...hist() });
+    // A new gesture opens a new step, named after the fact: the difference
+    // says what fn did, unless the caller already said. An edit within
+    // GESTURE_MS of the last continues the open step (a drag), so the name
+    // is computed once per gesture, not once per fader event.
+    const now = Date.now();
+    if (!gesture || now - lastEditAt >= GESTURE_MS) gesture = { label: label ?? describeEdit(cur, next), sent: false };
+    lastEditAt = now;
+    set({ project: next });
     // Local state updates every event so the UI stays live, but the wire send
     // is trailing-edge throttled: a scrub or fader drag emits dozens of edits
     // a second and each one is a whole project.
     // Slug-guarded. The send is deferred, and a timer armed just before an
     // openProject fires just after it — writing the previous show's project
-    // into the new slug. The undo stack tags every entry and the offline queue
-    // tags every message for exactly this reason; the live path had neither.
+    // into the new slug. The offline queue tags every message for exactly
+    // this reason; the live path had nothing.
     const slugAtEdit = currentSlug;
     queueProjectWrite(() => {
       if (currentSlug !== slugAtEdit) return; // a different show is open now
-      sendProjectUpdate(get().send, get().project!);
+      const g = gesture;
+      sendProjectUpdate(get().send, get().project!, g ? { label: g.label, coalesce: g.sent } : {});
+      if (g) g.sent = true;
     });
   },
 
@@ -473,45 +424,19 @@ export const useStore = create<Store>()((set, get) => ({
     sendProjectUpdate(get().send, get().project!);
   },
 
+  // The engine holds the history and restores the project for everyone; this
+  // window only asks. Through the socket, never the offline queue — an undo
+  // replayed after a reconnect would step back whatever happened meanwhile.
   undo: () => {
-    const cur = get().project;
-    const prev = undoStack.at(-1);
-    if (!cur) return;
-    if (!entryUsable(prev)) {
-      // unknown or foreign snapshot — never send another project's state
-      clearHistory();
-      set(hist());
-      return;
-    }
-    undoStack.pop();
-    // the redo entry restores the edit this undo reverts, so it keeps its name
-    redoStack.push({ slug: currentSlug, project: structuredClone(cur), label: prev.label });
-    lastPushAt = 0; // the next edit must not coalesce across a history apply
-    const restored = keepCurrentPage(prev.project, cur);
-    set({ project: restored, ...hist() });
-    // Through sendProjectUpdate, not a bare send: a write without baseGen is
-    // applied blind AND its echo is withheld from the sender, so the engine's
-    // generation runs one ahead of ours and the NEXT edit is rejected and
-    // silently reverted. An undo is an edit like any other — quote the base.
-    sendProjectUpdate(get().send, restored);
+    if (!get().connected || get().undoDepth === 0) return;
+    gesture = null; // the next edit opens a fresh step, never one spanning an undo
+    get().send({ type: 'undo' });
   },
 
   redo: () => {
-    const cur = get().project;
-    const next = redoStack.at(-1);
-    if (!cur) return;
-    if (!entryUsable(next)) {
-      clearHistory();
-      set(hist());
-      return;
-    }
-    redoStack.pop();
-    undoStack.push({ slug: currentSlug, project: structuredClone(cur), label: next.label });
-    if (undoStack.length > UNDO_CAP) undoStack.shift();
-    lastPushAt = 0;
-    const restored = keepCurrentPage(next.project, cur);
-    set({ project: restored, ...hist() });
-    sendProjectUpdate(get().send, restored); // same reasoning as undo above
+    if (!get().connected || get().redoDepth === 0) return;
+    gesture = null;
+    get().send({ type: 'redo' });
   },
 
   setSel: (sel) => {
@@ -742,7 +667,6 @@ function connect(): void {
       useStore.setState({
         project: ev.project,
         ...(pruned.length === cur.length ? {} : { fxSel: pruned }),
-        ...hist(),
       });
     }
     else if (ev.type === 'dmx') {
@@ -768,20 +692,17 @@ function connect(): void {
       useStore.setState({ learnMode: false, learnTarget: null, lastMidi: 'mapped ✓' });
     } else if (ev.type === 'importResult') {
       useStore.setState({ importMsg: { ok: ev.ok, text: ev.message } });
+    } else if (ev.type === 'history') {
+      useStore.setState({ undoDepth: ev.undoDepth, redoDepth: ev.redoDepth, undoLabel: ev.undo, redoLabel: ev.redo });
     } else if (ev.type === 'projects') {
       flushPending(ev.current);
       if (currentSlug !== ev.current) {
-        // different project identity — this window's history no longer applies
-        clearHistory();
+        // different project identity — the engine cleared its history with
+        // it, and this window's gesture belongs to the show that is gone
+        gesture = null;
         currentSlug = ev.current;
-        useStore.setState({
-          projects: { current: ev.current, list: ev.list },
-          undoDepth: 0,
-          redoDepth: 0,
-        });
-      } else {
-        useStore.setState({ projects: { current: ev.current, list: ev.list } });
       }
+      useStore.setState({ projects: { current: ev.current, list: ev.list } });
     } else if (ev.type === 'toast') {
       pushToast(ev.message, ev.ok);
     }

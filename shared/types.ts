@@ -660,7 +660,18 @@ export type Command =
   // changed underneath it via another client, an APC deck switch, or an
   // openProject — instead of letting last-write-wins clobber the newer state.
   // Optional so a non-UI writer (a test, a script) can still submit blind.
-  | { type: 'updateProject'; project: Project; baseGen?: number }
+  // label: what this edit is, in the operator's words ("rename song “Intro”") —
+  // the name the engine's history gives the step, and the undo tooltip shows.
+  // coalesce: this write continues the sender's previous one (a fader drag)
+  // and must join the step already open rather than start another. The
+  // engine honours it only for the same client, and never across an undo.
+  | { type: 'updateProject'; project: Project; baseGen?: number; label?: string; coalesce?: boolean }
+  /** Step the engine's history back or forward. One history per engine —
+   *  every client shares it, whoever made the edit — and the restored
+   *  project goes to everyone. Not an edit itself: the page, masters, haze
+   *  and Link stay where they are. */
+  | { type: 'undo' }
+  | { type: 'redo' }
   // Subscribe this client to raw DMX for the given universes; [] unsubscribes.
   // Only the Output tab wants it, so nothing else pays for it.
   | { type: 'watchDmx'; universeIds: string[] }
@@ -707,6 +718,10 @@ export type ServerEvent =
   // echoes the last gen it saw back as updateProject.baseGen, which is how the
   // engine detects and rejects a stale write.
   | { type: 'project'; project: Project; gen: number }
+  /** The engine's undo history as the buttons see it: the names of the next
+   *  step back and forward, and the depths. Sent on connect and whenever the
+   *  history changes. */
+  | { type: 'history'; undo: string | null; redo: string | null; undoDepth: number; redoDepth: number }
   | DmxEvent
   | PreviewEvent
   | Snapshot

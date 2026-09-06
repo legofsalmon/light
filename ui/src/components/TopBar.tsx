@@ -220,14 +220,17 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
       </button>
       <button
         className="btn small ghost"
-        disabled={undoDepth === 0}
-        // Says WHAT it will revert (review M16): the scope of undo is this
-        // screen's own edits, and the name is the only way to know which one
-        // is next — what the engine does on its own is not in the stack.
+        disabled={undoDepth === 0 || !connected}
+        // Says WHAT it will revert (review M16). The history is the engine's,
+        // shared by every screen, so the name is the only way to know whose
+        // edit is next — and what is played rather than edited (song
+        // switches, masters, nudges) is not in it.
         title={
-          undoDepth === 0
-            ? 'nothing to undo. Edits made on this screen can be undone; what the engine does on its own — imports, song switches, nudges, masters — cannot'
-            : `undo ${undoLabel ?? 'the last edit'} (⌘Z)`
+          !connected
+            ? 'undo needs the engine'
+            : undoDepth === 0
+              ? 'nothing to undo. Edits from any screen are steps — pads, looks, songs, the rig, imports; what you play (song switches, masters, nudges) is not'
+              : `undo ${undoLabel ?? 'the last edit'} (⌘Z)`
         }
         aria-label={undoDepth === 0 ? 'nothing to undo' : `undo ${undoLabel ?? 'the last edit'}`}
         onClick={() => useStore.getState().undo()}
@@ -236,8 +239,8 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
       </button>
       <button
         className="btn small ghost"
-        disabled={redoDepth === 0}
-        title={redoDepth === 0 ? 'nothing to redo' : `redo ${redoLabel ?? 'the last undone edit'} (⇧⌘Z)`}
+        disabled={redoDepth === 0 || !connected}
+        title={!connected ? 'redo needs the engine' : redoDepth === 0 ? 'nothing to redo' : `redo ${redoLabel ?? 'the last undone edit'} (⇧⌘Z)`}
         aria-label={redoDepth === 0 ? 'nothing to redo' : `redo ${redoLabel ?? 'the last undone edit'}`}
         onClick={() => useStore.getState().redo()}
       >
@@ -368,12 +371,8 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
           <button
             className="btn small"
             title="write these live positions into the show, so the looks keep them next time they fire (undoable)"
-            onClick={() => {
-              // capture undo locally FIRST: the commit arrives as an engine
-              // echo, which undo deliberately does not infer from
-              useStore.getState().captureUndo('keep the nudged values');
-              send({ type: 'softCommit' });
-            }}
+            // the engine records this as a step of its own ("keep the nudged values")
+            onClick={() => send({ type: 'softCommit' })}
           >
             Keep
           </button>

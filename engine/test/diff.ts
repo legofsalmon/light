@@ -34,6 +34,8 @@ class Client {
   dmx: Record<string, number[]> = {};
   /** The audition head set, likewise now targeted at the requesting client. */
   previewHeads: unknown = null;
+  /** The engine's undo history as the buttons see it — one per engine. */
+  history: { undo: string | null; redo: string | null; undoDepth: number; redoDepth: number } | null = null;
 
   async connect(port: number): Promise<void> {
     for (let i = 0; i < 50; i++) {
@@ -54,6 +56,9 @@ class Client {
           if (ev.type === 'project') {
             this.project = ev.project;
             this.gen = ev.gen;
+          }
+          if (ev.type === 'history') {
+            this.history = { undo: ev.undo, redo: ev.redo, undoDepth: ev.undoDepth, redoDepth: ev.redoDepth };
           }
         });
         return;
@@ -1378,6 +1383,57 @@ async function main(): Promise<void> {
     );
   }
 
+  // --- Engine-side undo parity (backlog #12): one history per engine, the
+  // --- same names, the same restore — the page kept, the live state kept.
+  {
+    const hist = (c: Client) => JSON.stringify(c.history);
+    const p0 = structuredClone(await currentProject(node));
+    const nameBefore = p0.name;
+    const deck2 = p0.decks?.[1]?.id ?? null;
+    const layerId = p0.layers[0].id;
+    const cellBefore = p0.layers[0].cells[0] ?? null;
+    const edit = (p: Project) => {
+      p.name = 'Parity Renamed';
+      p.layers[0].cells[0] = 'look-parity';
+      return p;
+    };
+    node.send({ type: 'updateProject', project: edit(structuredClone(await currentProject(node))), label: 'rename the show' });
+    rust.send({ type: 'updateProject', project: edit(structuredClone(await currentProject(rust))), label: 'rename the show' });
+    await sleep(300);
+    check('history: the step is named the same on both', hist(node) === hist(rust) && node.history?.undo === 'rename the show', `node=${hist(node)} rust=${hist(rust)}`);
+    if (deck2) both({ type: 'switchDeck', deckId: deck2 }); // played, not edited
+    await sleep(300);
+    check('history: a song switch is not a step', node.history?.undoDepth === rust.history?.undoDepth && hist(node) === hist(rust), `node=${hist(node)} rust=${hist(rust)}`);
+    node.project = null;
+    rust.project = null;
+    both({ type: 'undo' });
+    await sleep(400);
+    const un = await currentProject(node);
+    const ur = await currentProject(rust);
+    check('undo: the write is reverted on both', un.name === nameBefore && ur.name === nameBefore, `node=${un.name} rust=${ur.name}`);
+    if (deck2) {
+      check('undo: the song switch is kept on both', un.activeDeckId === deck2 && ur.activeDeckId === deck2, `node=${un.activeDeckId} rust=${ur.activeDeckId}`);
+      const padOf = (p: Project) => p.decks?.find((d) => d.id === p0.activeDeckId)?.cells[layerId]?.[0] ?? null;
+      check("undo: the other song's pad is back on both", padOf(un) === cellBefore && padOf(ur) === cellBefore, `node=${padOf(un)} rust=${padOf(ur)}`);
+    }
+    check('history: redo is named the same on both', hist(node) === hist(rust) && node.history?.redo === 'rename the show', `node=${hist(node)} rust=${hist(rust)}`);
+    check('gen: in agreement after an undo', node.gen === rust.gen, `node=${node.gen} rust=${rust.gen}`);
+    node.project = null;
+    rust.project = null;
+    both({ type: 'redo' });
+    await sleep(400);
+    check('redo: the write is back on both', (await currentProject(node)).name === 'Parity Renamed' && (await currentProject(rust)).name === 'Parity Renamed');
+    node.project = null;
+    rust.project = null;
+    both({ type: 'undo' });
+    await sleep(400);
+    check('undo: reverted again on both', (await currentProject(node)).name === nameBefore && (await currentProject(rust)).name === nameBefore);
+    await settle(node, rust);
+    compareDmx('undo/redo: output parity', node, rust);
+    if (deck2 && p0.activeDeckId) both({ type: 'switchDeck', deckId: p0.activeDeckId }); // back to the page the rest of the suite expects
+    await sleep(300);
+  }
+
   // --- MVR import parity: both engines apply the same scene identically.
   const mvr = fs.readFileSync(path.join(ROOT, 'core', 'tests', 'data', 'synthetic.mvr'));
   node.project = null;
@@ -1399,6 +1455,11 @@ async function main(): Promise<void> {
   const shapeN = shape(await currentProject(node));
   const shapeR = shape(await currentProject(rust));
   check('mvr import shape parity', shapeN === shapeR, `node=${shapeN}\nrust=${shapeR}`);
+  check(
+    'history: an import is a step, named the same on both',
+    node.history?.undo === 'import “synthetic.mvr”' && rust.history?.undo === 'import “synthetic.mvr”',
+    `node=${node.history?.undo} rust=${rust.history?.undo}`,
+  );
 
   // the import added artnet-enabled universes — disable ALL outputs in both
   // engines immediately (universe 0 is the factory default on most nodes;

@@ -4,7 +4,7 @@
 // packet over loopback.
 
 import dgram from 'node:dgram';
-import { EngineState } from '../state.ts';
+import { EngineState, HISTORY_CAP } from '../state.ts';
 import { Renderer } from '../renderer.ts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -764,6 +764,66 @@ await new Promise<void>((resolve) => {
     'auto-groups: a promoted id is never re-created (no duplicate ids)',
     !plan6.create.some((g) => g.id === 'auto-truss-t1'),
   );
+
+// --- Engine-side undo: one history per engine (backlog #12, review M16).
+// --- Mirrors history_tests in core/src/state.rs; parity holds the two to it.
+{
+  const st = new EngineState(sanitizeProject(demoProject())!);
+  const edited = (f: (p: Project) => void): Project => { const p = structuredClone(st.project); f(p); return p; };
+  const write = (p: Project, label: string, owner: number, coalesce: boolean) => { st.recordEdit(label, owner, coalesce); st.updateProject(p); };
+  const name0 = st.project.name;
+  write(edited((p) => { p.name = 'Renamed'; }), 'rename the show', 7, false);
+  check('undo: names the step', st.undoLabel() === 'rename the show', `got ${st.undoLabel()}`);
+  check('undo: reverts the write', st.undo() && st.project.name === name0);
+  check('redo: names the step', st.redoLabel() === 'rename the show');
+  check('redo: restores the write', st.redo() && st.project.name === 'Renamed');
+  check('redo: nothing left', !st.redo());
+
+  // a drag is one step, but only for its own client
+  const fade0 = st.project.layers[0].fade;
+  write(edited((p) => { p.layers[0].fade = 0.1; }), 'fade of Layer 1', 1, false);
+  write(edited((p) => { p.layers[0].fade = 0.2; }), 'fade of Layer 1', 1, true);
+  write(edited((p) => { p.layers[0].fade = 0.3; }), 'fade of Layer 1', 1, true);
+  check('coalesce: a continuing write joins the open step', st.history.length === 2, `depth ${st.history.length}`);
+  write(edited((p) => { p.layers[0].fade = 0.4; }), 'fade of Layer 1', 2, true);
+  check("coalesce: never into another client's step", st.history.length === 3, `depth ${st.history.length}`);
+  st.undo();
+  check("coalesce: undo lands on the other client's value", st.project.layers[0].fade === 0.3, `got ${st.project.layers[0].fade}`);
+  st.undo();
+  check('coalesce: the drag undoes as one', st.project.layers[0].fade === fade0, `got ${st.project.layers[0].fade}`);
+  write(edited((p) => { p.layers[0].fade = 0.5; }), 'fade of Layer 1', 1, true);
+  check('coalesce: never across an undo', st.history.length === 2 && st.redone.length === 0);
+
+  // a song switch is not a step, and undo keeps the song you are on
+  const deck1 = st.project.activeDeckId!;
+  const deck2 = st.project.decks![1].id;
+  const layer = st.project.layers[0].id;
+  const cell0 = st.project.layers[0].cells[0];
+  write(edited((p) => { p.layers[0].cells[0] = 'look-x'; }), 'place a pad', 1, false);
+  const steps = st.history.length;
+  st.switchDeck(deck2);
+  check('song switch: not a step', st.history.length === steps);
+  const page2 = JSON.stringify(st.project.layers[0].cells);
+  st.undo();
+  check('undo: keeps the song you are on', st.project.activeDeckId === deck2, `on ${st.project.activeDeckId}`);
+  check('undo: the page on screen is untouched', JSON.stringify(st.project.layers[0].cells) === page2);
+  check("undo: song 1's pad is back", st.project.decks!.find((d) => d.id === deck1)!.cells[layer][0] === cell0);
+
+  // what is played stays where it is
+  write(edited((p) => { p.name = 'x'; }), 'rename the show', 1, false);
+  st.project.layers[0].master = 0.25;
+  st.project.settings.haze = 0.6;
+  st.undo();
+  check('undo: keeps the layer master', st.project.layers[0].master === 0.25);
+  check('undo: keeps the haze', st.project.settings.haze === 0.6);
+
+  // capped, and cleared with the project
+  for (let i = 0; i < HISTORY_CAP + 5; i++) write(edited((p) => { p.name = `n${i}`; }), 'rename the show', 1, false);
+  check('history: capped', st.history.length === HISTORY_CAP, `depth ${st.history.length}`);
+  st.replaceProject(sanitizeProject(demoProject())!);
+  check('history: cleared with the project', st.history.length === 0 && st.redone.length === 0 && !st.undo());
+}
+
 
   // review regression: tagged names are machine-owned — a regenerate refreshes
   // a stale generated name (renaming untags, so no operator name is at risk)

@@ -234,7 +234,25 @@ pub struct Outcome {
     /// the engine rewrote an updateProject it was given, so the client that
     /// sent it is now holding something different from what the engine has
     pub repaired_submission: bool,
+    /// the undo history gained, lost or moved a step — clients need the
+    /// `history` event
+    pub history_changed: bool,
 }
+
+/// One step of the engine's undo history: the project as it was BEFORE the
+/// edit named by `label` (review M16, backlog #12). The engine owns the history
+/// so every client shares one — a ⌘Z on the laptop and a ⌘Z on the tablet step
+/// the same show back the same way. Mirrors engine/state.ts.
+#[derive(Clone)]
+pub struct HistoryEntry {
+    pub label: String,
+    pub project: Project,
+}
+
+/// Steps kept. Each is a whole project, which bounds the memory: a big show
+/// with compiled profiles is a few MB, and a hundred of those is still less
+/// than the browser holds.
+pub const HISTORY_CAP: usize = 100;
 
 /// Minimal base64 decode (standard alphabet, padding optional) — the import
 /// path only; not worth a dependency.
@@ -307,6 +325,13 @@ pub struct EngineState {
     /// or another client's edit) can be rejected instead of clobbering the newer
     /// state. Runtime-only — never saved, never reset on load.
     pub gen: u64,
+    /// Undo history: the project before each recorded edit, newest last.
+    pub history: Vec<HistoryEntry>,
+    /// Steps undone and not yet redone; the next recorded edit drops them.
+    pub redone: Vec<HistoryEntry>,
+    /// Who opened the newest step, when it was a client's project write —
+    /// only that client's next write may coalesce into it.
+    last_push_owner: Option<u64>,
 }
 
 impl EngineState {
@@ -327,6 +352,9 @@ impl EngineState {
             learn_target: None,
             gen: 1,
             pending_pin: None,
+            history: Vec::new(),
+            redone: Vec::new(),
+            last_push_owner: None,
         };
         st.ensure_decks();
         st.reconcile();
@@ -389,30 +417,9 @@ impl EngineState {
         if !self.project.decks.iter().any(|d| d.id == deck_id) {
             return false;
         }
-        let current_id = self.project.active_deck_id.clone();
-        if let Some(cur) = self
-            .project
-            .decks
-            .iter_mut()
-            .find(|d| Some(&d.id) == current_id.as_ref())
-        {
-            cur.columns = self.project.columns.clone();
-            cur.cells = self
-                .project
-                .layers
-                .iter()
-                .map(|l| (l.id.clone(), l.cells.clone()))
-                .collect();
-        }
-        let target = self.project.decks.iter().find(|d| d.id == deck_id).unwrap().clone();
-        self.project.columns = target.columns.clone();
-        let n = self.project.columns.len();
-        for l in &mut self.project.layers {
-            let mut cells = target.cells.get(&l.id).cloned().unwrap_or_default();
-            cells.resize(n, None);
-            l.cells = cells;
-        }
+        Self::store_page(&mut self.project);
         self.project.active_deck_id = Some(deck_id.to_string());
+        self.load_page();
         // Inside the swap, not at the call sites: every route onto a new page
         // has to release, and a caller that forgets is a blinder latched on for
         // the rest of the show. Node puts it here too (engine/state.ts) — the
@@ -427,6 +434,138 @@ impl EngineState {
     /// blinder stays lit for the rest of the show.
     fn release_holds_for_deck_change(&mut self, t: f64) {
         self.release_all_held(t, None);
+    }
+
+    /// Write the live page (columns and every layer's cells) into its deck, so
+    /// the project carries every song complete. switch_deck does it for the
+    /// outgoing deck; a history snapshot needs it for the active one.
+    fn store_page(p: &mut Project) {
+        let active = p.active_deck_id.clone();
+        if let Some(d) = p.decks.iter_mut().find(|d| Some(&d.id) == active.as_ref()) {
+            d.columns = p.columns.clone();
+            d.cells = p.layers.iter().map(|l| (l.id.clone(), l.cells.clone())).collect();
+        }
+    }
+
+    /// Load the active deck's columns and cells into the live grid — the
+    /// second half of switch_deck, shared with the history restore.
+    fn load_page(&mut self) {
+        let Some(target) = self
+            .project
+            .active_deck_id
+            .as_ref()
+            .and_then(|id| self.project.decks.iter().find(|d| &d.id == id))
+            .cloned()
+        else {
+            return;
+        };
+        self.project.columns = target.columns.clone();
+        let n = self.project.columns.len();
+        for l in &mut self.project.layers {
+            let mut cells = target.cells.get(&l.id).cloned().unwrap_or_default();
+            cells.resize(n, None);
+            l.cells = cells;
+        }
+    }
+
+    // --- undo history (review M16, backlog #12). One history per engine, fed by
+    // every recorded edit whoever made it. Steps hold the project BEFORE the
+    // edit; what is played rather than edited — song switches, masters, haze,
+    // nudges, blackout — is not a step and is kept when a step is undone.
+
+    /// The project as a history entry holds it: a copy with the live page
+    /// stored into its deck.
+    fn snapshot(&self) -> Project {
+        let mut p = self.project.clone();
+        Self::store_page(&mut p);
+        p
+    }
+
+    fn push_entry(&mut self, project: Project, label: &str) {
+        self.history.push(HistoryEntry { label: label.to_string(), project });
+        if self.history.len() > HISTORY_CAP {
+            self.history.remove(0);
+        }
+        self.redone.clear();
+    }
+
+    /// Record the state before an edit that is not a client's project write —
+    /// an import, a Keep, a learned mapping. Never coalesces.
+    pub fn record(&mut self, label: &str) {
+        let snap = self.snapshot();
+        self.push_entry(snap, label);
+        self.last_push_owner = None;
+    }
+
+    /// Record the state before a client's project write. `coalesce` is the
+    /// client saying this write continues its previous one (a drag): the open
+    /// step keeps its snapshot and its name — but only if that step is this
+    /// client's and nothing was undone since. Returns whether a step opened.
+    pub fn record_edit(&mut self, label: &str, owner: u64, coalesce: bool) -> bool {
+        if coalesce && self.redone.is_empty() && self.last_push_owner == Some(owner) && !self.history.is_empty() {
+            return false;
+        }
+        let snap = self.snapshot();
+        self.push_entry(snap, label);
+        self.last_push_owner = Some(owner);
+        true
+    }
+
+    /// Put a history snapshot back as the project, keeping what is live rather
+    /// than edited: the page the operator is on (a song switch is navigation),
+    /// the layer masters, the haze and the Link switch. The snapshot's copy of
+    /// the current page is loaded into the grid, so an edit made on song 1 is
+    /// undone even while song 2 is up.
+    fn restore(&mut self, mut p: Project) {
+        p.active_deck_id = self.project.active_deck_id.clone();
+        for l in &mut p.layers {
+            if let Some(now) = self.project.layers.iter().find(|x| x.id == l.id) {
+                l.master = now.master;
+            }
+        }
+        p.settings.haze = self.project.settings.haze;
+        p.settings.haze_fan = self.project.settings.haze_fan;
+        p.sync.link_enabled = self.project.sync.link_enabled;
+        self.project = p;
+        self.ensure_decks();
+        self.load_page();
+        self.reconcile();
+        self.last_push_owner = None;
+    }
+
+    /// Step back. False when there is nothing to undo.
+    pub fn undo(&mut self) -> bool {
+        let Some(entry) = self.history.pop() else { return false };
+        let now = self.snapshot();
+        self.redone.push(HistoryEntry { label: entry.label, project: now });
+        self.restore(entry.project);
+        true
+    }
+
+    /// Step forward again. False when there is nothing to redo.
+    pub fn redo(&mut self) -> bool {
+        let Some(entry) = self.redone.pop() else { return false };
+        let now = self.snapshot();
+        self.history.push(HistoryEntry { label: entry.label, project: now });
+        if self.history.len() > HISTORY_CAP {
+            self.history.remove(0);
+        }
+        self.restore(entry.project);
+        true
+    }
+
+    pub fn clear_history(&mut self) {
+        self.history.clear();
+        self.redone.clear();
+        self.last_push_owner = None;
+    }
+
+    pub fn undo_label(&self) -> Option<&str> {
+        self.history.last().map(|e| e.label.as_str())
+    }
+
+    pub fn redo_label(&self) -> Option<&str> {
+        self.redone.last().map(|e| e.label.as_str())
     }
 
     pub fn deck_step(&mut self, dir: i32, t: f64) -> bool {
@@ -586,8 +725,10 @@ impl EngineState {
                     number: d1,
                     action: target,
                 };
+                self.record("map a MIDI control");
                 self.project.midi.push(mapping.clone());
                 out.project_changed = true;
+                out.history_changed = true;
                 out.learned = Some(mapping);
                 return out;
             }
@@ -720,6 +861,8 @@ impl EngineState {
         let mut out = Outcome::default();
         match parsed {
             Ok(profiles) => {
+                self.record(&format!("import “{name}”"));
+                out.history_changed = true;
                 let ids: Vec<String> = profiles.iter().map(|p| p.id.clone()).collect();
                 let mut replaced: Vec<String> = Vec::new();
                 for mut p in profiles {
@@ -755,6 +898,12 @@ impl EngineState {
         let mut out = Outcome::default();
         match parsed {
             Ok(bundle) => {
+                self.record(&if replace {
+                    format!("replace the rig from “{name}”")
+                } else {
+                    format!("import “{name}”")
+                });
+                out.history_changed = true;
                 let n = self.apply_mvr(bundle, replace, t);
                 out.project_changed = true;
                 out.import_result = Some((true, format!("{name}: {n}"), vec![]));
@@ -932,6 +1081,7 @@ impl EngineState {
     pub fn replace_project(&mut self, p: Project) {
         self.project = p;
         self.ensure_decks();
+        self.clear_history(); // history belongs to the show it was made in
         self.live.clear();
         self.overrides.clear();
         self.soft.clear(); // rides belong to the show they were ridden in
@@ -1160,8 +1310,12 @@ impl EngineState {
                 self.set_soft(&look_id, &part_id, effect_id.as_deref(), field, value);
             }
             Command::SoftCommit => {
+                let before = self.snapshot();
                 if self.soft_commit() {
+                    self.push_entry(before, "keep the nudged values");
+                    self.last_push_owner = None;
                     out.project_changed = true;
+                    out.history_changed = true;
                 }
                 self.control_live.clear(); // the fan-out is baked; position spent
             }
@@ -1210,13 +1364,28 @@ impl EngineState {
             // these arms exist only for exhaustiveness.
             Command::WatchDmx { .. } => {}
             Command::PinClock { .. } => {}
-            Command::UpdateProject { project, base_gen: _ } => {
+            Command::UpdateProject { project, base_gen: _, label, coalesce } => {
                 // base_gen is a transport-layer concern (staleness rejection in
                 // engine.rs); by the time a command reaches the state machine it
                 // has been accepted. If the engine repaired what arrived, the
                 // sender is the one client that must NOT be spared the echo.
+                if self.record_edit(label.as_deref().unwrap_or("edit"), owner, coalesce) {
+                    out.history_changed = true;
+                }
                 out.repaired_submission = self.update_project(*project);
                 out.project_changed = true;
+            }
+            Command::Undo => {
+                if self.undo() {
+                    out.project_changed = true;
+                    out.history_changed = true;
+                }
+            }
+            Command::Redo => {
+                if self.redo() {
+                    out.project_changed = true;
+                    out.history_changed = true;
+                }
             }
             Command::SwitchDeck { deck_id } => {
                 if self.switch_deck(&deck_id, t) {
@@ -1247,5 +1416,132 @@ impl EngineState {
             Command::Save => out.save_requested = true,
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod history_tests {
+    use super::*;
+    use crate::defaults::default_project;
+
+    fn edited(st: &EngineState, f: impl FnOnce(&mut Project)) -> Project {
+        let mut p = st.project.clone();
+        f(&mut p);
+        p
+    }
+
+    fn write(st: &mut EngineState, p: Project, label: &str, owner: u64, coalesce: bool) {
+        st.handle_command(
+            Command::UpdateProject { project: Box::new(p), base_gen: None, label: Some(label.into()), coalesce },
+            0.0,
+            Some(owner),
+        );
+    }
+
+    #[test]
+    fn undo_reverts_a_write_and_redo_restores_it() {
+        let mut st = EngineState::new(default_project(), 0.0);
+        let before = st.project.name.clone();
+        let p = edited(&st, |p| p.name = "Renamed".into());
+        write(&mut st, p, "rename the show", 7, false);
+        assert_eq!(st.undo_label(), Some("rename the show"));
+        assert!(st.undo());
+        assert_eq!(st.project.name, before);
+        assert_eq!(st.redo_label(), Some("rename the show"));
+        assert!(st.redo());
+        assert_eq!(st.project.name, "Renamed");
+        assert!(!st.redo(), "nothing left to redo");
+    }
+
+    #[test]
+    fn a_drag_is_one_step_but_only_for_its_own_client() {
+        let mut st = EngineState::new(default_project(), 0.0);
+        let fade0 = st.project.layers[0].fade;
+        for (v, owner, coalesce) in [(0.1, 1, false), (0.2, 1, true), (0.3, 1, true)] {
+            let p = edited(&st, |p| p.layers[0].fade = v);
+            write(&mut st, p, "fade of Layer 1", owner, coalesce);
+        }
+        assert_eq!(st.history.len(), 1, "a continuing write from the same client joins the open step");
+        let p = edited(&st, |p| p.layers[0].fade = 0.4);
+        write(&mut st, p, "fade of Layer 1", 2, true);
+        assert_eq!(st.history.len(), 2, "another client's write never joins someone else's step");
+        assert!(st.undo());
+        assert_eq!(st.project.layers[0].fade, 0.3);
+        assert!(st.undo());
+        assert_eq!(st.project.layers[0].fade, fade0, "the drag undoes as one");
+        // after an undo, a "continuing" write must open its own step
+        let p = edited(&st, |p| p.layers[0].fade = 0.5);
+        write(&mut st, p, "fade of Layer 1", 1, true);
+        assert_eq!(st.history.len(), 1);
+        assert!(st.redone.is_empty(), "a new edit drops what was undone");
+    }
+
+    #[test]
+    fn undo_keeps_the_song_you_are_on() {
+        let mut st = EngineState::new(default_project(), 0.0);
+        assert!(st.project.decks.len() >= 2, "the demo show has songs");
+        let deck1 = st.project.active_deck_id.clone().unwrap();
+        let deck2 = st.project.decks[1].id.clone();
+        let layer = st.project.layers[0].id.clone();
+        let cell_before = st.project.layers[0].cells[0].clone();
+        let p = edited(&st, |p| p.layers[0].cells[0] = Some("look-x".into()));
+        write(&mut st, p, "place a pad", 1, false);
+        assert!(st.switch_deck(&deck2, 0.0));
+        assert_eq!(st.history.len(), 1, "a song switch is not a step");
+        let page2 = st.project.layers[0].cells.clone();
+        assert!(st.undo());
+        assert_eq!(st.project.active_deck_id.as_deref(), Some(deck2.as_str()), "undo does not switch the song back");
+        assert_eq!(st.project.layers[0].cells, page2, "the page on screen is untouched");
+        let d1 = st.project.decks.iter().find(|d| d.id == deck1).unwrap();
+        assert_eq!(d1.cells[&layer][0], cell_before, "song 1's pad is back to what it was");
+    }
+
+    #[test]
+    fn undo_keeps_live_state() {
+        let mut st = EngineState::new(default_project(), 0.0);
+        let layer = st.project.layers[0].id.clone();
+        let p = edited(&st, |p| p.name = "x".into());
+        write(&mut st, p, "rename the show", 1, false);
+        st.handle_command(Command::SetLayerMaster { layer_id: layer, v: 0.25 }, 0.0, None);
+        st.handle_command(Command::SetHaze { v: 0.6 }, 0.0, None);
+        assert_eq!(st.history.len(), 1, "masters and haze are played, not edited");
+        assert!(st.undo());
+        assert_eq!(st.project.layers[0].master, 0.25);
+        assert_eq!(st.project.settings.haze, 0.6);
+    }
+
+    #[test]
+    fn imports_keeps_and_learned_mappings_are_steps() {
+        let bytes = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/synthetic.gdtf")).unwrap();
+        let mut st = EngineState::new(default_project(), 0.0);
+        let profiles = st.project.profiles.len();
+        let out = st.apply_gdtf("synthetic.gdtf", crate::gdtf::parse_gdtf(&bytes), None);
+        assert!(out.history_changed);
+        assert_eq!(st.undo_label(), Some("import “synthetic.gdtf”"));
+        assert!(st.project.profiles.len() > profiles);
+        assert!(st.undo());
+        assert_eq!(st.project.profiles.len(), profiles, "the import is gone again");
+
+        let mappings = st.project.midi.len();
+        st.learn_target = Some(serde_json::from_str(r#"{"kind":"grand"}"#).unwrap());
+        let out = st.apply_midi(0x90, 60, 100, 0.0);
+        assert!(out.learned.is_some());
+        assert_eq!(st.undo_label(), Some("map a MIDI control"));
+        assert_eq!(st.project.midi.len(), mappings + 1);
+        assert!(st.undo());
+        assert_eq!(st.project.midi.len(), mappings);
+    }
+
+    #[test]
+    fn history_is_capped_and_cleared_with_the_project() {
+        let mut st = EngineState::new(default_project(), 0.0);
+        for i in 0..(HISTORY_CAP + 5) {
+            let p = edited(&st, |p| p.name = format!("n{i}"));
+            write(&mut st, p, "rename the show", 1, false);
+        }
+        assert_eq!(st.history.len(), HISTORY_CAP);
+        st.replace_project(default_project());
+        assert!(st.history.is_empty() && st.redone.is_empty());
+        assert!(!st.undo());
     }
 }

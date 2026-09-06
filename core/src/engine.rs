@@ -728,6 +728,18 @@ fn project_event(state: &EngineState) -> String {
     json!({ "type": "project", "project": state.project, "gen": state.gen }).to_string()
 }
 
+/// The history as the buttons see it — sent on connect and on every change.
+fn history_event(state: &EngineState) -> String {
+    json!({
+        "type": "history",
+        "undo": state.undo_label(),
+        "redo": state.redo_label(),
+        "undoDepth": state.history.len(),
+        "redoDepth": state.redone.len(),
+    })
+    .to_string()
+}
+
 fn broadcast_projects(bc: &Broadcaster, dir: &PathBuf) {
     let list: Vec<serde_json::Value> = persist::list_projects(dir)
         .into_iter()
@@ -765,6 +777,9 @@ fn apply_outcome(
         project_echo.mark(owner);
         *dirty_at = Some(Instant::now());
         ensure_osc(osc, state, tx);
+    }
+    if out.history_changed {
+        bc.broadcast(&history_event(state));
     }
     if let Some(mapping) = out.learned {
         bc.broadcast(&json!({ "type": "learned", "mapping": mapping }).to_string());
@@ -914,6 +929,7 @@ fn handle_msg(
                     persist::set_current_slug(dir, &slug);
                     state.replace_project(fresh);
                     bc.broadcast(&project_event(state));
+                    bc.broadcast(&history_event(state)); // cleared with the show
                     bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("created \"{name}\"")}).to_string());
                     broadcast_projects(bc, dir);
                     ensure_osc(osc, state, tx);
@@ -939,6 +955,7 @@ fn handle_msg(
                     let pname = p.name.clone();
                     state.replace_project(p);
                     bc.broadcast(&project_event(state));
+                    bc.broadcast(&history_event(state)); // cleared with the show
                     bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("opened \"{pname}\"")}).to_string());
                     broadcast_projects(bc, dir);
                     ensure_osc(osc, state, tx);
@@ -1022,6 +1039,7 @@ fn handle_msg(
         }
         EngineMsg::ClientConnected(id) => {
             bc.send_to(id, project_event(state));
+            bc.send_to(id, history_event(state));
             bc.send_to(id, json!({ "type": "midiInputs", "names": midi_names }).to_string());
         }
         EngineMsg::ClientDisconnected(gone) => {

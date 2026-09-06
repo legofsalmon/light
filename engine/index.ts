@@ -338,6 +338,7 @@ function flushProject(): void {
 
 server.onConnect = (ws) => {
   server.send(ws, { type: 'project', project: state.project, gen: state.gen });
+  server.send(ws, historyEvent());
   if (bootWarning) server.send(ws, { type: 'toast', ok: false, message: bootWarning });
   server.send(ws, { type: 'midiInputs', names: [] }); // Node dev engine has no native MIDI
 };
@@ -359,6 +360,19 @@ server.onDisconnect = (clientId, ws) => {
 state.onLearned = (mapping) => {
   server.broadcast({ type: 'learned', mapping });
 };
+
+/** The history as the buttons see it — sent on connect and on every change.
+ *  Mirrors history_event in core/src/engine.rs, field for field. */
+function historyEvent(): ServerEvent {
+  return {
+    type: 'history',
+    undo: state.undoLabel(),
+    redo: state.redoLabel(),
+    undoDepth: state.history.length,
+    redoDepth: state.redone.length,
+  };
+}
+state.onHistory = () => server.broadcast(historyEvent());
 
 function handleCommand(cmd: Command, _ws?: unknown, clientId: number = LOCAL_CLIENT): void {
   // Staleness gate (mirrors core/src/engine.rs): a full-project write composed
@@ -542,8 +556,19 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       state.project.sync.linkEnabled = cmd.on;
       state.updateProject(state.project);
       break;
-    case 'updateProject':
-      state.updateProject(cmd.project);
+    case 'updateProject': {
+      // the step opens BEFORE the write lands — it holds the project as it was
+      const opened = state.recordEdit(cmd.label ?? 'edit', clientId, cmd.coalesce === true);
+      if (!state.updateProject(cmd.project) && opened) state.dropLastEntry();
+      break;
+    }
+    // Not `updateProject`: the restored project goes to everyone, the sender
+    // included — it did not compose this state, the engine did.
+    case 'undo':
+      state.undo();
+      break;
+    case 'redo':
+      state.redo();
       break;
     case 'projects':
       broadcastProjects();
@@ -609,6 +634,7 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
     case 'importGdtf': {
       try {
         const profiles = parseGdtfBase64(cmd.data);
+        state.record(`import “${cmd.name}”`); // parsed, so the step will land
         state.project.profiles ??= {};
         const replacedGdtf: string[] = [];
         for (const p of profiles) {
@@ -642,6 +668,7 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
     case 'importMvr': {
       try {
         const bundle = parseMvrBase64(cmd.data);
+        state.record(cmd.replace ? `replace the rig from “${cmd.name}”` : `import “${cmd.name}”`);
         const summary = applyMvrBundle(state.project, bundle, cmd.replace);
         state.updateProject(state.project);
         server.broadcast({ type: 'importResult', ok: true, message: `${cmd.name}: ${summary}`, profileIds: [] });

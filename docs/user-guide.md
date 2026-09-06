@@ -129,9 +129,15 @@ same look can sit in many pads and songs — an empty pad offers
 then add steps (a look + a beat count each). It hard-cuts through the steps on
 the beat, loops, and follows the speed master. Steps cannot nest.
 
-**Undo/redo.** `⌘Z` / `⇧⌘Z`, or the ↺ ↻ buttons. Thirty steps, and a drag counts
-as one. History belongs to the loaded project: switching projects clears it
-rather than risking one show's state landing in another.
+**Undo/redo.** `⌘Z` / `⇧⌘Z`, or the ↺ ↻ buttons. The history lives in the
+engine, so every screen — the laptop and the tablet — shares one: whoever made
+the edit, ⌘Z steps it back, and the button's tooltip names the step it will
+take ("undo rename song “Intro”"). A hundred steps; a drag counts as one.
+Edits are steps: pads, looks, songs, columns, the rig, imports, Keep on a
+nudge, a learned MIDI mapping. What you play is not — song switches, masters,
+haze, nudges and blackout stay where they are when you undo, and undoing an
+edit made on another song leaves you on the song you are on. History belongs
+to the loaded project: switching projects clears it.
 
 **Projects.** The project name in the top bar is a menu: switch between shows,
 `+ new project…`, or `save as…`. Files live beside the app's data; the app

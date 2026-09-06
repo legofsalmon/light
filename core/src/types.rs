@@ -1099,7 +1099,16 @@ pub enum Command {
         /// submitters (tests, scripts) — then no staleness check runs.
         #[serde(default)]
         base_gen: Option<u64>,
+        /// what this edit is, for the history — the undo tooltip shows it
+        #[serde(default)]
+        label: Option<String>,
+        /// continues the sender's previous write (a drag): join the open step
+        #[serde(default)]
+        coalesce: bool,
     },
+    /// step the engine's shared history back / forward
+    Undo,
+    Redo,
     Midi { status: u8, d1: u8, d2: u8 },
     Learn { action: Option<MidiAction> },
     ImportGdtf {
