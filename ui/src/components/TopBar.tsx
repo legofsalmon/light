@@ -91,10 +91,18 @@ function ProjectMenu({ name }: { name: string }) {
           <button
             className="btn small ghost"
             style={{ justifyContent: 'flex-start' }}
-            title="start an empty show — the default rig and a blank grid. The current show is saved first."
+            title="start an empty show — a blank grid and no fixtures. The current show is saved first."
             onClick={() => {
               setOpen(false);
               void (async () => {
+                if (anyLive) {
+                  const ok = await askConfirm('Start a new project?', {
+                    body: 'The current show stops and the stage goes dark. It is saved first and stays in this menu.',
+                    confirmLabel: 'New project',
+                    danger: true,
+                  });
+                  if (!ok) return;
+                }
                 const n = await askPrompt('New project', '', { placeholder: 'project name' });
                 if (n) send({ type: 'newProject', name: n });
               })();

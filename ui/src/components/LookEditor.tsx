@@ -986,7 +986,7 @@ export function LookEditor() {
               />
               <span className="label">beats</span>
               <button
-                title="move this effect later — order matters, they stack in sequence"
+                title="move this step earlier"
                 className="btn small ghost"
                 disabled={i === 0}
                 onClick={() => editLook((lk) => {
@@ -997,7 +997,7 @@ export function LookEditor() {
                 ↑
               </button>
               <button
-                title="remove this effect from the part"
+                title="move this step later"
                 className="btn small ghost"
                 disabled={i === (look.steps?.length ?? 0) - 1}
                 onClick={() => editLook((lk) => {

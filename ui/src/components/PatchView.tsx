@@ -732,7 +732,7 @@ export function PatchView() {
                   </td>
                   <td>
                     <button
-                      title="delete this group. The fixtures stay patched; looks pointing at it lose their target."
+                      title="delete this fixture — it leaves the patch and every group it is in"
                       className="btn small ghost"
                       onClick={() => {
                         void (async () => {
@@ -1169,7 +1169,7 @@ function StageTable() {
   if (items.length === 0) {
     return (
       <div className="patchsec">
-        <div className="sechead">STAGE</div>
+        <div className="sectionhead">Stage</div>
         <div className="label">
           Nothing drawn yet — add truss, risers or screens from the stage's “+ structure…” menu,
           then drag them into place in the 2D plan.
@@ -1188,12 +1188,12 @@ function StageTable() {
 
   return (
     <div className="patchsec">
-      <div className="sechead">STAGE</div>
-      <table className="patchtable">
+      <div className="sectionhead">Stage</div>
+      <table className="tbl">
         <thead>
           <tr>
-            <th>PIECE</th><th>X</th><th>Z</th><th>BASE Y</th>
-            <th>WIDTH</th><th>HEIGHT</th><th>DEPTH</th><th>ROT°</th><th></th>
+            <th>Piece</th><th>X</th><th>Z</th><th>Base Y</th>
+            <th>Width</th><th>Height</th><th>Depth</th><th>Rot°</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -1215,7 +1215,7 @@ function StageTable() {
             return (
               <tr
                 key={pr.id}
-                className={selected ? 'sel' : ''}
+                className={selected ? 'rowsel' : ''}
                 onPointerDown={(e) => {
                   if (onControl(e.target)) return;
                   const additive = e.shiftKey || e.metaKey || e.ctrlKey;

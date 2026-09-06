@@ -131,6 +131,21 @@ fn resolve_port(wanted: u16) -> Option<u16> {
     }
 }
 
+/// Hand a link to macOS. The webview has no new-window handler, so a
+/// target="_blank" anchor goes nowhere in the packaged app; the UI calls this
+/// instead (ui/src/shell.ts). http(s) only — this is a door out, not a shell.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("only http(s) links open from here".into());
+    }
+    std::process::Command::new("/usr/bin/open")
+        .arg(&url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 fn main() {
     install_panic_logger();
     // the engine's message sender, once the engine thread is live — used to
@@ -168,6 +183,7 @@ fn main() {
             licence_net::licence_activate,
             licence_net::licence_heartbeat,
             licence_net::licence_deactivate,
+            open_url,
             share::share_status,
             share::share_login,
             share::share_login_saved,

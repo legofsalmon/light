@@ -114,12 +114,14 @@ export function LicencePanel(): React.ReactElement | null {
         <>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             <input
+              className="text"
               placeholder="LT-XXXX-XXXX-XXXX-XXXX"
               value={key}
               onChange={(e) => setKey(e.target.value)}
               style={{ fontFamily: 'var(--mono)', minWidth: 240 }}
             />
             <button
+              className="btn"
               disabled={!key.trim() || busy !== ''}
               onClick={() => run('activate', () => licenceActivate(key.trim(), 'LIGHT'))}
             >
@@ -129,18 +131,21 @@ export function LicencePanel(): React.ReactElement | null {
 
           <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             <input
+              className="text"
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={{ minWidth: 200 }}
             />
             <input
+              className="text"
               placeholder="your name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               style={{ minWidth: 140 }}
             />
             <button
+              className="btn on"
               disabled={!email.includes('@') || busy !== ''}
               onClick={() => run('trial', () => licenceStartTrial(email, name))}
             >
@@ -151,11 +156,11 @@ export function LicencePanel(): React.ReactElement | null {
       )}
 
       <div className="row" style={{ gap: 6 }}>
-        <button disabled={busy !== ''} onClick={() => run('heartbeat', licenceHeartbeat)}>
+        <button className="btn small ghost" disabled={busy !== ''} onClick={() => run('heartbeat', licenceHeartbeat)}>
           {busy === 'heartbeat' ? 'Refreshing…' : 'Refresh licence'}
         </button>
         {claims && (
-          <button disabled={busy !== ''} onClick={() => run('deactivate', licenceDeactivate)}>
+          <button className="btn small ghost" disabled={busy !== ''} onClick={() => run('deactivate', licenceDeactivate)}>
             {busy === 'deactivate' ? 'Deactivating…' : 'Deactivate this Mac'}
           </button>
         )}

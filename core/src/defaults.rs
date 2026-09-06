@@ -90,4 +90,23 @@ mod tests {
         missing.sort();
         assert!(missing.is_empty(), "blank project is missing fields: {missing:?}");
     }
+
+    /// Outputs are off until someone turns them on — the single most important
+    /// default in the app (docs/website/09-output.md). Both templates shipped
+    /// with Art-Net on, so a copy opened on a venue's WiFi broadcast two
+    /// universes the moment the splash cleared, and the blank project carried
+    /// the author's node labels and an OSC listener into every new show.
+    #[test]
+    fn neither_template_sends_dmx_until_asked() {
+        for (name, p) in [("default", super::default_project()), ("blank", super::blank_project())] {
+            for u in &p.universes {
+                assert!(!u.artnet, "{name}: universe {} sends Art-Net out of the box", u.label);
+                assert!(!u.sacn, "{name}: universe {} sends sACN out of the box", u.label);
+            }
+        }
+        let b = super::blank_project();
+        let labels: Vec<&str> = b.universes.iter().map(|u| u.label.as_str()).collect();
+        assert_eq!(labels, ["Universe 1", "Universe 2"], "a blank project must not name someone else's nodes");
+        assert!(!b.sync.osc_enabled, "the Resolume link is a step the operator takes, not a listener that starts itself");
+    }
 }

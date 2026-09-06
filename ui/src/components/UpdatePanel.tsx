@@ -29,6 +29,7 @@ import {
   type InstallProgress,
   type UpdateStatus,
 } from '../update.ts';
+import { openExternal } from '../shell.ts';
 
 const STAGE_SAYS: Record<string, string> = {
   downloading: 'Downloading',
@@ -155,9 +156,9 @@ export function UpdatePanel(): React.ReactElement | null {
           {blocker ? (
             <div style={{ color: 'var(--text-dim)', lineHeight: 1.5 }}>
               LIGHT cannot replace itself here — {blocker}.{' '}
-              <a href={found.pageUrl || status?.releasesUrl} target="_blank" rel="noreferrer">
+              <button className="btn small ghost" onClick={() => openExternal(found.pageUrl || status?.releasesUrl)}>
                 open the release page
-              </a>
+              </button>
             </div>
           ) : (
             <>
@@ -173,16 +174,8 @@ export function UpdatePanel(): React.ReactElement | null {
                     )}
                   </div>
                   {running && (
-                    <div style={{ height: 4, background: 'var(--line)', borderRadius: 2 }}>
-                      <div
-                        style={{
-                          height: '100%',
-                          width: `${pct}%`,
-                          background: 'var(--accent)',
-                          borderRadius: 2,
-                          transition: 'width 120ms linear',
-                        }}
-                      />
+                    <div className="progress">
+                      <div className="fill" style={{ width: `${pct}%` }} />
                     </div>
                   )}
                 </div>
@@ -200,26 +193,26 @@ export function UpdatePanel(): React.ReactElement | null {
                   )}
                   <div className="row" style={{ gap: 6 }}>
                     <button
+                      className={`btn ${armed ? 'hot' : 'on'}`}
                       disabled={!!refusal || busy !== ''}
                       onClick={armInstall}
                       title="quits LIGHT, replaces it, and reopens it"
-                      style={armed ? { color: 'var(--hot)', fontWeight: 600 } : undefined}
                     >
                       {armed ? 'Press again to quit and install' : 'Install and restart'}
                     </button>
-                    <button disabled={busy !== ''} onClick={() => run('cancel', updateCancel)}>
+                    <button className="btn ghost" disabled={busy !== ''} onClick={() => run('cancel', updateCancel)}>
                       Discard the download
                     </button>
                   </div>
                 </>
               ) : (
                 <div className="row" style={{ gap: 6 }}>
-                  <button disabled={busy !== '' || running} onClick={() => run('download', updateDownload)}>
+                  <button className="btn on" disabled={busy !== '' || running} onClick={() => run('download', updateDownload)}>
                     {running ? 'Working…' : `Download ${found.version.raw}`}
                   </button>
-                  <a href={found.pageUrl || status?.releasesUrl} target="_blank" rel="noreferrer">
+                  <button className="btn small ghost" onClick={() => openExternal(found.pageUrl || status?.releasesUrl)}>
                     or get it manually
-                  </a>
+                  </button>
                 </div>
               )}
             </>
@@ -231,6 +224,7 @@ export function UpdatePanel(): React.ReactElement | null {
 
       <div className="row" style={{ gap: 6 }}>
         <button
+          className="btn small ghost"
           disabled={busy !== '' || running}
           onClick={() => run('check', async () => setStatus(await updateCheckNow()))}
         >

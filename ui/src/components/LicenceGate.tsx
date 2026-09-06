@@ -24,6 +24,7 @@ import {
   licenceStatus,
   type LicenceStatus,
 } from '../licence.ts';
+import { openExternal } from '../shell.ts';
 
 export function LicenceGate({ onCleared }: { onCleared?: () => void }): React.ReactElement | null {
   const [status, setStatus] = useState<LicenceStatus | null>(null);
@@ -78,7 +79,7 @@ export function LicenceGate({ onCleared }: { onCleared?: () => void }): React.Re
     >
       <div className="col" style={{ gap: 18, width: 'min(520px, 100%)' }}>
         <div className="col" style={{ gap: 6 }}>
-          <div style={{ fontSize: 22, letterSpacing: 2, fontWeight: 600 }}>LIGHT</div>
+          <div className="wordmark" style={{ fontSize: 22 }}>LIGHT</div>
           {said && (
             <div style={{ color: said.tone === 'bad' ? 'var(--hot)' : 'var(--warn)', fontWeight: 600 }}>
               {said.title}
@@ -91,22 +92,22 @@ export function LicenceGate({ onCleared }: { onCleared?: () => void }): React.Re
           // No second paragraph here: describe() above already says to release
           // the other seat, and saying it twice is how a screen reads as
           // assembled rather than written.
-          <a href={status?.manageUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
+          <button className="btn on" style={{ alignSelf: 'flex-start' }} onClick={() => openExternal(status?.manageUrl)}>
             manage your licences →
-          </a>
+          </button>
         ) : (
           <div className="col" style={{ gap: 8 }}>
-            <div style={{ color: 'var(--text-faint)', textTransform: 'uppercase', fontSize: 11, letterSpacing: 1 }}>
-              Start a trial
-            </div>
+            <div className="sectionhead">Start a trial</div>
             <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
               <input
+                className="text"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 style={{ minWidth: 220, flex: 1 }}
               />
               <input
+                className="text"
                 placeholder="your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -114,6 +115,8 @@ export function LicenceGate({ onCleared }: { onCleared?: () => void }): React.Re
               />
             </div>
             <button
+              className="btn on"
+              style={{ alignSelf: 'flex-start' }}
               disabled={!email.includes('@') || busy !== ''}
               onClick={() => run('trial', () => licenceStartTrial(email, name))}
             >
@@ -123,17 +126,17 @@ export function LicenceGate({ onCleared }: { onCleared?: () => void }): React.Re
         )}
 
         <div className="col" style={{ gap: 8 }}>
-          <div style={{ color: 'var(--text-faint)', textTransform: 'uppercase', fontSize: 11, letterSpacing: 1 }}>
-            Or enter a licence key
-          </div>
+          <div className="sectionhead">Or enter a licence key</div>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
             <input
+              className="text"
               placeholder="LT-XXXX-XXXX-XXXX-XXXX"
               value={key}
               onChange={(e) => setKey(e.target.value)}
               style={{ fontFamily: 'var(--mono)', minWidth: 260, flex: 1 }}
             />
             <button
+              className="btn"
               disabled={!key.trim() || busy !== ''}
               onClick={() => run('activate', () => licenceActivate(key.trim(), 'LIGHT'))}
             >

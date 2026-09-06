@@ -1110,3 +1110,10 @@ table.tbl th { color: var(--text-dim); }
 /* a fixture whose profile is missing renders as nothing — mark the row */
 .tbl tr.rowdark td { background: rgba(216, 64, 64, 0.10); }
 .tbl tr.rowdark td:first-child { box-shadow: inset 2px 0 0 var(--hot, #d84040); }
+
+/* ---------- sections and the update progress bar ---------- */
+/* .patchsec was used by the Stage and GDTF Share sections and defined nowhere
+   (review M11) — the two rendered as unstyled text beside real section heads */
+.patchsec { margin-top: 18px; }
+.progress { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
+.progress .fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 120ms linear; }

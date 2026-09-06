@@ -7,7 +7,7 @@
    "label": "Art-Net node (U1)",
    "artnetUniverse": 1,
    "sacnUniverse": 1,
-   "artnet": true,
+   "artnet": false,
    "sacn": false,
    "unicast": null
   },
@@ -16,7 +16,7 @@
    "label": "Octostrips (U0)",
    "artnetUniverse": 0,
    "sacnUniverse": 1,
-   "artnet": true,
+   "artnet": false,
    "sacn": false,
    "unicast": null
   }

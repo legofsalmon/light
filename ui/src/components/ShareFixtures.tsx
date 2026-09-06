@@ -251,7 +251,7 @@ export function ShareFixtures(): React.ReactElement | null {
 
   return (
     <div className="patchsec">
-      <div className="sechead">GDTF SHARE</div>
+      <div className="sectionhead">GDTF Share</div>
 
       {stale.length > 0 && (
         <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>

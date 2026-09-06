@@ -8,7 +8,7 @@ two years, so check the dates before trusting any of it.
 
 | | Status |
 |---|---|
-| Architecture | universal (arm64 + x86_64) ✅ |
+| Architecture | universal (arm64 + x86_64) for stable releases ✅ — the 1.3 betas are arm64-only for CI time, see `release.yml` |
 | Format | `.dmg` (drag to Applications) + `.zip` ✅ |
 | Signature | Developer ID Application, hardened runtime ✅ |
 | Notarisation | accepted by Apple, ticket stapled to both the app and the dmg ✅ |

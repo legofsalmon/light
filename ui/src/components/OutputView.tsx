@@ -272,7 +272,7 @@ function ChannelCheck({
               setOverrides(() => ({}));
             }}
           
-            title="drop every held flash look — the safety net if a held pad or note is stuck on">
+            title="let go of every held channel — the show drives them all again">
             release all
           </button>
         </div>
@@ -451,13 +451,13 @@ export function OutputView() {
               label: `Universe ${p.universes.length + 1}`,
               artnetUniverse: maxU + 1,
               sacnUniverse: maxU + 1,
-              artnet: true,
+              artnet: false,
               sacn: false,
               unicast: null,
             });
           })}
         
-            title="another DMX universe: 512 channels with its own Art-Net/sACN destination">
+            title="another DMX universe: 512 channels with its own Art-Net/sACN destination — off until you turn it on">
           + add universe
         </button>
       </div>

@@ -34,6 +34,18 @@ function check(name: string, cond: boolean, detail = ''): void {
   }
 }
 
+// Outputs are off until someone turns them on — both templates, both engines
+// (the Rust twin is core/src/defaults.rs neither_template_sends_dmx_until_asked).
+{
+  const tpl = (f: string) => JSON.parse(fs.readFileSync(path.join(process.cwd(), 'shared', f), 'utf8')) as Project;
+  for (const f of ['defaultProject.json', 'blankProject.json']) {
+    check(`${f}: no universe sends Art-Net or sACN out of the box`, tpl(f).universes.every((u) => !u.artnet && !u.sacn));
+  }
+  const blank = tpl('blankProject.json');
+  check('blankProject.json: neutral universe names', blank.universes.map((u) => u.label).join('|') === 'Universe 1|Universe 2');
+  check('blankProject.json: the Resolume link waits for the operator', blank.sync.oscEnabled === false);
+}
+
 function oscBuf(addr: string, tags: string, args: number[]): Buffer {
   const pad = (s: string) => {
     const len = Math.floor(s.length / 4 + 1) * 4;
