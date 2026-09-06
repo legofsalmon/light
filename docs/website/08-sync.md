@@ -7,7 +7,7 @@ beats, steps.
 
 - **TAP** (or `T`) — tap the tempo. Every tap also lands the downbeat.
 - Drag the BPM number vertically for fine adjustment.
-- **SYNC** snaps the phase to the next downbeat, matching Arena's resync.
+- **SYNC** makes the moment you press it the top of a bar — the bar count and every effect cycle restart there. Arena's own resync over OSC does the same.
 - **LINK** joins an Ableton Link session and shows the peer count. Tapping in
   LIGHT leads the session.
 

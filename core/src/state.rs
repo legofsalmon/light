@@ -231,8 +231,9 @@ pub struct Outcome {
     /// (ok, message, imported profile ids)
     pub import_result: Option<(bool, String, Vec<String>)>,
     pub launch_previz: bool,
-    /// tap/resync: land the effect phase on a downbeat
-    pub align_phase: bool,
+    /// tap/resync: land the effect phase on a whole multiple of this many
+    /// beats — 1 for a tap, a bar for SYNC. None when nothing asked.
+    pub align_phase: Option<f64>,
     /// the engine rewrote an updateProject it was given, so the client that
     /// sent it is now holding something different from what the engine has
     pub repaired_submission: bool,
@@ -1343,11 +1344,15 @@ impl EngineState {
             Command::SetBpm { bpm } => self.clock.set_bpm(bpm, t),
             Command::Tap => {
                 self.clock.tap(t);
-                out.align_phase = true;
+                // A tap is a quarter note, so the effects land on one.
+                out.align_phase = Some(1.0);
             }
             Command::Resync => {
                 self.clock.resync(t);
-                out.align_phase = true;
+                // SYNC says "now is the top of the bar", and it has to mean
+                // that for the effects too or a bar-long shape stays wherever
+                // it was.
+                out.align_phase = Some(crate::clock::BAR);
             }
             Command::SetSpeed { v } => self.speed = clamp(v, 0.1, 8.0),
             Command::SetMaster { v } => self.master = clamp01(v),

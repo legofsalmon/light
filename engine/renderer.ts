@@ -91,6 +91,13 @@ export class Renderer {
     this.st = st;
   }
 
+  /** TEST ONLY: read the effect clock, so a harness can assert where an
+   *  alignment left it. The Rust twin needs no equivalent — its tests live in
+   *  the same module and read the field directly. */
+  readEffBeat(): number {
+    return this.effBeat;
+  }
+
   /** TEST ONLY: pin the effect clock to a fixed beat and freeze integration. */
   pinClock(effBeat: number): void {
     this.effBeat = effBeat;
@@ -122,9 +129,18 @@ export class Renderer {
     });
   }
 
-  /** Land the effect phase on a downbeat (tap / resync). */
-  alignPhase(): void {
-    const rounded = Math.round(this.effBeat);
+  /** Land the effect phase on a whole `grid` of beats (tap / resync).
+   *  Mirrors align_phase in core/src/renderer.rs.
+   *
+   *  `grid` is how much musical time one cycle of the thing being aligned
+   *  takes: 1 beat for a tap, a whole bar for SYNC. Effects run on
+   *  `effBeat / rate`, so a rate-4 effect tops out where effBeat is a multiple
+   *  of 4 — rounding to the nearest BEAT left it half or three quarters
+   *  through its cycle every time, which is what made SYNC look like it did
+   *  nothing to anything slower than a quarter note. */
+  alignPhase(grid: number): void {
+    const g = Number.isFinite(grid) && grid > 0 ? grid : 1;
+    const rounded = Math.round(this.effBeat / g) * g;
     // shift cue anchors by the same delta so running cue lists keep their
     // step position - and the two engines (whose absolute effBeats differ)
     // stay in the same step through a tap

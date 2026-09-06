@@ -88,7 +88,7 @@ Plain JSON text frames over `ws://<host>:9900`. Anything that can open a WebSock
 | `column` | `col` (0-based) | fire a column as a cue |
 | `setBpm` | `bpm` | set tempo (20–500) |
 | `tap` | — | tap tempo (also lands the downbeat) |
-| `resync` | — | snap phase to next downbeat |
+| `resync` | — | make now the top of a bar: the beat count and every effect cycle restart there |
 | `setSpeed` | `v` | effect-rate multiplier (0.1–8) |
 | `setMaster` | `v` | grand master 0–1 |
 | `setLayerMaster` | `layerId`, `v` | layer master 0–1 |

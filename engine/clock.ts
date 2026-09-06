@@ -1,4 +1,4 @@
-import { clamp } from '../shared/types.ts';
+import { BAR, clamp } from '../shared/types.ts';
 
 /** Musical clock: continuous beat position derived from an anchor + BPM. */
 export class BeatClock {
@@ -32,9 +32,16 @@ export class BeatClock {
     this.anchorT = t;
   }
 
-  /** Snap the beat phase to a downbeat now (Resolume resync). */
+  /** Make NOW the top of a bar (Resolume resync). Mirrors resync in
+   *  core/src/clock.rs.
+   *
+   *  The nearest bar line, not the next whole beat. "Downbeat" is the first
+   *  beat of a bar, and landing on any beat left the bar count — and every
+   *  effect cycle longer than a beat — wherever it happened to be. Nearest
+   *  rather than next because this is pressed ON the downbeat, so it should
+   *  move as little as possible in either direction. */
   resync(t = performance.now()): void {
-    this.anchorBeat = Math.ceil(this.beatAt(t));
+    this.anchorBeat = Math.round(this.beatAt(t) / BAR) * BAR;
     this.anchorT = t;
   }
 

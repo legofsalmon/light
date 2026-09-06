@@ -318,9 +318,16 @@ impl Renderer {
             .collect()
     }
 
-    /// Land the effect phase on a downbeat (tap / resync).
-    pub fn align_phase(&mut self) {
-        let rounded = self.eff_beat.round();
+    /// Land the effect phase on a whole `grid` of beats (tap / resync).
+    pub fn align_phase(&mut self, grid: f64) {
+        // `grid` is how much musical time one cycle of the thing being aligned
+        // takes: 1 beat for a tap, a whole bar for SYNC. Effects run on
+        // `eff_beat / rate`, so a rate-4 effect tops out where eff_beat is a
+        // multiple of 4 — rounding to the nearest BEAT left it half or three
+        // quarters through its cycle every time, which is what made SYNC look
+        // like it did nothing to anything slower than a quarter note.
+        let g = if grid.is_finite() && grid > 0.0 { grid } else { 1.0 };
+        let rounded = (self.eff_beat / g).round() * g;
         // shift cue anchors by the same delta so running cue lists keep
         // their step position - and the two engines (whose absolute
         // eff_beats differ) stay in the same step through a tap
@@ -962,5 +969,72 @@ impl Renderer {
         }
 
         TickResult { buffers, heads: head_snaps, layers: layer_snaps, beat }
+    }
+}
+
+
+#[cfg(test)]
+mod align_tests {
+    use super::*;
+
+    /// The bug SYNC had: effects run on `eff_beat / rate`, so a rate-4 effect
+    /// tops out where eff_beat is a multiple of 4. Rounding to the nearest BEAT
+    /// left it 0.5 or 0.75 through its cycle from every starting point tried —
+    /// which is why pressing SYNC appeared to do nothing to anything slower
+    /// than a quarter note.
+    #[test]
+    fn sync_lands_a_bar_long_effect_at_the_top_of_its_cycle() {
+        for start in [7.3f64, 5.9, 2.4, 10.1, 0.2, 13.75] {
+            let mut r = Renderer::new();
+            r.pin_clock(start);
+            r.align_phase(crate::clock::BAR);
+            let phase = (r.eff_beat / 4.0).rem_euclid(1.0);
+            assert!(phase.abs() < 1e-9, "start {start} left a rate-4 effect at phase {phase}");
+            // and the shorter cycles a bar contains land on a top too
+            for rate in [1.0, 2.0, 4.0, 0.5] {
+                let p = (r.eff_beat / rate).rem_euclid(1.0);
+                assert!(p.abs() < 1e-9, "start {start}, rate {rate} left phase {p}");
+            }
+        }
+    }
+
+    /// Tap is a quarter note and must stay one — aligning a tap to a bar would
+    /// move the effects by up to two beats every time somebody tapped tempo.
+    #[test]
+    fn a_tap_still_lands_on_the_beat_it_was_tapped_on() {
+        for start in [7.3f64, 5.9, 2.4] {
+            let mut r = Renderer::new();
+            r.pin_clock(start);
+            r.align_phase(1.0);
+            assert_eq!(r.eff_beat, start.round(), "a tap moved further than the nearest beat");
+        }
+    }
+
+    /// Whatever the grid, a running cue list must not lose its place: the
+    /// anchors move by exactly what the effect clock moved.
+    #[test]
+    fn cue_anchors_follow_the_alignment_whatever_the_grid() {
+        for grid in [1.0, crate::clock::BAR] {
+            let mut r = Renderer::new();
+            r.pin_clock(9.4);
+            let key = ("layer".to_string(), "look".to_string());
+            r.cue_anchors.insert(key.clone(), CueAnchor { fade_start: 0.0, at: 3.0 });
+            let before = r.eff_beat;
+            r.align_phase(grid);
+            let moved = r.eff_beat - before;
+            assert!((r.cue_anchors[&key].at - (3.0 + moved)).abs() < 1e-9, "grid {grid}");
+        }
+    }
+
+    /// A grid that is not a grid must not poison the effect clock — the value
+    /// reaches this from a command, and NaN here would stop every effect.
+    #[test]
+    fn a_nonsense_grid_falls_back_to_a_beat() {
+        for bad in [0.0f64, -4.0, f64::NAN, f64::INFINITY] {
+            let mut r = Renderer::new();
+            r.pin_clock(5.9);
+            r.align_phase(bad);
+            assert_eq!(r.eff_beat, 6.0, "grid {bad} did not fall back to a beat");
+        }
     }
 }

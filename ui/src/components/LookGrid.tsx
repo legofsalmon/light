@@ -43,6 +43,97 @@ function placeLook(layerId: string, col: number, lookId: string, deckId: string 
 const LOOK_DRAG = 'application/x-light-look';
 /** The song the drag started in, carried alongside the look id. */
 const DECK_DRAG = 'application/x-light-deck';
+/** `layerId\tcol` when the drag STARTED on a pad rather than in the library.
+ *  Its presence is the whole difference between the two gestures: the library
+ *  copies a look onto a pad, a pad hands its look to another pad. */
+const PAD_DRAG = 'application/x-light-pad';
+
+/** Copy the look on a pad into a new, independent look on the next free pad in
+ *  the same layer.
+ *
+ *  A pad points at a look in a shared pool, so putting the same look on two
+ *  pads is referencing, not copying — edit one and both change. This is the
+ *  other thing, and the one you cannot get any other way: a real copy to take
+ *  somewhere else without touching the original.
+ */
+function duplicatePad(layerId: string, col: number, columns: number) {
+  const st = useStore.getState();
+  const project = st.project;
+  if (!project) return;
+  const layer = project.layers.find((l) => l.id === layerId);
+  const srcId = layer?.cells[col] ?? null;
+  if (!srcId || !Object.hasOwn(project.looks, srcId)) {
+    notify('that pad is empty');
+    return;
+  }
+  // Nearest free pad in the same layer, looking right first because that is
+  // the direction a set is built in, then left.
+  const free = (() => {
+    for (let c = col + 1; c < columns; c++) if (!layer!.cells[c]) return c;
+    for (let c = col - 1; c >= 0; c--) if (!layer!.cells[c]) return c;
+    return -1;
+  })();
+  if (free < 0) {
+    notify(`${layer!.name} has no free pad in this song — add a column, or clear one first`);
+    return;
+  }
+  const id = uid('look');
+  st.mutate((p) => {
+    const src = p.looks[srcId];
+    const ly = p.layers.find((l) => l.id === layerId);
+    if (!src || !ly) return;
+    // Fresh ids all the way down, the way the FX pool copies an effect. The
+    // soft-override map is keyed on (lookId, partId) so a shared part id would
+    // not actually collide, but two looks carrying the same part ids is the
+    // kind of thing that only bites later.
+    const copy = structuredClone(src);
+    for (const part of copy.parts) {
+      part.id = uid('part');
+      for (const fx of part.effects) fx.id = uid('fx');
+    }
+    p.looks[id] = { ...copy, id, name: `${src.name} copy` };
+    while (ly.cells.length <= free) ly.cells.push(null);
+    ly.cells[free] = id;
+    const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
+    if (deck) deck.cells = Object.fromEntries(p.layers.map((x) => [x.id, [...x.cells]]));
+  }, 'duplicate a look');
+  st.setSel({ layerId, col: free });
+}
+
+/** Move a look from one pad to another, swapping if the destination is taken.
+ *
+ *  Swap rather than replace: rearranging a set is the reason to drag at all,
+ *  and a replace would quietly drop the other look out of the song. Nothing is
+ *  destroyed either way — looks live in a shared pool — but "where did that go"
+ *  mid-build is exactly the confusion this is meant to remove.
+ */
+function movePad(from: { layerId: string; col: number }, toLayerId: string, toCol: number, deckId: string | null) {
+  const st = useStore.getState();
+  if (!st.project) return;
+  if (from.layerId === toLayerId && from.col === toCol) return; // dropped on itself
+  // Same guard as placeLook: a (layerId, col) pair keeps its meaning only
+  // while the song does. An APC bank arrow or another client switching songs
+  // mid-drag would move a pad in whatever is now on stage.
+  if (deckId !== null && st.project.activeDeckId !== deckId) {
+    notify('the song changed while you were dragging — nothing was moved');
+    return;
+  }
+  st.mutate((p) => {
+    const src = p.layers.find((x) => x.id === from.layerId);
+    const dst = p.layers.find((x) => x.id === toLayerId);
+    if (!src || !dst) return;
+    // never leave holes for JSON to invent
+    while (src.cells.length <= from.col) src.cells.push(null);
+    while (dst.cells.length <= toCol) dst.cells.push(null);
+    const moving = src.cells[from.col] ?? null;
+    if (!moving) return;
+    src.cells[from.col] = dst.cells[toCol] ?? null;
+    dst.cells[toCol] = moving;
+    const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
+    if (deck) deck.cells = Object.fromEntries(p.layers.map((x) => [x.id, [...x.cells]]));
+  }, 'move a look to another pad');
+  st.setSel({ layerId: toLayerId, col: toCol });
+}
 
 // Live layer state reaches a cell as three primitives, not the LayerSnap
 // object — that object is freshly parsed 20×/s, so passing it re-rendered every
@@ -120,6 +211,29 @@ const Cell = React.memo(function Cell({
     if (!learnMode && look?.flash) send({ type: 'release', layerId: layer.id, col });
   };
 
+  // Right-click, or a long press on the NAME (never on the body — a long press
+  // there is how a flash look is held).
+  const padMenu = contextPress(() => {
+    if (!look) return;
+    void askChoice(`${look.name} — ${layer.name}, column ${col + 1}`, [
+      { value: 'duplicate', label: 'Duplicate', primary: true },
+      { value: 'clear', label: 'Clear pad' },
+    ], {
+      body: 'Duplicate makes an independent copy on the next free pad in this layer. Two pads pointing at the SAME look change together when you edit either one; a duplicate is how you get one you can change on its own.',
+    }).then((choice) => {
+      if (choice === 'duplicate') duplicatePad(layer.id, col, project.columns.length);
+      else if (choice === 'clear') {
+        useStore.getState().mutate((p) => {
+          const ly = p.layers.find((l) => l.id === layer.id);
+          if (!ly) return;
+          ly.cells[col] = null;
+          const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
+          if (deck) deck.cells = Object.fromEntries(p.layers.map((x) => [x.id, [...x.cells]]));
+        }, 'clear a pad');
+      }
+    });
+  });
+
   return (
     <div
       className={`cell ${look ? '' : 'empty'} ${active ? 'active' : ''} ${staleLive ? 'stale' : ''} ${selected ? 'selected' : ''} ${armed ? 'learn-armed' : ''} ${dropHover ? 'droptarget' : ''}`}
@@ -131,7 +245,7 @@ const Cell = React.memo(function Cell({
       onDragOver={(e) => {
         if (!e.dataTransfer.types.includes(LOOK_DRAG)) return;
         e.preventDefault(); // required, or the browser refuses the drop
-        e.dataTransfer.dropEffect = 'copy';
+        e.dataTransfer.dropEffect = e.dataTransfer.types.includes(PAD_DRAG) ? 'move' : 'copy';
       }}
       onDragLeave={(e) => {
         if (!e.dataTransfer.types.includes(LOOK_DRAG)) return;
@@ -143,7 +257,16 @@ const Cell = React.memo(function Cell({
         const id = e.dataTransfer.getData(LOOK_DRAG);
         if (!id) return;
         e.preventDefault();
-        placeLook(layer.id, col, id, e.dataTransfer.getData(DECK_DRAG) || null);
+        // A drag that STARTED on a pad hands its look over and takes whatever
+        // was here in exchange; one from the library copies onto this pad.
+        const pad = e.dataTransfer.getData(PAD_DRAG);
+        const deckId = e.dataTransfer.getData(DECK_DRAG) || null;
+        if (pad) {
+          const [layerId, c] = pad.split('\t');
+          movePad({ layerId, col: Number(c) }, layer.id, col, deckId);
+          return;
+        }
+        placeLook(layer.id, col, id, deckId);
       }}
       title={
         staleLive
@@ -192,18 +315,39 @@ const Cell = React.memo(function Cell({
             </div>
           )}
           {/* Two targets in one pad, like a Resolume clip: the body fires the
-              look, the name selects it for editing without firing. Selecting
-              has to be possible mid-show without putting the look on stage —
-              previously the only way to open a look in the editor was to run
-              it, which is not a thing you can do during someone else's song. */}
+              look, the name is everything that is NOT firing — select, drag to
+              another pad, right-click for the menu. Selecting has to be
+              possible mid-show without putting the look on stage; previously
+              the only way to open a look in the editor was to run it, which is
+              not a thing you can do during someone else's song.
+
+              The drag handle is the name and not the pad for the same reason:
+              the pad body fires on pointerdown, so making it draggable would
+              put a look on stage every time somebody reached for it. The long
+              press belongs here too — on the body it is how a flash look is
+              held. */}
           <div
             className="cellname"
-            title={`${look.name} — click to select (does not fire)`}
+            draggable
+            title={`${look.name} — click to select (does not fire), drag to move it to another pad, right-click for more`}
+            {...padMenu}
+            onDragStart={(e) => {
+              e.dataTransfer.setData(LOOK_DRAG, look.id);
+              e.dataTransfer.setData(DECK_DRAG, project.activeDeckId ?? '');
+              e.dataTransfer.setData(PAD_DRAG, `${layer.id}\t${col}`);
+              e.dataTransfer.effectAllowed = 'move';
+              // hand the keyboard back to the show before the drop lands
+              (document.activeElement as HTMLElement | null)?.blur();
+            }}
             onPointerDown={(e) => {
               e.stopPropagation(); // the cell body below must not fire it
               setSel({ layerId: layer.id, col });
+              padMenu.onPointerDown?.(e);
             }}
-            onPointerUp={(e) => e.stopPropagation()}
+            onPointerUp={(e) => {
+              e.stopPropagation();
+              padMenu.onPointerUp?.(e);
+            }}
           >
             {look.steps?.length ? '⛓ ' : ''}{look.name}
           </div>

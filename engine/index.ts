@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { Command, CompiledProfile, HeadSnap, ServerEvent, Snapshot, SoftField } from '../shared/types.ts';
-import { WS_PORT, clamp, sanitizeProject } from '../shared/types.ts';
+import { BAR, clamp, sanitizeProject, WS_PORT } from '../shared/types.ts';
 import { PROFILES } from '../shared/profiles.ts';
 import { EngineState, LOCAL_CLIENT } from './state.ts';
 import { Renderer } from './renderer.ts';
@@ -457,11 +457,13 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       break;
     case 'tap':
       state.clock.tap();
-      renderer.alignPhase();
+      renderer.alignPhase(1); // a tap is a quarter note
       break;
     case 'resync':
+      // SYNC says "now is the top of the bar", and it has to mean that for the
+      // effects too or a bar-long shape stays wherever it was.
       state.clock.resync();
-      renderer.alignPhase();
+      renderer.alignPhase(BAR);
       break;
     case 'setSpeed':
       state.speed = clamp(cmd.v, 0.1, 8);
@@ -749,7 +751,10 @@ function handleOsc(msg: OscMessage): void {
     }
   }
   if (msg.addr === '/composition/tempocontroller/resync') {
+    // Arena's own resync means the same thing the SYNC button does, so it
+    // lands the effects on a bar the same way.
     state.clock.resync();
+    renderer.alignPhase(BAR);
   }
   if (sync.followColumns) {
     const m = msg.addr.match(/^\/composition\/columns\/(\d+)\/connect$/);

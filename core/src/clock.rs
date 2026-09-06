@@ -1,5 +1,9 @@
 use crate::types::clamp;
 
+/// Beats to a bar. Four, everywhere: the bar LED counts the same four, and
+/// SYNC lands the beat and every effect cycle on a multiple of it.
+pub const BAR: f64 = 4.0;
+
 /// Musical clock: continuous beat position from an anchor + BPM.
 /// Times are engine-epoch milliseconds (f64), mirroring performance.now().
 pub struct BeatClock {
@@ -43,9 +47,15 @@ impl BeatClock {
         self.anchor_t = t;
     }
 
-    /// Snap the beat phase to a downbeat now (Resolume resync).
+    /// Make NOW the top of a bar (Resolume resync).
+    ///
+    /// The nearest bar line, not the next whole beat. "Downbeat" is the first
+    /// beat of a bar, and landing on any beat left the bar count — and every
+    /// effect cycle longer than a beat — wherever it happened to be. Nearest
+    /// rather than next because this is pressed ON the downbeat, so it should
+    /// move as little as possible in either direction.
     pub fn resync(&mut self, t: f64) {
-        self.anchor_beat = self.beat_at(t).ceil();
+        self.anchor_beat = (self.beat_at(t) / BAR).round() * BAR;
         self.anchor_t = t;
     }
 

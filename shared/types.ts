@@ -535,6 +535,11 @@ export const BUILTIN_PROFILE_IDS: readonly string[] = [
 /** The importer's current version — mirrors COMPILER_VERSION in
  *  core/src/cprofile.rs, where the history of what changed at each step lives.
  *  A profile stamped lower than this was compiled by an older build. */
+/** Beats to a bar. Four, everywhere: the top bar's bar LED counts the same
+ *  four, and SYNC lands the beat and every effect cycle on a multiple of it.
+ *  Mirrored as `BAR` in core/src/clock.rs. */
+export const BAR = 4;
+
 export const COMPILER_VERSION = 1;
 
 export type CompiledProfile = {

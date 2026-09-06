@@ -36,6 +36,7 @@ import { SHORTCUTS, SHORTCUT_GROUPS, runShortcut } from '../../ui/src/shortcuts.
 import { repairEffect } from '../../shared/types.ts';
 import { parseOsc } from '../osc.ts';
 import { ArtnetOut } from '../artnet.ts';
+import { BAR } from '../../shared/types.ts';
 import { BeatClock } from '../clock.ts';
 
 let failures = 0;
@@ -388,6 +389,41 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
     check(`surface: ${surface.name} exercises tap and blackout`, leds.has(surface.tap) && leds.has(surface.blackout));
     const stray = [...leds.keys()].filter((n) => !surface.clear.some(([a, b]) => n >= a && n <= b));
     check(`surface: ${surface.name} lights only notes it blanks on attach`, stray.length === 0, `stray ${stray.join(',')}`);
+  }
+}
+
+// ---------- SYNC lands on a bar, in both engines ----------
+{
+  // The bug: effects run on effBeat / rate, so a rate-4 effect tops out where
+  // effBeat is a multiple of 4. Rounding to the nearest BEAT left it 0.5 or
+  // 0.75 through its cycle from every start tried, which is why SYNC appeared
+  // to do nothing to anything slower than a quarter note. Same assertions as
+  // core/src/renderer.rs, so the two cannot drift.
+  const r = new Renderer(new EngineState(demoProject()));
+  for (const start of [7.3, 5.9, 2.4, 10.1, 0.2, 13.75]) {
+    r.pinClock(start);
+    r.alignPhase(BAR);
+    const eff = r.readEffBeat();
+    const off = [1, 2, 4, 0.5].map((rate) => Math.abs(((eff / rate) % 1 + 1) % 1)).filter((p) => p > 1e-9);
+    check(`sync: a bar-long effect tops out from ${start}`, off.length === 0, `eff ${eff}`);
+  }
+  for (const start of [7.3, 5.9, 2.4]) {
+    r.pinClock(start);
+    r.alignPhase(1);
+    check(`tap: still lands on the beat tapped from ${start}`, r.readEffBeat() === Math.round(start), `got ${r.readEffBeat()}`);
+  }
+  for (const bad of [0, -4, NaN, Infinity]) {
+    r.pinClock(5.9);
+    r.alignPhase(bad);
+    check(`sync: a nonsense grid (${bad}) falls back to a beat`, r.readEffBeat() === 6, `got ${r.readEffBeat()}`);
+  }
+  // and the musical clock lands on a bar line, not just any beat
+  const c = new BeatClock();
+  c.setBpm(120, 0);
+  for (const at of [1234, 2500, 9001]) {
+    c.resync(at);
+    const beat = c.beatAt(at);
+    check(`sync: the beat count lands on a bar line at ${at}`, Math.abs(((beat % BAR) + BAR) % BAR) < 1e-9, `beat ${beat}`);
   }
 }
 

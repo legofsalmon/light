@@ -46,7 +46,10 @@ patched, grouped and staged. Fire some pads and look around.
 
 | Action | How |
 |---|---|
-| Fire a pad | Click it (also selects it for editing) |
+| Fire a pad | Click its body (also selects it for editing) |
+| Select without firing | Click the pad's **name strip** — useful mid-show |
+| Move a look to another pad | Drag the name strip onto the other pad |
+| Duplicate or clear a pad | Right-click the name strip (long-press on a touch screen) |
 | Fire a column (cue) | Click the column header, or keys `1`–`8` |
 | Hold a flash look | Press and hold the pad — it releases on mouse-up |
 | Clear a layer | `✕` in the layer header |
@@ -56,6 +59,19 @@ patched, grouped and staged. Fire some pads and look around.
 **Column = cue.** Firing a column fires every layer's pad in that column and *clears* layers whose pad is empty — so a column fully describes the stage. Momentary **flash** looks are skipped by cues on purpose: a cue can never latch a blinder on.
 
 **Flash looks** are momentary: active only while the mouse button or mapped MIDI note is held. If the client holding a flash look disconnects entirely, the engine releases it automatically.
+
+**The name strip is the handle.** A pad's body fires it, and the strip along the
+bottom with the look's name on it does everything else: click to select without
+firing, drag onto another pad to move it there, right-click for the menu.
+Dragging onto a pad that already holds something swaps the two rather than
+replacing, because rearranging is the reason to drag.
+
+**Duplicate versus a second pad.** Looks live in one shared pool and a pad only
+points at one, so putting the same look on two pads is not a copy — edit either
+and both change. That is usually what you want. `Duplicate` in the pad menu is
+the other thing: an independent copy on the next free pad in that layer, which
+you can change without touching the original. The library drag does the first,
+the menu does the second.
 
 ## Crossfades
 
@@ -115,9 +131,14 @@ The **speed** fader in the top bar multiplies all effect rates (0.25×–4×) wi
 
 ## Tempo
 
-- **TAP** (or `T`) — tap tempo; every tap also lands the downbeat.
-- Drag the BPM number vertically for fine adjustment.
-- **SYNC** snaps the phase to the next downbeat (matches Arena's resync).
+- **TAP** (or `T`) — tap tempo; every tap also lands the beat.
+- **The BPM number** takes a typed value: click it, type, press Enter. Escape
+  leaves the tempo alone. Dragging it vertically still scrubs, and a drag never
+  opens the field.
+- **SYNC** — press it on the downbeat. The bar count restarts from there, and so
+  does every effect cycle: a shape that takes a bar to go round starts again at
+  the top rather than wherever it happened to be. Arena's own resync over OSC
+  does exactly the same thing.
 - With Resolume connected via OSC, Arena's tempo drives the clock (see [resolume-and-midi.md](resolume-and-midi.md)).
 
 ## MIDI learn

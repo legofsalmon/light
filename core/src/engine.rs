@@ -406,8 +406,8 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
                         &mut osc_log, now_ms(), &mut project_echo, &mut subs, &mut midi_clock,
                         &mut own_midi_port,
                     );
-                    if align {
-                        renderer.align_phase();
+                    if let Some(grid) = align {
+                        renderer.align_phase(grid);
                     }
                     // TEST ONLY: apply a pending clock pin so the next tick uses it.
                     if let Some(v) = state.pending_pin.take() {
@@ -871,6 +871,10 @@ fn apply_outcome(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Returns Some(grid) when the command asked the effect phase to land on a
+/// whole multiple of that many beats — 1 for a tap, a bar for SYNC. See
+/// `EngineState::handle_command`.
+#[allow(clippy::too_many_arguments)]
 fn handle_msg(
     msg: EngineMsg,
     state: &mut EngineState,
@@ -886,7 +890,7 @@ fn handle_msg(
     subs: &mut Subs,
     midi_clock: &mut crate::midi_clock::MidiClock,
     own_midi_port: &mut Option<String>,
-) -> bool {
+) -> Option<f64> {
     match msg {
         // handled by the drain loop before it reaches here
         EngineMsg::Shutdown => {}
@@ -930,7 +934,7 @@ fn handle_msg(
             match &cmd {
                 Command::Projects => {
                     broadcast_projects(bc, dir);
-                    return false;
+                    return None;
                 }
                 // TEST ONLY, LIGHT_TEST_CLOCK gated: pin the effect clock so a
                 // moving effect is byte-comparable between the two engines.
@@ -939,7 +943,7 @@ fn handle_msg(
                     if std::env::var("LIGHT_TEST_CLOCK").is_ok() {
                         state.pending_pin = Some(*eff_beat);
                     }
-                    return false;
+                    return None;
                 }
                 // Transport-level subscription: never reaches the state machine.
                 Command::WatchDmx { universe_ids } => {
@@ -950,7 +954,7 @@ fn handle_msg(
                             subs.dmx.insert(id, universe_ids.clone());
                         }
                     }
-                    return false;
+                    return None;
                 }
                 // Record WHO is auditioning so the preview head set can be sent
                 // to them alone; the look id itself still goes to the state
@@ -987,7 +991,7 @@ fn handle_msg(
                     *dirty_at = None;
                     if let Err(e) = persist::save_slug_now(dir, &slug, &fresh) {
                         bc.broadcast(&json!({"type":"toast","ok":false,"message":format!("cannot create: {e}")}).to_string());
-                        return false;
+                        return None;
                     }
                     persist::set_current_slug(dir, &slug);
                     state.replace_project(fresh);
@@ -996,7 +1000,7 @@ fn handle_msg(
                     bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("created \"{name}\"")}).to_string());
                     broadcast_projects(bc, dir);
                     ensure_osc(osc, state, tx);
-                    return false;
+                    return None;
                 }
                 Command::OpenProject { slug } if *slug == persist::current_slug(dir) => {
                     // already open — flush live edits rather than reverting
@@ -1005,12 +1009,12 @@ fn handle_msg(
                     let _ = persist::save_project_slug(dir, &cur, &state.project);
                     *dirty_at = None;
                     bc.broadcast(&json!({"type":"toast","ok":true,"message":"already open"}).to_string());
-                    return false;
+                    return None;
                 }
                 Command::OpenProject { slug } => {
                     let Some(p) = persist::load_slug(dir, slug) else {
                         bc.broadcast(&json!({"type":"toast","ok":false,"message":format!("cannot open \"{slug}\"")}).to_string());
-                        return false;
+                        return None;
                     };
                     let _ = persist::save_project(dir, &state.project); // flush pending edits, old slug
                     *dirty_at = None;
@@ -1022,7 +1026,7 @@ fn handle_msg(
                     bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("opened \"{pname}\"")}).to_string());
                     broadcast_projects(bc, dir);
                     ensure_osc(osc, state, tx);
-                    return false;
+                    return None;
                 }
                 Command::SaveProjectAs { name } => {
                     let name = if name.trim().is_empty() { "Untitled" } else { name.trim() };
@@ -1030,14 +1034,14 @@ fn handle_msg(
                     state.project.name = name.to_string();
                     if let Err(e) = persist::save_slug_now(dir, &slug, &state.project) {
                         bc.broadcast(&json!({"type":"toast","ok":false,"message":format!("cannot save: {e}")}).to_string());
-                        return false;
+                        return None;
                     }
                     persist::set_current_slug(dir, &slug);
                     state.bump_gen(); // the name changed — new authoritative gen
                     bc.broadcast(&project_event(state));
                     bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("saved as \"{name}\"")}).to_string());
                     broadcast_projects(bc, dir);
-                    return false;
+                    return None;
                 }
                 _ => {}
             }
@@ -1059,7 +1063,7 @@ fn handle_msg(
                     if let Some(id) = owner {
                         bc.send_to(id, project_event(state));
                     }
-                    return false;
+                    return None;
                 }
             }
             let out = state.handle_command(cmd, t, owner);
@@ -1087,7 +1091,10 @@ fn handle_msg(
                         .to_string(),
                 );
             }
-            let align = m.addr == "/composition/tempocontroller/resync";
+            // Arena's own resync means the same thing the SYNC button does,
+            // so it lands the effects on a bar the same way.
+            let align =
+                (m.addr == "/composition/tempocontroller/resync").then_some(crate::clock::BAR);
             handle_osc_sync(&m, state, t);
             return align;
         }
@@ -1149,7 +1156,7 @@ fn handle_msg(
             }
         }
     }
-    false
+    None
 }
 
 fn handle_osc_sync(m: &OscMessage, state: &mut EngineState, t: f64) {

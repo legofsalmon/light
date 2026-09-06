@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useStore, type ViewMode } from '../store.ts';
 import { askConfirm, askPrompt } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
-import { clamp } from '../../../shared/types.ts';
+import { BAR, clamp } from '../../../shared/types.ts';
 
 function StatusDot({ ok, label, warn, title }: { ok: boolean; label: string; warn?: boolean; title?: string }) {
   return (
@@ -176,8 +176,18 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
   const followingClock = clockSource !== undefined;
   const beat = snap?.beat ?? 0;
   const beatOn = ((beat % 1) + 1) % 1 < 0.22;
-  const barOn = ((beat % 4) + 4) % 4 < 1;
-  const dragRef = useRef<{ y: number; bpm: number } | null>(null);
+  const barOn = ((beat % BAR) + BAR) % BAR < 1;
+  const dragRef = useRef<{ y: number; bpm: number; moved: boolean } | null>(null);
+  /** The typed tempo while the readout is a field; null means it is a readout. */
+  const [bpmEdit, setBpmEdit] = useState<string | null>(null);
+  const commitBpm = (raw: string) => {
+    setBpmEdit(null);
+    const v = Number(raw.trim());
+    // A field that silently ignores what was typed is worse than one that says
+    // so — 20 to 500 is the clock's own range in both engines.
+    if (!Number.isFinite(v) || v <= 0) return;
+    send({ type: 'setBpm', bpm: clamp(v, 20, 500) });
+  };
 
   const oscAlive = oscLog.length > 0 && Date.now() - oscLog[0].t < 3000;
   // engineStalled comes from snapshot ARRIVAL time. The fps figure below only
@@ -249,28 +259,64 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
       <div className="bpmblock">
         <div className={`beatled ${beatOn && barOn ? 'on' : ''}`} style={{ width: 10, height: 10 }} />
         <div className={`beatled ${beatOn ? 'on' : ''}`} />
-        <div
-          className={`bpm ${followingClock ? 'followed' : ''}`}
-          title={
-            followingClock
-              ? `tempo is coming from ${clockSource} — switch the beat clock off to set it here`
-              : 'drag to adjust BPM'
-          }
-          onPointerDown={(e) => {
-            if (followingClock) return;
-            dragRef.current = { y: e.clientY, bpm };
-            e.currentTarget.setPointerCapture(e.pointerId);
-          }}
-          onPointerMove={(e) => {
-            if (dragRef.current && e.buttons & 1) {
-              const d = (dragRef.current.y - e.clientY) * 0.25;
-              send({ type: 'setBpm', bpm: clamp(dragRef.current.bpm + d, 20, 500) });
+        {bpmEdit === null ? (
+          <div
+            className={`bpm ${followingClock ? 'followed' : ''}`}
+            role={followingClock ? undefined : 'button'}
+            tabIndex={followingClock ? undefined : 0}
+            title={
+              followingClock
+                ? `tempo is coming from ${clockSource} — switch the beat clock off to set it here`
+                : 'drag to adjust the tempo, or click to type it'
             }
-          }}
-          onPointerUp={() => (dragRef.current = null)}
-        >
-          {bpm.toFixed(1)}
-        </div>
+            onPointerDown={(e) => {
+              if (followingClock) return;
+              // Where a click ends up being a click and not a drag is decided
+              // on pointerUP, by how far it moved: a scrub and a click both
+              // start here, and demanding a double-click to type would make
+              // the obvious gesture the wrong one.
+              dragRef.current = { y: e.clientY, bpm, moved: false };
+              e.currentTarget.setPointerCapture(e.pointerId);
+            }}
+            onPointerMove={(e) => {
+              if (dragRef.current && e.buttons & 1) {
+                const d = (dragRef.current.y - e.clientY) * 0.25;
+                if (Math.abs(d) >= 0.5) dragRef.current.moved = true;
+                if (dragRef.current.moved) send({ type: 'setBpm', bpm: clamp(dragRef.current.bpm + d, 20, 500) });
+              }
+            }}
+            onPointerUp={() => {
+              const scrubbed = dragRef.current?.moved ?? false;
+              dragRef.current = null;
+              if (!scrubbed) setBpmEdit(bpm.toFixed(1));
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              setBpmEdit(bpm.toFixed(1));
+            }}
+          >
+            {bpm.toFixed(1)}
+          </div>
+        ) : (
+          <input
+            className="bpm bpmedit"
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- the click that opened it asked for the caret
+            autoFocus
+            aria-label="tempo in BPM"
+            title="Enter to set it, Escape to leave it alone"
+            value={bpmEdit}
+            onFocus={(e) => e.currentTarget.select()}
+            onChange={(e) => setBpmEdit(e.target.value)}
+            onBlur={() => commitBpm(bpmEdit)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitBpm(bpmEdit);
+              // Escape leaves the tempo where it was — the one gesture that
+              // has to be safe on a control this size during a show.
+              else if (e.key === 'Escape') setBpmEdit(null);
+            }}
+          />
+        )}
         <span className="label">bpm</span>
         <button
           className="btn small"
@@ -286,7 +332,11 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
         >
           tap
         </button>
-        <button className="btn small ghost" onClick={() => send({ type: 'resync' })} title="snap phase to downbeat">
+        <button
+          className="btn small ghost"
+          onClick={() => send({ type: 'resync' })}
+          title="press it on the downbeat — the bar count and every effect cycle start again from here"
+        >
           sync
         </button>
         <button

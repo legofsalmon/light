@@ -320,6 +320,17 @@ select.sel { cursor: pointer; }
    the follower rewrites it every frame. Colour it like the control that owns
    it and stop offering the drag cursor. */
 .bpm.followed { color: var(--accent); cursor: default; }
+/* The typing state of the same readout: same box, same digits, so the number
+   does not jump when it becomes a field. */
+.bpm.bpmedit {
+  cursor: text;
+  background: var(--raise);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 0;
+  text-align: right;
+  outline: none;
+}
 
 /* Touch drag ownership. Every continuous control here drags a pointer, and the
    UI is served to a FOH tablet (docs/user-guide.md). Without touch-action the
