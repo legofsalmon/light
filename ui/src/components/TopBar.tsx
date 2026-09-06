@@ -376,6 +376,35 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
           </button>
         </span>
       )}
+      {(() => {
+        // The transmit gate. LIGHT boots offline every time, so this is the one
+        // deliberate step between opening a show and putting DMX on somebody's
+        // network — and the state has to be readable from across a room.
+        //
+        // Amber when output is configured but nothing is going out: that is the
+        // confusing case ("I set up Art-Net, why is there no light?"), and it
+        // is the one this button exists to answer. With no universe enabled
+        // there is nothing to send either way, so it stays quiet.
+        const configured = project.universes.some((u) => u.artnet || u.sacn);
+        const live = snap?.transmit === true;
+        return (
+          <button
+            className={`btn ${live ? 'on' : configured ? 'warn on' : ''}`}
+            title={
+              live && !configured
+                ? 'Live, but no universe is set up to send — so nothing is reaching the rig anyway. Turn on Art-Net or sACN in the Output tab.'
+                : live
+                ? 'LIVE — the rig is receiving. Click to go offline: LIGHT sends a blackout, then stops transmitting entirely, and the show keeps running on screen.'
+                : configured
+                  ? 'OFFLINE — nothing is reaching the rig. The universes are set up; click to go live.'
+                  : 'OFFLINE — nothing is reaching the rig, and no universe is set up to send anyway. Turn on Art-Net or sACN in the Output tab first.'
+            }
+            onClick={() => send({ type: 'setTransmit', v: !live })}
+          >
+            {live ? 'live' : 'offline'}
+          </button>
+        );
+      })()}
       <button
         className="btn allstop"
         title="ALL STOP — blackout, clear every layer, release holds, haze and motors off"
@@ -441,6 +470,19 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
           const fresh = nodes.filter((n) => n.ageMs < 8000);
           const failed = snap?.artnetPoll === 'failed';
           const wire = artnetOn && sacnOn ? 'Art-Net + sACN' : artnetOn ? 'Art-Net' : 'sACN';
+          // The gate comes first: with it shut nothing is being sent, whatever
+          // the universes say, and a dot reading "sending" would be a lie an
+          // operator would believe while the rig sat dark.
+          if ((artnetOn || sacnOn) && snap?.transmit !== true) {
+            return (
+              <StatusDot
+                ok={false}
+                warn
+                label="not sending"
+                title={`set up for ${wire}, but LIGHT is offline — nothing is reaching the rig. Go live with the button to the left.`}
+              />
+            );
+          }
           const label = !artnetOn && !sacnOn
             ? 'output off'
             : fresh.length > 0

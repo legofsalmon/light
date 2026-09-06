@@ -499,7 +499,7 @@ export function PatchView() {
         </div>
       )}
       <div onPointerDown={onTablePointerDown}>
-        <div className="sectionhead">Fixtures</div>
+        <div className="sectionhead" data-setup="fixtures">Fixtures</div>
         <table className="tbl">
           <thead>
             <tr>
@@ -1019,7 +1019,7 @@ export function PatchView() {
       </div>
 
       <div>
-        <div className="sectionhead">
+        <div className="sectionhead" data-setup="groups">
           Groups
           <button
             className="btn small ghost"
@@ -1250,7 +1250,7 @@ function StageTable() {
   if (items.length === 0) {
     return (
       <div className="patchsec">
-        <div className="sectionhead">Stage</div>
+        <div className="sectionhead" data-setup="stage">Stage</div>
         <StageSizeRow />
         <div className="prose">
           Nothing drawn yet — add truss, risers or screens from the stage's “+ structure…” menu,

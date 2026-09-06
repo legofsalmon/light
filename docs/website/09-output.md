@@ -6,10 +6,12 @@ The Output tab lists the show's DMX universes. Each has a label, an **Art-Net**
 toggle with its universe number, an **sACN** toggle, and a destination. Both
 protocols can run at once.
 
-**Outputs are off until you turn them on.** A new show sends nothing, and
-opening someone else's show does not start transmitting on your network. This is
-the single most important default in the app: it means you can build, demo and
-experiment anywhere without wondering what is plugged in.
+**Outputs are off until you turn them on**, twice over. A new show has no
+universe switched on, and separately LIGHT starts **offline** every time it
+opens: nothing reaches the wire until you say so, whatever the show file says.
+It means you can open anything — a demo, a show someone emailed you, your own
+set in a venue where somebody else is mid-patch — without wondering what is
+plugged in.
 
 The `art-net` dot in the top bar goes green only when a node has actually
 answered an ArtPoll, with its name in the tooltip. Amber means LIGHT is sending
@@ -20,6 +22,31 @@ There is a live DMX monitor per universe in the same tab: the actual bytes
 leaving the app, which is the end of most "is it the desk or the fixture?"
 arguments.
 
+## Going live
+
+The button at the left of the top bar's safety group reads **offline** or
+**live**, and clicking it switches. The Output tab says the same thing in
+sentences, with the universes it is gating right underneath.
+
+Offline is not blackout. Blackout is the show being dark: the engine keeps
+transmitting, and it is the transmitting that holds the rig at zero. Offline is
+LIGHT not speaking to the network at all — the show carries on running on
+screen, the stage view and the DMX monitor still show exactly what it is doing,
+and none of it leaves the Mac.
+
+Going offline **blacks the rig out first**. Art-Net and sACN nodes hold the last
+frame they were sent, so simply falling silent would leave the rig lit at
+whatever was on it. LIGHT sends a few frames of zeros, then stops.
+
+The output dot beside the button reads **not sending** whenever universes are
+switched on but LIGHT is offline. That combination is the one thing in the app
+that looks like a fault and is not, so it is called out rather than left to be
+discovered with a dark rig and a soundcheck running.
+
+Node discovery is not gated. ArtPoll is a question, not output, so LIGHT keeps
+finding nodes while offline — which is exactly when you want to know what is out
+there.
+
 ## Masters
 
 - **Grand master** scales all intensity output.
@@ -27,7 +54,7 @@ arguments.
 - **Speed** multiplies every effect rate, 0.25× to 4×, without jumping phase.
 - **Haze** is merged highest-wins with whatever the looks are asking for.
 
-## The three ways to stop
+## The four ways to stop
 
 **Blackout** (top bar, or `B`) zeroes intensity and strobe instantly and always
 wins, while the layers keep running underneath. Release it and the stage returns
@@ -35,6 +62,10 @@ exactly as it was. This is the one to use when something needs to go dark *now*
 and come back in a moment.
 
 **Clear layer** (`✕` on a layer head) stops that layer and leaves the rest.
+
+**Going offline** stops LIGHT talking to the rig at all, after blacking it out.
+Use it when the rig belongs to someone else for a while, or when you want to
+build a show at a venue without touching what is hanging.
 
 **ALL STOP** is the panic key: blackout on, every layer cleared, held flashes
 released, haze and motors off, and any live nudge dropped. It asks for
@@ -55,6 +86,10 @@ The **live state does not**. Which looks were running, blackout, held flashes �
 all gone. A restart always comes up dark. That is deliberate: an app that
 restores "everything at full" while someone is standing on a ladder is an app
 that hurts someone.
+
+**Being live does not survive either.** LIGHT comes back offline every time, on
+purpose and for the same reason. Going live is one click, and it is a click
+somebody made on purpose rather than a setting a file remembered.
 
 ## Saving
 

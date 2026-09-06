@@ -13,6 +13,7 @@ import { licenceAvailable, licenceStatus, type LicenceStatus } from './licence.t
 import { AdminModal } from './components/AdminModal.tsx';
 import { Toasts } from './components/Toasts.tsx';
 import { HelpOverlay } from './components/HelpMode.tsx';
+import { SetupGuide } from './components/SetupGuide.tsx';
 import { updateAvailable, updateStatus } from './update.ts';
 import { size, sizeTouch } from './tokens.ts';
 
@@ -372,6 +373,7 @@ export function App() {
         </div>
       )}
       <Toasts />
+      <SetupGuide />
       <HelpOverlay />
       {admin && <AdminModal onClose={() => setAdmin(false)} />}
       <DialogHost />

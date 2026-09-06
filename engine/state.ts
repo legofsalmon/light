@@ -100,6 +100,9 @@ export class EngineState {
   master = 1;
   speed = 1;
   blackout = false;
+  /** Whether rendered frames reach the wire at all (engine/output.ts).
+   *  Runtime-only and OFF at every boot, whatever the show says. */
+  transmit = false;
   learnTarget: MidiAction | null = null;
   /** Monotonic project generation. Bumped once per project-changing command by
    *  the transport layer (engine/index.ts) — matching the per-command bump in

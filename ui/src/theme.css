@@ -1281,3 +1281,41 @@ button.warnchip { background: none; cursor: pointer; }
   border-color: var(--line2);
   max-width: min(92vw, var(--size-notice-max-w));
 }
+
+/* ---------- the rig-setup guide (backlog #1) ----------
+   A card, not a modal: the five steps happen on the real surfaces at full
+   size, so the guide has to sit beside the work rather than over it. Bottom
+   right, away from the top bar's panic controls. */
+.setupguide {
+  position: fixed;
+  right: var(--space-16);
+  bottom: var(--space-16);
+  z-index: 120;
+  width: min(92vw, var(--size-notice-max-w));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  padding: var(--space-12);
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-modal);
+}
+.setupsteps { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.setupstep {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--size-btn-sm);
+  padding: var(--space-2) var(--space-7);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.setupstep:hover { border-color: var(--line2); color: var(--text); }
+/* ticked by reading the project, so this is a statement of fact, not a claim */
+.setupstep.done { color: var(--good); border-color: var(--good); }
+.setupstep.next { color: var(--accent); border-color: var(--accent); }
+.setupmark { font-variant-numeric: tabular-nums; }

@@ -23,6 +23,7 @@ const demoProject = (): Project =>
   JSON.parse(fs.readFileSync(path.join(process.cwd(), 'core/tests/data/demo_project.json'), 'utf8'));
 import { readFileSync } from 'node:fs';
 import { MAX_THROW, buildOccluders, hitsPropFootprint, standingHeightAt, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
+import { GO_DARK_FRAMES, OutputGate } from '../output.ts';
 import { parseOsc } from '../osc.ts';
 import { ArtnetOut } from '../artnet.ts';
 import { BeatClock } from '../clock.ts';
@@ -876,6 +877,68 @@ await new Promise<void>((resolve) => {
     'auto-groups: a stale generated name is refreshed on regenerate',
     plan7.update.some((u) => u.existing.id === 'auto-truss-t1' && u.name === 'Truss 1'),
   );
+}
+
+// --- the transmit gate: what actually reaches the wire (backlog #1) ---------
+// Mirrors the unit tests in core/src/output.rs. The two engines must decide
+// identically, and neither may put DMX on a network it was not asked to.
+{
+  {
+    const g = new OutputGate();
+    check('gate: a fresh engine is offline', !g.isLive());
+    let silent = true;
+    for (let i = 0; i < 10; i++) if (g.tick() !== 'silent') silent = false;
+    check('gate: and stays silent, with no go-dark frames to send', silent);
+  }
+  {
+    const g = new OutputGate();
+    g.set(true);
+    let show = g.isLive();
+    for (let i = 0; i < 10; i++) if (g.tick() !== 'show') show = false;
+    check('gate: live sends the show', show);
+  }
+  {
+    // A node holds the last frame it received, so falling silent while the rig
+    // is lit would leave it lit. Zeros first, then nothing.
+    const g = new OutputGate();
+    g.set(true);
+    g.tick();
+    g.set(false);
+    const dark = Array.from({ length: GO_DARK_FRAMES }, () => g.tick());
+    check(
+      'gate: going offline darkens the rig first',
+      dark.every((w) => w === 'dark'),
+      `got ${dark.join(',')}`,
+    );
+    check('gate: then falls silent for good', [g.tick(), g.tick(), g.tick()].every((w) => w === 'silent'));
+  }
+  {
+    const g = new OutputGate();
+    g.set(true);
+    g.set(false);
+    check('gate: one go-dark frame out', g.tick() === 'dark');
+    g.set(true);
+    check('gate: going live again cancels the rest — no black flash', g.tick() === 'show');
+  }
+  {
+    // the engine calls set() from the engine state every tick, so re-setting
+    // the state it already has is the common path, not an edge case
+    const g = new OutputGate();
+    g.set(true);
+    g.set(false);
+    g.set(false);
+    g.set(false);
+    const run = [g.tick(), g.tick(), g.tick(), g.tick()];
+    check(
+      'gate: the go-dark run is armed once, not re-armed every tick',
+      JSON.stringify(run) === JSON.stringify(['dark', 'dark', 'dark', 'silent']),
+      `got ${run.join(',')}`,
+    );
+  }
+  {
+    const st = new EngineState(sanitizeProject(demoProject())!);
+    check('gate: engine state boots offline, whatever the show says', st.transmit === false);
+  }
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

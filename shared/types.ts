@@ -633,6 +633,10 @@ export type Snapshot = {
   speed: number;
   master: number;
   blackout: boolean;
+  /** Whether the engine is putting DMX on the wire. Not derivable from the
+   *  project: the universes say WHERE output would go, this says whether any
+   *  of it leaves the machine. Off at every boot. */
+  transmit: boolean;
   haze: number;
   /** Ableton Link session state — native (Rust) engine only */
   link?: { on: boolean; peers: number };
@@ -717,6 +721,11 @@ export type Command =
   | { type: 'setMaster'; v: number }
   | { type: 'setLayerMaster'; layerId: string; v: number }
   | { type: 'setBlackout'; v: boolean }
+  /** Open or close the transmit gate: whether rendered frames reach the wire
+   *  at all. Blackout is the show being dark and is still transmitted; this is
+   *  LIGHT not speaking to the network. Runtime-only and off at every boot,
+   *  whatever the show says — engine/output.ts. */
+  | { type: 'setTransmit'; v: boolean }
   | { type: 'setHaze'; v: number }
   | { type: 'setHazeFan'; v: number }
   // baseGen: the project generation this edit was composed against. The engine

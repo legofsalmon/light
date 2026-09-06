@@ -2,6 +2,39 @@
 
 How to operate LIGHT: looks, layers, cues, effects, and the controls that matter mid-set.
 
+## Getting started
+
+A rig needs five things set up before it lights, and LIGHT walks you through
+them. The steps appear by themselves on a show with no fixtures — which is what
+**New project** gives you — and **Settings ▸ Rig setup** brings them back. Each
+one ticks itself off by reading the show, so anything you have already done, or
+that arrived in an MVR import, is ticked before you get to it.
+
+1. **Output** — switch on Art-Net or sACN for the universes your nodes listen to.
+2. **Fixtures** — patch what is on the truss, at the addresses it is set to.
+   Import a GDTF for one fixture or an MVR for the whole plot.
+3. **Stage** — set the size of the room and drag the fixtures on the plan to
+   where they hang. This is what the stage view draws and what spread effects
+   fan across.
+4. **Groups** — the fixtures you will light together. Looks are built on groups,
+   so nothing can be programmed until there is at least one.
+5. **Aim** — point each moving head at the stage once. Looks then move around
+   that aim rather than from the centre of its travel.
+
+Then **go live**. LIGHT starts offline every time it opens and sends nothing
+until you say so, so the last step is deliberate: click **offline** in the top
+bar, or **go live** in the Output tab, and the universes you switched on start
+transmitting. Going back offline blacks the rig out first, then stops — a node
+holds the last frame it was sent, so falling silent on its own would leave the
+rig lit.
+
+Offline is not blackout. Blackout is the show being dark and is still
+transmitted; offline is LIGHT not speaking to the network, while the show keeps
+running on screen.
+
+A first launch skips all of this: it opens the demo show, which is already
+patched, grouped and staged. Fire some pads and look around.
+
 ## The mental model
 
 - A **look** is a lighting state: colour, intensity, positions, and effects for one or more fixture groups.

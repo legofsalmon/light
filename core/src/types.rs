@@ -1025,6 +1025,10 @@ pub struct Snapshot {
     pub speed: f64,
     pub master: f64,
     pub blackout: bool,
+    /// Whether the engine is putting DMX on the wire. Not derivable from the
+    /// project: the universes say WHERE output would go, this says whether any
+    /// of it leaves the machine.
+    pub transmit: bool,
     pub haze: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<LinkSnap>,
@@ -1137,6 +1141,9 @@ pub enum Command {
     SetMaster { v: f64 },
     SetLayerMaster { layer_id: String, v: f64 },
     SetBlackout { v: bool },
+    /// Open or close the transmit gate: whether rendered frames reach the wire
+    /// at all. Runtime-only, off at every boot — crate::output.
+    SetTransmit { v: bool },
     SetHaze { v: f64 },
     SetHazeFan { v: f64 },
     /// Subscribe this client to raw DMX for the given universes; an empty list

@@ -25,6 +25,8 @@ pub mod midi;
 #[cfg(feature = "engine")]
 pub mod osc;
 #[cfg(feature = "engine")]
+pub mod output;
+#[cfg(feature = "engine")]
 pub mod persist;
 #[cfg(feature = "engine")]
 pub mod renderer;

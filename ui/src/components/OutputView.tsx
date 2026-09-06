@@ -39,6 +39,48 @@ function describeChannel(spans: Span[], ch: number): string | null {
   return name && name !== '—' ? `${s.name} · ${name}` : s.name;
 }
 
+/** The transmit gate, stated where an operator comes to look for it.
+ *
+ *  LIGHT boots offline every time — see engine/output.ts for why — so there is
+ *  always one deliberate step between opening a show and driving somebody's
+ *  rig. The top bar carries the same control; this says it in full sentences,
+ *  next to the universes it is gating, and doubles as the empty state for a
+ *  show with no output set up at all. */
+function TransmitBanner() {
+  const project = useStore((s) => s.project)!;
+  const send = useStore((s) => s.send);
+  const live = useStore((s) => s.snap?.transmit) === true;
+  const configured = project.universes.some((u) => u.artnet || u.sacn);
+
+  if (!configured) {
+    return (
+      <div className="row" style={{ gap: 8 }}>
+        <span className="label" style={{ color: 'var(--warn)' }}>⚠</span>
+        <span className="prose">
+          No universe is set up to send, so nothing can reach the rig. Turn on Art-Net or
+          sACN below for the universes your nodes are listening to, then go live.
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="row" style={{ gap: 8 }}>
+      <button
+        className={`btn ${live ? 'on' : 'warn on'}`}
+        title={live ? 'stop sending — LIGHT blacks the rig out first' : 'start sending on every universe switched on below'}
+        onClick={() => send({ type: 'setTransmit', v: !live })}
+      >
+        {live ? 'go offline' : 'go live'}
+      </button>
+      <span className="prose">
+        {live
+          ? 'Live — the universes switched on below are being sent. Going offline blacks the rig out first, then stops transmitting; the show keeps running on screen.'
+          : 'Offline — nothing is leaving this Mac. LIGHT starts this way every time it opens, so a show can never drive a rig until you say so.'}
+      </span>
+    </div>
+  );
+}
+
 function DmxMeters({
   universeId,
   overrides,
@@ -358,6 +400,7 @@ export function OutputView() {
 
   return (
     <div className="col" style={{ gap: 14 }}>
+      <TransmitBanner />
       <div>
         <div className="sectionhead">Universes</div>
         <table className="tbl">

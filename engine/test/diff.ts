@@ -259,6 +259,45 @@ async function main(): Promise<void> {
   await sleep(400);
   compareDmx('idle output identical', node, rust);
 
+  // --- the transmit gate (backlog #1). Both engines must boot OFFLINE, agree
+  // --- on the state, and keep rendering the show either way: the gate decides
+  // --- what reaches the wire, not what the show is doing. Every universe here
+  // --- has Art-Net and sACN off, so this drives the state, never a socket.
+  {
+    check(
+      'transmit: both engines boot offline, whatever the show says',
+      node.snap?.transmit === false && rust.snap?.transmit === false,
+      `node=${node.snap?.transmit} rust=${rust.snap?.transmit}`,
+    );
+    const dmxBefore = JSON.stringify(node.dmx);
+    both({ type: 'setTransmit', v: true });
+    await settle(node, rust);
+    check(
+      'transmit: going live is agreed by both engines',
+      node.snap?.transmit === true && rust.snap?.transmit === true,
+      `node=${node.snap?.transmit} rust=${rust.snap?.transmit}`,
+    );
+    compareDmx('transmit: live parity', node, rust);
+    check(
+      'transmit: the gate changes the wire, not the render',
+      JSON.stringify(node.dmx) === dmxBefore,
+      'the rendered frame moved when the gate opened',
+    );
+    check(
+      'transmit: blackout is a separate question from being offline',
+      node.snap?.blackout === false && rust.snap?.blackout === false,
+      `node=${node.snap?.blackout} rust=${rust.snap?.blackout}`,
+    );
+    both({ type: 'setTransmit', v: false });
+    await settle(node, rust);
+    check(
+      'transmit: going offline is agreed by both engines',
+      node.snap?.transmit === false && rust.snap?.transmit === false,
+      `node=${node.snap?.transmit} rust=${rust.snap?.transmit}`,
+    );
+    compareDmx('transmit: offline parity', node, rust);
+  }
+
   both({ type: 'column', col: 0 }); // Intro: amber wash (no effects)
   await sleep(1400); // > 0.8 s fade
   compareDmx('column 1 (amber wash)', node, rust);

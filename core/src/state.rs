@@ -297,6 +297,13 @@ pub struct EngineState {
     pub master: f64,
     pub speed: f64,
     pub blackout: bool,
+    /// Whether rendered frames reach the wire at all (crate::output).
+    ///
+    /// Runtime-only and OFF at every boot, whatever the show says — see
+    /// output.rs for why. Blackout is the show being dark; this is LIGHT not
+    /// speaking to the network, which is a different question and the one an
+    /// operator wants answered before a laptop joins a venue's LAN.
+    pub transmit: bool,
     /// Silenced fixtures — a stuck or dead unit is taken out of the show
     /// without touching the patch (which would re-fan every chase).
     /// Transient: a mute is for tonight, not a property of the show.
@@ -345,6 +352,7 @@ impl EngineState {
             master: 1.0,
             speed: 1.0,
             blackout: false,
+            transmit: false,
             muted: std::collections::HashSet::new(),
             identify: None,
             preview_look: None,
@@ -1274,6 +1282,7 @@ impl EngineState {
                 }
             }
             Command::SetBlackout { v } => self.blackout = v,
+            Command::SetTransmit { v } => self.transmit = v,
             Command::Projects
             | Command::NewProject { .. }
             | Command::OpenProject { .. }

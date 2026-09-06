@@ -16,6 +16,10 @@ use crate::types::{Command, EngineStats, Snapshot};
 
 const TICK_MS: u64 = 25; // 40 Hz DMX refresh
 
+/// The frame sent on the way offline, so a node holding its last look lets go
+/// of it before LIGHT stops talking. See crate::output.
+static ZERO_FRAME: [u8; 512] = [0u8; 512];
+
 pub enum EngineMsg {
     /// quit requested — flush the project to disk, then let run() return
     Shutdown,
@@ -290,6 +294,9 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
     let mut preview_renderer = Renderer::new();
     let mut artnet = ArtnetOut::new();
     let mut sacn = SacnOut::new();
+    // Whether any of it reaches the wire. Off until an operator says otherwise,
+    // every boot — crate::output.
+    let mut gate = crate::output::OutputGate::new();
     let mut osc = OscIn::new();
     // APC40 LED feedback shares the with_midi gate — the parity harness runs
     // with LIGHT_NO_MIDI and must never touch a controller
@@ -457,6 +464,9 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
         }
         let res = renderer.tick(&mut state, t);
         {
+            // Discovery follows the PATCH, not the gate. ArtPoll is a question,
+            // not output, and which nodes are out there is exactly what an
+            // operator wants to know while still offline and setting one up.
             let enabled = state.project.universes.iter().any(|u| u.artnet);
             let unicasts: Vec<Option<String>> = state
                 .project
@@ -467,13 +477,21 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
                 .collect();
             artnet.poll_tick(enabled, &unicasts);
         }
-        for u in &state.project.universes {
-            let Some(buf) = res.buffers.get(&u.id) else { continue };
-            if u.artnet {
-                artnet.send(u.artnet_universe, buf, u.unicast.as_deref());
-            }
-            if u.sacn {
-                sacn.send(u.sacn_universe, buf, u.unicast.as_deref());
+        gate.set(state.transmit);
+        match gate.tick() {
+            crate::output::Wire::Silent => {}
+            wire => {
+                for u in &state.project.universes {
+                    let Some(buf) = res.buffers.get(&u.id) else { continue };
+                    // The universes still say WHERE; the gate only says whether.
+                    let frame = if wire == crate::output::Wire::Show { buf } else { &ZERO_FRAME };
+                    if u.artnet {
+                        artnet.send(u.artnet_universe, frame, u.unicast.as_deref());
+                    }
+                    if u.sacn {
+                        sacn.send(u.sacn_universe, frame, u.unicast.as_deref());
+                    }
+                }
             }
         }
 
@@ -1243,6 +1261,7 @@ fn build_snapshot(
             s => Some(if s == "failed" { "failed" } else { "on" }),
         },
         blackout: state.blackout,
+        transmit: state.transmit,
         haze: state.project.settings.haze,
         haze_fan: state.project.settings.haze_fan,
         heads: res.heads.clone(),

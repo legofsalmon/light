@@ -72,6 +72,11 @@ type Store = {
   /** The on-screen ?: the next tap on any control shows its help instead of
    *  operating it. */
   helpMode: boolean;
+  /** The rig-setup guide (backlog #1) — open, and whether it has been sent
+   *  away for this show. Dismissal is deliberately not persisted to disk: it
+   *  is per-session, and opening a different show asks again. */
+  setupGuide: boolean;
+  setupDismissed: boolean;
   previz2dTool: PlanTool;
   previzMode: '3d' | '2d';
   /** What the previz was showing before the patch view borrowed it for the
@@ -142,6 +147,8 @@ type Store = {
   redo: () => void;
   setSel: (s: Sel) => void;
   setTab: (t: Tab) => void;
+  /** open or close the setup guide; `dismiss` also stops it re-opening itself */
+  setSetupGuide: (v: boolean, dismiss?: boolean) => void;
   setView: (v: ViewMode) => void;
   togglePreviz: (v: BandView) => void;
   /** Set rather than toggle: a panel can be folded by the WINDOW (too narrow
@@ -353,6 +360,8 @@ export const useStore = create<Store>()((set, get) => ({
   touchPref: loadTouchPref(),
   touch: touchFor(loadTouchPref()),
   helpMode: false,
+  setupGuide: false,
+  setupDismissed: false,
   previz2dTool: 'move',
   // Launching straight back into the patch view must give the plan the view
   // exists for, the same way arriving there from anywhere else does — and must
@@ -450,6 +459,8 @@ export const useStore = create<Store>()((set, get) => ({
     wsSend(JSON.stringify({ type: 'previewLook', lookId: lookId ?? null }));
   },
   setTab: (tab) => set({ tab }),
+  setSetupGuide: (setupGuide, dismiss) =>
+    set(dismiss ? { setupGuide, setupDismissed: true } : { setupGuide }),
   setView: (view) => {
     // Remembered across launches: an operator who works full-screen on the pads
     // should not have to set that up again every time the app opens.
@@ -664,9 +675,13 @@ function connect(): void {
       const ids = new Set(ev.project.fixtures.map((f) => f.id));
       const cur = useStore.getState().fxSel;
       const pruned = cur.filter((id) => ids.has(id));
+      // A different show asks about setup again: "no thanks" was about the one
+      // you were working on, not a standing answer.
+      const switched = useStore.getState().project?.name !== ev.project.name;
       useStore.setState({
         project: ev.project,
         ...(pruned.length === cur.length ? {} : { fxSel: pruned }),
+        ...(switched ? { setupDismissed: false } : {}),
       });
     }
     else if (ev.type === 'dmx') {

@@ -712,24 +712,33 @@ function RigHint() {
   const project = useStore((s) => s.project)!;
   const setView = useStore((s) => s.setView);
   const setTab = useStore((s) => s.setTab);
+  const send = useStore((s) => s.send);
   const noFixtures = project.fixtures.length === 0;
   const noOutput = !project.universes.some((u) => u.artnet || u.sacn);
-  if (!noFixtures && !noOutput) return null;
+  // The third way a pad can light the stage and nothing else: universes are
+  // set up, but LIGHT has not been told to transmit. It is the one of the
+  // three that looks like a fault, so it gets the go-live button right here
+  // rather than a trip to another tab.
+  const offline = useStore((s) => s.snap?.transmit) !== true;
+  if (!noFixtures && !noOutput && !offline) return null;
   return (
     <div className="gridhint">
       <span className="prose">
         {noFixtures
           ? 'Nothing is patched yet — pads light the stage, but there is no rig for them to reach. Add fixtures in the Rig view.'
-          : 'Outputs are off — the stage shows what the rig would do, and nothing reaches it. Turn on Art-Net or sACN in the Output tab when you want it live.'}
+          : noOutput
+            ? 'Outputs are off — the stage shows what the rig would do, and nothing reaches it. Turn on Art-Net or sACN in the Output tab when you want it live.'
+            : 'LIGHT is offline — the stage shows what the rig would do, and nothing reaches it. The universes are set up, so this is the only step left.'}
       </span>
       <button
-        className="btn small"
+        className={`btn small ${!noFixtures && !noOutput ? 'warn on' : ''}`}
         onClick={() => {
           if (noFixtures) setView('patch');
-          else { setView('split'); setTab('output'); }
+          else if (noOutput) { setView('split'); setTab('output'); }
+          else send({ type: 'setTransmit', v: true });
         }}
       >
-        {noFixtures ? 'Rig view' : 'Output tab'}
+        {noFixtures ? 'Rig view' : noOutput ? 'Output tab' : 'go live'}
       </button>
     </div>
   );

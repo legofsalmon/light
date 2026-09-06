@@ -6,6 +6,7 @@ import { EngineState, LOCAL_CLIENT } from './state.ts';
 import { Renderer } from './renderer.ts';
 import { ArtnetOut } from './artnet.ts';
 import { SacnOut } from './sacn.ts';
+import { OutputGate } from './output.ts';
 import { OscIn, type OscMessage } from './osc.ts';
 import { Server } from './server.ts';
 import type { WebSocket } from 'ws';
@@ -265,6 +266,11 @@ function broadcastProjects(): void {
   });
 }
 const sacn = new SacnOut();
+// Whether any of it reaches the wire. Off until an operator says otherwise,
+// every boot — engine/output.ts.
+const gate = new OutputGate();
+/** Sent on the way offline, so a node holding its last look lets go of it. */
+const ZERO_FRAME = new Uint8Array(512);
 
 const server = new Server(PORT, path.join(process.cwd(), 'ui', 'dist'), handleCommand);
 
@@ -471,6 +477,9 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
     }
     case 'setBlackout':
       state.blackout = !!cmd.v;
+      break;
+    case 'setTransmit':
+      state.transmit = !!cmd.v;
       break;
     case 'setHaze':
       state.project.settings.haze = clamp(cmd.v);
@@ -775,15 +784,24 @@ function loopBody(): void {
 
   flushProject(); // one project echo per tick, however many edits arrived
   const res = renderer.tick(now);
+  // Discovery follows the PATCH, not the gate. ArtPoll is a question, not
+  // output, and which nodes are out there is exactly what an operator wants to
+  // know while still offline and setting one up.
   artnet.pollTick(
     state.project.universes.some((u) => u.artnet),
     state.project.universes.filter((u) => u.artnet).map((u) => u.unicast),
   );
-  for (const u of state.project.universes) {
-    const buf = res.buffers.get(u.id);
-    if (!buf) continue;
-    if (u.artnet) artnet.send(u.artnetUniverse, buf, u.unicast);
-    if (u.sacn) sacn.send(u.sacnUniverse, buf, u.unicast);
+  gate.set(state.transmit);
+  const wire = gate.tick();
+  if (wire !== 'silent') {
+    for (const u of state.project.universes) {
+      const buf = res.buffers.get(u.id);
+      if (!buf) continue;
+      // The universes still say WHERE; the gate only says whether.
+      const frame = wire === 'show' ? buf : ZERO_FRAME;
+      if (u.artnet) artnet.send(u.artnetUniverse, frame, u.unicast);
+      if (u.sacn) sacn.send(u.sacnUniverse, frame, u.unicast);
+    }
   }
 
   tickCount++;
@@ -809,6 +827,7 @@ function loopBody(): void {
       speed: state.speed,
       master: state.master,
       blackout: state.blackout,
+      transmit: state.transmit,
       haze: state.project.settings.haze,
       hazeFan: state.project.settings.hazeFan,
       heads: res.heads,

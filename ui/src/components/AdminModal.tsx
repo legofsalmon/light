@@ -99,6 +99,28 @@ export function AdminModal({ onClose }: { onClose: () => void }): React.ReactEle
           <TouchSetting />
         </div>
 
+        {/* The guide opens itself on a show with no fixtures and can be sent
+            away; this is how it comes back, and how it is found at all on a
+            show that was already set up. */}
+        <div style={{ marginTop: 12 }}>
+          <div className="sectionhead">Rig setup</div>
+          <div className="row" style={{ gap: 8 }}>
+            <button
+              className="btn small"
+              onClick={() => {
+                useStore.getState().setSetupGuide(true);
+                onClose();
+              }}
+            >
+              show the setup steps
+            </button>
+            <span className="prose">
+              Output, fixtures, stage, groups and aim — what a rig needs before it lights,
+              with each step ticked off by reading the show.
+            </span>
+          </div>
+        </div>
+
         {anything ? (
           <div className="col" style={{ gap: 18, marginTop: 18 }}>
             {updateAvailable() && (

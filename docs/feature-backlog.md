@@ -45,25 +45,46 @@ These block more than one item and are product calls, not engineering.
 
 ## The list
 
-### 1 · Output-safe first run and a setup path — ⬜ absent — L
+### 1 · Output-safe first run and a setup path — ◼ shipped 2026-09-06
 **Touches:** ui, shared/types.ts, core, engine, parity, docs
-**Today:** first launch boots the demo show; *new project* gives a blank grid.
-Both templates ship `artnet: true` on two universes, so a fresh install
-transmits to the LAN the moment it opens — the review's blocker B1. The five
-setup surfaces (Output, Fixtures, Stage, Groups, Aim) exist as unordered tabs;
-nothing sequences them, and PatchView has no zero-fixture state.
-**Build:**
-- A global *transmit gate* distinct from blackout (blackout still sends frames
-  of zeros): a project setting or engine command honoured in both engines'
-  Art-Net/sACN send path, defaulted OFF for shipped templates, with a
-  persistent on-screen state and a one-click "go live". Parity-covered.
-- A first-run gate (the engines already know "no saved project ever") that
-  opens an assistant — Output → Fixtures → Stage → Groups → Aim → done —
-  hosting the existing tab content, with "just give me the demo" one click away.
-- Zero-fixture and all-universes-off empty states.
-- A Getting-started chapter in the user guide.
-**First slice:** flip both templates to `artnet: false` + a test (hours; in the
-review's "now" lane). Then the transmit gate. Then the assistant (M on its own).
+**Shipped:** a **transmit gate** — runtime-only, OFF at every boot, never
+saved. `EngineState.transmit` + `setTransmit` + a `transmit` snapshot field in
+both engines; `core/src/output.rs` / `engine/output.ts` hold the decision
+(`Wire::Show | Dark | Silent`) and are unit-tested identically in each. Going
+offline sends `GO_DARK_FRAMES` (3) frames of zeros before falling silent,
+because Art-Net and sACN nodes hold the last frame they were sent and simply
+stopping would leave the rig lit. Node discovery is deliberately NOT gated:
+ArtPoll is a question, not output, and it is what you want while setting up.
+The universes still say WHERE output goes; the gate only says whether any of
+it leaves the machine. This makes B1 a rule rather than a property of whichever
+templates happened to ship with outputs off.
+
+UI: a `live` / `offline` button at the head of the top bar's safety group,
+amber whenever universes are switched on but nothing is going out — the one
+state that looks like a fault and is not. The output dot reads **not sending**
+in that case instead of claiming it is sending. The Output tab carries the same
+control in sentences, and doubles as the all-universes-off empty state.
+
+**Setup guide** (`ui/src/components/SetupGuide.tsx`): Output → Fixtures →
+Stage → Groups → Aim, each step ticked by READING the project rather than
+self-reported, so an MVR import that arrives with fixtures, groups and
+positions ticks three steps before you see them; Aim is dropped entirely on a
+rig with no movers. It ends on **go live**. Re-openable from Settings ▸ Rig
+setup. Docs: a Getting-started chapter in `docs/user-guide.md` and a "Going
+live" section in `docs/website/09-output.md`.
+
+**Two deliberate departures from the plan above.** It *guides* rather than
+hosts the tab content — each step sends you to the real surface at full size,
+which avoids duplicating five views inside a modal and lets you work normally
+while it is up. And it opens on a project with **no fixtures** rather than on a
+first-run flag: that is exactly a new project and nothing else, it needs no new
+wire state, and it behaves the same on the tablet as on the Mac. A fresh
+install boots the demo, which is already patched — so "just give me the demo"
+is what a first launch already does, and the guide stays out of its way.
+
+**Not done:** nothing outstanding for this item. The gate's behaviour on real
+hardware (a node going dark on the go-dark frames) is unverified — every test
+here ran with outputs off, by standing rule.
 
 ### 2 · A bundled starter fixture library — ◧ shipped 2026-09-06 as generics + picker; brand content still gated on decision 1
 **Touches:** src-tauri, ui, docs (+ core/engine/shared/parity only if the
