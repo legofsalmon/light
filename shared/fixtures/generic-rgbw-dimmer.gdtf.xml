@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A generic layout LIGHT ships (shared/fixtures): for a fixture whose channels
+     are simply in this order. Authored by LIGHT, free to redistribute. The
+     amber and UV emitters are carried but held at zero: LIGHT mixes red, green,
+     blue and white. Pick the mode that matches the fixture's manual. -->
+<GDTF DataVersion="1.2">
+  <FixtureType Name="RGBW par with dimmer" Manufacturer="Generic" Description="red, green, blue, white and a master dimmer">
+    <Geometries>
+      <Geometry Name="Base">
+        <Beam Name="Beam1" BeamAngle="25" FieldAngle="40" LuminousFlux="2500"/>
+      </Geometry>
+    </Geometries>
+    <DMXModes>
+      <DMXMode Name="5ch D-RGBW" Geometry="Base">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1" Geometry="Base">
+            <LogicalChannel Attribute="Dimmer">
+              <ChannelFunction Attribute="Dimmer" DMXFrom="0/1" Default="0/1" Name="Dimmer"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="2" Geometry="Base">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1" Name="Red"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="3" Geometry="Base">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1" Name="Green"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="4" Geometry="Base">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1" Name="Blue"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="5" Geometry="Base">
+            <LogicalChannel Attribute="ColorAdd_W">
+              <ChannelFunction Attribute="ColorAdd_W" DMXFrom="0/1" Default="0/1" Name="White"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+      <DMXMode Name="5ch RGBW-D" Geometry="Base">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1" Geometry="Base">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1" Name="Red"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="2" Geometry="Base">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1" Name="Green"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="3" Geometry="Base">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1" Name="Blue"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="4" Geometry="Base">
+            <LogicalChannel Attribute="ColorAdd_W">
+              <ChannelFunction Attribute="ColorAdd_W" DMXFrom="0/1" Default="0/1" Name="White"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="5" Geometry="Base">
+            <LogicalChannel Attribute="Dimmer">
+              <ChannelFunction Attribute="Dimmer" DMXFrom="0/1" Default="0/1" Name="Dimmer"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+    </DMXModes>
+  </FixtureType>
+</GDTF>

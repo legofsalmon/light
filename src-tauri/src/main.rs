@@ -3,6 +3,7 @@
 use tauri::Manager;
 
 mod keychain;
+mod library;
 mod licence;
 mod licence_net;
 mod share;
@@ -195,6 +196,9 @@ fn main() {
             share::share_cached_count,
             share::share_download,
             share::library_list,
+            library::library_info,
+            library::library_save,
+            library::library_remove,
             share::library_read,
         ])
         .setup(move |app| {
@@ -263,6 +267,13 @@ fn main() {
             // long since returned. Every other status is a banner; see
             // Status::blocks_new_session.
             licence_net::start_heartbeat(app.handle().clone());
+            // The generic fixture layouts, into the library once per version.
+            // Off the main thread: a dozen small zips, but disk is disk.
+            std::thread::spawn(|| match library::seed_default() {
+                Ok(n) if n > 0 => log_line(&format!("fixture library: seeded {n} generic fixture file(s)")),
+                Ok(_) => {}
+                Err(e) => log_line(&format!("fixture library: seeding failed: {e}")),
+            });
             // Before the licence gate below on purpose: a lapsed trial is
             // exactly when the operator most wants to know a newer build
             // exists, and this only ever sets a flag a panel can read.

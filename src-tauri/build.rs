@@ -27,5 +27,27 @@ fn main() {
     // Rebuild when the verifying key changes, so switching keys cannot leave a
     // stale constant baked into an otherwise-fresh binary.
     println!("cargo:rerun-if-env-changed=LIGHT_LICENCE_PUBLIC_KEY");
+
+    // The generic fixture layouts LIGHT ships (shared/fixtures/*.gdtf.xml),
+    // compiled into the binary so seeding the fixture library needs no
+    // resource path — the same in `tauri dev` and in the bundle.
+    let fixtures = std::path::Path::new("../shared/fixtures");
+    let mut sources: Vec<std::path::PathBuf> = std::fs::read_dir(fixtures)
+        .expect("shared/fixtures")
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.to_string_lossy().ends_with(".gdtf.xml"))
+        .collect();
+    sources.sort();
+    let mut seeds = String::from("pub const SEEDS: &[(&str, &str)] = &[\n");
+    for p in &sources {
+        let file = p.file_name().unwrap().to_string_lossy().replace(".gdtf.xml", ".gdtf");
+        let abs = std::fs::canonicalize(p).expect("fixture path");
+        seeds.push_str(&format!("    ({:?}, include_str!({:?})),\n", file, abs.to_string_lossy()));
+        println!("cargo:rerun-if-changed={}", p.display());
+    }
+    seeds.push_str("];\n");
+    println!("cargo:rerun-if-changed=../shared/fixtures");
+    let out = std::path::PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR")).join("seeds.rs");
+    std::fs::write(out, seeds).expect("write seeds.rs");
     tauri_build::build()
 }

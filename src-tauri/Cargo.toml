@@ -40,6 +40,10 @@ ring = "0.17"
 base64 = "0.21"
 sha2 = "0.10"
 
+# The fixture library writes .gdtf files (a zip around description.xml) for the
+# generics it seeds — the same crate light-core reads them with.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = { version = "3", features = ["OSX_10_15"] }
 

@@ -65,7 +65,7 @@ nothing sequences them, and PatchView has no zero-fixture state.
 **First slice:** flip both templates to `artnet: false` + a test (hours; in the
 review's "now" lane). Then the transmit gate. Then the assistant (M on its own).
 
-### 2 · A bundled starter fixture library — ◧ partial — L (gated on decision 1)
+### 2 · A bundled starter fixture library — ◧ shipped 2026-09-06 as generics + picker; brand content still gated on decision 1
 **Touches:** src-tauri, ui, docs (+ core/engine/shared/parity only if the
 picker must work on the tablet or the compiler is extended)
 **Today:** exactly 7 built-in profiles (3 from Colm's rig, 4 generics). The
@@ -86,6 +86,17 @@ library".
   mover would patch but not fully drive until #3 lands.
 **Note:** the competitive gap is *offline and zero-setup*, not catalogue size —
 GDTF Share and Lightkey are the same order of magnitude.
+**Shipped:** twelve LIGHT-authored generic layouts (`shared/fixtures/*.gdtf.xml`
+— pars with the dimmer and strobe in every common position, RGBA/RGBAW/UV
+pars, RGB and RGBW bars, a 16-cell strip; 24 modes) compiled into the app by
+`build.rs` and seeded into the fixture directory once per `SEED_VERSION`
+(`src-tauri/src/library.rs`, never overwriting); the Rig view's **Fixture
+library** section lists the operator's own files, the generics and the
+built-ins in one searchable table with `+ rig` per mode (imports the file
+through the engine's compiler, waits for the echo, patches at the next free
+address) and removal; a file import now also lands in the library. What is
+not done: brand-name content — every candidate source is GDTF Share, and its
+terms forbid redistribution, so that waits on the email in decision 1.
 
 ### 3 · Moving-light optics: gobo, prism, shutter modes — ◧ partial — L
 **Touches:** shared/types.ts, core, engine, parity, ui, docs

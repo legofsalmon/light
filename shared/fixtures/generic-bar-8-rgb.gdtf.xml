@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A generic layout LIGHT ships (shared/fixtures): for a fixture whose channels
+     are simply in this order. Authored by LIGHT, free to redistribute. The
+     amber and UV emitters are carried but held at zero: LIGHT mixes red, green,
+     blue and white. Pick the mode that matches the fixture's manual. -->
+<GDTF DataVersion="1.2">
+  <FixtureType Name="LED bar 8 cells RGB" Manufacturer="Generic" Description="eight RGB cells in a row, three channels each">
+    <Geometries>
+      <Geometry Name="Base">
+        <Beam Name="Beam1" BeamAngle="30" FieldAngle="50" LuminousFlux="2000"/>
+        <Geometry Name="Cell1"/>
+        <Geometry Name="Cell2"/>
+        <Geometry Name="Cell3"/>
+        <Geometry Name="Cell4"/>
+        <Geometry Name="Cell5"/>
+        <Geometry Name="Cell6"/>
+        <Geometry Name="Cell7"/>
+        <Geometry Name="Cell8"/>
+      </Geometry>
+    </Geometries>
+    <DMXModes>
+      <DMXMode Name="24ch 8xRGB" Geometry="Base">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1" Geometry="Cell1">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1" Name="Red"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="2" Geometry="Cell1">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1" Name="Green"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="3" Geometry="Cell1">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1" Name="Blue"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="4" Geometry="Cell2">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1" Name="Red"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="5" Geometry="Cell2">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1" Name="Green"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="6" Geometry="Cell2">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1" Name="Blue"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="7" Geometry="Cell3">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1" Name="Red"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="8" Geometry="Cell3">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1" Name="Green"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="9" Geometry="Cell3">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1" Name="Blue"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="10" Geometry="Cell4">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1" Name="Red"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="11" Geometry="Cell4">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1" Name="Green"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="12" Geometry="Cell4">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1" Name="Blue"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="13" Geometry="Cell5">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1" Name="Red"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="14" Geometry="Cell5">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1" Name="Green"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="15" Geometry="Cell5">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1" Name="Blue"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="16" Geometry="Cell6">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1" Name="Red"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="17" Geometry="Cell6">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1" Name="Green"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="18" Geometry="Cell6">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1" Name="Blue"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="19" Geometry="Cell7">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1" Name="Red"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="20" Geometry="Cell7">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1" Name="Green"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="21" Geometry="Cell7">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1" Name="Blue"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="22" Geometry="Cell8">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1" Name="Red"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="23" Geometry="Cell8">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1" Name="Green"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="24" Geometry="Cell8">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1" Name="Blue"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+    </DMXModes>
+  </FixtureType>
+</GDTF>

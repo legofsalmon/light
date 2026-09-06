@@ -88,3 +88,32 @@ export const libraryList = (): Promise<string[]> => call<string[]>('library_list
 /** One library file as base64, ready for the engine's importGdtf. */
 export const libraryRead = (name: string): Promise<string> =>
   call<string>('library_read', { name });
+
+export type LibraryMode = {
+  name: string;
+  footprint: number;
+  /** the id importGdtf will give it — the same compiler */
+  profileId: string;
+  heads: number;
+  kind: string;
+  virtualDimmer: boolean;
+};
+export type LibraryEntry = {
+  file: string;
+  manufacturer: string;
+  model: string;
+  modes: LibraryMode[];
+  /** one of the generic layouts LIGHT ships */
+  seeded: boolean;
+  /** a file the compiler could not read — listed, not hidden */
+  error: string | null;
+};
+
+/** Everything in the library, with what the compiler makes of each file. */
+export const libraryInfo = (): Promise<LibraryEntry[]> => call<LibraryEntry[]>('library_info');
+
+/** Keep an imported .gdtf (base64) in the library; returns the name it was saved under. */
+export const librarySave = (name: string, data: string): Promise<string> =>
+  call<string>('library_save', { name, data });
+
+export const libraryRemove = (name: string): Promise<void> => call<void>('library_remove', { name });

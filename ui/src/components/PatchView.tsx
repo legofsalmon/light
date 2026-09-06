@@ -6,6 +6,9 @@ import { allProfileMetas, profileMeta } from '../profileInfo.ts';
 import { createGroupFromSelection } from '../selection.ts';
 import { ScrubNumInput, TextField } from './inputs.tsx';
 import { ShareFixtures } from './ShareFixtures.tsx';
+import { FixtureLibrary } from './FixtureLibrary.tsx';
+import { librarySave, shareAvailable } from '../share.ts';
+import { nextFreeAddress } from '../rig.ts';
 import { useStore } from '../store.ts';
 import { stageExtent } from '../../../shared/stageExtent.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
@@ -74,16 +77,6 @@ function findConflicts(p: Project): Set<string> {
     }
   }
   return conflicts;
-}
-
-function nextFreeAddress(p: Project, universeId: string, channels: number): number {
-  const used: [number, number][] = p.fixtures
-    .filter((f) => f.universeId === universeId)
-    .map((f) => [f.address, f.address + (profileMeta(p, f.profileId)?.channels ?? 1) - 1]);
-  for (let a = 1; a + channels - 1 <= 512; a++) {
-    if (used.every(([lo, hi]) => a + channels - 1 < lo || a > hi)) return a;
-  }
-  return 1;
 }
 
 /** DMX address editor that commits on blur/Enter — not per keystroke — so
@@ -806,6 +799,8 @@ export function PatchView() {
                   const b64 = String(reader.result).split(',')[1] ?? '';
                   if (!isMvr) {
                     useStore.getState().send({ type: 'importGdtf', name: file.name, data: b64 });
+                    // and into the library, so the next show starts with it
+                    if (shareAvailable()) void librarySave(file.name, b64).catch((e) => console.warn('[library]', e));
                     return;
                   }
                   // three explicit choices — replacing the whole patch must
@@ -1161,6 +1156,7 @@ export function PatchView() {
 
       <PixelLayout />
       <StageTable />
+      <FixtureLibrary />
       <ShareFixtures />
     </div>
   );
