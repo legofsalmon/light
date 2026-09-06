@@ -75,11 +75,11 @@ Variant names are `Property=Value` in Title Case with State on the columns.
 | Field | Field (16: Text · Number · Select · Chip-select × 4 states) | `input.text` `input.num` `select.sel` `.chipsel`; adds Invalid |
 | Fader | Fader (12: Accent · Dim · Hue × 4 states) | `.fader` |
 | Enable & Swatch | Enable (4) · Swatch (3) | `.enable` `.swatches i` `.swatch.mini` |
-| Chip | Chip (5) · Chip / Selectable (8) | `.chip` `.headchip` `.deckchip` `.mutedchip` `.identifychip` `.warnchip` + the RIDING chip |
+| Chip | Chip (5: Tag · Muted · Finding · Warn · Nudged) · Chip / Selectable (8: Head · Song × 4 states) | `.chip` `.headchip` `.deckchip` `.mutedchip` `.identifychip` `.warnchip` + the NUDGED chip |
 | Status | Status dot (4) · Beat LED (2) · BPM · Offline bar · Toast (2) | `.statusdot` `.beatled` `.bpm` `.offlinebar` and today's top-bar toast |
 | Pad | Pad (9 states) | `.cell` — the two targets: colour block fires, name strip selects |
-| Grid heads | Column head (8) · Layer head (3) · Control cell (5) · Control head | `.colhead` `.layerhead` `.ctlcell` `.controlhead` |
-| Deck bar | Deck bar | `.deckbar` |
+| Grid heads | Column head (8) · Layer head (3) · Dial cell (5) · Dial head | `.colhead` `.layerhead` `.ctlcell` `.controlhead` |
+| Song bar | Song bar | `.deckbar` |
 | Library row | Library row (4) · Library hint | `.librow` `.libhint` |
 | Tabs | Tab (4) · Tab bar | `.tab` `.tabs` |
 | Table | Table header cell (3) · Table row (5) | `table.tbl` and the stub / beamless / dark / selected rows |
