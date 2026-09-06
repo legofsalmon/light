@@ -11,15 +11,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # v2 is deliberate and not stale: its major tag already resolves to a
+      # node24 build, unlike checkout/setup-node whose v4 tags stayed on node20.
       - uses: Swatinem/rust-cache@v2
         with:
           # previz (Bevy) is never built in CI — key the cache to core only
@@ -42,9 +44,24 @@ jobs:
       # step below runs Node against it, so every PR exercises current source
       # through the real bridge.
       - name: Install wasm-pack
-        uses: jetli/wasm-pack-action@v0.4.0
-        with:
-          version: 'v0.15.0'
+        # A pinned tarball rather than an action. jetli/wasm-pack-action is
+        # still on node16 and its newest release IS the one we were using, so
+        # there was no version to move to — and a step that only downloads a
+        # file has no runtime to be deprecated in the first place. The checksum
+        # is the pinned release's, so a swapped asset fails here rather than
+        # building the WASM interpreter from something else.
+        env:
+          WP: wasm-pack-v0.15.0-x86_64-unknown-linux-musl
+          WP_SHA256: c09f971ecaed9a2efc80fdcea7a00ef6b53c7fadc8c57d1f61b53a6aa66b668a
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/wasm-pack.tar.gz \
+            "https://github.com/rustwasm/wasm-pack/releases/download/v0.15.0/$WP.tar.gz"
+          echo "$WP_SHA256  /tmp/wasm-pack.tar.gz" | sha256sum -c -
+          tar xzf /tmp/wasm-pack.tar.gz -C /tmp "$WP/wasm-pack"
+          mkdir -p "$HOME/.cargo/bin"
+          install -m 0755 "/tmp/$WP/wasm-pack" "$HOME/.cargo/bin/wasm-pack"
+          wasm-pack --version
 
       - name: Rebuild the WASM profile interpreter from current source
         run: npm run build:wasm

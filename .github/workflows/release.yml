@@ -29,9 +29,9 @@ jobs:
       # the other way.
       LIGHT_TARGET: aarch64-apple-darwin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -42,6 +42,8 @@ jobs:
           # the full test suite has already run.
           targets: aarch64-apple-darwin
 
+      # v2 is deliberate and not stale: its major tag already resolves to a
+      # node24 build, unlike checkout/setup-node whose v4 tags stayed on node20.
       - uses: Swatinem/rust-cache@v2
 
       - name: Set up the signing keychain (also proves the password works)
@@ -193,7 +195,7 @@ jobs:
         run: ditto -c -k --keepParent "target/$LIGHT_TARGET/release/bundle/macos/LIGHT.app" LIGHT.zip
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: LIGHT-macos
           path: LIGHT.zip
@@ -204,7 +206,7 @@ jobs:
 
       - name: Publish release (tag builds)
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           # A tag with a hyphen is a prerelease by semver's own rule
           # (v1.3.0-beta.1), and GitHub then keeps it off /releases/latest — so
