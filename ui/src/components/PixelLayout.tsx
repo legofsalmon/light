@@ -150,7 +150,7 @@ export function PixelLayout(): React.ReactElement | null {
           <svg
             width={200}
             height={110}
-            style={{ background: 'var(--panel, #17171b)', border: '1px solid var(--line2, #333)', borderRadius: 4, flexShrink: 0 }}
+            style={{ background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 4, flexShrink: 0 }}
           >
             {placements.map((p, i) => (
               <circle

@@ -253,22 +253,49 @@ being read — and Escape or `?` again ends it. The card is `.helpcard`
 
 ## Keeping Figma and the code in sync
 
+The code consumes the tokens, so a change in Figma reaches the screen through
+a variable rather than a hand edit:
+
+```
+Figma (LIGHT Design System)  →  docs/design/tokens.json  →  npm run tokens
+                                                              ├─ ui/src/tokens.css   custom properties (+ the Touch mode under .app.touch)
+                                                              └─ ui/src/tokens.ts    the same numbers and colours for code that lays out or paints
+theme.css and the components read only those names.
+```
+
 1. Change a variable or style **in Figma**.
-2. Export: a read-only `use_figma` script dumps every variable (collection,
-   name, type, value or alias, scopes, WEB code syntax, description) and every
-   text/effect style; the same shape as the tables above. (Until a Figma REST
-   token is set up this runs through the Figma MCP connector in a Claude session.)
-3. Regenerate `tokens.json` from the export — the `$extensions.com.light.figma`
-   block records the file key and export date.
-4. Update `theme.css` from `tokens.json`; the WEB code syntax on each variable
-   is the custom property to write.
-5. A CI check should fail when `theme.css` drifts from `tokens.json` — not yet
-   written; the first one to add.
+2. Export: `scripts/figma-export-tokens.js` is the read-only Plugin-API script
+   (run it through `use_figma` or the Figma console) that dumps every variable
+   and text style in the tokens.json shape; save the result over
+   `docs/design/tokens.json`.
+3. `npm run tokens` regenerates the two files above. Commit all three.
+4. `npm run typecheck` (and CI) runs `scripts/check-tokens.mjs`, which fails on
+   drift: a stale generated file; a literal colour, radius, font size, tracking,
+   leading, weight, duration, or a px space/size in a property that means one,
+   anywhere in `theme.css`; a `var(--x)` nothing defines; a literal colour in a
+   component's inline style; an `index.html` ground that is not a token value.
+   A value that is deliberately not a token says so on its line:
+   `/* not a token: the hue wheel is physics, not palette */`. The canvas and
+   WebGL renderers (2D plan, 3D stage, DMX meter) keep their own palettes and
+   are exempt; the grounds they share with the chrome are `scene/*` tokens read
+   from `tokens.ts`.
 
-Adding a component: duplicate the closest page, keep the conventions
-(`Property=Value` variants, State on columns, `_Doc` on the left, no hardcoded
-colours, a description on the set), and add it to the table above.
+**Names.** A token's custom property is its `com.light.css` name when the code
+already had one — `--bg`, `--panel`, `--panel2`, `--raise`, `--raise2`,
+`--line`, `--line2`, `--text`, `--text-dim`, `--text-faint`, `--accent`,
+`--accent-soft`, `--good`, `--warn`, `--hot`, `--flash`, `--font`, `--mono`,
+`--strip`, `--padname-h` — and otherwise systematic: primitives `--grey-900`,
+`--alpha-white-6`, `--swatch-rainbow-1`; semantic `--color-<group>-<name>`
+(`--color-danger-text`, `--color-status-nudge`, `--color-overlay-veil`);
+`--space-N`; `--radius-xs|sm|md|lg|pill`; `--size-<name>`; type
+`--font-size-9-5`, `--weight-medium`, `--leading-tight`, and one set per text
+style — `--text-label-size`, `--text-label-tracking`, `--text-control-leading`,
+`--text-wordmark-weight`, `--text-num-family`; `--elevation-menu|modal|glow-*`;
+`--motion-fast|base|pulse-*`. The Size collection's **Touch** mode is emitted
+as overrides under `.app.touch`, so touch density is a Figma mode, not a CSS
+fork. Semantic colours alias their primitives (`--bg: var(--grey-900)`), the
+way the Figma aliases read.
 
-The library is intended to outlive this app: the primitives and the component
-primitives (button, field, fader, chip, table, modal, tabs) are generic; only the
-pad grid, the grid heads and the stage surfaces are LIGHT-specific.
+**Still by hand:** the Bevy native previz and the Rust engine carry no tokens;
+`Previz3D.tsx` paints its scene with `0x` literals that match `scene/3d-*` but
+are not read from `tokens.ts` yet.

@@ -16,7 +16,10 @@
     "test": "node engine/test/smoke.ts",
     "build:wasm": "cd profile-wasm && wasm-pack build --target nodejs --out-dir pkg",
     "test:parity": "cargo build -p light-core --bins && node engine/test/diff.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p ui/tsconfig.json --noEmit && node scripts/check-language.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p ui/tsconfig.json --noEmit && node scripts/check-language.mjs && node scripts/check-tokens.mjs",
+    "tokens": "node scripts/build-tokens.mjs",
+    "tokens:import": "node scripts/import-tokens.mjs",
+    "check:tokens": "node scripts/check-tokens.mjs",
     "app:build:native": "LIGHT_TARGET=aarch64-apple-darwin bash scripts/build-app.sh",
     "dev:ui": "vite ui --port 5178",
     "lint:language": "node scripts/check-language.mjs"

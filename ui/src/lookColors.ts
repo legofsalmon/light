@@ -1,7 +1,9 @@
 import type { Look } from '../../shared/types.ts';
 import { derbyMacroForValue, hsvToRgb, rgbHex } from '../../shared/color.ts';
+import { color } from './tokens.ts';
 
-const RAINBOW = ['#ff3b30', '#ffcc00', '#34c759', '#32ade6', '#5856d6', '#ff2d88'];
+// the swatch palette is a token set (Figma: Primitives/swatch), shared with the design file
+const RAINBOW = [1, 2, 3, 4, 5, 6].map((i) => color[`swatch/rainbow-${i}` as keyof typeof color]);
 
 /** Representative colour strip for a look's grid-cell thumbnail. Cue lists
  *  borrow the swatch of their first resolvable step (pass `looks` for that). */
@@ -11,7 +13,7 @@ export function lookSwatch(look: Look, looks?: Record<string, Look>): string[] {
       const target = Object.hasOwn(looks, st.lookId) ? looks[st.lookId] : undefined;
       if (target && !target.steps?.length) return lookSwatch(target);
     }
-    return ['#3a3a40'];
+    return [color['swatch/neutral']];
   }
   const out: string[] = [];
   for (const part of look.parts) {
@@ -31,16 +33,16 @@ export function lookSwatch(look: Look, looks?: Record<string, Look>): string[] {
       continue;
     }
     if (part.params.white !== undefined || part.params.ringFx !== undefined) {
-      out.push('#f5f5f0');
+      out.push(color['swatch/white']);
       continue;
     }
     if (part.params.strobe !== undefined) {
-      out.push('#e8e8ee');
+      out.push(color['swatch/strobe']);
       continue;
     }
     if (part.params.dimmer !== undefined || part.effects.length > 0) {
-      out.push('#9a9aa4');
+      out.push(color['swatch/dimmer']);
     }
   }
-  return out.length ? out.slice(0, 8) : ['#3a3a40'];
+  return out.length ? out.slice(0, 8) : [color['swatch/neutral']];
 }

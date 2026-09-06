@@ -488,8 +488,8 @@ export function PatchView() {
               top: box.top,
               width: box.right - box.left,
               height: box.bottom - box.top,
-              background: 'rgba(57,194,255,0.08)',
-              border: '1px dashed rgba(57,194,255,0.7)',
+              background: 'var(--color-accent-marquee)',
+              border: '1px dashed var(--color-accent-marquee-edge)',
               pointerEvents: 'none',
               zIndex: 30,
             }}

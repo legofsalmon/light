@@ -8,6 +8,7 @@ import { hitsPropFootprint, standingHeightAt } from '../../../shared/beamThrow.t
 import { askConfirm } from '../dialog.tsx';
 import { LONG_PRESS_MS } from '../touch.ts';
 import { PROP_LABEL } from '../labels.ts';
+import { color } from '../tokens.ts';
 
 /** Head world positions from the shared geometry module — the same builder the
  *  engines use, so the plan view can never disagree with the 3D previz (it
@@ -140,7 +141,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       if (canvas.width !== Math.round(w * dpr)) canvas.width = Math.round(w * dpr);
       if (canvas.height !== Math.round(h * dpr)) canvas.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = '#101013';
+      ctx.fillStyle = color['scene/2d-bg'];
       ctx.fillRect(0, 0, w, h);
       if (!project) return;
       const m = mapping(view);
@@ -262,7 +263,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
           ctx.arc(hx, hy, rad, 0, Math.PI * 2);
           ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
           ctx.fill();
-          ctx.strokeStyle = '#4a4a52';
+          ctx.strokeStyle = color['scene/2d-outline'];
           ctx.lineWidth = 1;
           ctx.stroke();
 

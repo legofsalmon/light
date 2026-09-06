@@ -14,6 +14,7 @@ import { AdminModal } from './components/AdminModal.tsx';
 import { Toasts } from './components/Toasts.tsx';
 import { HelpOverlay } from './components/HelpMode.tsx';
 import { updateAvailable, updateStatus } from './update.ts';
+import { size, sizeTouch } from './tokens.ts';
 
 /** Keeps one crashing region from blanking the whole console mid-show: the
  *  grid, masters, and blackout survive a previz or editor exception. */
@@ -386,15 +387,18 @@ type Layout = { previzH: number; bottomH: number; libraryW: number; editorW: num
  *  the library and the look editor beside the grid). A layer head is 184px and
  *  sticks to the left edge, so a grid narrower than MIN_GRID_W is a head
  *  covering its own pads. */
-const MIN_GRID = 140;
-const MIN_PANEL = 150;
-const MIN_GRID_W = 306;
-const MIN_LIBRARY = 200;
-const MIN_EDITOR = 300;
-const SPLIT_CHROME = 46 + 6 + 6 + 6;
-/** the collapsed band's reveal strip — --strip in theme.css, wider in touch mode */
-const stripH = () => (useStore.getState().touch ? 24 : 18);
-const SPLIT_CHROME_BANDLESS = () => 46 + stripH() + 6 + 5;
+// The floors and chrome heights are design tokens (tokens.ts, generated from
+// Figma), the same numbers theme.css lays the grid out with.
+const MIN_GRID = size['min-grid-h'];
+const MIN_PANEL = size['min-panel'];
+const MIN_GRID_W = size['min-grid-w'];
+const MIN_LIBRARY = size['min-library'];
+const MIN_EDITOR = size['min-editor'];
+/** top bar + three splitter tracks */
+const SPLIT_CHROME = size.topbar + 3 * size.splitter;
+/** the collapsed band's reveal strip — size/strip, wider in touch mode */
+const stripH = () => (useStore.getState().touch ? sizeTouch.strip : size.strip);
+const SPLIT_CHROME_BANDLESS = () => size.topbar + stripH() + size.splitter + 5;
 /** Window widths below which a pads-view side panel cannot be shown at all —
  *  its own floor plus a usable grid does not fit. */
 const LIBRARY_MIN_WINDOW = MIN_GRID_W + MIN_LIBRARY + 8;

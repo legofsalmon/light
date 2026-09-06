@@ -68,26 +68,18 @@ function ProjectMenu({ name }: { name: string }) {
         {name} ▾
       </button>
       {open && (
-        <div
-          style={{
-            position: 'fixed', top: pos.top, left: pos.left, zIndex: 60, minWidth: 220,
-            background: 'var(--panel2, #1c1c20)', border: '1px solid var(--line)',
-            borderRadius: 4, padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
-          }}
-        >
+        <div className="popover" style={{ top: pos.top, left: pos.left }}>
           {(projects?.list ?? []).map((p) => (
             <button
               key={p.slug}
               className={`btn small ghost ${p.slug === projects?.current ? 'on' : ''}`}
-              style={{ justifyContent: 'flex-start', textAlign: 'left' }}
               title={`open “${p.name}” — the running show is saved first, and undo history does not cross projects`}
               onClick={() => openProject(p.slug, p.name)}
             >
               {p.slug === projects?.current ? '✓ ' : ''}{p.name}
             </button>
           ))}
-          <div style={{ borderTop: '1px solid var(--line)', margin: '4px 0' }} />
+          <div className="popover-rule" />
           <button
             className="btn small ghost"
             style={{ justifyContent: 'flex-start' }}
@@ -363,8 +355,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
       )}
       {(snap?.soft?.length ?? 0) > 0 && (
         <span
-          className="chip"
-          style={{ background: 'rgba(240,166,62,0.18)', border: '1px solid var(--amber, #f0a63e)', color: 'var(--amber, #f0a63e)', fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
+          className="chip nudgechip"
           title="live nudges are driving the rig — Keep writes them into the show, Discard drops them. Always visible here, whatever panel is open."
         >
           NUDGED {snap!.soft!.length}

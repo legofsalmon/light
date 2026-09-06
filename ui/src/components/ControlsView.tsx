@@ -67,7 +67,7 @@ function LinkRow({ link, onEdit, onRemove }: {
   return (
     <div className="row" style={{ marginBottom: 4, paddingLeft: 16 }}>
       {dangling && (
-        <span className="label" title="this link's look, part or effect no longer exists — it is skipped when the control moves" style={{ color: 'var(--amber, #f0a63e)' }}>
+        <span className="label" title="this link's look, part or effect no longer exists — it is skipped when the control moves" style={{ color: 'var(--color-status-nudge)' }}>
           ⚠
         </span>
       )}
@@ -172,7 +172,7 @@ function BindingRow({ b, onEdit, onRemove }: {
   return (
     <div className="row" style={{ marginBottom: 4, paddingLeft: 16 }}>
       {dangling && (
-        <span className="label" title="this binding's look, part or effect no longer exists — the pulse skips it" style={{ color: 'var(--amber, #f0a63e)' }}>
+        <span className="label" title="this binding's look, part or effect no longer exists — the pulse skips it" style={{ color: 'var(--color-status-nudge)' }}>
           ⚠
         </span>
       )}
@@ -286,7 +286,7 @@ export function ControlsView(): React.ReactElement {
       {controls.map((c) => {
         const liveValue = live?.find((x) => x.id === c.id)?.value;
         return (
-          <div key={c.id} style={{ marginBottom: 14, borderLeft: '2px solid var(--line2, #333)', paddingLeft: 8 }}>
+          <div key={c.id} style={{ marginBottom: 14, borderLeft: 'var(--size-rule) solid var(--line2)', paddingLeft: 8 }}>
             <div className="row" style={{ marginBottom: 4 }}>
               <TextField
                 className="text"
@@ -372,7 +372,7 @@ export function ControlsView(): React.ReactElement {
         bound parameter about its value with a ± depth. Depth 0 is silent; negative inverts.
       </div>
       {(project.modulators ?? []).map((m) => (
-        <div key={m.id} style={{ marginBottom: 14, borderLeft: '2px solid var(--line2, #333)', paddingLeft: 8 }}>
+        <div key={m.id} style={{ marginBottom: 14, borderLeft: 'var(--size-rule) solid var(--line2)', paddingLeft: 8 }}>
           <div className="row" style={{ marginBottom: 4 }}>
             <button
               className={`btn small ${m.on ? 'on' : 'ghost'}`}

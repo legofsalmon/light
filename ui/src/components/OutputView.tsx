@@ -4,6 +4,7 @@ import { uid } from '../../../shared/types.ts';
 import { NumInput, ScrubNumInput, TextField, UnicastInput } from './inputs.tsx';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
+import { color } from '../tokens.ts';
 
 const METER_W = 1024;
 const METER_H = 88;
@@ -61,7 +62,7 @@ function DmxMeters({
     if (!ctx) return;
     canvas.width = METER_W;
     canvas.height = METER_H;
-    ctx.fillStyle = '#1a1a1c';
+    ctx.fillStyle = color['scene/meter-bg'];
     ctx.fillRect(0, 0, METER_W, METER_H);
 
     // --- fixture spans: alternating bands so a patch is readable at a glance
@@ -70,9 +71,9 @@ function DmxMeters({
     spans.forEach((s, i) => {
       const x = (s.from - 1) * CH_W;
       const w = (s.to - s.from + 1) * CH_W;
-      ctx.fillStyle = i % 2 ? '#2b2b31' : '#232329';
+      ctx.fillStyle = i % 2 ? color['scene/meter-span'] : color['scene/meter-span-2'];
       ctx.fillRect(x, 0, w, RIBBON_H);
-      ctx.fillStyle = '#3a3a42';
+      ctx.fillStyle = color['scene/meter-span-edge'];
       ctx.fillRect(x, RIBBON_H, Math.max(1, w), 1);
       // the label only fits on wide spans; the hover readout covers the rest
       if (w > 30) {
@@ -93,7 +94,7 @@ function DmxMeters({
       const v = data?.[i] ?? 0;
       const h = (v / 255) * usable;
       const overridden = overrides[i + 1] !== undefined;
-      ctx.fillStyle = overridden ? '#ffb020' : v > 0 ? '#39c2ff' : '#26262a';
+      ctx.fillStyle = overridden ? color['amber/400'] : v > 0 ? color['cyan/500'] : '#26262a';
       ctx.fillRect(i * CH_W, top + usable - h, 1.6, Math.max(1, h));
     }
 
@@ -103,7 +104,7 @@ function DmxMeters({
       ctx.fillRect((hover - 1) * CH_W, 0, CH_W, METER_H - 9);
     }
 
-    ctx.fillStyle = '#5c5c66';
+    ctx.fillStyle = color['grey/400'];
     ctx.font = '8px ui-monospace';
     ctx.textBaseline = 'alphabetic';
     for (let c = 0; c <= 512; c += 64) {

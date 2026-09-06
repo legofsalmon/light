@@ -269,7 +269,7 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
         )}
       </select>
       {targetInactive && (
-        <span className="label" title="nothing in this group takes this parameter — it does nothing here until the effect is retargeted or dropped on a group that has it" style={{ color: 'var(--amber, #f0a63e)' }}>
+        <span className="label" title="nothing in this group takes this parameter — it does nothing here until the effect is retargeted or dropped on a group that has it" style={{ color: 'var(--color-status-nudge)' }}>
           ⚠
         </span>
       )}
@@ -525,7 +525,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
               </div>
               <i
                 style={{ width: 20, height: 20, borderRadius: 3, border: '1px solid var(--line2)', flexShrink: 0,
-                  background: prm.color ? rgbHex(...hsvToRgb(prm.color.h, prm.color.s, 1)) : '#333' }}
+                  background: prm.color ? rgbHex(...hsvToRgb(prm.color.h, prm.color.s, 1)) : 'var(--swatch-neutral)' }}
               />
             </div>
           </div>
@@ -909,7 +909,7 @@ export function LookEditor() {
           className={`btn small ${ride ? 'on' : 'ghost'}`}
           title="NUDGE: fader moves become live nudges — they drive the rig without touching the show (no project write, no undo spam). Keep writes them into the look, Discard drops them. Cleared by ALL STOP and project switch."
           onClick={() => setRide(!ride)}
-          style={ride ? { background: 'var(--amber, #f0a63e)', color: '#000' } : undefined}
+          style={ride ? { background: 'var(--color-status-nudge)', color: 'var(--color-text-inverse)' } : undefined}
         >
           nudge
         </button>

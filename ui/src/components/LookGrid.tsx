@@ -4,6 +4,7 @@ import { uid } from '../../../shared/types.ts';
 import { notify, useStore } from '../store.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 import { contextPress } from '../touch.ts';
+import { size } from '../tokens.ts';
 import { Fader } from './Fader.tsx';
 import { lookSwatch } from '../lookColors.ts';
 import { APC_COLS, APC_KNOB_BANKS, APC_LAYER_ROWS } from '../apcFeedback.ts';
@@ -832,7 +833,7 @@ export function LookGrid() {
     <DeckBar />
     <div
       className="lookgrid"
-      style={{ gridTemplateColumns: `184px repeat(${cols.length}, 108px) 30px` }}
+      style={{ gridTemplateColumns: `${size['layerhead-w']}px repeat(${cols.length}, ${size['pad-w']}px) ${size['addcol-w']}px` }}
     >
       <div
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
