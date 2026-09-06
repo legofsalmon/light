@@ -32,7 +32,7 @@ const RETIRED = [
   { re: /\bsoft overrides?\b/i, say: 'nudge' },
   { re: /\bcue ?lists?\b/i, say: 'steps' },
   { re: /\bcue steps?\b/i, say: 'steps' },
-  { re: /\bhtp\b/i, say: 'brightest wins' },
+  { re: /\bhtp\b/i, say: 'brightest' },
   { re: /\bcto\b/i, say: 'warmth' },
   { re: /\biris\b/i, say: 'beam size' },
   { re: /\bfrost\b/i, say: 'soften' },

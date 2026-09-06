@@ -33,8 +33,8 @@ Each layer has a default fade (seconds) in the project; a look can override it w
 Layers apply bottom-to-top. Each has a **master** (scales that layer's intensity contribution) and a **blend mode**:
 
 - **replaces** — replaces what's below on the channels the look touches. For base washes.
-- **dims through** — scales the intensity (dimmer/white) below. This is the FX layer's mode: a chase or pulse modulates *whatever colour the wash is showing* without owning colour itself.
-- **brightest wins** — the brighter of the two layers, on intensity. For strobes and blinders that sit on top.
+- **dims** — scales the intensity (dimmer/white) below. This is the FX layer's mode: a chase or pulse modulates *whatever colour the wash is showing* without owning colour itself.
+- **brightest** — the brighter of the two layers wins, on intensity. For strobes and blinders that sit on top.
 
 The **grand master** (top bar) scales all dimmer/white output. **Blackout** (top bar or `B`) zeroes intensity and strobing instantly — it always wins.
 

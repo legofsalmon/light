@@ -350,12 +350,12 @@ type Layout = { previzH: number; bottomH: number; libraryW: number; editorW: num
 /** Floors, and the fixed furniture around the adjustable tracks.
  *  MIN_GRID/MIN_PANEL are vertical (the split view stacks band + pads +
  *  editor); MIN_GRID_W and the panel widths are horizontal (the pads view puts
- *  the library and the look editor beside the grid). A layer head is 168px and
+ *  the library and the look editor beside the grid). A layer head is 184px and
  *  sticks to the left edge, so a grid narrower than MIN_GRID_W is a head
  *  covering its own pads. */
 const MIN_GRID = 140;
 const MIN_PANEL = 150;
-const MIN_GRID_W = 290;
+const MIN_GRID_W = 306;
 const MIN_LIBRARY = 200;
 const MIN_EDITOR = 300;
 const SPLIT_CHROME = 46 + 6 + 6 + 6;

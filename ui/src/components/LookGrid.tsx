@@ -201,8 +201,8 @@ const Cell = React.memo(function Cell({
  *  because "multiply" reads like it should multiply colours and it does not. */
 const BLEND_HELP: Record<LayerBlend, string> = {
   normal: 'replaces — this layer replaces what is under it (intensity only)',
-  multiply: 'dims through — scales what is under it; can only take light away',
-  htp: 'brightest wins — the brighter of this layer and what is under it; can only add light, never remove it',
+  multiply: 'dims — scales what is under it; can only take light away',
+  htp: 'brightest — the brighter of this layer and what is under it wins; can only add light, never remove it',
 };
 
 function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined }) {
@@ -235,8 +235,8 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
           }}
         >
           <option value="normal">replaces</option>
-          <option value="multiply">dims through</option>
-          <option value="htp">brightest wins</option>
+          <option value="multiply">dims</option>
+          <option value="htp">brightest</option>
         </select>
         <button
           className="btn small ghost clearbtn"
@@ -733,7 +733,7 @@ export function LookGrid() {
     <DeckBar />
     <div
       className="lookgrid"
-      style={{ gridTemplateColumns: `168px repeat(${cols.length}, 108px) 30px` }}
+      style={{ gridTemplateColumns: `184px repeat(${cols.length}, 108px) 30px` }}
     >
       <div
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}

@@ -33,10 +33,10 @@ Each layer has a master and a blend mode, and they merge bottom to top:
 
 - **replaces** — replaces what is below on the channels the look touches. For base
   washes.
-- **dims through** — scales the intensity below it. This is what an FX layer wants:
+- **dims** — scales the intensity below it. This is what an FX layer wants:
   a chase or a pulse that carves whatever colour the wash is showing, without
   owning colour itself.
-- **brightest wins** — the brighter of the two layers. For strobes and blinders that sit on top
+- **brightest** — the brighter of the two layers wins. For strobes and blinders that sit on top
   and must never *remove* light.
 
 Blend affects intensity only. Colour, position, strobe and colour slots always take

@@ -110,8 +110,7 @@ under the same conventions and are in `tokens.json`:
 
 One name per thing, and the name says what it does. The words: **pad**, **look**,
 **song**, **rig**, **stage**, **dial**, **pulse**, **nudge**, **steps**, **spread**
-(an effect across a group), **haze fan** (the hazer's), **brightest wins / dims
-through / replaces** (layer blends), **ramp up / ramp down** (waves), **beam
+(an effect across a group), **haze fan** (the hazer's), **brightest / dims / replaces** (layer blends), **ramp up / ramp down** (waves), **beam
 size / soften / warmth** (beam channels), **find this light** (identify),
 **Keep / Discard** (a nudge's two outcomes). Retired: deck, cell, previz, patch
 (as a name), LFO, modulator, macro, named control, ride, soft override, cue
@@ -155,7 +154,7 @@ are Figma Grid layouts in the templates, so the mapping is one-to-one:
 | `.app.view-pads` — rows `auto 46px var(--previz-h) 6px minmax(0,1fr)`, columns `minmax(0,1fr) 6px 280px 6px 380px` | template frame, 4 × 5, bars spanning 5 columns | `gridRowSizingCSS` = `46px 270px 6px minmax(0,1fr)`, `gridColumnSizingCSS` = `minmax(0,1fr) 6px 280px 6px 380px` |
 | `.app.view-split` — `auto 46px … 6px minmax(0,1fr) 6px 292px` | 6 × 1 | `46px 270px 6px minmax(0,1fr) 6px 292px` |
 | `.app.view-patch` / `.app.view-previz` | 4 × 1 / 2 × 1 (offline twin 3 × 1) | likewise |
-| `.lookgrid` — `168px repeat(N, 108px) 30px`, `gap: 3px`, control row `grid-column: 1 / -1` | N+2 columns, HUG rows, control row spanning | `168px 108px … 30px` |
+| `.lookgrid` — `184px repeat(N, 108px) 30px`, `gap: 3px`, control row `grid-column: 1 / -1` | N+2 columns, HUG rows, control row spanning | `184px 108px … 30px` |
 
 The 1px seam is the grid gap, bound to `space/1`; the look grid's gap is bound to
 `space/3`. **Track sizes cannot bind to variables** in Figma (only gaps can), so

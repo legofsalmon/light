@@ -207,6 +207,9 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
   background-repeat: no-repeat;
 }
 .chipsel:hover { color: var(--text); border-color: var(--text-dim); }
+/* the blend chip must show its whole word closed — "brightest" needs 80px, and
+   a select's intrinsic width ignores the tracking, so it clips without this */
+.layerhead .chipsel { min-width: 80px; }
 .chipsel:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 
 .chip {
@@ -384,7 +387,7 @@ input.num,
 .colhead { position: sticky; top: 0; z-index: 1; }
 
 .layerhead {
-  width: 168px;
+  width: 184px;
   padding: 6px 8px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -394,7 +397,7 @@ input.num,
   gap: 5px;
   justify-content: center;
 }
-.layerhead .name { font-size: 10.5px; letter-spacing: 0.1em; color: var(--text); text-transform: uppercase; }
+.layerhead .name { font-size: 10.5px; letter-spacing: 0.1em; color: var(--text); text-transform: uppercase; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .layerhead .row { gap: 5px; }
 
 .cell {
@@ -524,7 +527,7 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
   padding-top: 12px;
   border-top: 1px solid var(--line2);
 }
-.controlrow .controlhead { flex: 0 0 168px; }
+.controlrow .controlhead { flex: 0 0 184px; }
 .controlrow .ctlcell { flex: 0 0 108px; }
 .controlhead { background: var(--panel2); border-color: var(--line2); }
 .controlhead .name { color: var(--text-dim); letter-spacing: 0.14em; }
