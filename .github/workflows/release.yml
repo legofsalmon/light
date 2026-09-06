@@ -33,7 +33,13 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          # 26, not the 24 LTS: this is the Node the suites RUN on, and the
+          # machine they are written on is on 26. A difference between the two
+          # is a difference CI cannot catch. Nothing Node touches here ships —
+          # it builds the UI bundle and runs the engine tests, and the product
+          # is a Rust binary plus static assets — so being a release ahead of
+          # LTS costs nothing. 26 goes LTS in October.
+          node-version: 26
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
