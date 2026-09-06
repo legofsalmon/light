@@ -281,20 +281,42 @@ that proves the whole design — the snapshot follows an edit that the wire does
 not. Verified live: the wire latched while the stage view fell to 1.4%, and
 released to catch up.
 
-### 8 · In-app help, shortcut sheet, first-run card — ◧ partial — M
-**Touches:** ui, src-tauri, docs
-**Today:** 219 hand-written tooltips (rich, deliberate), nothing else. No
-guide link, no shortcut list (the guide's keyboard reference is already stale:
-says 1–8, handler does 1–9 and `[`/`]`), no first-run guidance, no videos.
-**Side finding to verify first:** the two existing external links (licence
-"manage →", update "release page") are `target="_blank"` with no
-`on_new_window` handler; on wry 0.55 WKWebView that click is dropped. A
-~10-line `open_url` Tauri command (or `tauri-plugin-opener`) fixes both and is
-the prerequisite for any guide link.
-**Build:** a `?` in the top bar / settings → hosted guide; a shortcut table in
-`App.tsx` that both the keydown handler and a `?`-key modal read so they cannot
-drift; a dismissable once-only first-run card after the licence gate; sync the
-guide's keyboard reference. Videos are content, not code.
+### 8 · In-app help, shortcut sheet, first-run card — ◼ shipped 2026-09-06
+**Touches:** ui, docs
+**Side finding: already fixed.** `open_url` shipped with the "now" lane
+(`src-tauri/src/main.rs`, wrapped by `ui/src/shell.ts` with a `window.open`
+fallback), so external links work in the packaged app and the guide link had
+its prerequisite.
+
+**Shipped:** `ui/src/shortcuts.ts` is the keyboard, written down once. The key
+handler runs it, the sheet renders it, and a test in the engine suite reads the
+published table out of `docs/website/10-reference.md` and requires the two to
+match key for key — so a shortcut cannot be added without appearing in the
+documentation. That is the drift this replaces: the guide claimed keys 1–8
+fire columns long after the handler had grown to 1–9, and never mentioned
+`[` / `]` at all.
+
+The module is deliberately DOM-free — its own `KeyPress` and `State` shapes
+rather than the browser's `KeyboardEvent` and the store's type — because the
+engine's test suite runs under Node with no DOM and imports it to press keys
+at the real dispatcher. Nineteen checks, including the one that matters:
+`⌥1` switches view and does **not** also fire column 1, which the two-pass
+dispatcher is what prevents.
+
+`?` opens the sheet (`ShortcutSheet.tsx`), `?` or Escape closes it, and while
+it is open every other key is swallowed — it has no text fields, so without
+that the cue keys behind it stay armed and reading the keyboard reference
+fires cues. Settings gains a **Help** section: the user guide and the sheet.
+
+**First-run card** (`WelcomeCard.tsx`): once per machine, after the licence
+gate by construction, dismissed to `localStorage`. Says what LIGHT is in two
+paragraphs, says that the demo is a demo and that LIGHT starts offline, and
+offers three doors — set up my own rig (opens the setup guide), read the guide,
+have a play. Deliberately not a tour.
+
+`docs/user-guide.md`'s keyboard line is corrected and now points at `?`.
+
+**Not done:** videos, which the entry itself calls content rather than code.
 
 ### 9 · Named movement shapes (circle, figure-8, paths) — ◧ partial — S / M / L slices
 **Touches:** shared/types.ts, core, engine, parity, ui, docs

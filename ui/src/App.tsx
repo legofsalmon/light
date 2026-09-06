@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { WS_PORT } from '../../shared/types.ts';
 import { useStore, type BandView, type ViewMode } from './store.ts';
+import { runShortcut } from './shortcuts.ts';
 import { DialogHost } from './dialog.tsx';
 import { TopBar } from './components/TopBar.tsx';
 import { LookGrid } from './components/LookGrid.tsx';
@@ -14,6 +15,8 @@ import { AdminModal } from './components/AdminModal.tsx';
 import { Toasts } from './components/Toasts.tsx';
 import { HelpOverlay } from './components/HelpMode.tsx';
 import { SetupGuide } from './components/SetupGuide.tsx';
+import { ShortcutSheet } from './components/ShortcutSheet.tsx';
+import { WelcomeCard, welcomeSeen } from './components/WelcomeCard.tsx';
 import { updateAvailable, updateStatus } from './update.ts';
 import { size, sizeTouch } from './tokens.ts';
 
@@ -107,6 +110,10 @@ export function App() {
   // even though no engine is listening. A browser or the LAN tablet has no
   // bridge and never sees a gate — they are not the machine running the show.
   const [admin, setAdmin] = useState(false);
+  const [shortcuts, setShortcuts] = useState(false);
+  // Read once at mount: the card is a first-launch thing, and re-reading it
+  // per render would make dismissing it a re-render race with itself.
+  const [welcome, setWelcome] = useState(() => !welcomeSeen());
   const [gate, setGate] = useState<LicenceStatus | null>(null);
   useEffect(() => {
     if (!licenceAvailable()) return;
@@ -182,50 +189,15 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
-      const st = useStore.getState();
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      // ? opens the sheet that lists everything below it. Shift-slash on most
+      // layouts, and no binding wants a bare "?" — so it is checked here
+      // rather than earning a row in a table it exists to display.
+      if (e.key === '?') {
         e.preventDefault();
-        st.send({ type: 'save' });
+        setShortcuts((v) => !v);
         return;
       }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) st.redo();
-        else st.undo();
-        return;
-      }
-      // ⌥1..⌥4 switch layout. Alt rather than plain digits because 1-9 fire
-      // columns, and a mis-hit that changes the layout mid-song is cheap while
-      // a mis-hit that fires the wrong cue is not.
-      if (e.altKey && !e.metaKey && !e.ctrlKey && e.key >= '1' && e.key <= '4') {
-        e.preventDefault();
-        st.setView((['pads', 'previz', 'patch', 'split'] as const)[Number(e.key) - 1]);
-        return;
-      }
-      // Held keys must not machine-gun cues/tap/blackout, and browser
-      // shortcuts (⌘1 etc.) must not double as ours.
-      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
-      // [ and ] step songs — the APC bank arrows do this, the keyboard should too
-      if (e.key === '[' || e.key === ']') {
-        const decks = st.project?.decks ?? [];
-        if (decks.length > 1) {
-          const i = decks.findIndex((d) => d.id === st.project?.activeDeckId);
-          // clamp, don't wrap — matches deck_step in both engines
-          const j = Math.max(0, Math.min(decks.length - 1, (i < 0 ? 0 : i) + (e.key === ']' ? 1 : -1)));
-          if (j !== i) st.send({ type: 'switchDeck', deckId: decks[j].id });
-        }
-        return;
-      }
-      if (e.key >= '1' && e.key <= '9') {
-        const col = Number(e.key) - 1;
-        if (st.project && col < st.project.columns.length) st.send({ type: 'column', col });
-      } else if (e.key.toLowerCase() === 't') {
-        st.send({ type: 'tap' });
-      } else if (e.key.toLowerCase() === 'b') {
-        st.send({ type: 'setBlackout', v: !st.snap?.blackout });
-      } else if (e.key === 'Escape') {
-        st.setSel(null);
-      }
+      runShortcut(e, useStore.getState());
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -374,8 +346,11 @@ export function App() {
       )}
       <Toasts />
       <SetupGuide />
+      {shortcuts && <ShortcutSheet onClose={() => setShortcuts(false)} />}
+      {/* After the licence gate by construction: that returns early above. */}
+      {welcome && <WelcomeCard onClose={() => setWelcome(false)} />}
       <HelpOverlay />
-      {admin && <AdminModal onClose={() => setAdmin(false)} />}
+      {admin && <AdminModal onClose={() => setAdmin(false)} onOpenShortcuts={() => setShortcuts(true)} />}
       <DialogHost />
     </div>
   );

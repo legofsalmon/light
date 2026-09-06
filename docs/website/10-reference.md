@@ -13,6 +13,11 @@
 | `⌘Z` / `⇧⌘Z` | undo / redo |
 | `⌥1`–`⌥4` | Pads / Stage / Rig / Build |
 
+Press `?` for this table on screen. It is rendered from the same list the key
+handler runs (`ui/src/shortcuts.ts`), and the engine test suite reads the table
+above back out of this file and requires the two to match — so a shortcut
+cannot be added without appearing here.
+
 Shortcuts are ignored while you are typing in a field. A text field left focused
 would otherwise swallow your cue keys, so the search box in the look library
 hands the keyboard back on `Esc`, on `Enter`, and when you start dragging a look.

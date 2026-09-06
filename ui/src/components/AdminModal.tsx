@@ -19,6 +19,8 @@ import { UpdatePanel } from './UpdatePanel.tsx';
 import { licenceAvailable } from '../licence.ts';
 import { updateAvailable } from '../update.ts';
 import { useStore, type TouchPref } from '../store.ts';
+import { openExternal } from '../shell.ts';
+import { GUIDE_URL } from '../links.ts';
 
 /** Touch sizing (review M14/M15). Auto follows what the browser says the
  *  pointer is; the override exists because a touchscreen laptop or a tablet
@@ -55,7 +57,11 @@ function TouchSetting(): React.ReactElement {
   );
 }
 
-export function AdminModal({ onClose }: { onClose: () => void }): React.ReactElement {
+export function AdminModal({ onClose, onOpenShortcuts }: {
+  onClose: () => void;
+  /** open the keyboard sheet — owned by App, so it can outlive this modal */
+  onOpenShortcuts: () => void;
+}): React.ReactElement {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -97,6 +103,27 @@ export function AdminModal({ onClose }: { onClose: () => void }): React.ReactEle
         <div style={{ marginTop: 12 }}>
           <div className="sectionhead">Display</div>
           <TouchSetting />
+        </div>
+
+        {/* Where someone looks when they do not know what to press. The
+            keyboard sheet is also on ?, but ? is itself a thing to know. */}
+        <div style={{ marginTop: 12 }}>
+          <div className="sectionhead">Help</div>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn small" onClick={() => openExternal(GUIDE_URL)}>
+              user guide
+            </button>
+            <button
+              className="btn small"
+              title="every keyboard shortcut — also on the ? key"
+              onClick={() => {
+                onClose();
+                onOpenShortcuts();
+              }}
+            >
+              keyboard shortcuts
+            </button>
+          </div>
         </div>
 
         {/* The guide opens itself on a show with no fixtures and can be sent

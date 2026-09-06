@@ -26,6 +26,7 @@ import { MAX_THROW, buildOccluders, hitsPropFootprint, standingHeightAt, throwDi
 import { FreezeHold, GO_DARK_FRAMES, OutputGate } from '../output.ts';
 import { aimIsIdentity, applyAim } from '../../shared/aim.ts';
 import { FX_CATEGORIES, FX_LIBRARY, fxSearch } from '../../ui/src/fxLibrary.ts';
+import { SHORTCUTS, SHORTCUT_GROUPS, runShortcut } from '../../ui/src/shortcuts.ts';
 import { repairEffect } from '../../shared/types.ts';
 import { parseOsc } from '../osc.ts';
 import { ArtnetOut } from '../artnet.ts';
@@ -1128,6 +1129,90 @@ await new Promise<void>((resolve) => {
     check('freeze: clearing blackout does not', held());
     check('freeze: the engine boots unfrozen', !new EngineState(sanitizeProject(demoProject())!).frozen);
   }
+}
+
+// --- the keyboard, written down once (backlog #8) ---------------------------
+// The handler and the published table were kept by hand and drifted: the guide
+// said keys 1-8 fire columns long after the handler had grown to 1-9, and it
+// never mentioned [ and ] at all. Nobody notices, because the only person who
+// reads a keyboard reference is someone who has already failed to guess. So
+// the code is the source and this reads the documentation back.
+{
+  const ref = fs.readFileSync(path.join(process.cwd(), 'docs/website/10-reference.md'), 'utf8');
+  // the first markdown table under "## Keyboard"
+  const section = ref.slice(ref.indexOf('## Keyboard'));
+  const rows = section
+    .split('\n')
+    .filter((l) => l.startsWith('| `'))
+    .map((l) => l.split('|').map((c) => c.trim()).filter(Boolean))
+    .map(([keys, does]) => ({ keys, does }));
+
+  check('shortcuts: the published table was found', rows.length > 0, `${rows.length} rows`);
+  check(
+    'shortcuts: the guide lists exactly what the handler binds',
+    JSON.stringify(rows) === JSON.stringify(SHORTCUTS.map((s) => ({ keys: s.keys, does: s.label }))),
+    `\n  guide: ${JSON.stringify(rows)}\n  code:  ${JSON.stringify(SHORTCUTS.map((s) => ({ keys: s.keys, does: s.label })))}`,
+  );
+  check(
+    'shortcuts: every one is in a group the sheet renders',
+    SHORTCUTS.every((s) => SHORTCUT_GROUPS.includes(s.group)),
+    SHORTCUTS.filter((s) => !SHORTCUT_GROUPS.includes(s.group)).map((s) => s.keys).join(','),
+  );
+  check(
+    'shortcuts: no group is empty',
+    SHORTCUT_GROUPS.every((g) => SHORTCUTS.some((s) => s.group === g)),
+    SHORTCUT_GROUPS.filter((g) => !SHORTCUTS.some((s) => s.group === g)).join(','),
+  );
+
+  // What actually happens, not what the predicates claim. ⌥1 matches the
+  // digits rule AND the view rule, and it is the dispatcher's two passes that
+  // make it mean one thing — so the dispatcher is what gets tested.
+  // Structural, not Partial<KeyboardEvent>: this suite runs under Node with no
+  // DOM lib, where that name is not the browser's.
+  type FakeKey = {
+    key: string;
+    metaKey?: boolean;
+    ctrlKey?: boolean;
+    altKey?: boolean;
+    shiftKey?: boolean;
+    repeat?: boolean;
+  };
+  const press = (e: FakeKey): string[] => {
+    const calls: string[] = [];
+    const st = {
+      project: { columns: new Array(9).fill(null), decks: [{ id: 'a' }, { id: 'b' }], activeDeckId: 'a' },
+      snap: { blackout: false },
+      send: (c: { type: string; col?: number }) => calls.push(c.col === undefined ? c.type : `${c.type}:${c.col}`),
+      setView: (v: string) => calls.push(`view:${v}`),
+      setSel: () => calls.push('deselect'),
+      undo: () => calls.push('undo'),
+      redo: () => calls.push('redo'),
+    };
+    runShortcut(e, st as never);
+    return calls;
+  };
+  const is = (name: string, e: FakeKey, want: string[]) => {
+    const got = press(e);
+    check(`shortcuts: ${name}`, JSON.stringify(got) === JSON.stringify(want), `got ${JSON.stringify(got)}`);
+  };
+
+  is('a digit fires that column', { key: '1' }, ['column:0']);
+  is('and the ninth', { key: '9' }, ['column:8']);
+  is('⌥1 switches view and does NOT fire column 1', { key: '1', altKey: true }, ['view:pads']);
+  is('⌥4 is the last view', { key: '4', altKey: true }, ['view:split']);
+  is('T taps', { key: 'T' }, ['tap']);
+  is('B blacks out', { key: 'b' }, ['setBlackout']);
+  is('] steps a song', { key: ']' }, ['switchDeck']);
+  is('Escape deselects', { key: 'Escape' }, ['deselect']);
+  is('save is the chord, not the letter', { key: 's', metaKey: true }, ['save']);
+  is('⇧⌘Z redoes', { key: 'z', metaKey: true, shiftKey: true }, ['redo']);
+  is('⌘Z undoes', { key: 'z', metaKey: true }, ['undo']);
+  // the two gates that keep a cue key from misfiring
+  is('a held key does not machine-gun a cue', { key: '1', repeat: true }, []);
+  is('a browser chord whose letter is ours is not ours', { key: 'b', metaKey: true }, []);
+  is('an unbound key does nothing', { key: 'q' }, []);
+
+  check('shortcuts: the modified ones shadow a system chord', SHORTCUTS.some((s) => s.modified));
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

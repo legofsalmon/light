@@ -146,7 +146,12 @@ Everything autosaves ~1 second after any edit, with five rotating backups (`.bak
 
 ## Keyboard reference
 
-`1`–`8` fire columns · `T` tap tempo · `B` blackout · `⌘S` save · `Esc` deselect. Shortcuts are ignored while you're typing in a field.
+Press `?` at any time for the full list — it is rendered from the same table the
+handler runs, so it cannot be out of date.
+
+`1`–`9` fire columns · `T` tap tempo · `B` blackout · `[` `]` previous / next song ·
+`Esc` deselect · `⌘S` save · `⌘Z` / `⇧⌘Z` undo / redo · `⌥1`–`⌥4` Pads / Stage / Rig / Build.
+Shortcuts are ignored while you're typing in a field.
 
 ---
 
