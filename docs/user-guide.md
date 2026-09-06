@@ -90,7 +90,7 @@ Enable a parameter with the checkbox to its left; a look only writes the paramet
 
 ### Effects
 
-Each part can stack effects. An effect modulates one target (dimmer, hue, white, strobe, pan, tilt, the beam parameters, gobo spin, prism spin) with a wave:
+Each part can stack effects. **browse…** opens a catalogue of 46 ready-made ones — grouped, searchable, and applied as you click so you can audition down the list — or build your own: an effect modulates one target (dimmer, hue, white, strobe, pan, tilt, the beam parameters, gobo spin, prism spin) with a wave:
 
 | Wave | Feels like |
 |---|---|

@@ -6,6 +6,8 @@ import { type HeadKind } from '../../../shared/profiles.ts';
 import { TextField } from './inputs.tsx';
 import { BEAM_FADERS, BEAM_LABELS, BEAM_PARAMS, type BeamCaps, type BeamParam, noBeamCaps, profileMeta } from '../profileInfo.ts';
 import { TARGET_LABEL } from '../labels.ts';
+import { FxPicker } from './FxPicker.tsx';
+import type { FxFactoryPreset } from '../fxLibrary.ts';
 import { hasUndrivenBeamChannels } from '../../../shared/gdtfShare.ts';
 import { useStore } from '../store.ts';
 import { WAVE_LABEL } from '../labels.ts';
@@ -179,6 +181,18 @@ function SlotRow({ label, title, names, value, onChange }: {
   );
 }
 
+/** Which effect targets the rig in this group can actually take. One answer,
+ *  shared by the target menu and the catalogue picker — two of them would drift
+ *  and the picker would flag things the menu was happy with. */
+function capableTargets(kinds: Set<HeadKind>, canAim: boolean, beamCaps: BeamCaps): EffectTarget[] {
+  const capable: EffectTarget[] = ['dimmer'];
+  if (kinds.has('rgb') || kinds.has('derby') || kinds.has('mover')) capable.push('hue', 'strobe');
+  if (kinds.has('derby')) capable.push('white');
+  if (canAim) capable.push('pan', 'tilt');
+  for (const k of BEAM_PARAMS) if (beamCaps[k]) capable.push(k);
+  return capable;
+}
+
 function Enable({ on, toggle }: { on: boolean; toggle: () => void }) {
   return (
     <div
@@ -284,12 +298,7 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
   /** live soft value for one of this effect's fields, if ridden */
   soft: (field: SoftField) => number | undefined;
 }) {
-  // Which targets the rig in this group can actually take.
-  const capable: EffectTarget[] = ['dimmer'];
-  if (kinds.has('rgb') || kinds.has('derby') || kinds.has('mover')) capable.push('hue', 'strobe');
-  if (kinds.has('derby')) capable.push('white');
-  if (canAim) capable.push('pan', 'tilt');
-  for (const k of BEAM_PARAMS) if (beamCaps[k]) capable.push(k);
+  const capable = capableTargets(kinds, canAim, beamCaps);
   // inform, don't forbid: every target stays assignable (an effect is
   // interchangeable across groups), the ones this group can't take are just
   // grouped apart and the current target is flagged if it lands there.
@@ -427,15 +436,38 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
   const canAim = groupCanAim(project, part.groupId);
   const beamCaps = groupBeamCaps(project, part.groupId);
   const optics = groupOptics(project, part.groupId);
+
+  // The factory catalogue's picker. It applies as you browse — the effect it
+  // put there is tracked so the next pick replaces it rather than stacking a
+  // dozen auditions onto the part.
+  const [fxPickerOpen, setFxPickerOpen] = useState(false);
+  const fxPickerBtn = React.useRef<HTMLButtonElement>(null);
+  const previewFx = React.useRef<string | null>(null);
+  const dropPreview = (pt: LookPart) => {
+    if (previewFx.current) pt.effects = pt.effects.filter((x) => x.id !== previewFx.current);
+  };
+  const previewPreset = (p: FxFactoryPreset) => {
+    const id = uid('fx');
+    edit((pt) => {
+      dropPreview(pt);
+      pt.effects.push({ ...p.effect, id });
+    }, `add ${p.name} effect`);
+    previewFx.current = id;
+  };
+  const closePicker = (keep: boolean) => {
+    if (!keep && previewFx.current) edit((pt) => dropPreview(pt), 'remove the previewed effect');
+    previewFx.current = null;
+    setFxPickerOpen(false);
+  };
   // a derby's ring is on/off hardware and has its own control; this is the
   // faded white emitter on an RGBW head
   const canWhite = !kinds.has('derby') && groupCanWhite(project, part.groupId);
 
-  const edit = (fn: (pt: LookPart) => void) =>
+  const edit = (fn: (pt: LookPart) => void, label?: string) =>
     mutate((p) => {
       const pt = p.looks[lookId]?.parts.find((x) => x.id === part.id);
       if (pt) fn(pt);
-    });
+    }, label);
 
   /** P1: the live soft value for one address, if the operator is riding it. */
   const softFor = (field: SoftField, effectId?: string): number | undefined =>
@@ -825,6 +857,26 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
             title="add an effect to this part: a wave over one parameter, locked to the beat">
             + effect
           </button>
+          {/* The factory catalogue. Named starting points, because "+ effect"
+              above gives a blank sine on dimmer and everything worth having is
+              several knobs away from it. */}
+          <button
+            ref={fxPickerBtn}
+            className="btn small ghost"
+            title="browse ready-made effects — pick one to hear it on this part straight away"
+            onClick={() => setFxPickerOpen(true)}
+          >
+            browse…
+          </button>
+          {fxPickerOpen && (
+            <FxPicker
+              capable={new Set(capableTargets(kinds, canAim, beamCaps))}
+              anchor={fxPickerBtn}
+              onPreview={previewPreset}
+              onKeep={() => closePicker(true)}
+              onCancel={() => closePicker(false)}
+            />
+          )}
           {(project.fxPool?.length ?? 0) > 0 && (
             <select
               className="sel"

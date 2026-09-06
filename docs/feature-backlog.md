@@ -152,23 +152,40 @@ fractional slot / released). **Not done:** drawing gobos and prisms in the
 previz (a larger item of its own); a second gobo wheel; gobo shake and wheel
 spin; indexed (angle) rotation on a `…Pos` channel with no rotate function.
 
-### 4 · A ready-made effects library — ◧ partial — M
-**Touches:** ui, docs (no engine change for single-effect presets)
-**Today:** effects are composed (11 targets × 7 waves × fan pipeline). A
-user-authored FX pool exists end to end (copy-on-apply; the engine never
-renders from the pool) but ships empty, and its picker is a bare `<select>`
-that only appears once the pool is non-empty.
-**Build:**
-- A factory catalogue as an app-level constant — 30–70 named, categorised,
-  described presets validated with `repairEffect` at test time — surfaced
-  beside "apply from pool…" or in a proper picker with categories, search and
-  live preview onto the selected part.
-- Composite presets (Fire = random dimmer + hue drift + white flicker) mean
-  `FxPreset.effect → effects[]`: a schema change across both engines and the
-  parity round-trip test — escalates to L. Ship single-effect first.
-**Note:** most of the day is authoring and auditioning on the real rig, not
-code. Many Lightkey templates are pixel-matrix effects LIGHT routes through
-Arena by design; per-pixel Rain/Meteor is the roadmap "pixel mapping" item.
+### 4 · A ready-made effects library — ◼ shipped 2026-09-06 (single-effect; composites still open)
+**Touches:** ui, docs (no engine change, as predicted)
+**Shipped:** `ui/src/fxLibrary.ts` — 46 named, categorised, described factory
+presets across Intensity, Colour, Movement, Beam, and Strobe and white. App
+data, not show data: applying one copies it into the part with a fresh id, the
+same copy-on-apply the user-authored pool already used, so nothing in the
+catalogue is ever live and nothing a look does can edit it.
+
+`ui/src/components/FxPicker.tsx` is the picker the bare `<select>` was not:
+search over name, description and category; category filter; each row showing
+its target, wave and speed in musical time ("dimmer · sine · a bar") plus a
+sentence on when to reach for it. Presets whose target the group cannot take
+are flagged rather than hidden, using `capableTargets()` — extracted so the
+target menu and the picker give one answer instead of two that drift.
+
+**Preview is the real thing.** Picking applies to the part immediately and
+leaves the picker open, so the next pick REPLACES it: you audition by clicking
+down the list and watching the stage. Keep closes on what is playing; Cancel
+takes it back out; Escape is Cancel. Every write is an ordinary look edit, so
+undo covers it and no preview state exists on the wire to go stale.
+
+The catalogue is validated in `engine/test/smoke.ts`: 30–70 entries, unique
+ids and names, every category populated, full-sentence descriptions, nothing
+inert as shipped, search behaviour — and the real one, that every preset
+survives `repairEffect` **unchanged**, which is the difference between "the
+engines will accept this" and "the engines will quietly rewrite it".
+
+**Not done, and honestly:** composite presets (Fire = random dimmer + colour
+drift + white flicker) still need `FxPreset.effect → effects[]` across both
+engines and the parity round-trip — the L this entry warned about, and the
+next slice if it is wanted. And the presets are authored from the effect
+maths, not auditioned on Colm's rig: they are structurally correct and each
+one renders, but which of them are actually *good* is a judgement only the
+real rig can make.
 
 ### 5 · Pan/tilt calibration — ◧ partial — L (M without the wizard)
 **Touches:** shared/types.ts, core, engine, parity, ui, previz, previz3d, docs

@@ -1319,3 +1319,50 @@ button.warnchip { background: none; cursor: pointer; }
 .setupstep.done { color: var(--good); border-color: var(--good); }
 .setupstep.next { color: var(--accent); border-color: var(--accent); }
 .setupmark { font-variant-numeric: tabular-nums; }
+
+/* ---------- the effects catalogue picker (backlog #4) ----------
+   Fixed, like the project menu, for the same reason: it opens from a button
+   inside a scrolling tab, and an absolutely-positioned child would be clipped
+   to it. Wider than a menu because every row carries a sentence — the
+   description is what tells two presets with the same wave apart. */
+.fxpicker {
+  position: fixed;
+  z-index: 60;
+  width: var(--size-modal-w);
+  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-8);
+  background: var(--panel2);
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-menu);
+}
+.fxcats { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.fxlist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* Deep enough to browse rather than peer through a letterbox — the
+     catalogue is 45 entries and each row is three lines. Viewport-relative so
+     it still fits a laptop screen with the panel opened upward. */
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.fxitem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-7);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.fxitem:hover { background: var(--raise); border-color: var(--line); }
+/* the one currently playing on the part — this list is an audition, not a menu */
+.fxitem.on { background: var(--accent-soft); border-color: var(--accent); }
+.fxname { color: var(--text); }
+.fxitem.on .fxname { color: var(--accent); }

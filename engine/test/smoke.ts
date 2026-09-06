@@ -24,6 +24,8 @@ const demoProject = (): Project =>
 import { readFileSync } from 'node:fs';
 import { MAX_THROW, buildOccluders, hitsPropFootprint, standingHeightAt, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
 import { GO_DARK_FRAMES, OutputGate } from '../output.ts';
+import { FX_CATEGORIES, FX_LIBRARY, fxSearch } from '../../ui/src/fxLibrary.ts';
+import { repairEffect } from '../../shared/types.ts';
 import { parseOsc } from '../osc.ts';
 import { ArtnetOut } from '../artnet.ts';
 import { BeatClock } from '../clock.ts';
@@ -939,6 +941,56 @@ await new Promise<void>((resolve) => {
     const st = new EngineState(sanitizeProject(demoProject())!);
     check('gate: engine state boots offline, whatever the show says', st.transmit === false);
   }
+}
+
+// --- the factory effects catalogue (backlog #4) -----------------------------
+// It is app data that becomes SHOW data the moment anyone applies one, so it
+// has to satisfy the same validator an untrusted project file does — and
+// satisfy it without being changed, which is the difference between "the
+// engine will accept this" and "the engine will quietly rewrite this".
+{
+  check(
+    'fx library: between 30 and 70 presets',
+    FX_LIBRARY.length >= 30 && FX_LIBRARY.length <= 70,
+    `${FX_LIBRARY.length} presets`,
+  );
+  const ids = new Set(FX_LIBRARY.map((p) => p.id));
+  check('fx library: ids are unique', ids.size === FX_LIBRARY.length);
+  const names = new Set(FX_LIBRARY.map((p) => p.name));
+  check('fx library: names are unique', names.size === FX_LIBRARY.length);
+
+  const cats = new Set(FX_CATEGORIES.map((c) => c.id));
+  const strayCat = FX_LIBRARY.filter((p) => !cats.has(p.category));
+  check('fx library: every preset is in a category the picker shows', strayCat.length === 0, strayCat.map((p) => p.id).join(','));
+  const emptyCat = FX_CATEGORIES.filter((c) => !FX_LIBRARY.some((p) => p.category === c.id));
+  check('fx library: no category is empty', emptyCat.length === 0, emptyCat.map((c) => c.id).join(','));
+
+  const noDesc = FX_LIBRARY.filter((p) => p.description.trim().length < 20 || !p.description.trim().endsWith('.'));
+  check('fx library: every preset has a described, full-sentence purpose', noDesc.length === 0, noDesc.map((p) => p.id).join(','));
+
+  // The real assertion: repairEffect accepts each one AND leaves it alone.
+  const rejected: string[] = [];
+  const rewritten: string[] = [];
+  for (const p of FX_LIBRARY) {
+    const asEffect = { ...p.effect, id: p.id };
+    const fixed = repairEffect(asEffect);
+    if (!fixed) { rejected.push(p.id); continue; }
+    if (JSON.stringify(fixed) !== JSON.stringify(asEffect)) rewritten.push(p.id);
+  }
+  check('fx library: every preset survives repairEffect', rejected.length === 0, rejected.join(','));
+  check('fx library: and none of them is repaired on the way through', rewritten.length === 0, rewritten.join(','));
+
+  // Knobs the validator tolerates but an operator would call broken: a rate of
+  // zero or a depth of zero is an effect that renders nothing at all, and both
+  // engines skip it outright (shared/effects.ts, core/src/effects.rs).
+  const inert = FX_LIBRARY.filter((p) => p.effect.rate <= 0 || p.effect.size <= 0 || p.effect.mix <= 0 || p.effect.bypass);
+  check('fx library: no preset is inert as shipped', inert.length === 0, inert.map((p) => p.id).join(','));
+
+  check('fx library: search matches a name', fxSearch(FX_LIBRARY, 'rainbow').length > 0);
+  check('fx library: search matches words only in a description', fxSearch(FX_LIBRARY, 'downbeat').length > 0);
+  check('fx library: search matches a category label', fxSearch(FX_LIBRARY, 'movement').length > 0);
+  check('fx library: an unmatched search returns nothing rather than everything', fxSearch(FX_LIBRARY, 'zzzznope').length === 0);
+  check('fx library: an empty search returns the lot', fxSearch(FX_LIBRARY, '  ').length === FX_LIBRARY.length);
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

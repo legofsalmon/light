@@ -81,10 +81,34 @@ four numbers, and no per-fixture programming.
 Because positions come from the patch, a spread by `x` keeps working when you move
 a fixture. Nothing needs re-teaching.
 
-## Reusing an effect
+## Ready-made effects
+
+**browse…** beside `+ effect` opens the catalogue: 46 named starting points in
+five groups — Intensity, Colour, Movement, Beam, and Strobe and white — each
+with its target, its wave and its speed in musical time, and a sentence on when
+to reach for it. Search matches the name, the description and the group, so
+"beat", "slow" and "chase" all find something.
+
+Picking one applies it to the part **straight away** and leaves the list open,
+so the next pick swaps it out: you audition by clicking down the list and
+watching the stage. **keep** closes on whatever is playing, **cancel** (or
+Escape) takes it back out, and either way it is an ordinary edit that `⌘Z`
+undoes by name.
+
+A preset whose target this group cannot take is flagged rather than hidden — a
+pan sweep is still worth reading about on a rig of pars, and the same effect is
+useful the moment you drop it on a group that moves.
+
+Every preset is a starting point, not a finished thing. The knobs above are all
+still there, and the ones that came from the catalogue are no different from the
+ones you build by hand.
+
+## Reusing your own
 
 `☆` saves an effect to the FX pool as a preset, ready to drop onto another part.
-The pool is per show.
+The pool is per show, and it is the same copy-on-apply as the catalogue: the
+preset is a stamp, so editing a look never rewrites it and editing it never
+changes a look already using it.
 
 ## Worked examples
 
