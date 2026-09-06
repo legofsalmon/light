@@ -91,8 +91,9 @@ type Store = {
   lastMidi: string | null;
   /** last GDTF/MVR import outcome, shown in the Fixtures tab */
   importMsg: { ok: boolean; text: string } | null;
-  /** transient engine notice shown in the top bar */
-  toast: { ok: boolean; text: string; at: number } | null;
+  /** notices, oldest first — failures stay until dismissed, the rest expire */
+  toasts: Toast[];
+  dismissToast: (id: number) => void;
   /** known project files on the engine's disk (for the project menu) */
   projects: { current: string; list: { slug: string; name: string }[] } | null;
   /** undo depth available (for button/menu state) */
@@ -176,15 +177,22 @@ const saveFlag = (key: string, v: boolean) => {
   try { localStorage.setItem(key, v ? '1' : '0'); } catch { /* non-essential */ }
 };
 
-/** A local notice in the top bar's toast slot, with the expiry the engine's own
- *  toasts get — one set without it sticks on screen forever. */
+export type Toast = { id: number; ok: boolean; text: string; at: number; sticky: boolean };
+
+/** A notice from this window. Same rules as the engine's: a failure stays
+ *  until dismissed — SAVE FAILED must not vanish while nobody is looking — and
+ *  anything else expires, because one set without an expiry stuck forever. */
 export function notify(text: string, ok = false) {
-  const at = Date.now();
-  useStore.setState({ toast: { ok, text, at } });
-  setTimeout(() => {
-    const t = useStore.getState().toast;
-    if (t && t.at === at) useStore.setState({ toast: null });
-  }, 6000);
+  pushToast(text, ok);
+}
+
+let toastSeq = 0;
+export function pushToast(text: string, ok: boolean) {
+  const id = ++toastSeq;
+  const toast: Toast = { id, ok, text, at: Date.now(), sticky: !ok };
+  // six at most: a burst of notices must not paper the screen
+  useStore.setState((s) => ({ toasts: [...s.toasts.slice(-5), toast] }));
+  if (!toast.sticky) setTimeout(() => useStore.getState().dismissToast(id), 5000);
 }
 
 let ws: WebSocket | null = null;
@@ -366,7 +374,8 @@ export const useStore = create<Store>()((set, get) => ({
   engineMidi: false,
   lastMidi: null,
   importMsg: null,
-  toast: null,
+  toasts: [],
+  dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   projects: null,
   undoDepth: 0,
   redoDepth: 0,
@@ -611,15 +620,7 @@ function flushPending(engineSlug: string): void {
   }
   for (const m of others) ws?.send(m);
   if (dropped > 0) {
-    const at = Date.now();
-    useStore.setState({
-      toast: { ok: false, text: `${dropped} offline edit(s) discarded — the engine changed project`, at },
-    });
-    // toasts set outside the WS 'toast' handler had no expiry and stuck forever
-    setTimeout(() => {
-      const t = useStore.getState().toast;
-      if (t && t.at === at) useStore.setState({ toast: null });
-    }, 6000);
+    pushToast(`${dropped} offline edit(s) discarded — the engine changed project`, false);
   }
 }
 
@@ -721,11 +722,7 @@ function connect(): void {
         useStore.setState({ projects: { current: ev.current, list: ev.list } });
       }
     } else if (ev.type === 'toast') {
-      useStore.setState({ toast: { ok: ev.ok, text: ev.message, at: Date.now() } });
-      setTimeout(() => {
-        const t = useStore.getState().toast;
-        if (t && Date.now() - t.at >= 4900) useStore.setState({ toast: null });
-      }, 5000);
+      pushToast(ev.message, ev.ok);
     }
   };
   ws.onclose = () => {

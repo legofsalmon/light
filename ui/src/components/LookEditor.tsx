@@ -126,7 +126,53 @@ function groupBeamCaps(project: Project, groupId: string): BeamCaps {
 }
 
 function Enable({ on, toggle }: { on: boolean; toggle: () => void }) {
-  return <div className={`enable ${on ? 'on' : ''}`} onClick={toggle} />;
+  return (
+    <div
+      className={`enable ${on ? 'on' : ''}`}
+      role="checkbox"
+      aria-checked={on}
+      tabIndex={0}
+      title={on ? 'this look sets it — click to leave it to the layers below' : 'left to the layers below — click to have this look set it'}
+      onClick={toggle}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+    />
+  );
+}
+
+/** Seconds, committed on blur/Enter — per keystroke, "1.5" passed through "1"
+ *  and wrote it to the show (review M12). Empty means "use the layer's fade". */
+function FadeInput({ value, placeholder, onCommit }: {
+  value: number | undefined;
+  placeholder: number;
+  onCommit: (v: number | undefined) => void;
+}) {
+  const shown = value === undefined ? '' : String(value);
+  const [draft, setDraft] = useState(shown);
+  const ref = React.useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (document.activeElement !== ref.current) setDraft(value === undefined ? '' : String(value));
+  }, [value]);
+  const commit = () => {
+    const t = draft.trim();
+    const v = t === '' ? undefined : Math.max(0, Number(t));
+    if (v !== undefined && !Number.isFinite(v)) { setDraft(shown); return; }
+    if (v !== value) onCommit(v);
+  };
+  return (
+    <input
+      ref={ref}
+      className="num"
+      type="number"
+      step="0.1"
+      min="0"
+      placeholder={String(placeholder)}
+      title="fade in seconds — empty uses the layer's fade. Commits on Enter or when the field loses focus"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') { commit(); e.currentTarget.blur(); } }}
+    />
+  );
 }
 
 /** Small integer editor that commits on blur/Enter — the same discipline as
@@ -381,6 +427,9 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
             <option key={g.id} value={g.id}>{g.name}</option>
           ))}
         </select>
+        {!project.groups.some((g) => g.id === part.groupId) && (
+          <span className="prose" style={{ color: 'var(--warn)' }}>no group — this part drives nothing until it has one</span>
+        )}
         <div className="grow" />
         <button
           className="btn small ghost"
@@ -454,7 +503,12 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
                   return (
                     <i
                       key={i}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`colour swatch ${i + 1}`}
+                      title="set this colour"
                       style={{ background: rgbHex(r, g, b) }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
                       onClick={() => {
                         // a swatch IS a hue+sat pair: with ride armed or the
                         // colour already ridden it must go through the soft
@@ -586,8 +640,8 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
         {BEAM_PARAMS.every((k) => !beamCaps[k]) && groupHasDeadBeamChannels(project, part.groupId) && (
           <div className="row">
             <span className="label" style={{ color: 'var(--warn)' }}>⚠</span>
-            <span className="label" style={{ whiteSpace: 'normal', lineHeight: 1.5 }}>
-              this group's fixtures list zoom, focus, beam size, soften or warmth channels that their
+            <span className="prose">
+              This group's fixtures list zoom, focus, beam size, soften or warmth channels that their
               profile does not drive — re-import their GDTF in the Fixtures tab to get
               the controls
             </span>
@@ -731,6 +785,7 @@ export function LookEditor() {
   const send = useStore((s) => s.send);
   const ride = useStore((s) => s.ride);
   const setRide = useStore((s) => s.setRide);
+  const setView = useStore((s) => s.setView);
 
   if (!sel) return <div className="hint">Select a pad to edit its look — click an empty pad to start a new one (it won't fire the layer).</div>;
 
@@ -748,6 +803,23 @@ export function LookEditor() {
     // Looks are a shared pool across decks, so filling a cell from the pool is
     // the primary authoring move — without it a new deck is 32 dead cells.
     const pool = Object.values(project.looks).sort((a, b) => a.name.localeCompare(b.name));
+    // A look needs a group to drive. With none, "+ create look here" made a
+    // part with an empty group and every row hid — a dead end exactly where a
+    // new user lands after New Project (review M8). Say what to do instead.
+    if (project.groups.length === 0) {
+      return (
+        <div className="hint">
+          <div style={{ marginBottom: 10 }}>
+            Empty pad — {layer.name} · column {sel.col + 1}
+          </div>
+          <div className="prose" style={{ maxWidth: 420, margin: '0 auto 12px' }}>
+            Nothing to light yet — a look drives a group of fixtures, and this show has none. Add
+            fixtures in the Rig view and make a group; then a pad here can hold a look.
+          </div>
+          <button className="btn" onClick={() => setView('patch')}>Rig view</button>
+        </div>
+      );
+    }
     return (
       <div className="hint">
         <div style={{ marginBottom: 10 }}>
@@ -794,7 +866,7 @@ export function LookEditor() {
             ))}
           </select>
         </div>
-        <div className="label" style={{ marginTop: 8 }}>
+        <div className="prose" style={{ marginTop: 8 }}>
           {pool.length} look{pool.length === 1 ? '' : 's'} in this project’s pool — the same look can sit in
           many pads and songs.
         </div>
@@ -827,15 +899,7 @@ export function LookEditor() {
           flash
         </button>
         <span className="label">fade</span>
-        <input
-          className="num"
-          type="number"
-          step="0.1"
-          min="0"
-          placeholder={String(layer.fade)}
-          value={look.fade ?? ''}
-          onChange={(e) => editLook((lk) => (lk.fade = e.target.value === '' ? undefined : Math.max(0, Number(e.target.value))))}
-        />
+        <FadeInput value={look.fade} placeholder={layer.fade} onCommit={(v) => editLook((lk) => (lk.fade = v))} />
         <span className="label">s</span>
         <button className="btn small ghost" onClick={() => send({ type: 'trigger', layerId: layer.id, col: sel.col })}
             title="fire this look on its layer now, exactly as clicking the pad would">

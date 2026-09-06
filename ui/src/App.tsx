@@ -11,6 +11,8 @@ import { EditorPane } from './components/EditorPane.tsx';
 import { LicenceGate } from './components/LicenceGate.tsx';
 import { licenceAvailable, licenceStatus, type LicenceStatus } from './licence.ts';
 import { AdminModal } from './components/AdminModal.tsx';
+import { Toasts } from './components/Toasts.tsx';
+import { updateAvailable, updateStatus } from './update.ts';
 
 /** Keeps one crashing region from blanking the whole console mid-show: the
  *  grid, masters, and blackout survive a previz or editor exception. */
@@ -105,6 +107,22 @@ export function App() {
     if (!licenceAvailable()) return;
     licenceStatus().then(setGate).catch(() => setGate(null));
   }, []);
+  // Two things that had no presence outside the settings modal: a trial about
+  // to end, and an update waiting (review M5). The top bar shows a chip and a
+  // dot; both are shell-only, so a browser or the tablet never asks.
+  const [updateWaiting, setUpdateWaiting] = useState(false);
+  useEffect(() => {
+    if (!updateAvailable()) return;
+    let stop = false;
+    const look = () => updateStatus().then((s) => { if (!stop) setUpdateWaiting(!!s.available); }).catch(() => {});
+    const first = setTimeout(look, 15_000); // the shell's own check runs at startup; give it a moment
+    const every = setInterval(look, 30 * 60_000);
+    return () => { stop = true; clearTimeout(first); clearInterval(every); };
+  }, []);
+  const trialDaysLeft =
+    gate?.claims && gate.claims.edition.toLowerCase() === 'trial'
+      ? Math.max(0, Math.ceil((gate.claims.exp - Date.now() / 1000) / 86_400))
+      : null;
   // The previz rides across the top of every view (rigs are wider than tall);
   // each view remembers its own hide state, and the full-screen previz view is
   // never hidden — it IS the previz.
@@ -225,7 +243,7 @@ export function App() {
         </div>
         <div className="dot">{connected ? 'loading project…' : 'connecting to engine…'}</div>
         {stalled && !connected && (
-          <div className="label" style={{ maxWidth: 380, textAlign: 'center', lineHeight: 1.6 }}>
+          <div className="prose" style={{ maxWidth: 380, textAlign: 'center' }}>
             The engine is not responding. Another copy of LIGHT (or other software) may be holding
             port {WS_PORT} — quit it and reopen, or check Console.app for “[light]” errors.
           </div>
@@ -256,7 +274,7 @@ export function App() {
             : 'ENGINE OFFLINE — reconnecting… nothing you press is reaching the rig'}
         </div>
       )}
-      <Region name="top bar"><TopBar onOpenAdmin={() => setAdmin(true)} /></Region>
+      <Region name="top bar"><TopBar onOpenAdmin={() => setAdmin(true)} updateWaiting={updateWaiting} trialDaysLeft={trialDaysLeft} /></Region>
       {/* Unmounted, not hidden — for the collapsed band too. A previz left
           mounted behind another panel keeps its requestAnimationFrame loop and
           its WebGL context running for a view nobody is looking at — on a
@@ -274,8 +292,11 @@ export function App() {
       {bandHidden && (
         <div
           className="previzstrip"
+          role="button"
+          tabIndex={0}
           title="show the stage (hidden in this view only)"
           onClick={() => togglePreviz(view)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePreviz(view); } }}
         >
           <span className="label">stage ▾</span>
         </div>
@@ -304,7 +325,10 @@ export function App() {
               ? 'show the look library'
               : 'the look library needs a wider window than this — the pads keep the width here'
           }
+          role="button"
+          tabIndex={0}
           onClick={() => libraryFits && revealLibrary()}
+          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && libraryFits) { e.preventDefault(); revealLibrary(); } }}
         >
           <span className="label">looks ◂</span>
         </div>
@@ -328,7 +352,10 @@ export function App() {
               ? 'show the look editor'
               : 'the look editor needs a wider window than this — the pads keep the width here'
           }
+          role="button"
+          tabIndex={0}
           onClick={() => editorFits && revealEditor()}
+          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && editorFits) { e.preventDefault(); revealEditor(); } }}
         >
           <span className="label">editor ◂</span>
         </div>
@@ -339,6 +366,7 @@ export function App() {
           <Region name="bottom panel"><BottomPanel /></Region>
         </div>
       )}
+      <Toasts />
       {admin && <AdminModal onClose={() => setAdmin(false)} />}
       <DialogHost />
     </div>

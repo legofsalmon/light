@@ -255,7 +255,7 @@ export function ShareFixtures(): React.ReactElement | null {
 
       {stale.length > 0 && (
         <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-          <span className="label">
+          <span className="prose">
             {stale.length} profile{stale.length === 1 ? '' : 's'} predate the beam
             parameters — zoom, focus, beam size and soften are patched but not driven
           </span>

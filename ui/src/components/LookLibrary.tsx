@@ -65,8 +65,8 @@ export function LookLibrary() {
       </div>
       <div className="librarylist">
         {looks.length === 0 && (
-          <div className="label" style={{ padding: '14px 6px', whiteSpace: 'normal', lineHeight: 1.6 }}>
-            {q ? 'no looks match' : 'no looks yet — click an empty pad to start one'}
+          <div className="prose" style={{ padding: '14px 6px' }}>
+            {q ? 'No looks match.' : 'No looks yet — click an empty pad to start one.'}
           </div>
         )}
         {looks.map((look) => {

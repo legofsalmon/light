@@ -4,7 +4,7 @@ import { FIXTURE_FORMS, inferFixtureForm, uid } from '../../../shared/types.ts';
 import { PROFILES } from '../../../shared/profiles.ts';
 import { allProfileMetas, profileMeta } from '../profileInfo.ts';
 import { createGroupFromSelection } from '../selection.ts';
-import { ScrubNumInput } from './inputs.tsx';
+import { ScrubNumInput, TextField } from './inputs.tsx';
 import { ShareFixtures } from './ShareFixtures.tsx';
 import { useStore } from '../store.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
@@ -496,6 +496,12 @@ export function PatchView() {
           />
         );
       })()}
+      {project.fixtures.length === 0 && (
+        <div className="prose" style={{ margin: '6px 0 10px' }}>
+          No fixtures yet — add one, or import a GDTF for a fixture or an MVR for the whole plot.
+          Each fixture takes a universe and a DMX address; the plan above is where it hangs.
+        </div>
+      )}
       <div onPointerDown={onTablePointerDown}>
         <div className="sectionhead">Fixtures</div>
         <table className="tbl">
@@ -536,14 +542,15 @@ export function PatchView() {
                   }
                 >
                   <td>
-                    <input
+                    <TextField
                       className="text"
                       title="fixture name — shown in the plan and in group lists"
                       style={{ width: 130 }}
+                      entityId={f.id}
                       value={f.name}
-                      onChange={(e) => mutate((p) => {
+                      onCommit={(v) => mutate((p) => {
                         const x = p.fixtures.find((y) => y.id === f.id);
-                        if (x) x.name = e.target.value;
+                        if (x) x.name = v;
                       })}
                     />
                   </td>
@@ -1044,15 +1051,16 @@ export function PatchView() {
         </div>
         {project.groups.map((g) => (
           <div key={g.id} className="row" style={{ marginBottom: 6, alignItems: 'flex-start' }}>
-            <input
+            <TextField
               className="text"
-              title="group name. Renaming a generated group does not promote it — use the pin for that"
+              title="group name — renaming a generated group makes it yours, and ⟳ leaves it alone after that"
               style={{ width: 130 }}
+              entityId={g.id}
               value={g.name}
-              onChange={(e) => mutate((p) => {
+              onCommit={(v) => mutate((p) => {
                 const x = p.groups.find((y) => y.id === g.id);
-                if (!x) return;
-                x.name = e.target.value;
+                if (!x || x.name === v) return;
+                x.name = v;
                 delete x.auto; // renamed = promoted to authored: regenerate keeps its hands off
               })}
             />
@@ -1082,6 +1090,10 @@ export function PatchView() {
                       key={`${f.id}:${hi}`}
                       title={on ? `chase position ${pos + 1}` : 'click to add to this group'}
                       className={`headchip ${on ? 'on' : ''}`}
+                      role="checkbox"
+                      aria-checked={on}
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
                       onClick={() => mutate((p) => {
                         const x = p.groups.find((y) => y.id === g.id);
                         if (!x) return;
@@ -1170,7 +1182,7 @@ function StageTable() {
     return (
       <div className="patchsec">
         <div className="sectionhead">Stage</div>
-        <div className="label">
+        <div className="prose">
           Nothing drawn yet — add truss, risers or screens from the stage's “+ structure…” menu,
           then drag them into place in the 2D plan.
         </div>

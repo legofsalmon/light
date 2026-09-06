@@ -97,6 +97,27 @@ const Cell = React.memo(function Cell({
     setDropHover(false);
   };
 
+  // One press, two inputs. An empty pad is also where you START a look — the
+  // editor invites "click an empty pad to create one" — so a stray press while
+  // building must NOT black out a layer that is live: selecting is enough, and
+  // the deliberate stop is the ✕ on the layer head. When the layer is already
+  // idle the clear is harmless and kept, so the Resolume "empty slot stops the
+  // layer" reflex still works where it cannot hurt.
+  const fire = () => {
+    if (learnMode) {
+      useStore.getState().armLearn({ kind: 'cell', layerId: layer.id, col });
+      return;
+    }
+    if (!look) {
+      if (!liveLookId) send({ type: 'clearLayer', layerId: layer.id });
+      return;
+    }
+    send({ type: 'trigger', layerId: layer.id, col });
+  };
+  const release = () => {
+    if (!learnMode && look?.flash) send({ type: 'release', layerId: layer.id, col });
+  };
+
   return (
     <div
       className={`cell ${look ? '' : 'empty'} ${active ? 'active' : ''} ${staleLive ? 'stale' : ''} ${selected ? 'selected' : ''} ${armed ? 'learn-armed' : ''} ${dropHover ? 'droptarget' : ''}`}
@@ -131,34 +152,29 @@ const Cell = React.memo(function Cell({
               ? 'empty — click to select (layer keeps playing)'
               : 'empty — click to stop the layer'
       }
+      role="button"
+      tabIndex={0}
+      aria-pressed={active}
+      aria-label={look ? `${look.name} — ${layer.name}, column ${col + 1}` : `empty pad — ${layer.name}, column ${col + 1}`}
       onPointerDown={(e) => {
         setSel({ layerId: layer.id, col });
         if (e.button !== 0) return; // right/middle-click must never latch a flash look
-        if (learnMode) {
-          useStore.getState().armLearn({ kind: 'cell', layerId: layer.id, col });
-          return;
-        }
-        // An empty pad is also where you START a look — the editor invites
-        // "click an empty cell to create one". So a stray click while building
-        // must NOT black out a layer that is currently live: selecting is
-        // enough (done above), and the deliberate stop is the ✕ on the layer
-        // head. When the layer is already idle the clear is harmless and kept,
-        // so the Resolume "empty slot stops the layer" reflex still works where
-        // it cannot hurt.
-        if (!look) {
-          if (!liveLookId) send({ type: 'clearLayer', layerId: layer.id });
-          return;
-        }
-        send({ type: 'trigger', layerId: layer.id, col });
-        if (look.flash) {
-          e.currentTarget.setPointerCapture(e.pointerId);
-        }
+        fire();
+        if (look?.flash && !learnMode) e.currentTarget.setPointerCapture(e.pointerId);
       }}
-      onPointerUp={() => {
-        if (!learnMode && look?.flash) send({ type: 'release', layerId: layer.id, col });
+      onPointerUp={release}
+      onPointerCancel={release}
+      // Keyboard: Enter or Space is the press, and letting go releases a flash
+      // look — the same two moments a pointer has.
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        if (e.repeat) return;
+        setSel({ layerId: layer.id, col });
+        fire();
       }}
-      onPointerCancel={() => {
-        if (!learnMode && look?.flash) send({ type: 'release', layerId: layer.id, col });
+      onKeyUp={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') release();
       }}
     >
       {look && (
@@ -305,7 +321,7 @@ function DeckBar() {
   if (decks.length === 0) return null;
 
   return (
-    <div className="deckbar">
+    <div className="deckbar" role="tablist" aria-label="songs">
       <span className="label">song</span>
       <button
         className="btn small ghost"
@@ -339,6 +355,12 @@ function DeckBar() {
           key={d.id}
           ref={d.id === project.activeDeckId ? activeChipRef : undefined}
           className={`deckchip ${d.id === project.activeDeckId ? 'on' : ''}`}
+          role="tab"
+          aria-selected={d.id === project.activeDeckId}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && d.id !== project.activeDeckId) { e.preventDefault(); send({ type: 'switchDeck', deckId: d.id }); }
+          }}
           title="click to switch · double-click to rename"
           onClick={() => {
             // already on this deck: a switch is a no-op, so don't delay the
@@ -580,8 +602,8 @@ function ControlRow() {
             edit
           </button>
         </div>
-        <div className="label" style={{ whiteSpace: 'normal', lineHeight: 1.45 }}>
-          dials — tweak whatever is playing
+        <div className="prose">
+          Dials — tweak whatever is playing
         </div>
       </div>
       {slots.map((c, i) => {
@@ -647,6 +669,36 @@ function ControlRow() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Where the eye is when the rig stays dark: above the pads, not in a tooltip
+ *  (review M3). A pad lights the stage; if nothing reaches the rig, say why here
+ *  — and say what to do about it. Gone the moment an output is on. */
+function RigHint() {
+  const project = useStore((s) => s.project)!;
+  const setView = useStore((s) => s.setView);
+  const setTab = useStore((s) => s.setTab);
+  const noFixtures = project.fixtures.length === 0;
+  const noOutput = !project.universes.some((u) => u.artnet || u.sacn);
+  if (!noFixtures && !noOutput) return null;
+  return (
+    <div className="gridhint">
+      <span className="prose">
+        {noFixtures
+          ? 'Nothing is patched yet — pads light the stage, but there is no rig for them to reach. Add fixtures in the Rig view.'
+          : 'Outputs are off — the stage shows what the rig would do, and nothing reaches it. Turn on Art-Net or sACN in the Output tab when you want it live.'}
+      </span>
+      <button
+        className="btn small"
+        onClick={() => {
+          if (noFixtures) setView('patch');
+          else { setView('split'); setTab('output'); }
+        }}
+      >
+        {noFixtures ? 'Rig view' : 'Output tab'}
+      </button>
     </div>
   );
 }
@@ -730,6 +782,7 @@ export function LookGrid() {
 
   return (
     <>
+    <RigHint />
     <DeckBar />
     <div
       className="lookgrid"
@@ -745,6 +798,9 @@ export function LookGrid() {
         <div
           key={col}
           className={`colhead ${learnTarget?.kind === 'column' && learnTarget.col === col ? 'learn-armed' : ''}`}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); e.currentTarget.click(); } }}
           title={`trigger column ${col + 1}${col < 9 ? ` (key ${col + 1})` : ''} · right-click to rename, insert or delete`}
           onClick={() => {
             if (!useStore.getState().armLearn({ kind: 'column', col })) send({ type: 'column', col });

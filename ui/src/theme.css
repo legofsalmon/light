@@ -58,12 +58,12 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 
 /* All: previz / pads / editor tabs */
 .app.view-split {
-  grid-template-rows: auto 46px var(--previz-h, 30vh) 6px minmax(0, 1fr) 6px var(--bottom-h, 292px);
+  grid-template-rows: auto auto var(--previz-h, 30vh) 6px minmax(0, 1fr) 6px var(--bottom-h, 292px);
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas: 'offline' 'top' 'previz' 'psplit' 'grid' 'hsplit' 'bottom';
 }
 .app.view-split.previz-off {
-  grid-template-rows: auto 46px 18px minmax(0, 1fr) 6px var(--bottom-h, 292px);
+  grid-template-rows: auto auto 18px minmax(0, 1fr) 6px var(--bottom-h, 292px);
   grid-template-areas: 'offline' 'top' 'pstrip' 'grid' 'hsplit' 'bottom';
 }
 
@@ -72,7 +72,7 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
    a collapsed panel becomes an 18px reveal strip occupying the same area, and
    its splitter track goes to zero. One template, every combination. */
 .app.view-pads {
-  grid-template-rows: auto 46px var(--previz-h, 30vh) 6px minmax(0, 1fr);
+  grid-template-rows: auto auto var(--previz-h, 30vh) 6px minmax(0, 1fr);
   grid-template-columns:
     minmax(0, 1fr)
     var(--lsplit-w, 6px) var(--library-w, 280px)
@@ -85,7 +85,7 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
     'grid lsplit library esplit editor';
 }
 .app.view-pads.previz-off {
-  grid-template-rows: auto 46px 18px minmax(0, 1fr);
+  grid-template-rows: auto auto 18px minmax(0, 1fr);
   grid-template-areas:
     'offline offline offline offline offline'
     'top top top top top'
@@ -96,18 +96,18 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 /* Patch: the 2D plan / the fixtures table — patching is drag-a-row-into-the-
    plan, so the two must share a screen (no audition pane here) */
 .app.view-patch {
-  grid-template-rows: auto 46px var(--previz-h, 30vh) 6px minmax(0, 1fr);
+  grid-template-rows: auto auto var(--previz-h, 30vh) 6px minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas: 'offline' 'top' 'previz' 'psplit' 'bottom';
 }
 .app.view-patch.previz-off {
-  grid-template-rows: auto 46px 18px minmax(0, 1fr);
+  grid-template-rows: auto auto 18px minmax(0, 1fr);
   grid-template-areas: 'offline' 'top' 'pstrip' 'bottom';
 }
 
 /* Previz, full screen — the FOH big-screen view; never collapsed */
 .app.view-previz {
-  grid-template-rows: auto 46px minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas: 'offline' 'top' 'previz';
 }
@@ -295,12 +295,19 @@ select.sel { cursor: pointer; }
 
 .topbar {
   display: flex;
+  /* Below ~1500px the bar takes a second row instead of scrolling its status
+     dots out of reach with no scrollbar to say so (review M4). The grid row
+     above it is auto, so the rows below simply move down. */
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 2px 10px;
+  min-height: 46px;
   padding: 0 12px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
+/* a master fader squashed to its 60px floor is not a master */
+.topbar .fader { flex: 0 0 auto; }
 .wordmark {
   font-weight: 700;
   letter-spacing: 0.42em;
@@ -1117,3 +1124,75 @@ table.tbl th { color: var(--text-dim); }
 .patchsec { margin-top: 18px; }
 .progress { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
 .progress .fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 120ms linear; }
+
+/* ---------- prose: help copy reads as sentences, not as a tracked caption ---------- */
+.prose {
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-dim);
+  white-space: normal;
+}
+
+/* ---------- the rig hint above the pads ---------- */
+.gridhint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line2);
+  border-radius: 3px;
+}
+.gridhint .prose { flex: 1; min-width: 0; }
+
+/* ---------- notices ---------- */
+.toasts {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 440px;
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 8px 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line2);
+  border-left: 3px solid var(--good);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.toast.bad { border-left-color: var(--hot); }
+.toast .toasttext { flex: 1; min-width: 0; }
+
+/* ---------- the trial chip and the cog's update dot ---------- */
+button.warnchip { background: none; cursor: pointer; }
+.btn.cog .badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ---------- keyboard focus: every operable thing shows where focus is (review M13) ---------- */
+.btn:focus-visible, .seg button:focus-visible, .tab:focus-visible, .cell:focus-visible, .colhead:focus-visible,
+.deckchip:focus-visible, .enable:focus-visible, .swatches i:focus-visible, .headchip:focus-visible,
+.chipsel:focus-visible, input.text:focus-visible, input.num:focus-visible, select.sel:focus-visible,
+.previzstrip:focus-visible, .librarystrip:focus-visible, .editorstrip:focus-visible, .warnchip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}

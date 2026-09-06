@@ -25,9 +25,18 @@ export function BottomPanel() {
   const setTab = useStore((s) => s.setTab);
   return (
     <>
-      <div className="tabs">
+      <div className="tabs" role="tablist">
         {TABS.map((t) => (
-          <div key={t.id} className={`tab ${tab === t.id ? 'on' : ''}`} title={t.help} onClick={() => setTab(t.id)}>
+          <div
+            key={t.id}
+            className={`tab ${tab === t.id ? 'on' : ''}`}
+            role="tab"
+            aria-selected={tab === t.id}
+            tabIndex={0}
+            title={t.help}
+            onClick={() => setTab(t.id)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setTab(t.id); } }}
+          >
             {t.label}
           </div>
         ))}

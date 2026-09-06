@@ -199,7 +199,7 @@ export function SyncView() {
             bpm from resolume
           </button>
         </div>
-        <div className="label" style={{ lineHeight: 1.7 }}>
+        <div className="prose">
           Arena ▸ Preferences ▸ OSC → enable <b>OSC Output</b>, address <b>127.0.0.1</b>, port <b>{sync.oscPort}</b>.
           Column launches then fire the matching column here, and Arena's BPM drives all effects.
           Extra addresses: /light/bpm (float) · /light/column (int, 1-based) · /light/blackout (0/1).
@@ -229,7 +229,7 @@ export function SyncView() {
           <div className="grow" />
           <span className="label" style={{ fontFamily: 'var(--mono)' }}>{lastMidi ?? ''}</span>
         </div>
-        <div className="label" style={{ lineHeight: 1.7 }}>
+        <div className="prose">
           {learnMode
             ? 'LEARN ARMED — click a pad, column, or fader, then press/move the control on your device.'
             : 'Click MIDI LEARN in the top bar, click any pad / column / fader, then touch your controller.'}

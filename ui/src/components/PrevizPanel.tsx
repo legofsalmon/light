@@ -124,6 +124,13 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
         >
           measure
         </button>
+        <button
+          className="btn small ghost"
+          title="open the stage in its own window — the native renderer, for a second screen"
+          onClick={() => useStore.getState().send({ type: 'launchPreviz' })}
+        >
+          stage window
+        </button>
         {/* The audition is a second renderer, and it appears whenever a pad is
             selected — which firing one does. Worth it while building; worth
             switching off for a show run from the pads. */}

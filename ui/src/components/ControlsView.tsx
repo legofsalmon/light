@@ -279,7 +279,7 @@ export function ControlsView(): React.ReactElement {
   return (
     <div>
       <div className="sectionhead">Dials — one fader, many parameters</div>
-      <div className="label" style={{ marginBottom: 8 }}>
+      <div className="prose" style={{ marginBottom: 8 }}>
         One fader, many parameters, each through its own min→max bracket (min above max inverts).
         Moves are nudges — live, not stored: Keep/Discard in the top bar apply. MIDI-learnable like any fader.
       </div>
@@ -367,7 +367,7 @@ export function ControlsView(): React.ReactElement {
       </button>
 
       <div className="sectionhead" style={{ marginTop: 18 }}>Pulses — beat-locked waves</div>
-      <div className="label" style={{ marginBottom: 8 }}>
+      <div className="prose" style={{ marginBottom: 8 }}>
         Pure functions of the beat clock (they follow the speed master and tap for free), nudging each
         bound parameter about its value with a ± depth. Depth 0 is silent; negative inverts.
       </div>

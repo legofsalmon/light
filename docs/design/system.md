@@ -76,7 +76,7 @@ Variant names are `Property=Value` in Title Case with State on the columns.
 | Fader | Fader (12: Accent · Dim · Hue × 4 states) | `.fader` |
 | Enable & Swatch | Enable (4) · Swatch (3) | `.enable` `.swatches i` `.swatch.mini` |
 | Chip | Chip (5: Tag · Muted · Finding · Warn · Nudged) · Chip / Selectable (8: Head · Song × 4 states) | `.chip` `.headchip` `.deckchip` `.mutedchip` `.identifychip` `.warnchip` + the NUDGED chip |
-| Status | Status dot (4) · Beat LED (2) · BPM · Offline bar · Toast (2) | `.statusdot` `.beatled` `.bpm` `.offlinebar` and today's top-bar toast |
+| Status | Status dot (4) · Beat LED (2) · BPM · Offline bar · Toast (2) | `.statusdot` `.beatled` `.bpm` `.offlinebar` `.toast` — the bottom-left notice card; failures stay until dismissed |
 | Pad | Pad (9 states) | `.cell` — the two targets: colour block fires, name strip selects |
 | Grid heads | Column head (8) · Layer head (3) · Dial cell (5) · Dial head | `.colhead` `.layerhead` `.ctlcell` `.controlhead` |
 | Song bar | Song bar | `.deckbar` |
@@ -84,7 +84,7 @@ Variant names are `Property=Value` in Title Case with State on the columns.
 | Tabs | Tab (4) · Tab bar | `.tab` `.tabs` |
 | Table | Table header cell (3) · Table row (5) | `table.tbl` and the stub / beamless / dark / selected rows |
 | Look editor | Param row (2) · Effect row (2) · Part card | `.paramrow` `.fxrow` `.parthead`/`.partbody`; the effect row spells out Size · Spread · Offset · Amount |
-| Bars | Top bar · Pane header | `.topbar` `.previzbar` |
+| Bars | Top bar · Pane header | `.topbar` (wraps to a second row below ~1500px; carries the trial chip and the cog's update dot) `.previzbar` (holds the stage-window button) |
 | Shell | Reveal strip (4) · Splitter (4) · Splash · Crashed region | `.previzstrip` `.vsplit` `.splash` `.crashed` |
 | Overlays | Modal (4) · Veil · Popover menu · Marquee | `.modal` `.modalveil`, the project menu, the plan marquee |
 | Monitors | OSC monitor · DMX meter · Progress bar (4) | `.oscmon`, the Output-tab meter, the updater bar |
@@ -105,6 +105,21 @@ under the same conventions and are in `tokens.json`:
 - Space: `space/7`, `space/9` · Type: `size/8_5`
 - Size: `num-w`, `swatch-mini-w/h`, `deckchip-max-w`, `bpm-w`, `nowplaying`, `tab-indicator`, `param-label-w`, `menu-w`, `progress-h`
 - Text styles: `text/hint` `text/segment` `text/chip-muted` `text/chip-warn` `text/chip-head` `text/chip-deck` `text/chip-riding` `text/offline` `text/colhead` `text/control-name` `text/control-midi` `text/library-hint` `text/table-head` `text/project-name` `text/cog` `text/control-sm` `text/strip-vertical` `text/crashed` `text/control-head`
+
+## Copy and focus rules the code now carries
+
+- `.prose` is help copy: 12px, line-height 1.5, sentence case, `text/secondary`. `.label`
+  is a caption. The Controls and Sync paragraphs, the dial-row caption, the empty
+  states and the library's hint are `.prose`; nothing explains itself in tracked caps.
+- `.gridhint` sits above the pads when nothing reaches the rig — no fixtures, or
+  every output off — and says what to do, with the button that does it.
+- Every operable thing is focusable and announces itself: pads (`role=button`,
+  Enter/Space press and release like a pointer), column heads, song chips and tabs
+  (`role=tab`), enables and head chips (`role=checkbox`), swatches, the reveal
+  strips. `:focus-visible` is a 2px accent ring (`box-shadow`, so a learn-armed
+  outline still shows). Dialogs focus the safe button and keep Tab inside.
+- Fields commit on blur or Enter, never per keystroke: fixture name, group name
+  (renaming a generated group makes it yours), look fade.
 
 ## Language
 

@@ -150,7 +150,13 @@ const VIEWS: { id: ViewMode; label: string; title: string; key: string }[] = [
   { id: 'split', label: 'Build', title: 'Build — the stage over the pads and the look editor', key: '4' },
 ];
 
-export function TopBar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
+export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = null }: {
+  onOpenAdmin: () => void;
+  /** a newer build is downloaded-able — a dot on the cog, nothing louder */
+  updateWaiting?: boolean;
+  /** days until a trial ends, or null when this is not a trial */
+  trialDaysLeft?: number | null;
+}) {
   const snap = useStore((s) => s.snap);
   const project = useStore((s) => s.project)!;
   const connected = useStore((s) => s.connected);
@@ -162,7 +168,6 @@ export function TopBar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
   const learnMode = useStore((s) => s.learnMode);
   const send = useStore((s) => s.send);
   const savedFlash = useStore((s) => s.savedFlash);
-  const toast = useStore((s) => s.toast);
   const undoDepth = useStore((s) => s.undoDepth);
   const redoDepth = useStore((s) => s.redoDepth);
 
@@ -403,17 +408,14 @@ export function TopBar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
       >
         midi learn
       </button>
-      <button
-        className="btn ghost"
-        title="open the stage in its own window — the native renderer, for a second screen"
-        onClick={() => send({ type: 'launchPreviz' })}
-      >
-        stage window
-      </button>
-      {toast && (
-        <span className="label" style={{ color: toast.ok ? 'var(--good)' : 'var(--hot)' }}>
-          {toast.text}
-        </span>
+      {trialDaysLeft !== null && trialDaysLeft <= 3 && (
+        <button
+          className="warnchip"
+          title="your trial is nearly over — enter a licence key in settings to keep going"
+          onClick={onOpenAdmin}
+        >
+          {trialDaysLeft === 0 ? 'trial ends today' : trialDaysLeft === 1 ? 'trial ends tomorrow' : `trial ends in ${trialDaysLeft} days`}
+        </button>
       )}
 
       <div className="statusdots">
@@ -424,24 +426,39 @@ export function TopBar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
           title={connected ? 'engine tick rate' : 'the engine is not responding — commands are not reaching the rig'}
         />
         {(() => {
-          // "sending" must reflect the CURRENT config, not the cumulative
-          // packet counter — a warn dot must clear when Art-Net is disabled
-          const sending = project.universes.some((u) => u.artnet);
+          // One dot for the rig, whichever wire it is on (review M2/M3). "sending"
+          // reflects the CURRENT config, not the cumulative packet counter — a
+          // warn dot must clear when Art-Net is disabled. sACN is multicast
+          // with no reply, so an sACN-only rig reads as sending: that is what
+          // LIGHT is doing, and the tooltip says it cannot know what arrived.
+          const artnetOn = project.universes.some((u) => u.artnet);
+          const sacnOn = project.universes.some((u) => u.sacn);
           const nodes = snap?.artnetNodes ?? [];
           const fresh = nodes.filter((n) => n.ageMs < 8000);
           const failed = snap?.artnetPoll === 'failed';
-          const label = fresh.length > 0 ? `sending ·${fresh.length}` : failed ? 'no discovery' : sending ? 'no reply' : 'output off';
-          const title = fresh.length
-            ? 'sending Art-Net to ' + fresh.map((n) => `${n.name} (${n.ip})`).join(', ')
-            : failed
-              ? 'Art-Net discovery unavailable — port 6454 is held by another app (QLC+? a second engine?)'
-              : sending
-                ? 'sending Art-Net, but no node has answered — check the network and node power'
-                : 'Art-Net output is off on every universe — turn it on in the Output tab';
+          const wire = artnetOn && sacnOn ? 'Art-Net + sACN' : artnetOn ? 'Art-Net' : 'sACN';
+          const label = !artnetOn && !sacnOn
+            ? 'output off'
+            : fresh.length > 0
+              ? `sending ·${fresh.length}`
+              : artnetOn && failed
+                ? 'no discovery'
+                : artnetOn
+                  ? sacnOn ? 'sacn · no art-net reply' : 'no reply'
+                  : 'sending sacn';
+          const title = !artnetOn && !sacnOn
+            ? 'Output is off on every universe — the stage shows what the rig would do. Turn on Art-Net or sACN in the Output tab.'
+            : fresh.length
+              ? `sending ${wire} — ` + fresh.map((n) => `${n.name} (${n.ip})`).join(', ')
+              : artnetOn && failed
+                ? 'Art-Net discovery unavailable — port 6454 is held by another app (QLC+? a second engine?)'
+                : artnetOn
+                  ? 'sending Art-Net, but no node has answered — check the network and node power'
+                  : 'sending sACN (E1.31) — multicast has no reply, so this is what LIGHT is doing, not what arrived';
           return (
             <StatusDot
-              ok={fresh.length > 0}
-              warn={sending && fresh.length === 0 && !failed}
+              ok={fresh.length > 0 || (sacnOn && !artnetOn)}
+              warn={artnetOn && fresh.length === 0}
               label={label}
               title={title}
             />
@@ -471,11 +488,11 @@ export function TopBar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
           on the visible edge instead. */}
       <button
         className="btn ghost cog"
-        title="settings — updates, licence"
-        aria-label="settings"
+        title={updateWaiting ? 'settings — an update is waiting' : 'settings — updates, licence'}
+        aria-label={updateWaiting ? 'settings, update waiting' : 'settings'}
         onClick={onOpenAdmin}
       >
-        ⚙
+        ⚙{updateWaiting && <i className="badge" aria-hidden="true" />}
       </button>
     </div>
   );

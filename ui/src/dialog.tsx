@@ -101,6 +101,8 @@ export function DialogHost() {
   const req = queue[0];
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const focusRef = useRef<HTMLButtonElement>(null);
   /** The capture-phase key handler below settles the dialog itself, and its
    *  effect does not re-subscribe per keystroke — so it needs the live text,
    *  not the value closed over when the dialog opened. */
@@ -113,8 +115,14 @@ export function DialogHost() {
     setText(req.input?.initial ?? '');
     // focus after paint so the caret lands in the field, not on the button
     const t = setTimeout(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
+      // A confirm used to focus nothing, so Tab left the veil and a keyboard
+      // user was stranded (review M13). The safe button gets focus: the primary
+      // on an ordinary question, Cancel when the confirming choice is
+      // destructive — Enter still confirms either way.
+      if (inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.select();
+      } else focusRef.current?.focus();
     }, 0);
     return () => clearTimeout(t);
   }, [id, req]);
@@ -144,6 +152,16 @@ export function DialogHost() {
         }
         return;
       }
+      // Tab cycles inside the dialog rather than wandering off into the console
+      if (e.key === 'Tab') {
+        const els = [...(modalRef.current?.querySelectorAll<HTMLElement>('input, button') ?? [])];
+        if (els.length) {
+          e.preventDefault();
+          const i = els.indexOf(document.activeElement as HTMLElement);
+          els[e.shiftKey ? (i <= 0 ? els.length - 1 : i - 1) : (i + 1) % els.length].focus();
+        }
+        return;
+      }
       // A modal must swallow the app's global hotkeys: without this, typing
       // over a confirm dialog still fired cues (1-9), tap (T) and blackout (B)
       // on the rig underneath it.
@@ -156,6 +174,7 @@ export function DialogHost() {
 
   if (!req) return null;
   const answer = (value: string) => settle(req.id, req.input ? (value === 'ok' ? text.trim() || null : null) : value);
+  const safe = req.choices.find((c) => c.primary && !c.danger) ?? req.choices.find((c) => c.value === 'cancel') ?? req.choices[0];
 
   return (
     <div
@@ -164,7 +183,7 @@ export function DialogHost() {
         if (e.target === e.currentTarget) settle(req.id, null);
       }}
     >
-      <div className="modal panel" role="dialog" aria-modal="true" aria-label={req.title}>
+      <div className="modal panel" role="dialog" aria-modal="true" aria-label={req.title} ref={modalRef}>
         <div className="modaltitle">{req.title}</div>
         {req.body && <div className="modalbody">{req.body}</div>}
         {req.input && (
@@ -187,6 +206,7 @@ export function DialogHost() {
           {req.choices.map((c) => (
             <button
               key={c.value}
+              ref={c === safe ? focusRef : undefined}
               className={`btn small ${c.primary ? 'on' : ''} ${c.danger ? 'danger' : 'ghost'}`}
               onClick={() => answer(c.value)}
             >
