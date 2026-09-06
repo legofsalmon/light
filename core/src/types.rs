@@ -986,6 +986,8 @@ pub enum MidiAction {
     Control { control_id: String },
     Column { col: usize },
     LayerMaster { layer_id: String },
+    /// a group submaster on a fader
+    Submaster { group_id: String },
     LayerClear { layer_id: String },
     Grand,
     Speed,
@@ -1154,6 +1156,12 @@ pub struct ControlSnap {
 
 /// One live soft override, as the snapshot carries it.
 #[derive(Debug, Clone, Serialize)]
+pub struct SubSnap {
+    pub id: String,
+    pub v: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SoftSnap {
     pub look_id: String,
@@ -1196,6 +1204,9 @@ pub struct Snapshot {
     /// live soft overrides (P1) — present only while something is ridden
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub soft: Vec<SoftSnap>,
+    /// Group submasters, present only while any is below full.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub submasters: Vec<SubSnap>,
     /// live Named Control positions (P3)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub controls: Vec<ControlSnap>,
@@ -1293,6 +1304,9 @@ pub enum Command {
     SetSpeed { v: f64 },
     SetMaster { v: f64 },
     SetLayerMaster { layer_id: String, v: f64 },
+    /// Pull a whole group's intensity down without touching a look.
+    /// Runtime-only and never saved — see the wire type for why.
+    SetSubmaster { group_id: String, v: f64 },
     SetBlackout { v: bool },
     /// Open or close the transmit gate: whether rendered frames reach the wire
     /// at all. Runtime-only, off at every boot — crate::output.

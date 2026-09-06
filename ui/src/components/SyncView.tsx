@@ -141,6 +141,8 @@ function describeAction(p: Project, a: MidiAction): string {
       return `Clear layer · ${p.layers.find((l) => l.id === a.layerId)?.name ?? '?'}`;
     case 'control':
       return `Dial · ${p.controls?.find((c) => c.id === a.controlId)?.name ?? a.controlId}`;
+    case 'submaster':
+      return `Group level · ${p.groups.find((g) => g.id === a.groupId)?.name ?? a.groupId}`;
     case 'grand':
       return 'Grand master';
     case 'speed':

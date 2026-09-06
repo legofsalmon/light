@@ -69,6 +69,12 @@ Layers apply bottom-to-top. Each has a **master** (scales that layer's intensity
 - **dims** — scales the intensity (dimmer/white) below. This is the FX layer's mode: a chase or pulse modulates *whatever colour the wash is showing* without owning colour itself.
 - **brightest** — the brighter of the two layers wins, on intensity. For strobes and blinders that sit on top.
 
+**Group levels** are a fader per group on the row under the dials: pull a group
+down without touching a look. The lowest level over a head wins rather than
+multiplying, because auto-groups put most heads in two groups. They are never
+saved and ALL STOP clears them — a fixture that must stay out of the show is a
+mute instead.
+
 The **grand master** (top bar) scales all dimmer/white output. **Blackout** (top bar or `B`) zeroes intensity and strobing instantly — it always wins.
 
 ## The look editor

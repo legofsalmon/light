@@ -1431,6 +1431,110 @@ async function main(): Promise<void> {
     await settle(node, rust);
   }
 
+  // --- group submasters (backlog #6). The cases the entry names: one group,
+  // --- two overlapping groups, and stacked with a layer master and blackout.
+  {
+    await armWash('wash-rainbow', 0);
+    both({ type: '_pinClock', effBeat: 0 });
+    await settle(node, rust);
+    const p0 = await currentProject(node);
+    const wash = p0.layers.find((l) => l.id === 'layer-wash')!;
+    const live = wash.cells[6];
+    const groupId = p0.looks[live!].parts[0].groupId;
+    const lit = () => (node.snap?.heads ?? []).filter((h) => h.i > 0).length;
+    const peak = () => Math.max(0, ...(node.snap?.heads ?? []).map((h) => h.i));
+
+    check('submaster: something is lit to pull down', lit() > 0 && peak() > 0.5, `peak ${peak()}`);
+    check(
+      'submaster: both engines start with none set',
+      (node.snap?.submasters ?? []).length === 0 && (rust.snap?.submasters ?? []).length === 0,
+    );
+    const full = peak();
+
+    both({ type: 'setSubmaster', groupId, v: 0.5 });
+    await settle(node, rust);
+    compareDmx('submaster: one group at half parity', node, rust);
+    check(
+      'submaster: half means half',
+      Math.abs(peak() - full * 0.5) < 0.02,
+      `peak ${peak()} against ${full}`,
+    );
+    check(
+      'submaster: and both engines report it',
+      JSON.stringify(node.snap?.submasters) === JSON.stringify(rust.snap?.submasters),
+      `node=${JSON.stringify(node.snap?.submasters)} rust=${JSON.stringify(rust.snap?.submasters)}`,
+    );
+
+    // A second group over the same heads. Auto-groups put every head in a
+    // per-type group AND a per-truss one, so this is the normal case, not the
+    // exotic one: the LOWEST fader wins. Multiplying would give 0.25 here,
+    // which is what neither fader says.
+    const overlap = structuredClone(await currentProject(node));
+    overlap.groups.push({ id: 'g-overlap', name: 'Overlap', heads: [...overlap.groups.find((g) => g.id === groupId)!.heads] });
+    both({ type: 'updateProject', project: overlap });
+    await sleep(400);
+    both({ type: 'setSubmaster', groupId: 'g-overlap', v: 0.8 });
+    await settle(node, rust);
+    compareDmx('submaster: overlapping groups parity', node, rust);
+    check(
+      'submaster: the lowest fader wins, it does not multiply',
+      Math.abs(peak() - full * 0.5) < 0.02,
+      `peak ${peak()} — 0.5 expected, ${full * 0.25} would be the product`,
+    );
+    both({ type: 'setSubmaster', groupId, v: 1 });
+    await settle(node, rust);
+    check(
+      'submaster: releasing one leaves the other in charge',
+      Math.abs(peak() - full * 0.8) < 0.02,
+      `peak ${peak()} against ${full * 0.8}`,
+    );
+    check(
+      'submaster: full is stored as absent, not as 1',
+      (node.snap?.submasters ?? []).every((x) => x.id !== groupId),
+      JSON.stringify(node.snap?.submasters),
+    );
+
+    // stacked with the layer master, and then blackout over the lot
+    both({ type: 'setLayerMaster', layerId: 'layer-wash', v: 0.5 });
+    await settle(node, rust);
+    compareDmx('submaster: stacked under a layer master parity', node, rust);
+    check(
+      'submaster: it multiplies with the layer master, which is a different stage',
+      Math.abs(peak() - full * 0.8 * 0.5) < 0.02,
+      `peak ${peak()} against ${full * 0.4}`,
+    );
+    both({ type: 'setBlackout', v: true });
+    await settle(node, rust);
+    compareDmx('submaster: blackout over the lot parity', node, rust);
+    check('submaster: blackout still wins', peak() === 0, `peak ${peak()}`);
+    both({ type: 'setBlackout', v: false });
+    both({ type: 'setLayerMaster', layerId: 'layer-wash', v: 1 });
+
+    // a panic clears levels; a deleted group takes its level with it
+    both({ type: 'setSubmaster', groupId: 'g-overlap', v: 0.3 });
+    await settle(node, rust);
+    both({ type: 'allStop' });
+    await settle(node, rust);
+    check(
+      'submaster: a panic clears every level on both engines',
+      (node.snap?.submasters ?? []).length === 0 && (rust.snap?.submasters ?? []).length === 0,
+      `node=${JSON.stringify(node.snap?.submasters)} rust=${JSON.stringify(rust.snap?.submasters)}`,
+    );
+    both({ type: 'setBlackout', v: false });
+    both({ type: 'setSubmaster', groupId: 'g-overlap', v: 0.3 });
+    await sleep(300);
+    const pruned = structuredClone(await currentProject(node));
+    pruned.groups = pruned.groups.filter((g) => g.id !== 'g-overlap');
+    both({ type: 'updateProject', project: pruned });
+    await settle(node, rust);
+    check(
+      'submaster: deleting a group takes its level with it',
+      (node.snap?.submasters ?? []).length === 0 && (rust.snap?.submasters ?? []).length === 0,
+      `node=${JSON.stringify(node.snap?.submasters)} rust=${JSON.stringify(rust.snap?.submasters)}`,
+    );
+    compareDmx('submaster: cleared parity', node, rust);
+  }
+
   // --- movement shapes (backlog #9). One effect writing pan AND tilt from a
   // --- parametric figure, so the two engines have to agree on trig they each
   // --- get from their own platform. Pinned at several points of the lap,

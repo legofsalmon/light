@@ -103,6 +103,16 @@ export class EngineState {
   /** Whether rendered frames reach the wire at all (engine/output.ts).
    *  Runtime-only and OFF at every boot, whatever the show says. */
   transmit = false;
+  /** Group submasters, 0..1, keyed by group id. Only entries BELOW full are
+   *  stored, so an empty map is the common case and the renderer's pass skips
+   *  entirely.
+   *
+   *  Runtime-only and never saved (backlog decision 4): one stored at zero
+   *  would kill that group on the next boot, and "comes up dark and safe" has
+   *  to mean dark for a reason an operator can see. A fixture that must stay
+   *  out of the show across a restart is a MUTE, a different tool that
+   *  survives a panic where a level does not. */
+  submasters = new Map<string, number>();
   /** Whether the rig is holding the frame it was showing while the show
    *  carries on underneath (engine/output.ts). Runtime-only, and released by
    *  blackout, ALL STOP and a project switch: a hold that could swallow a
@@ -458,6 +468,9 @@ export class EngineState {
       case 'blackout':
         if (pressed) this.setBlackout(!this.blackout);
         break;
+      case 'submaster':
+        this.setSubmaster(a.groupId, value);
+        break;
       case 'deckNext':
         if (pressed) this.deckStep(1);
         break;
@@ -514,6 +527,32 @@ export class EngineState {
   /** Blackout always wins. Turning it on releases any freeze, because a hold
    *  that could keep a lit frame on the rig through a blackout is exactly the
    *  thing blackout exists to be incapable of. */
+  /** Set one group's submaster. Full is the ABSENCE of an entry, so a strip
+   *  pushed back up leaves nothing behind for the renderer to walk. */
+  setSubmaster(groupId: string, v: number): void {
+    const x = clamp(v);
+    if (x >= 1) this.submasters.delete(groupId);
+    else this.submasters.set(groupId, x);
+  }
+
+  /** Drop submasters whose group is gone. Called from the renderer's
+   *  per-generation rebuild, beside sweepSoft, for the same reason. */
+  sweepSubmasters(): void {
+    if (this.submasters.size === 0) return;
+    const live = new Set(this.project.groups.map((g) => g.id));
+    for (const id of [...this.submasters.keys()]) {
+      if (!live.has(id)) this.submasters.delete(id);
+    }
+  }
+
+  /** Group submasters for the wire, lowest id first so the two engines
+   *  serialise the same bytes. */
+  submasterEntries(): { id: string; v: number }[] {
+    return [...this.submasters.entries()]
+      .map(([id, v]) => ({ id, v }))
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }
+
   setBlackout(v: boolean): void {
     this.blackout = v;
     if (v) this.frozen = false;
@@ -531,6 +570,7 @@ export class EngineState {
     this.identify = null;
     this.muted.clear();
     this.previewLook = null;
+    this.submasters.clear(); // levels belong to the show they were set in
     // A hold belongs to the show it was taken in; repeating the old show's
     // frame over the new one would be nobody's idea of frozen.
     this.frozen = false;

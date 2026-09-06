@@ -1243,6 +1243,7 @@ fn build_snapshot(
             m
         },
         soft: state.soft_entries(),
+        submasters: state.submaster_entries(),
         controls: state.control_entries(),
         identify: state.identify.clone(),
         overrides: state.overrides.values().map(|m| m.len()).sum(),

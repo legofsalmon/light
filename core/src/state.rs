@@ -297,6 +297,16 @@ pub struct EngineState {
     pub master: f64,
     pub speed: f64,
     pub blackout: bool,
+    /// Group submasters, 0..1, keyed by group id. Only entries BELOW full are
+    /// stored, so an empty map is the common case and the renderer's pass
+    /// skips entirely.
+    ///
+    /// Runtime-only and never saved (backlog decision 4): one stored at zero
+    /// would kill that group on the next boot, and "comes up dark and safe"
+    /// has to mean dark for a reason an operator can see. A fixture that must
+    /// stay out of the show across a restart is a MUTE, which is a different
+    /// tool and survives a panic where a level does not.
+    pub submasters: HashMap<String, f64>,
     /// Whether the rig is holding the frame it was showing while the show
     /// carries on underneath (crate::output). Runtime-only, and released by
     /// blackout, ALL STOP and a project switch: a hold that could swallow a
@@ -357,6 +367,7 @@ impl EngineState {
             master: 1.0,
             speed: 1.0,
             blackout: false,
+            submasters: HashMap::new(),
             frozen: false,
             transmit: false,
             muted: std::collections::HashSet::new(),
@@ -833,6 +844,11 @@ impl EngineState {
                 }
                 false
             }
+            MidiAction::Submaster { group_id } => {
+                let id = group_id.clone();
+                self.set_submaster(&id, value);
+                false
+            }
             MidiAction::Blackout => {
                 if pressed {
                     self.set_blackout(!self.blackout);
@@ -1094,6 +1110,42 @@ impl EngineState {
         });
     }
 
+    /// Set one group's submaster. Full is the absence of an entry, so a strip
+    /// pushed back up leaves nothing behind for the renderer to walk.
+    pub fn set_submaster(&mut self, group_id: &str, v: f64) {
+        let v = clamp01(v);
+        if v >= 1.0 {
+            self.submasters.remove(group_id);
+        } else {
+            self.submasters.insert(group_id.to_string(), v);
+        }
+    }
+
+    /// Drop submasters whose group is gone. Called from the renderer's
+    /// per-generation rebuild, beside sweep_soft, for the same reason: a level
+    /// on a group somebody deleted must not linger and must not come back if
+    /// an id is ever reused.
+    pub fn sweep_submasters(&mut self) {
+        if self.submasters.is_empty() {
+            return;
+        }
+        let live: std::collections::HashSet<&str> =
+            self.project.groups.iter().map(|g| g.id.as_str()).collect();
+        self.submasters.retain(|id, _| live.contains(id.as_str()));
+    }
+
+    /// Group submasters for the wire, lowest id first so the two engines
+    /// serialise the same bytes.
+    pub fn submaster_entries(&self) -> Vec<crate::types::SubSnap> {
+        let mut out: Vec<crate::types::SubSnap> = self
+            .submasters
+            .iter()
+            .map(|(id, v)| crate::types::SubSnap { id: id.clone(), v: *v })
+            .collect();
+        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out
+    }
+
     /// Blackout always wins. Turning it on releases any freeze, because a hold
     /// that could keep a lit frame on the rig through a blackout is exactly
     /// the thing blackout exists to be incapable of.
@@ -1115,6 +1167,7 @@ impl EngineState {
         self.identify = None;
         self.muted.clear();
         self.preview_look = None;
+        self.submasters.clear(); // levels belong to the show they were set in
         // A hold belongs to the show it was taken in; repeating the old show's
         // frame over the new one would be nobody's idea of frozen.
         self.frozen = false;
@@ -1305,6 +1358,7 @@ impl EngineState {
             }
             Command::SetBlackout { v } => self.set_blackout(v),
             Command::SetTransmit { v } => self.transmit = v,
+            Command::SetSubmaster { group_id, v } => self.set_submaster(&group_id, v),
             Command::SetFreeze { v } => self.frozen = v,
             Command::Projects
             | Command::NewProject { .. }
@@ -1336,6 +1390,9 @@ impl EngineState {
                 self.overrides.clear();
                 self.soft.clear(); // rides are transient state; panic drops them too
                 self.control_live.clear();
+                // Levels are transient too. A fixture that must stay out of
+                // the show is MUTED, and mutes deliberately survive this.
+                self.submasters.clear();
                 self.project.settings.haze = 0.0;
                 self.project.settings.haze_fan = 0.0; // the fan is the audible one
                 out.project_changed = true;

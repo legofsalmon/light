@@ -465,6 +465,8 @@ export type MidiAction =
   | { kind: 'control'; controlId: string }
   | { kind: 'column'; col: number }
   | { kind: 'layerMaster'; layerId: string }
+  /** a group submaster on a fader */
+  | { kind: 'submaster'; groupId: string }
   | { kind: 'layerClear'; layerId: string }
   | { kind: 'grand' }
   | { kind: 'speed' }
@@ -711,6 +713,9 @@ export type Snapshot = {
   /** live Named Control positions (P3) — present only while any differ from
    *  their stored value */
   controls?: { id: string; value: number }[];
+  /** Group submasters — present only while any is below full, because that is
+   *  the only time one is doing anything. */
+  submasters?: { id: string; v: number }[];
   /** Art-Net nodes discovered via ArtPoll (present when polling is active) */
   artnetNodes?: { ip: string; name: string; ageMs: number }[];
   /** 'failed' = reply port 6454 is held by another app — discovery unavailable */
@@ -785,6 +790,12 @@ export type Command =
   | { type: 'setSpeed'; v: number }
   | { type: 'setMaster'; v: number }
   | { type: 'setLayerMaster'; layerId: string; v: number }
+  /** Pull a whole group's intensity down without touching a look.
+   *
+   *  Runtime-only and never saved (backlog decision 4): a submaster stored at
+   *  zero would kill that group on the next boot, and "comes up dark and safe"
+   *  has to mean dark for a reason you can see. */
+  | { type: 'setSubmaster'; groupId: string; v: number }
   | { type: 'setBlackout'; v: boolean }
   /** Open or close the transmit gate: whether rendered frames reach the wire
    *  at all. Blackout is the show being dark and is still transmitted; this is

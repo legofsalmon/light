@@ -197,6 +197,13 @@ pub struct Renderer {
     /// Each entry carries the modulator's array index so its per-tick value
     /// can be looked up, and the S&H random seed stays stable.
     mod_index: HashMap<(String, String), Vec<(crate::types::ModBinding, usize)>>,
+    /// group id -> the heads in it, rebuilt on the same generation gate as
+    /// geometry. Walking project.groups on the tick to find a submaster's
+    /// heads would be a scan per fader per frame.
+    sub_index: HashMap<String, Vec<(String, usize)>>,
+    /// Scratch for the submaster pass: head -> the lowest submaster over it.
+    /// Kept on the renderer and cleared rather than allocated per tick.
+    sub_level: HashMap<(String, usize), f64>,
     geom_gen: Option<u64>,
 }
 
@@ -262,6 +269,8 @@ impl Renderer {
             geom: HashMap::new(),
             extents: HashMap::new(),
             mod_index: HashMap::new(),
+            sub_index: HashMap::new(),
+            sub_level: HashMap::new(),
             geom_gen: None,
         }
     }
@@ -343,6 +352,14 @@ impl Renderer {
             self.geom = build_geometry(&st.project);
             self.extents = build_group_extents(&st.project, &self.geom);
             st.sweep_soft();
+            st.sweep_submasters();
+            self.sub_index.clear();
+            for g in &st.project.groups {
+                self.sub_index.insert(
+                    g.id.clone(),
+                    g.heads.iter().map(|h| (h.fixture_id.clone(), h.head)).collect(),
+                );
+            }
             self.mod_index.clear();
             for (mod_idx, m) in st.project.modulators.iter().enumerate() {
                 if !m.on {
@@ -695,6 +712,38 @@ impl Renderer {
             if let Some(o) = heads.get_mut(&ho.key) {
                 o.haze = o.haze.max(st.project.settings.haze);
                 o.fan = o.fan.max(st.project.settings.haze_fan);
+            }
+        }
+
+        // --- group submasters: pull a group down without touching a look ---
+        //
+        // After the layer merge and before the grand master, on dimmer and
+        // white only — masters scale intensity and nothing else (ROADMAP).
+        //
+        // MIN across the groups a head is in, never the product. Auto-groups
+        // put every head in a per-type group AND a per-truss one, so almost
+        // every head is in two: multiplying would take a head in two groups
+        // both at 50% down to 25%, which is not what either fader says. The
+        // lowest fader wins, the way it does on a console.
+        //
+        // Only groups actually pulled down are walked, and an empty map skips
+        // the whole pass — which is the state the rig is in nearly all the time.
+        if !st.submasters.is_empty() {
+            self.sub_level.clear();
+            for (gid, v) in &st.submasters {
+                let Some(heads_in) = self.sub_index.get(gid) else { continue };
+                for key in heads_in {
+                    let e = self.sub_level.entry(key.clone()).or_insert(1.0);
+                    if *v < *e {
+                        *e = *v;
+                    }
+                }
+            }
+            for (key, v) in &self.sub_level {
+                if let Some(o) = heads.get_mut(key) {
+                    o.dimmer = clamp01(o.dimmer * v);
+                    o.white = clamp01(o.white * v);
+                }
             }
         }
 

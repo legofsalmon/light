@@ -1369,3 +1369,34 @@ button.warnchip { background: none; cursor: pointer; }
 .fxitem.on { background: var(--accent-soft); border-color: var(--accent); }
 .fxname { color: var(--text); }
 .fxitem.on .fxname { color: var(--accent); }
+
+/* ---------- group levels, the row under the dials (backlog #6) ----------
+   Scrolls sideways rather than wrapping: a rig with twenty auto-groups would
+   otherwise push the pads off the screen, and this row is a thing you reach
+   for mid-song, not a thing you read. */
+.substrip {
+  display: flex;
+  gap: var(--space-3);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+}
+.subcell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-5);
+  flex: 0 0 var(--size-pad-w);
+  padding: var(--space-6);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.subcell .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* pulled down: the one state worth spotting from across a room */
+.subcell.down { border-color: var(--color-status-nudge); }
+.subcell.down .label { color: var(--color-status-nudge); }

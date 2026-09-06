@@ -483,6 +483,9 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
     case 'setTransmit':
       state.transmit = !!cmd.v;
       break;
+    case 'setSubmaster':
+      state.setSubmaster(cmd.groupId, cmd.v);
+      break;
     case 'setFreeze':
       state.frozen = !!cmd.v;
       break;
@@ -516,6 +519,9 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       state.overrides.clear();
       state.soft.clear(); // rides are transient state; panic drops them too
       state.controlLive.clear();
+      // Levels are transient too. A fixture that must stay out of the show is
+      // MUTED, and mutes deliberately survive this.
+      state.submasters.clear();
       state.project.settings.haze = 0;
       state.project.settings.hazeFan = 0; // the fan is the audible one
       state.onChange?.();
@@ -846,6 +852,7 @@ function loopBody(): void {
       ...(state.muted.size > 0 ? { muted: [...state.muted] } : {}),
       ...(state.soft.size > 0 ? { soft: state.softEntries() } : {}),
       ...(state.controlLive.size > 0 ? { controls: state.controlEntries() } : {}),
+      ...(state.submasters.size > 0 ? { submasters: state.submasterEntries() } : {}),
       ...(state.identify ? { identify: state.identify } : {}),
       ...((() => {
         let n = 0;

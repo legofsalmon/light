@@ -22,6 +22,27 @@ There is a live DMX monitor per universe in the same tab: the actual bytes
 leaving the app, which is the end of most "is it the desk or the fixture?"
 arguments.
 
+### Group levels
+
+A fader per group, under the dials. It pulls that group's intensity down
+without touching a look, which is what you want when the drummer's backlight
+is in somebody's eyes and the song is not over.
+
+**The lowest one wins.** Auto-groups put every head in a per-type group *and*
+a per-truss group, so nearly every head is in two. If those multiplied, a head
+in two groups both at 50% would land at a quarter — which is what neither
+fader says. The lowest level over a head is the one that applies, the way it
+does on a console.
+
+**They are never saved.** Close LIGHT with a group at zero and it opens at
+full. A level stored at zero would be a rig that came up dark next time with
+nothing on screen to explain why, and "comes up dark and safe" has to mean
+dark for a reason you can see. A fixture that must stay out of the show is a
+**mute**, which is a different tool: mutes survive a restart, and survive ALL
+STOP, where a level does not.
+
+Levels scale intensity only — the same rule every other master follows.
+
 ## Going live
 
 The button at the left of the top bar's safety group reads **offline** or
@@ -51,6 +72,9 @@ there.
 
 - **Grand master** scales all intensity output.
 - **Layer masters** scale one layer's contribution.
+- **Group levels** scale one group's, on the row under the dials in the pads
+  view. They are a separate stage from the layer masters and multiply with
+  them, so a group at 50% under a layer at 50% lands at a quarter.
 - **Speed** multiplies every effect rate, 0.25× to 4×, without jumping phase.
 - **Haze** is merged highest-wins with whatever the looks are asking for.
 

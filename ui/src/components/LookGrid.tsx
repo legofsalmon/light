@@ -587,6 +587,69 @@ function midiLabel(project: Project, controlId: string): { text: string; partial
   return { text: parts.join(' · '), partial };
 }
 
+/** Group levels: pull a whole group down without touching a look.
+ *
+ *  A row rather than a panel because that is how it is used — one hand, mid
+ *  song, without leaving the pads. Only groups that exist are shown, and the
+ *  row is absent entirely on a show with none.
+ *
+ *  These are runtime-only and never saved (backlog decision 4), which the
+ *  header says out loud: a fader that silently persisted at zero would be a
+ *  rig that came up dark next time with nothing on screen explaining why. */
+function SubmasterRow() {
+  const project = useStore((s) => s.project)!;
+  const send = useStore((s) => s.send);
+  const subs = useStore((s) => s.snap?.submasters);
+  const groups = project.groups;
+  if (groups.length === 0) return null;
+  const levelOf = (id: string) => subs?.find((x) => x.id === id)?.v ?? 1;
+  const anyDown = groups.some((g) => levelOf(g.id) < 1);
+
+  return (
+    <div className="controlrow">
+      <div className="layerhead controlhead">
+        <div className="row">
+          <div className="name grow">GROUPS</div>
+          {anyDown && (
+            <button
+              className="btn small ghost"
+              title="put every group level back to full"
+              onClick={() => {
+                for (const g of groups) if (levelOf(g.id) < 1) send({ type: 'setSubmaster', groupId: g.id, v: 1 });
+              }}
+            >
+              all up
+            </button>
+          )}
+        </div>
+        <div className="prose">
+          Levels — not saved with the show
+        </div>
+      </div>
+      <div className="substrip">
+        {groups.map((g) => {
+          const v = levelOf(g.id);
+          return (
+            <div key={g.id} className={`subcell ${v < 1 ? 'down' : ''}`}>
+              <span className="label" title={g.name}>{g.name}</span>
+              <Fader
+                value={v}
+                def={1}
+                help={`${g.name} level — scales intensity for every head in the group. The lowest group level over a head wins, so a head in two groups follows whichever is further down.`}
+                onChange={(x) => send({ type: 'setSubmaster', groupId: g.id, v: x })}
+                fmt={(x) => `${Math.round(x * 100)}%`}
+                width="100%"
+                variant="dim"
+                learn={{ kind: 'submaster', groupId: g.id }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ControlRow() {
   const project = useStore((s) => s.project)!;
   const live = useStore((s) => s.snap?.controls);
@@ -906,6 +969,7 @@ export function LookGrid() {
       {/* The fifth row. Ruled off from the layers because it is not one: these
           reach into whatever is playing rather than playing anything. */}
       <ControlRow />
+      <SubmasterRow />
       {overflowLayers.map((layer) => {
         const live = liveLayers?.find((l) => l.id === layer.id);
         return (

@@ -232,19 +232,39 @@ direction from `rotY` automatically would change the output of every existing
 show with a rotated fixture, which is a decision rather than a fix. `invertPan`
 is the explicit form, and it reaches the wire and both stage views together.
 
-### 6 · Group / fixture submasters — ⬜ absent — M (L with per-fixture + APC)
+### 6 · Group / fixture submasters — ◧ group slice shipped 2026-09-06; per-fixture and APC still open
 **Touches:** shared/types.ts, core, engine, parity, ui, docs
-**Today:** grand master (runtime), four layer masters (persisted), speed, haze,
-blackout. Per-fixture: a binary mute. Named Controls *replace* a stored level;
-they do not scale, and are per (look, part).
-**Build:** a submaster stage per group (optionally fixture) multiplying dimmer
-and white after the layer merge and before the grand master, in both engines:
-commands, MIDI actions, snapshot fields, a head→groups index built per project
-generation (never on the tick), parity cases (single, overlapping, stacked
-with layer master and blackout), a fader strip. Overlap semantics: auto-groups
-put every head in a per-type *and* a per-truss group — `min` is the console
-answer, product double-scales. Respect `ROADMAP.md:23` "masters only scale
-intensity". See decision 4 on persistence.
+**Shipped: the M slice.** `setSubmaster` command, `submaster` MIDI action,
+`submasters` snapshot field (present only while one is below full), and a
+`GROUPS` fader row under the dials in the pads view.
+
+The pass sits after the layer merge and before the grand master, on dimmer and
+white only — `ROADMAP.md:23`, masters scale intensity and nothing else.
+
+**Overlap is MIN, as the entry called it.** Auto-groups put every head in a
+per-type group *and* a per-truss one, so nearly every head is in two: the
+product would take a head in two groups both at 50% down to 25%, which is
+what neither fader says. Pinned by a parity case that would pass under either
+rule if it only checked one group.
+
+**Runtime-only, per decision 4.** Only entries BELOW full are stored, so full
+is the absence of an entry and an empty map skips the render pass entirely —
+which is the state the rig is in nearly all the time. Cleared by ALL STOP and
+by a project switch, and swept when a group is deleted (from the renderer's
+per-generation rebuild, beside `sweep_soft`). Mute is the tool that survives a
+panic; a level is not, and the docs say which is which.
+
+The head index is built on the same generation gate as geometry, and the
+per-tick scratch map lives on the renderer and is cleared rather than
+allocated — nothing heavy on the tick path.
+
+Sixteen parity checks: one group, overlapping groups, released, stacked under
+a layer master, blackout over the lot, a panic clearing them, and a deleted
+group taking its level with it.
+
+**Still open:** per-fixture submasters and APC LED feedback, the two things
+that made this an L. Neither is foreclosed — the pass takes a head key and a
+level, and a per-fixture level would join the same `min`.
 
 ### 7 · Freeze (hold output while editing) — ◼ shipped 2026-09-06
 **Touches:** shared/types.ts, core, engine, parity, ui, docs

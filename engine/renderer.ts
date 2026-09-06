@@ -80,6 +80,12 @@ export class Renderer {
    *  be looked up, and the S&H random seed stays stable. */
   private modIndex: Map<string, (ModBinding & { modIdx: number })[]> = new Map();
   private geomGen = -1; // st.gen starts at 1 and wraps at 32 bits; never -1
+  /** group id -> the head keys in it, rebuilt on the same generation gate as
+   *  geometry. Walking p.groups on the tick to find a submaster's heads would
+   *  be a scan per fader per frame. */
+  private subIndex = new Map<string, string[]>();
+  /** Scratch for the submaster pass, cleared rather than allocated per tick. */
+  private subLevel = new Map<string, number>();
 
   constructor(st: EngineState) {
     this.st = st;
@@ -202,6 +208,8 @@ export class Renderer {
       this.geom = buildGeometry(p);
       this.extents = buildGroupExtents(p, this.geom);
       st.sweepSoft();
+      st.sweepSubmasters();
+      this.subIndex = new Map(p.groups.map((g) => [g.id, g.heads.map((h) => `${h.fixtureId}:${h.head}`)]));
       this.modIndex = new Map();
       (p.modulators ?? []).forEach((m, modIdx) => {
         if (!m.on) return;
@@ -424,6 +432,35 @@ export class Renderer {
       const o = heads.get(ho.key)!;
       o.haze = Math.max(o.haze, p.settings.haze);
       o.fan = Math.max(o.fan, p.settings.hazeFan);
+    }
+
+    // --- group submasters: pull a group down without touching a look ---
+    //
+    // After the layer merge and before the grand master, on dimmer and white
+    // only — masters scale intensity and nothing else (ROADMAP).
+    //
+    // MIN across the groups a head is in, never the product. Auto-groups put
+    // every head in a per-type group AND a per-truss one, so almost every head
+    // is in two: multiplying would take a head in two groups both at 50% down
+    // to 25%, which is not what either fader says. The lowest fader wins, the
+    // way it does on a console.
+    //
+    // Only groups actually pulled down are walked, and an empty map skips the
+    // whole pass — which is the state the rig is in nearly all the time.
+    if (st.submasters.size > 0) {
+      this.subLevel.clear();
+      for (const [gid, v] of st.submasters) {
+        for (const key of this.subIndex.get(gid) ?? []) {
+          const e = this.subLevel.get(key);
+          if (e === undefined || v < e) this.subLevel.set(key, v);
+        }
+      }
+      for (const [key, v] of this.subLevel) {
+        const o = heads.get(key);
+        if (!o) continue;
+        o.dimmer = clamp(o.dimmer * v);
+        o.white = clamp(o.white * v);
+      }
     }
 
     // --- grand master & blackout ---
