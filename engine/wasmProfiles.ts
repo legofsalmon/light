@@ -50,6 +50,9 @@ export function parseMvrBase64(b64: string): import('../shared/types.ts').MvrBun
 }
 
 const MM: Record<string, number> = { off: 0, aim: 1, rotate: 2 };
+const SM: Record<string, number> = { strobe: 0, pulse: 1, random: 2 };
+/** f64 slots per head — mirrors PARAMS_PER_HEAD in profile-wasm/src/lib.rs. */
+const PARAMS_PER_HEAD = 25;
 // handle per profile id; re-registered when the profile object changes
 const handles = new Map<string, { handle: number; ref: CompiledProfile }>();
 
@@ -68,9 +71,9 @@ export function renderImported(
     h = { handle: w.register_profile(JSON.stringify(cp)), ref: cp };
     handles.set(id, h);
   }
-  const flat = new Float64Array(heads.length * 20);
+  const flat = new Float64Array(heads.length * PARAMS_PER_HEAD);
   heads.forEach((p, i) => {
-    const o = i * 20;
+    const o = i * PARAMS_PER_HEAD;
     flat[o] = p.dimmer;
     flat[o + 1] = p.r;
     flat[o + 2] = p.g;
@@ -93,6 +96,11 @@ export function renderImported(
     flat[o + 17] = p.iris ?? NaN;
     flat[o + 18] = p.frost ?? NaN;
     flat[o + 19] = p.cto ?? NaN;
+    flat[o + 20] = p.gobo ?? NaN;
+    flat[o + 21] = p.goboRotate ?? NaN;
+    flat[o + 22] = p.prism ?? NaN;
+    flat[o + 23] = p.prismRotate ?? NaN;
+    flat[o + 24] = SM[p.strobeMode] ?? 0;
   });
   const bytes = w.render(h.handle, flat);
   // Never trust the length: an inconsistent profile must not RangeError the

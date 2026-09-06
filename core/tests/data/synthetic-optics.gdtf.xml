@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GDTF DataVersion="1.2">
+  <FixtureType Name="TestSpot 200" Manufacturer="ACME" Description="synthetic optics test fixture: gobo wheel + rotation, prism wheel + rotation, shutter with pulse and random bands, InitialFunction defaults">
+    <Wheels>
+      <Wheel Name="GoboWheel1">
+        <Slot Name="Open"/>
+        <Slot Name="Breakup"/>
+        <Slot Name="Stars"/>
+        <Slot Name="Dots"/>
+      </Wheel>
+      <Wheel Name="PrismWheel1">
+        <Slot Name="Open"/>
+        <Slot Name="3-facet"/>
+        <Slot Name="5-facet"/>
+      </Wheel>
+    </Wheels>
+    <Geometries>
+      <Geometry Name="Base">
+        <Beam Name="Beam1" BeamAngle="10" FieldAngle="12"/>
+      </Geometry>
+    </Geometries>
+    <DMXModes>
+      <DMXMode Name="Standard" Geometry="Base">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1" Geometry="Base">
+            <LogicalChannel Attribute="Pan">
+              <ChannelFunction Attribute="Pan" DMXFrom="0/1" Default="128/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="2" Geometry="Base">
+            <LogicalChannel Attribute="Tilt">
+              <ChannelFunction Attribute="Tilt" DMXFrom="0/1" Default="128/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="3" Geometry="Base">
+            <LogicalChannel Attribute="Dimmer">
+              <ChannelFunction Attribute="Dimmer" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <!-- Closed is listed first, as on a real Lyra; InitialFunction says the channel rests Open. -->
+          <DMXChannel DMXBreak="1" Offset="4" Geometry="Base" InitialFunction="Base_Shutter1.Shutter1.Open">
+            <LogicalChannel Attribute="Shutter1">
+              <ChannelFunction Name="Closed" Attribute="Shutter1" DMXFrom="0/1" Default="2/1"/>
+              <ChannelFunction Name="Open" Attribute="Shutter1" DMXFrom="8/1" Default="12/1"/>
+              <ChannelFunction Name="Strobe" Attribute="Shutter1Strobe" DMXFrom="16/1" Default="16/1"/>
+              <ChannelFunction Name="Pulse" Attribute="Shutter1StrobePulse" DMXFrom="128/1" Default="128/1"/>
+              <ChannelFunction Name="Random" Attribute="Shutter1StrobeRandom" DMXFrom="200/1" Default="200/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <!-- The slot wheel: sets on the Gobo1 function only; shake and spin functions share the channel. -->
+          <DMXChannel DMXBreak="1" Offset="5" Geometry="Base">
+            <LogicalChannel Attribute="Gobo1">
+              <ChannelFunction Name="Gobo1" Attribute="Gobo1" DMXFrom="0/1" Default="0/1" Wheel="GoboWheel1">
+                <ChannelSet Name="Open" DMXFrom="0/1" WheelSlotIndex="1"/>
+                <ChannelSet Name="Breakup" DMXFrom="10/1" WheelSlotIndex="2"/>
+                <ChannelSet Name="" DMXFrom="20/1" WheelSlotIndex="3"/>
+                <ChannelSet Name="Dots" DMXFrom="30/1" WheelSlotIndex="4"/>
+              </ChannelFunction>
+              <ChannelFunction Name="Shake" Attribute="Gobo1SelectShake" DMXFrom="40/1" Default="40/1" Wheel="GoboWheel1">
+                <ChannelSet Name="Breakup shake" DMXFrom="40/1" WheelSlotIndex="2"/>
+              </ChannelFunction>
+              <ChannelFunction Name="Wheel spin" Attribute="Gobo1WheelSpin" DMXFrom="128/1" Default="128/1" Wheel="GoboWheel1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <!-- Rotation: an indexed half, then rotate functions split CCW / stop / CW, as on a real Lyra. -->
+          <DMXChannel DMXBreak="1" Offset="6" Geometry="Base">
+            <LogicalChannel Attribute="Gobo1Pos">
+              <ChannelFunction Name="Index" Attribute="Gobo1Pos" DMXFrom="0/1" Default="0/1" Wheel="GoboWheel1"/>
+              <ChannelFunction Name="Rotate CCW" Attribute="Gobo1PosRotate" DMXFrom="128/1" Default="128/1" Wheel="GoboWheel1">
+                <ChannelSet Name="max CCW" DMXFrom="128/1"/>
+                <ChannelSet Name="" DMXFrom="129/1"/>
+                <ChannelSet Name="min CCW" DMXFrom="189/1"/>
+              </ChannelFunction>
+              <ChannelFunction Name="Stop" Attribute="Gobo1PosRotate" DMXFrom="190/1" Default="190/1" Wheel="GoboWheel1"/>
+              <ChannelFunction Name="Rotate CW" Attribute="Gobo1PosRotate" DMXFrom="194/1" Default="255/1" Wheel="GoboWheel1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <!-- Prism slots spread over two functions carrying the same attribute. -->
+          <DMXChannel DMXBreak="1" Offset="7" Geometry="Base">
+            <LogicalChannel Attribute="Prism1">
+              <ChannelFunction Name="Open" Attribute="Prism1" DMXFrom="0/1" Default="0/1" Wheel="PrismWheel1">
+                <ChannelSet Name="Open" DMXFrom="0/1" WheelSlotIndex="1"/>
+              </ChannelFunction>
+              <ChannelFunction Name="Prisms" Attribute="Prism1" DMXFrom="64/1" Default="64/1" Wheel="PrismWheel1">
+                <ChannelSet Name="3-facet" DMXFrom="64/1" WheelSlotIndex="2"/>
+                <ChannelSet Name="5-facet" DMXFrom="128/1" WheelSlotIndex="3"/>
+              </ChannelFunction>
+            </LogicalChannel>
+          </DMXChannel>
+          <!-- A channel named after its rotate function, the whole way across; rests at Stop. -->
+          <DMXChannel DMXBreak="1" Offset="8" Geometry="Base" InitialFunction="Base_Prism1PosRotate.Prism1PosRotate.Stop">
+            <LogicalChannel Attribute="Prism1PosRotate">
+              <ChannelFunction Name="CCW" Attribute="Prism1PosRotate" DMXFrom="0/1" Default="0/1" Wheel="PrismWheel1"/>
+              <ChannelFunction Name="Stop" Attribute="Prism1PosRotate" DMXFrom="120/1" Default="128/1" Wheel="PrismWheel1"/>
+              <ChannelFunction Name="CW" Attribute="Prism1PosRotate" DMXFrom="136/1" Default="255/1" Wheel="PrismWheel1"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+    </DMXModes>
+  </FixtureType>
+</GDTF>

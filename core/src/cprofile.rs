@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::color::{hsv_to_rgb, rgb_to_hsv};
 use crate::profiles::{HeadKind, ResolvedParams};
-use crate::types::{clamp01, MotorMode};
+use crate::types::{clamp01, MotorMode, StrobeMode};
 
 /// A scalar the interpreter can read off the resolved head parameters.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,6 +37,12 @@ pub enum Source {
     Iris,
     Frost,
     Cto,
+    // Optics. The slots are wheel indices (0 = open) read through Func::Slot;
+    // the rotations are 0..1 like the beam parameters. All four can be unset.
+    Gobo,
+    GoboRotate,
+    Prism,
+    PrismRotate,
 }
 
 /// Case guard — the first matching case in a channel wins.
@@ -53,6 +59,9 @@ pub enum Cond {
     MotorModeIs { mode: MotorMode },
     /// the source carries no value — the look never touched this parameter
     SourceUnset { source: Source },
+    /// the look asked for this shutter pattern (a band of its own on the
+    /// shutter channel; a fixture without it falls through to plain strobe)
+    StrobeModeIs { mode: StrobeMode },
 }
 
 /// One slot on a banded/wheel channel (colour wheels, macro tables, gobos).
@@ -80,6 +89,11 @@ pub enum Func {
     /// banded wheel: explicit DMX override (params.macro) when allowed,
     /// else nearest-colour among `auto` sets
     Wheel { sets: Vec<WheelSet>, allow_explicit: bool },
+    /// banded wheel addressed by INDEX: the source's value, rounded, picks a
+    /// set (clamped to the last), and that set's DMX value is written. Gobo
+    /// and prism wheels — a look says "slot 2", never a DMX number, so it
+    /// reads the same on any fixture.
+    Slot { sets: Vec<WheelSet>, source: Source },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,6 +232,22 @@ impl FixtureForm {
     ];
 }
 
+/// The importer's version, stamped on every profile it writes.
+///
+/// A project stores compiled profiles rather than the .gdtf they came from,
+/// which is what lets a show open on a machine that has never seen the
+/// fixture. The cost is that a profile keeps whatever the compiler understood
+/// the day it was imported, and until this stamp existed the only way to tell
+/// was to look for a channel by name with nothing behind it. The UI offers a
+/// rebuild from the fixture library for anything stamped lower.
+///
+/// 0 — everything before the stamp (dimmer, position, colour, shutter/strobe,
+///     colour wheels, the five beam parameters).
+/// 1 — gobo and prism slots and rotation, shutter pulse/random bands, and
+///     the resting value taken from the channel's InitialFunction rather
+///     than whichever function is listed first.
+pub const COMPILER_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompiledProfile {
@@ -259,6 +289,10 @@ pub struct CompiledProfile {
     pub beam_radius: Option<f64>,
     /// no dimmer channel exists: fold intensity into colour/white sources
     pub virtual_dimmer: bool,
+    /// `COMPILER_VERSION` of the importer that wrote this; 0 on anything
+    /// compiled before the stamp existed, which is exactly what it should say.
+    #[serde(default)]
+    pub compiler: u32,
     /// Who authored the fixture definition this was compiled from.
     ///
     /// GDTF Share's terms require that "our status (and that of any identified
@@ -417,6 +451,10 @@ fn source_value(p: &ResolvedParams, s: Source, virtual_dimmer: bool) -> f64 {
         Source::Iris => p.beam.iris.unwrap_or(0.0),
         Source::Frost => p.beam.frost.unwrap_or(0.0),
         Source::Cto => p.beam.cto.unwrap_or(0.0),
+        Source::Gobo => p.gobo.unwrap_or(0.0),
+        Source::GoboRotate => p.beam.gobo_rotate.unwrap_or(0.0),
+        Source::Prism => p.prism.unwrap_or(0.0),
+        Source::PrismRotate => p.beam.prism_rotate.unwrap_or(0.0),
     }
 }
 
@@ -428,6 +466,10 @@ fn source_is_set(p: &ResolvedParams, s: Source) -> bool {
         Source::Iris => p.beam.iris.is_some(),
         Source::Frost => p.beam.frost.is_some(),
         Source::Cto => p.beam.cto.is_some(),
+        Source::Gobo => p.gobo.is_some(),
+        Source::GoboRotate => p.beam.gobo_rotate.is_some(),
+        Source::Prism => p.prism.is_some(),
+        Source::PrismRotate => p.beam.prism_rotate.is_some(),
         _ => true,
     }
 }
@@ -440,6 +482,7 @@ fn cond_matches(c: &Cond, p: &ResolvedParams, virtual_dimmer: bool) -> bool {
         Cond::SourceBelow { source, value } => source_value(p, *source, virtual_dimmer) <= *value,
         Cond::MotorModeIs { mode } => p.motor_mode == *mode,
         Cond::SourceUnset { source } => !source_is_set(p, *source),
+        Cond::StrobeModeIs { mode } => p.strobe_mode == *mode,
     }
 }
 
@@ -492,6 +535,14 @@ fn eval_case(case: &FuncCase, p: &ResolvedParams, virtual_dimmer: bool) -> u16 {
                 }
             }
             wheel_quantize(sets, p)
+        }
+        Func::Slot { sets, source } => {
+            let Some(last) = sets.last() else { return case.dmx_from };
+            let want = source_value(p, *source, virtual_dimmer);
+            // f64 → index without ever going negative or past the end: an
+            // untrusted look can say slot -3 or slot 900.
+            let i = want.round().clamp(0.0, (sets.len() - 1) as f64) as usize;
+            sets.get(i).unwrap_or(last).value as u16
         }
     }
 }
@@ -597,6 +648,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: false,
+        compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
         channels: vec![
@@ -699,6 +751,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: false,
+        compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
     });
@@ -720,6 +773,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: false,
+        compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
     });
@@ -738,6 +792,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: false,
+        compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
     });
@@ -760,6 +815,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: true,
+        compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
     });
@@ -783,6 +839,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: true,
+        compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
     });
@@ -810,6 +867,7 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: false,
+        compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
     });

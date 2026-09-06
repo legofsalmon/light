@@ -2,7 +2,7 @@ import React from 'react';
 import type { Control, ControlLink, ModBinding, Modulator, SoftField, Wave } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
-import { WAVE_LABEL } from '../labels.ts';
+import { FIELD_LABEL, TARGET_LABEL, WAVE_LABEL } from '../labels.ts';
 import { Fader } from './Fader.tsx';
 import { TextField } from './inputs.tsx';
 
@@ -14,7 +14,7 @@ import { TextField } from './inputs.tsx';
 
 const PART_FIELDS: SoftField[] = [
   'dimmer', 'hue', 'sat', 'white', 'strobe', 'pan', 'tilt', 'ringFx', 'motorValue',
-  'haze', 'fan', 'zoom', 'focus', 'iris', 'frost', 'cto',
+  'haze', 'fan', 'zoom', 'focus', 'iris', 'frost', 'cto', 'goboRotate', 'prismRotate',
 ];
 const EFFECT_FIELDS: SoftField[] = ['rate', 'size', 'spread', 'width', 'phase', 'mix'];
 
@@ -128,13 +128,13 @@ function LinkRow({ link, onEdit, onRemove }: {
       >
         <optgroup label="part">
           {PART_FIELDS.map((f) => (
-            <option key={f} value={`p:${f}`}>{f}</option>
+            <option key={f} value={`p:${f}`}>{FIELD_LABEL[f]}</option>
           ))}
         </optgroup>
         {(part?.effects ?? []).map((e, i) => (
-          <optgroup key={e.id} label={`effect ${i + 1} · ${e.target} ${e.wave}`}>
+          <optgroup key={e.id} label={`effect ${i + 1} · ${TARGET_LABEL[e.target]} ${WAVE_LABEL[e.wave]}`}>
             {EFFECT_FIELDS.map((f) => (
-              <option key={f} value={`fx:${e.id}:${f}`}>{f}</option>
+              <option key={f} value={`fx:${e.id}:${f}`}>{FIELD_LABEL[f]}</option>
             ))}
           </optgroup>
         ))}
@@ -231,13 +231,13 @@ function BindingRow({ b, onEdit, onRemove }: {
       >
         <optgroup label="part">
           {PART_FIELDS.map((f) => (
-            <option key={f} value={`p:${f}`}>{f}</option>
+            <option key={f} value={`p:${f}`}>{FIELD_LABEL[f]}</option>
           ))}
         </optgroup>
         {(part?.effects ?? []).map((e, i) => (
-          <optgroup key={e.id} label={`effect ${i + 1} · ${e.target} ${e.wave}`}>
+          <optgroup key={e.id} label={`effect ${i + 1} · ${TARGET_LABEL[e.target]} ${WAVE_LABEL[e.wave]}`}>
             {MOD_EFFECT_FIELDS.map((f) => (
-              <option key={f} value={`fx:${e.id}:${f}`}>{f}</option>
+              <option key={f} value={`fx:${e.id}:${f}`}>{FIELD_LABEL[f]}</option>
             ))}
           </optgroup>
         ))}

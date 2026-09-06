@@ -1,5 +1,5 @@
 use crate::color::{derby_quantize, rgb_to_hsv};
-use crate::types::{clamp01, MotorMode};
+use crate::types::{clamp01, MotorMode, StrobeMode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -34,6 +34,13 @@ pub struct ResolvedParams {
     pub tilt: f64,
     pub haze: f64,
     pub fan: f64,
+    /// Shutter pattern; plain unless a look picks another. Banded like
+    /// `motor_mode`: the incoming look's value from fade start, never blended.
+    pub strobe_mode: StrobeMode,
+    /// Wheel slots, banded like `macro_`: None until a look picks one, and
+    /// then the slot index the profile's `Func::Slot` turns into a DMX value.
+    pub gobo: Option<f64>,
+    pub prism: Option<f64>,
     /// Beam parameters, absent until a look sets one.
     ///
     /// These are Option rather than f64 on purpose. A fixture's zoom, focus,
@@ -53,6 +60,10 @@ pub struct BeamParams {
     pub iris: Option<f64>,
     pub frost: Option<f64>,
     pub cto: Option<f64>,
+    /// The optics rotations ride here too: continuous 0..1 values that
+    /// crossfade between looks, unlike the slots they spin.
+    pub gobo_rotate: Option<f64>,
+    pub prism_rotate: Option<f64>,
 }
 
 impl Default for ResolvedParams {
@@ -72,6 +83,9 @@ impl Default for ResolvedParams {
             tilt: 0.5,
             haze: 0.0,
             fan: 0.0,
+            strobe_mode: StrobeMode::Strobe,
+            gobo: None,
+            prism: None,
             beam: BeamParams::default(),
         }
     }

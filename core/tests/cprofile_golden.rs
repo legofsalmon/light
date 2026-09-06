@@ -4,7 +4,7 @@
 
 use light_core::cprofile::{compiled_builtins, render_compiled, CompiledProfile};
 use light_core::profiles::{profile_of, BeamParams, ResolvedParams};
-use light_core::types::MotorMode;
+use light_core::types::{MotorMode, StrobeMode};
 
 fn lcg(seed: &mut u64) -> f64 {
     *seed = seed
@@ -63,6 +63,18 @@ fn gen_params(seed: &mut u64, case: usize) -> ResolvedParams {
             iris: maybe(seed, case, 14),
             frost: maybe(seed, case, 15),
             cto: maybe(seed, case, 16),
+            gobo_rotate: maybe(seed, case, 17),
+            prism_rotate: maybe(seed, case, 18),
+        },
+        // The optics slots and shutter pattern likewise: no built-in has a
+        // gobo, a prism or a pulse band, and none of them may notice a look
+        // that sets one.
+        gobo: maybe(seed, case, 19).map(|v| (v * 9.0).round()),
+        prism: maybe(seed, case, 20).map(|v| (v * 3.0).round()),
+        strobe_mode: match case % 3 {
+            0 => StrobeMode::Strobe,
+            1 => StrobeMode::Pulse,
+            _ => StrobeMode::Random,
         },
     }
 }

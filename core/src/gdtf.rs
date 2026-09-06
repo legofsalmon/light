@@ -8,7 +8,8 @@
 
 use std::io::{Cursor, Read};
 
-use crate::cprofile::{CChannel, CHead, CompiledProfile, Cond, Func, FuncCase, Source, WheelSet};
+use crate::cprofile::{CChannel, CHead, CompiledProfile, Cond, Func, FuncCase, Source, WheelSet, COMPILER_VERSION};
+use crate::types::StrobeMode;
 use crate::profiles::HeadKind;
 
 /// Deepest element nesting we will hand to roxmltree. Its tree construction and
@@ -240,6 +241,19 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
 
         let mut chan_geom: Vec<String> = Vec::new();
         let mut chan_color: Vec<Option<char>> = Vec::new(); // 'r','g','b','w' colour channels
+
+        // Which gobo and prism wheel LIGHT drives in this mode: the first one
+        // that can rotate, else wheel 1. A MegaPointe's Gobo1 is its static
+        // wheel and Gobo2 the rotating one, and "the gobo" an operator means
+        // is the one that spins.
+        let attrs: Vec<&str> = mode
+            .descendants()
+            .filter(|n| n.has_tag_name("LogicalChannel"))
+            .filter_map(|l| l.attribute("Attribute"))
+            .collect();
+        let gobo_attr = format!("Gobo{}", rotating_wheel_index(&attrs, "Gobo"));
+        let prism_attr = format!("Prism{}", rotating_wheel_index(&attrs, "Prism"));
+
         for ch in mode.descendants().filter(|n| n.has_tag_name("DMXChannel")) {
             let Some(offset_attr) = ch.attribute("Offset") else { continue };
             if offset_attr.trim().is_empty() || offset_attr == "None" {
@@ -267,8 +281,22 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             let functions: Vec<roxmltree::Node> = logical
                 .map(|l| l.children().filter(|n| n.has_tag_name("ChannelFunction")).collect())
                 .unwrap_or_default();
-            let default = functions
-                .first()
+            // The channel's resting value is the Default of the function
+            // InitialFunction names ("Geometry.Attribute.Name"), not of
+            // whichever function is listed first. A Lyra's shutter lists
+            // "Closed" (default 5) before "Open" (default 15) and points
+            // InitialFunction at Open: taking the first compiled its shutter
+            // shut, so the fixture sat dark until a look strobed it.
+            let initial = ch
+                .attribute("InitialFunction")
+                .and_then(|s| s.rsplit('.').next())
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
+            let initial_fn = initial.and_then(|name| {
+                functions.iter().find(|f| f.attribute("Name").map(str::trim) == Some(name))
+            });
+            let default = initial_fn
+                .or(functions.first())
                 .and_then(|f| f.attribute("Default"))
                 .and_then(|d| parse_dmx_value(d, width))
                 .unwrap_or(0)
@@ -356,13 +384,46 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
                             .and_then(|d| parse_dmx_value(d, width))
                             .unwrap_or(0)
                             .min(max_dmx as u32) as u16;
-                        let to = strobe_fn_end(sf, &functions, max_dmx, width);
+                        let to = function_end(sf, &functions, max_dmx, width);
                         cases.push(FuncCase {
                             cond: Cond::SourceBelow { source: Source::Strobe, value: 0.01 },
                             dmx_from: open_value,
                             dmx_to: open_value,
                             func: Func::Fixed { value: open_value },
                         });
+                        // Pulse and random are bands of their own on most
+                        // heads, each sweeping slow to fast like the plain
+                        // strobe. Matched by suffix so Shutter2 and the
+                        // unindexed spelling count too; a look asking for a
+                        // pattern the fixture lacks falls through to plain.
+                        let band_named = |suffixes: &[&str]| {
+                            suffixes.iter().find_map(|suffix| {
+                                functions.iter().find(|f| {
+                                    f.attribute("Attribute").map_or(false, |a| a.ends_with(suffix))
+                                })
+                            })
+                        };
+                        let modes = [
+                            (StrobeMode::Pulse, &["StrobePulse", "StrobePulseOpen", "StrobePulseClose"][..]),
+                            (
+                                StrobeMode::Random,
+                                &["StrobeRandom", "StrobeRandomPulse", "StrobeRandomPulseOpen", "StrobeRandomPulseClose"][..],
+                            ),
+                        ];
+                        for (mode, suffixes) in modes {
+                            let Some(f) = band_named(suffixes) else { continue };
+                            let from = f
+                                .attribute("DMXFrom")
+                                .and_then(|d| parse_dmx_value(d, width))
+                                .unwrap_or(0)
+                                .min(max_dmx as u32) as u16;
+                            cases.push(FuncCase {
+                                cond: Cond::StrobeModeIs { mode },
+                                dmx_from: from,
+                                dmx_to: function_end(f, &functions, max_dmx, width),
+                                func: Func::Linear { source: Source::Strobe },
+                            });
+                        }
                         cases.push(FuncCase {
                             cond: Cond::Always,
                             dmx_from: from,
@@ -370,6 +431,26 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
                             func: Func::Linear { source: Source::Strobe },
                         });
                     }
+                }
+                // Optics. The slot channel (Gobo1) and the rotation channel
+                // (Gobo1Pos, or Gobo1PosRotate where the file names the whole
+                // channel after its rotate function) both land here; the
+                // helper reads which of the two — or both — the channel is.
+                a if a == gobo_attr
+                    || a == format!("{gobo_attr}Pos")
+                    || a == format!("{gobo_attr}PosRotate") =>
+                {
+                    cases.extend(optics_cases(
+                        &functions, &gobo_attr, Source::Gobo, Source::GoboRotate, &wheels, default, max_dmx, width,
+                    ));
+                }
+                a if a == prism_attr
+                    || a == format!("{prism_attr}Pos")
+                    || a == format!("{prism_attr}PosRotate") =>
+                {
+                    cases.extend(optics_cases(
+                        &functions, &prism_attr, Source::Prism, Source::PrismRotate, &wheels, default, max_dmx, width,
+                    ));
                 }
                 // Beam shaping. All continuous and monotonic on every fixture
                 // that has them, which is what makes them safe to expose as a
@@ -465,6 +546,7 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             lumens,
             beam_radius,
             virtual_dimmer: !has_dimmer,
+            compiler: COMPILER_VERSION,
             credit: credit.clone(),
             form_override: None,
         });
@@ -475,9 +557,9 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
     Ok(out)
 }
 
-/// The strobe band ends where the next function begins (GDTF functions
+/// A function's band ends where the next function begins (GDTF functions
 /// partition the channel by DMXFrom), or at the channel max.
-fn strobe_fn_end(
+fn function_end(
     sf: &roxmltree::Node,
     functions: &[roxmltree::Node],
     max_dmx: u16,
@@ -494,6 +576,180 @@ fn strobe_fn_end(
         .min()
         .map(|next| (next - 1).min(max_dmx as u32) as u16)
         .unwrap_or(max_dmx)
+}
+
+/// Which `Gobo{n}` / `Prism{n}` wheel a mode's controls address: the first
+/// that has a rotation channel (`{base}{n}Pos` or `{base}{n}PosRotate`), else
+/// wheel 1. Two wheels is the most any real fixture carries; four is headroom.
+fn rotating_wheel_index(attrs: &[&str], base: &str) -> usize {
+    (1..=4)
+        .find(|n| {
+            let pos = format!("{base}{n}Pos");
+            let rot = format!("{base}{n}PosRotate");
+            attrs.iter().any(|a| *a == pos || *a == rot)
+        })
+        .unwrap_or(1)
+}
+
+/// DMXFrom of a function, clamped into the channel.
+fn function_from(f: &roxmltree::Node, max_dmx: u16, width: usize) -> u16 {
+    f.attribute("DMXFrom")
+        .and_then(|d| parse_dmx_value(d, width))
+        .unwrap_or(0)
+        .min(max_dmx as u32) as u16
+}
+
+/// The slots of a gobo or prism wheel, read off the ChannelSets of every
+/// function carrying the slot attribute exactly (`Gobo1`, not
+/// `Gobo1SelectShake`): a set's band runs to the next set, or to the end of
+/// its function. A nameless set with no wheel slot behind it is a band
+/// boundary, not a slot. With no sets at all the wheel's own slots are spread
+/// evenly over the function's band. Index 0 is the first set — open, on every
+/// wheel anyone has authored.
+fn slot_sets(
+    functions: &[roxmltree::Node],
+    attr: &str,
+    wheels: &[WheelDef],
+    max_dmx: u16,
+    width: usize,
+) -> Vec<WheelSet> {
+    let slot_fns: Vec<&roxmltree::Node> =
+        functions.iter().filter(|f| f.attribute("Attribute") == Some(attr)).collect();
+    if slot_fns.is_empty() {
+        return Vec::new();
+    }
+    let wheel = slot_fns
+        .iter()
+        .find_map(|f| f.attribute("Wheel"))
+        .and_then(|wn| wheels.iter().find(|w| w.name == wn));
+    let slot_name = |idx: Option<&str>| -> Option<String> {
+        let i: usize = idx?.trim().parse().ok()?;
+        wheel.and_then(|w| w.slots.get(i.checked_sub(1)?)).map(|s| s.0.clone())
+    };
+    let mut bands: Vec<(u32, u32, String)> = Vec::new();
+    for f in &slot_fns {
+        let end = function_end(f, functions, max_dmx, width) as u32;
+        let sets: Vec<roxmltree::Node> = f.children().filter(|n| n.has_tag_name("ChannelSet")).collect();
+        for (i, cs) in sets.iter().enumerate() {
+            let Some(from) = cs.attribute("DMXFrom").and_then(|d| parse_dmx_value(d, width)) else {
+                continue;
+            };
+            let to = sets
+                .get(i + 1)
+                .and_then(|n| n.attribute("DMXFrom"))
+                .and_then(|d| parse_dmx_value(d, width))
+                .map(|n| n.saturating_sub(1))
+                .unwrap_or(end)
+                .max(from);
+            let named = cs.attribute("Name").map(str::trim).filter(|n| !n.is_empty()).map(String::from);
+            let Some(name) = named.or_else(|| slot_name(cs.attribute("WheelSlotIndex"))) else {
+                continue; // a boundary
+            };
+            bands.push((from, to, name));
+        }
+    }
+    if bands.is_empty() {
+        let Some(w) = wheel else { return Vec::new() };
+        let from = slot_fns.iter().map(|f| function_from(f, max_dmx, width) as u32).min().unwrap_or(0);
+        let end = slot_fns.iter().map(|f| function_end(f, functions, max_dmx, width) as u32).max().unwrap_or(max_dmx as u32);
+        let n = w.slots.len().max(1) as u32;
+        let span = end.saturating_sub(from) + 1;
+        for (i, (name, _)) in w.slots.iter().enumerate() {
+            let lo = from + i as u32 * span / n;
+            let hi = (from + (i as u32 + 1) * span / n).saturating_sub(1).max(lo);
+            bands.push((lo, hi, name.clone()));
+        }
+    }
+    bands.sort_by_key(|b| b.0);
+    bands
+        .into_iter()
+        .map(|(from, to, name)| WheelSet {
+            value: (from + (to - from) / 2).min(255) as u8,
+            min: from.min(255) as u8,
+            max: to.min(255) as u8,
+            name,
+            comps: Vec::new(),
+            auto: false,
+        })
+        .collect()
+}
+
+/// The rotation band: the union of every function carrying the rotate
+/// attribute. Files split it into CCW / stop / CW functions, and one fader
+/// across the lot is the point — the middle stops, either end is full speed.
+fn rotate_band(functions: &[roxmltree::Node], attr: &str, max_dmx: u16, width: usize) -> Option<(u16, u16)> {
+    let rot: Vec<&roxmltree::Node> =
+        functions.iter().filter(|f| f.attribute("Attribute") == Some(attr)).collect();
+    let from = rot.iter().map(|f| function_from(f, max_dmx, width)).min()?;
+    let to = rot.iter().map(|f| function_end(f, functions, max_dmx, width)).max()?;
+    Some((from, to.max(from)))
+}
+
+/// Cases for a gobo or prism channel — the slot wheel, its rotation, or (on a
+/// fixture that puts both on one channel) both:
+///
+/// - slot unset → parked at the file's default, like the beam parameters;
+/// - slot 0 (open) → the open band, whatever the rotation says: an empty
+///   slot has nothing to spin, and the rotate band would leave it in a gobo;
+/// - rotation unset → the slot's band;
+/// - otherwise → the rotate band, swept by the rotation value.
+///
+/// An index-only `Gobo1Pos` (a rotation channel with no rotate function)
+/// gets no cases and holds its default.
+#[allow(clippy::too_many_arguments)]
+fn optics_cases(
+    functions: &[roxmltree::Node],
+    slot_attr: &str,
+    slot_src: Source,
+    rot_src: Source,
+    wheels: &[WheelDef],
+    default: u16,
+    max_dmx: u16,
+    width: usize,
+) -> Vec<FuncCase> {
+    let sets = slot_sets(functions, slot_attr, wheels, max_dmx, width);
+    let rot = rotate_band(functions, &format!("{slot_attr}PosRotate"), max_dmx, width);
+    let parked = |source: Source| FuncCase {
+        cond: Cond::SourceUnset { source },
+        dmx_from: default,
+        dmx_to: default,
+        func: Func::Fixed { value: default },
+    };
+    let slot = |cond: Cond| FuncCase {
+        cond,
+        dmx_from: 0,
+        dmx_to: max_dmx,
+        func: Func::Slot { sets: sets.clone(), source: slot_src },
+    };
+    let mut cases = Vec::new();
+    match (sets.is_empty(), rot) {
+        (true, None) => {}
+        (false, None) => {
+            cases.push(parked(slot_src));
+            cases.push(slot(Cond::Always));
+        }
+        (true, Some((from, to))) => {
+            cases.push(parked(rot_src));
+            cases.push(FuncCase {
+                cond: Cond::Always,
+                dmx_from: from,
+                dmx_to: to,
+                func: Func::Linear { source: rot_src },
+            });
+        }
+        (false, Some((from, to))) => {
+            cases.push(parked(slot_src));
+            cases.push(slot(Cond::SourceBelow { source: slot_src, value: 0.5 }));
+            cases.push(slot(Cond::SourceUnset { source: rot_src }));
+            cases.push(FuncCase {
+                cond: Cond::Always,
+                dmx_from: from,
+                dmx_to: to,
+                func: Func::Linear { source: rot_src },
+            });
+        }
+    }
+    cases
 }
 
 /// Wheel-slot bands: each ChannelSet (or function partition) covers a DMX

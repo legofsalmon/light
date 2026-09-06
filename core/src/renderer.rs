@@ -6,7 +6,7 @@ use crate::effects::{apply_effects, effect_field_value, mod_wave, soft_base};
 use crate::geometry::{build_geometry, build_group_extents, GroupExtents, HeadGeom, NO_EXTENTS, NO_GEOM};
 use crate::profiles::{profile_of, HeadKind, Profile, ResolvedParams};
 use crate::state::EngineState;
-use crate::types::{clamp01, lerp, HeadSnap, LayerBlend, LayerSnap, MotorMode, Project};
+use crate::types::{clamp01, lerp, HeadSnap, LayerBlend, LayerSnap, MotorMode, Project, StrobeMode};
 
 /// A fixture profile from either source: built-in code or imported data.
 /// Whether a fixture's profile id resolves to anything at all. A fixture whose
@@ -70,7 +70,7 @@ const ALL_FIELDS: [Field; N_FIELDS] = [
 /// are *optional*: a look that never mentions zoom must leave zoom alone, so
 /// there is no neutral f64 to merge from. Keeping them separate also means the
 /// existing merge is untouched and a saved show still renders byte for byte.
-const N_BEAM: usize = 5;
+const N_BEAM: usize = 7;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BeamField {
     Zoom = 0,
@@ -78,9 +78,13 @@ enum BeamField {
     Iris,
     Frost,
     Cto,
+    GoboRotate,
+    PrismRotate,
 }
-const ALL_BEAM: [BeamField; N_BEAM] =
-    [BeamField::Zoom, BeamField::Focus, BeamField::Iris, BeamField::Frost, BeamField::Cto];
+const ALL_BEAM: [BeamField; N_BEAM] = [
+    BeamField::Zoom, BeamField::Focus, BeamField::Iris, BeamField::Frost, BeamField::Cto,
+    BeamField::GoboRotate, BeamField::PrismRotate,
+];
 
 fn get_beam(p: &ResolvedParams, f: BeamField) -> Option<f64> {
     match f {
@@ -89,6 +93,8 @@ fn get_beam(p: &ResolvedParams, f: BeamField) -> Option<f64> {
         BeamField::Iris => p.beam.iris,
         BeamField::Frost => p.beam.frost,
         BeamField::Cto => p.beam.cto,
+        BeamField::GoboRotate => p.beam.gobo_rotate,
+        BeamField::PrismRotate => p.beam.prism_rotate,
     }
 }
 fn set_beam(p: &mut ResolvedParams, f: BeamField, v: f64) {
@@ -98,6 +104,8 @@ fn set_beam(p: &mut ResolvedParams, f: BeamField, v: f64) {
         BeamField::Iris => p.beam.iris = Some(v),
         BeamField::Frost => p.beam.frost = Some(v),
         BeamField::Cto => p.beam.cto = Some(v),
+        BeamField::GoboRotate => p.beam.gobo_rotate = Some(v),
+        BeamField::PrismRotate => p.beam.prism_rotate = Some(v),
     }
 }
 
@@ -135,6 +143,11 @@ struct Acc {
     col: Option<(f64, f64, f64, f64)>,   // (r,g,b, weight)
     motor_mode: Option<MotorMode>,
     macro_: Option<f64>,
+    // banded like macro_: the wheel slots and the shutter pattern snap, they
+    // never blend — half a gobo is not a thing
+    gobo: Option<f64>,
+    prism: Option<f64>,
+    strobe_mode: Option<StrobeMode>,
 }
 
 pub struct TickResult {
@@ -556,6 +569,8 @@ impl Renderer {
                         add_beam(BeamField::Iris, prm.iris);
                         add_beam(BeamField::Frost, prm.frost);
                         add_beam(BeamField::Cto, prm.cto);
+                        add_beam(BeamField::GoboRotate, prm.gobo_rotate);
+                        add_beam(BeamField::PrismRotate, prm.prism_rotate);
                         if let Some(c) = prm.color {
                             let (r, g, b) = hsv_to_rgb(c.h, c.s, 1.0);
                             let col = a.col.get_or_insert((0.0, 0.0, 0.0, 0.0));
@@ -570,6 +585,15 @@ impl Renderer {
                         }
                         if prm.macro_.is_some() && (incoming || a.macro_.is_none()) {
                             a.macro_ = prm.macro_;
+                        }
+                        if prm.gobo.is_some() && (incoming || a.gobo.is_none()) {
+                            a.gobo = prm.gobo;
+                        }
+                        if prm.prism.is_some() && (incoming || a.prism.is_none()) {
+                            a.prism = prm.prism;
+                        }
+                        if prm.strobe_mode.is_some() && (incoming || a.strobe_mode.is_none()) {
+                            a.strobe_mode = prm.strobe_mode;
                         }
                     }
                 }
@@ -628,6 +652,15 @@ impl Renderer {
                 }
                 if a.macro_.is_some() {
                     out.macro_ = a.macro_;
+                }
+                if a.gobo.is_some() {
+                    out.gobo = a.gobo;
+                }
+                if a.prism.is_some() {
+                    out.prism = a.prism;
+                }
+                if let Some(sm) = a.strobe_mode {
+                    out.strobe_mode = sm;
                 }
             }
         }

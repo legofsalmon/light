@@ -68,7 +68,16 @@ A look is a list of **parts**. Each part points at one fixture group and carries
 - **Beam** — zoom, focus, beam size, soften, warmth. Each offered only if a fixture in
   the group has it. Absent means the look says nothing about that parameter and
   the fixture keeps whatever its profile parks it at — not that it is zero.
-- **Strobe**, and the derby-specific ring controls where they apply.
+- **Gobo** and **prism** — a slot picker built from the fixture's own wheel
+  (0 is open), and a *spin* fader where the wheel rotates. A slot is an index,
+  not a DMX value, so one look lands on "the second gobo" of every fixture in
+  the group, whatever make they are. *Not set* leaves the wheel where the
+  fixture parks it, like the beam parameters. The spin fader's middle is
+  stopped on most heads; either end is full speed one way.
+- **Strobe** — the rate, plus the pattern where the fixture has one: plain,
+  *pulse* (each flash ramps open and shut) or *random*. A fixture without the
+  pattern strobes plain, so a pattern can never silence a head.
+- The derby-specific ring controls where they apply.
 
 Enable a parameter with the checkbox beside it. A look only writes the
 parameters it has enabled, which is what lets layers combine cleanly: a colour

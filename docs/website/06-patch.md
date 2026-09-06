@@ -50,8 +50,12 @@ was built against and imports the rest from **GDTF**.
 
 Import a `.gdtf` and every DMX mode inside it becomes a profile you can select
 in the table. The importer maps the standard attributes — dimmer, pan/tilt,
-RGB/W, shutter, and the beam parameters zoom, focus, beam size, soften and warmth — onto
-the parameters the look editor offers.
+RGB/W, shutter with its pulse and random bands, the beam parameters zoom, focus,
+beam size, soften and warmth, and one gobo wheel and one prism wheel (slot select
+and rotation; where a fixture has two of a kind, the one that rotates) — onto the
+parameters the look editor offers. A channel's resting value is what its
+`InitialFunction` names, so a shutter that lists *closed* before *open* still
+rests open.
 
 Attributes are matched including their indexed spellings: GDTF writes `Dimmer`
 on a single-instance geometry and `Dimmer1`, `Dimmer2` … when it is indexed, and
@@ -77,6 +81,11 @@ count, and nothing that drives anything. LIGHT flags those:
 - **Undriven beam channels** — the profile lists zoom, focus, beam size, soften or warmth
   by name but has no function behind them, so the look editor cannot offer those
   controls. The look editor says so where the faders would be.
+- **An older importer** — every profile carries the version of the importer that
+  compiled it, and one behind this build is flagged the same way: gobo, prism and
+  shutter-pattern controls arrived with version 1, so a fixture imported before
+  that has the channels and nothing behind them until it is rebuilt. **GDTF
+  Share ▸ rebuild from library** re-imports every file in the fixture library.
 
 The fix for both is the same: fetch the real definition from **GDTF Share** (or
 the manufacturer) and re-import it, then point the fixtures at the new profile.

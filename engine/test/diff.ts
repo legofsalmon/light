@@ -9,7 +9,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import WebSocket from 'ws';
 import { defaultProject } from '../defaultProject.ts';
-import type { Command, ControlLink, Effect, FxPreset, Project, Snapshot } from '../../shared/types.ts';
+import type { Command, ControlLink, Effect, FxPreset, PartParams, Project, Snapshot } from '../../shared/types.ts';
+import { COMPILER_VERSION } from '../../shared/types.ts';
 
 const ROOT = process.cwd();
 const TMP = path.join(ROOT, '.parity-tmp');
@@ -547,6 +548,96 @@ async function main(): Promise<void> {
       'zoom: releasing it parks the channel again, it does not fall to 0',
       node.dmx['u1']?.[208] === 128,
       `zoom byte ${node.dmx['u1']?.[208]} (expected 128, the GDTF default)`,
+    );
+  }
+
+  // --- optics: gobo and prism wheels, their rotation, and shutter patterns.
+  // --- Slots snap, rotations crossfade, an unset one parks — in both engines,
+  // --- byte for byte. Node renders through the WASM interpreter, Rust natively.
+  {
+    const optics = fs.readFileSync(path.join(ROOT, 'core', 'tests', 'data', 'synthetic-optics.gdtf'));
+    both({ type: 'importGdtf', name: 'synthetic-optics.gdtf', data: optics.toString('base64') });
+    await sleep(500);
+    const opticsId = 'gdtf-acme-testspot-200-standard';
+    const pN = structuredClone(await currentProject(node));
+    const pR = structuredClone(await currentProject(rust));
+    check('optics: import landed in both engines', !!pN.profiles?.[opticsId] && !!pR.profiles?.[opticsId]);
+    check(
+      'optics: the importer stamps its version, the same on both engines',
+      pN.profiles?.[opticsId]?.compiler === COMPILER_VERSION && pR.profiles?.[opticsId]?.compiler === COMPILER_VERSION,
+      `node=${pN.profiles?.[opticsId]?.compiler} rust=${pR.profiles?.[opticsId]?.compiler}`,
+    );
+    type SlotCase = { func?: { kind?: string; sets?: { name: string }[] } };
+    const gobos = (pN.profiles?.[opticsId]?.channels.find((c) => c.name === 'Gobo1')?.cases as SlotCase[] | undefined)
+      ?.find((k) => k.func?.kind === 'slot')?.func?.sets?.map((s) => s.name);
+    check(
+      'optics: gobo slots read off the wheel, the nameless set named from its wheel slot',
+      JSON.stringify(gobos) === JSON.stringify(['Open', 'Breakup', 'Stars', 'Dots']),
+      `got ${JSON.stringify(gobos)}`,
+    );
+
+    // a pad of its own on the wash layer, so the spot look above is untouched
+    const col = Math.max(1, pN.layers[0].cells.findIndex((c, i) => i > 0 && c === null));
+    const patchOptics = (p: Project) => {
+      p.fixtures.push({
+        id: 'opt1', name: 'Optics', profileId: opticsId, universeId: 'u1', address: 400,
+        pos: { x: 1, y: 3, z: 0 }, rotY: 0,
+      });
+      p.groups.push({ id: 'g-opt', name: 'Optics', heads: [{ fixtureId: 'opt1', head: 0 }] });
+      p.looks['look-opt'] = {
+        id: 'look-opt', name: 'Optics test',
+        parts: [{ id: 'p-opt', groupId: 'g-opt', params: { dimmer: 1, pan: 0.5, tilt: 0.5 }, effects: [] }],
+      };
+      while (p.layers[0].cells.length <= col) p.layers[0].cells.push(null);
+      p.layers[0].cells[col] = 'look-opt';
+      return p;
+    };
+    node.send({ type: 'updateProject', project: patchOptics(pN) });
+    rust.send({ type: 'updateProject', project: patchOptics(pR) });
+    await sleep(300);
+    both({ type: 'trigger', layerId: 'layer-wash', col });
+    await sleep(1400);
+    const bytes = () => node.dmx['u1']?.slice(399, 407);
+    compareDmx('optics: parked parity', node, rust);
+    check(
+      'optics: nothing asked → every wheel rests where the file parks it (shutter open per InitialFunction, prism rotate at stop)',
+      JSON.stringify(bytes()) === JSON.stringify([128, 128, 255, 12, 0, 0, 0, 128]),
+      `got ${JSON.stringify(bytes())}`,
+    );
+
+    const setOptics = async (params: Record<string, unknown>) => {
+      const p = structuredClone(await currentProject(node));
+      p.looks['look-opt'].parts[0].params = { dimmer: 1, pan: 0.5, tilt: 0.5, ...params } as unknown as PartParams;
+      both({ type: 'updateProject', project: p });
+      await sleep(400);
+    };
+    await setOptics({ gobo: 2, goboRotate: 0.5, prism: 1, prismRotate: 0.25, strobe: 0.5, strobeMode: 'pulse' });
+    compareDmx('optics: driven parity', node, rust);
+    check(
+      'optics: slot 2 = its band midpoint, rotations sweep the rotate bands, pulse strobes in the pulse band',
+      JSON.stringify(bytes()) === JSON.stringify([128, 128, 255, 164, 24, 192, 95, 64]),
+      `got ${JSON.stringify(bytes())}`,
+    );
+    await setOptics({ strobe: 0.5, strobeMode: 'random', gobo: 9 });
+    compareDmx('optics: random pattern + clamped slot parity', node, rust);
+    check(
+      'optics: random strobes in its own band; a slot past the wheel clamps to the last',
+      bytes()?.[3] === 228 && bytes()?.[4] === 34,
+      `got ${JSON.stringify(bytes())}`,
+    );
+    await setOptics({ strobe: 0.5, strobeMode: 'bogus', gobo: 1.4 });
+    compareDmx('optics: unknown pattern + fractional slot parity', node, rust);
+    check(
+      'optics: an unknown pattern strobes plain and a fractional slot rounds, in both engines',
+      bytes()?.[3] === 72 && bytes()?.[4] === 14,
+      `got ${JSON.stringify(bytes())}`,
+    );
+    await setOptics({});
+    compareDmx('optics: released parity', node, rust);
+    check(
+      'optics: releasing parks every wheel again, it does not fall to 0',
+      JSON.stringify(bytes()) === JSON.stringify([128, 128, 255, 12, 0, 0, 0, 128]),
+      `got ${JSON.stringify(bytes())}`,
     );
   }
 

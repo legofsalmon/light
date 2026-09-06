@@ -98,24 +98,38 @@ address) and removal; a file import now also lands in the library. What is
 not done: brand-name content — every candidate source is GDTF Share, and its
 terms forbid redistribution, so that waits on the email in decision 1.
 
-### 3 · Moving-light optics: gobo, prism, shutter modes — ◧ partial — L
+### 3 · Moving-light optics: gobo, prism, shutter modes — ◼ shipped 2026-09-06 (previz drawing of them still open)
 **Touches:** shared/types.ts, core, engine, parity, ui, docs
-**Today:** strobe is present (one linear rate; `Shutter1StrobePulse/Random`
-never driven). Colour wheels are present in both engines (auto-quantised from
-HS; explicit slot picker is derby-only). Gobo and prism are absent everywhere —
-`Gobo1*`/`Prism1*` fall into the GDTF importer's "unmapped" arm.
-**Build:**
-- A banded, snap-not-fade part parameter (gobo slot) + continuous rotate;
-  prism in/out + rotate; shutter modes as selectable bands. Each needs
-  `PartParams` fields, `ResolvedParams`/`BeamParams`, both renderers' merge
-  (banded merges like `macro`, not weighted), new `Source` variants, GDTF arms,
-  the WASM param-layout bump, SoftField/EffectTarget membership, UI caps and a
-  slot picker built from the profile's wheel names, tests + parity checkpoints.
-- Previz rendering of gobos/prisms is a separate, larger item.
-**First slice (S, UI only):** expose imported profiles' colour-wheel slot names
-as a picker for non-derby fixtures — `macro` already flows through both engines.
-**Constraint:** golden tests for built-ins must stay byte-identical; old saves
-must load with the new params absent (the `SourceUnset` pattern already exists).
+**Shipped:** `PartParams` gains `gobo` and `prism` (a wheel slot INDEX, 0 =
+open, never a DMX value, so one look lands on "the second gobo" of every
+fixture in the group), `goboRotate` / `prismRotate` (0..1 across the rotate
+band; nudge-able, effect targets) and `strobeMode` (`strobe` / `pulse` /
+`random`). Slots and the pattern snap like `macro`; rotations crossfade like
+zoom; all absent = parked, so every old save renders byte for byte. Engine:
+`Source::{Gobo, GoboRotate, Prism, PrismRotate}`, `Func::Slot` (index →
+set), `Cond::StrobeModeIs`, WASM layout 20 → 25 slots (NaN = unset), both
+renderers' merge. Importer: one gobo and one prism wheel per mode — the first
+that rotates, else wheel 1 (a MegaPointe's Gobo1 is static, Gobo2 spins);
+slots from the ChannelSets of the exact-attribute functions (nameless sets
+named from `WheelSlotIndex`, boundary sets skipped, no sets → the wheel's
+slots spread over the function's band); rotation = the union of the
+`…PosRotate` functions, on the `…Pos` channel or a channel named after the
+rotate function (Lyra); slot + rotate on one channel handled; pulse/random
+shutter bands by suffix with plain as the fallback. Side-finding fixed: a
+channel's resting value now comes from its `InitialFunction` — the Lyra's
+shutter lists Closed (default 5) before Open (15) and compiled SHUT.
+Profiles carry `compiler` (`COMPILER_VERSION` = 1); `isStaleProfile` joins
+the undriven-beam-channel check behind the Rig table's flag and GDTF Share's
+"rebuild from library". UI: gobo / prism slot pickers (names from the
+profile), gobo spin / prism spin faders, a plain · pulse · random picker
+beside the strobe fader; every effect target and control field now shows its
+person-facing name (`TARGET_LABEL` / `FIELD_LABEL`). Tests: ten Rust import
+tests on a second synthetic fixture plus inline MegaPointe-style and
+one-channel cases, golden sweep extended, Node sanitiser checks, parity
+checkpoints (parked / driven / random + clamped slot / unknown pattern +
+fractional slot / released). **Not done:** drawing gobos and prisms in the
+previz (a larger item of its own); a second gobo wheel; gobo shake and wheel
+spin; indexed (angle) rotation on a `…Pos` channel with no rotate function.
 
 ### 4 · A ready-made effects library — ◧ partial — M
 **Touches:** ui, docs (no engine change for single-effect presets)

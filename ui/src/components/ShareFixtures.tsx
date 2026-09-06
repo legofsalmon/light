@@ -18,7 +18,7 @@
 
 import React, { useEffect, useState } from 'react';
 import type { ShareEntry } from '../../../shared/types.ts';
-import { hasUndrivenBeamChannels, isPlaceholderProfile, parseGdtfSpec, rankMatches } from '../../../shared/gdtfShare.ts';
+import { profileNeedsRebuild, isPlaceholderProfile, parseGdtfSpec, rankMatches } from '../../../shared/gdtfShare.ts';
 import { useStore } from '../store.ts';
 import {
   shareAvailable,
@@ -98,11 +98,13 @@ export function ShareFixtures(): React.ReactElement | null {
 
   // Profiles compiled by an older build keep whatever the compiler understood
   // then — a Spiider patched before LIGHT could drive zoom has a Zoom channel
-  // with nothing behind it, and the fader would silently do nothing. The source
-  // .gdtf is still in the library, so this is offered as a rebuild rather than
-  // asking the operator to hunt the file down and import it again.
+  // with nothing behind it, and the fader would silently do nothing; one
+  // patched before the gobo wheel was understood has a Gobo1 channel the same
+  // way, which is what the compiler stamp catches. The source .gdtf is still
+  // in the library, so this is offered as a rebuild rather than asking the
+  // operator to hunt the file down and import it again.
   const stale = Object.entries(project.profiles ?? {})
-    .filter(([, pr]) => hasUndrivenBeamChannels(pr))
+    .filter(([, pr]) => profileNeedsRebuild(pr))
     .map(([id]) => id);
 
   // Sign in from the Keychain without being asked. "Remember me" that still
@@ -256,8 +258,8 @@ export function ShareFixtures(): React.ReactElement | null {
       {stale.length > 0 && (
         <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
           <span className="prose">
-            {stale.length} profile{stale.length === 1 ? '' : 's'} predate the beam
-            parameters — zoom, focus, beam size and soften are patched but not driven
+            {stale.length} profile{stale.length === 1 ? '' : 's'} came from an older importer —
+            beam, gobo, prism or shutter-pattern controls may be missing until they are rebuilt
           </span>
           <button
             className="btn small"
@@ -277,7 +279,7 @@ export function ShareFixtures(): React.ReactElement | null {
                 }
                 setNote(
                   `rebuilt from ${files.length} library file${files.length === 1 ? '' : 's'} — ` +
-                    'fixtures using them can now take the beam parameters',
+                    'fixtures using them now have every control their definition allows',
                 );
               })
             }

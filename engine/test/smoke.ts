@@ -12,7 +12,8 @@ import type { Project } from '../../shared/types.ts';
 import { sanitizeProject, sanitizeStage } from '../../shared/types.ts';
 import { stageExtent } from '../../shared/stageExtent.ts';
 import type { ShareList } from '../../shared/gdtfShare.ts';
-import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
+import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, isStaleProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
+import { COMPILER_VERSION } from '../../shared/types.ts';
 
 /** The demo show these tests were written against — five fixtures at known
  *  addresses, looks with known ids. Deliberately NOT the shipped default: that
@@ -448,6 +449,24 @@ await new Promise<void>((resolve) => {
     'stale: an undriven channel LIGHT has no parameter for is not staleness',
     !hasUndrivenBeamChannels({ channels: [{ name: 'Effects2Rate', cases: [] }] }),
   );
+  // The importer stamps its version too — what catches a gobo wheel compiled
+  // before LIGHT could drive one, which the name check cannot tell from a
+  // wheel LIGHT still leaves alone.
+  check('stale: a profile with no compiler stamp is behind this build', isStaleProfile({}));
+  check('stale: a profile stamped by this build is current', !isStaleProfile({ compiler: COMPILER_VERSION }));
+  check('stale: a profile stamped by a newer build is not offered a rebuild', !isStaleProfile({ compiler: COMPILER_VERSION + 1 }));
+}
+
+// --- optics params are read the way Rust's de_slot / de_strobe_mode read them
+{
+  const raw = demoProject();
+  const look = Object.values(raw.looks)[0]!;
+  look.parts[0].params = { gobo: 2.4, prism: -1, strobeMode: 'bogus', goboRotate: 0.3 } as unknown as Project['looks'][string]['parts'][number]['params'];
+  const prm = sanitizeProject(raw)!.looks[look.id].parts[0].params;
+  check('sanitize: a wheel slot is rounded to a whole slot', prm.gobo === 2, `gobo=${prm.gobo}`);
+  check('sanitize: a negative slot is dropped', prm.prism === undefined, `prism=${prm.prism}`);
+  check('sanitize: an unknown shutter pattern is dropped', prm.strobeMode === undefined, `strobeMode=${prm.strobeMode}`);
+  check('sanitize: a rotation passes through', prm.goboRotate === 0.3);
   check('stale: a profile with no channels is not stale', !hasUndrivenBeamChannels({}));
 }
 

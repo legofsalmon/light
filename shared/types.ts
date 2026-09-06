@@ -152,6 +152,14 @@ export type Group = { id: string; name: string; heads: HeadRef[]; auto?: string 
 export type ColorHS = { h: number; s: number }; // hue 0..360, sat 0..1
 export type MotorMode = 'off' | 'aim' | 'rotate';
 
+/** How the shutter strobes while `strobe` is above zero: a plain strobe (the
+ *  default, and all an older save knows), a pulse that ramps each flash open
+ *  and shut, or random flashes around the set rate. A fixture without the
+ *  pattern falls back to its plain strobe band. Mirrors StrobeMode in
+ *  core/src/types.rs. */
+export type StrobeMode = 'strobe' | 'pulse' | 'random';
+export const STROBE_MODES: readonly StrobeMode[] = ['strobe', 'pulse', 'random'];
+
 export type PartParams = {
   dimmer?: number;
   color?: ColorHS;
@@ -184,11 +192,26 @@ export type PartParams = {
   frost?: number;
   /** colour temperature correction, 0..1 across the fixture's range */
   cto?: number;
+  /** shutter pattern while strobing — absent is a plain strobe */
+  strobeMode?: StrobeMode;
+  // Optics. A slot is an INDEX into the fixture's own wheel (0 = open, no
+  // prism), never a DMX value, so one look reads the same on two different
+  // fixtures: "the second gobo" on each. Absent leaves the wheel where the
+  // profile parks it, exactly like the beam parameters above.
+  /** gobo wheel slot, 0 = open */
+  gobo?: number;
+  /** gobo rotation, 0..1 across the fixture's rotate band — on most heads the
+   *  middle of the band is stopped and either end is full speed one way */
+  goboRotate?: number;
+  /** prism slot, 0 = no prism */
+  prism?: number;
+  /** prism rotation, 0..1 across the fixture's rotate band */
+  prismRotate?: number;
 };
 
 export type EffectTarget =
   | 'dimmer' | 'hue' | 'white' | 'strobe' | 'pan' | 'tilt'
-  | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto';
+  | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'goboRotate' | 'prismRotate';
 export type Wave = 'sine' | 'triangle' | 'sawUp' | 'sawDown' | 'square' | 'chase' | 'random';
 /** How an effect's phase fans across the group: patch order (the legacy
  *  behaviour), a world-position sweep, a ripple from the group's centre, a
@@ -204,6 +227,7 @@ export type Fold = 'none' | 'mirror' | 'centre';
  *  validator draw from. */
 export const EFFECT_TARGETS: ReadonlySet<EffectTarget> = new Set<EffectTarget>([
   'dimmer', 'hue', 'white', 'strobe', 'pan', 'tilt', 'zoom', 'focus', 'iris', 'frost', 'cto',
+  'goboRotate', 'prismRotate',
 ]);
 export const WAVES: ReadonlySet<Wave> = new Set<Wave>([
   'sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random',
@@ -218,15 +242,15 @@ export const FOLDS: ReadonlySet<Fold> = new Set<Fold>(['none', 'mirror', 'centre
  *  numeric Effect knobs. One vocabulary, shared with P2/P3 bindings later. */
 export type SoftField =
   | 'dimmer' | 'white' | 'ringFx' | 'strobe' | 'motorValue' | 'pan' | 'tilt'
-  | 'haze' | 'fan' | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'hue' | 'sat'
-  | 'rate' | 'size' | 'spread' | 'width' | 'phase' | 'mix';
+  | 'haze' | 'fan' | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'goboRotate' | 'prismRotate'
+  | 'hue' | 'sat' | 'rate' | 'size' | 'spread' | 'width' | 'phase' | 'mix';
 
 /** Runtime membership set — the Node engine must reject an unknown field the
  *  same way Rust's typed SoftField deserialization drops the whole frame. */
 export const SOFT_FIELDS: ReadonlySet<SoftField> = new Set<SoftField>([
   'dimmer', 'white', 'ringFx', 'strobe', 'motorValue', 'pan', 'tilt',
-  'haze', 'fan', 'zoom', 'focus', 'iris', 'frost', 'cto', 'hue', 'sat',
-  'rate', 'size', 'spread', 'width', 'phase', 'mix',
+  'haze', 'fan', 'zoom', 'focus', 'iris', 'frost', 'cto', 'goboRotate', 'prismRotate',
+  'hue', 'sat', 'rate', 'size', 'spread', 'width', 'phase', 'mix',
 ]);
 
 /** Per-field clamp for soft values — the engine validates at the door, so the
@@ -427,6 +451,11 @@ export type Settings = {
 // re-exported here so UI code has one import for "the shapes on the wire".
 export type { ShareEntry, ShareList, ShareMatch, MissingFixture } from './gdtfShare.ts';
 
+/** The importer's current version — mirrors COMPILER_VERSION in
+ *  core/src/cprofile.rs, where the history of what changed at each step lives.
+ *  A profile stamped lower than this was compiled by an older build. */
+export const COMPILER_VERSION = 1;
+
 export type CompiledProfile = {
   id: string;
   manufacturer: string;
@@ -454,6 +483,12 @@ export type CompiledProfile = {
    *  1/r² beam integral finite when the camera looks straight at a lamp. */
   beamRadius?: number;
   virtualDimmer: boolean;
+  /** Which importer wrote this profile — COMPILER_VERSION at the time. A
+   *  project stores compiled profiles, so an old one keeps whatever the
+   *  compiler understood the day it was imported; the Rig view offers a
+   *  rebuild from the fixture library when this is behind. Absent (0) on
+   *  anything compiled before the stamp existed, which is what it should say. */
+  compiler?: number;
   /** who authored the fixture definition — carried so the credit travels with
    *  the project, which is what GDTF Share's terms ask for. */
   credit?: string;
@@ -853,6 +888,18 @@ export function sanitizeProject(p: Project): Project | null {
     }
     for (const part of lk.parts) {
       if (!part.params || typeof part.params !== 'object') part.params = {};
+      // A shutter pattern from a newer build (or a typo) is dropped, not
+      // failed — Rust's de_strobe_mode does the same, so both engines strobe
+      // plain. A wheel slot is a finite, non-negative whole number; anything
+      // else is dropped the way de_slot drops it.
+      const prm = part.params as Record<string, unknown>;
+      if (prm.strobeMode !== undefined && !STROBE_MODES.includes(prm.strobeMode as StrobeMode)) delete prm.strobeMode;
+      for (const k of ['gobo', 'prism'] as const) {
+        const v = prm[k];
+        if (v === undefined) continue;
+        if (typeof v === 'number' && Number.isFinite(v) && v >= 0) prm[k] = Math.round(v);
+        else delete prm[k];
+      }
       part.effects = Array.isArray(part.effects)
         ? part.effects.map(repairEffect).filter((e): e is Effect => e !== null)
         : [];

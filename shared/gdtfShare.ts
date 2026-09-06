@@ -1,3 +1,4 @@
+import { COMPILER_VERSION } from './types.ts';
 // Matching a fixture LIGHT is missing against the GDTF Share catalogue.
 //
 // This is deliberately a pure module with no network in it: the HTTP lives in
@@ -206,4 +207,21 @@ export function hasUndrivenBeamChannels(p: {
   return (p.channels ?? []).some(
     (c) => BEAM_ATTRIBUTES.has(c.name ?? '') && (c.cases?.length ?? 0) === 0,
   );
+}
+
+/** Compiled by an importer older than this build's — the other way a stored
+ *  profile falls behind, and the one that catches what a name check cannot:
+ *  a gobo wheel compiled before LIGHT could drive one has a `Gobo1` channel
+ *  with nothing behind it, but so does a wheel LIGHT still leaves alone, so
+ *  the stamp is what says which. Absent means older than the stamp. */
+export function isStaleProfile(p: { compiler?: number }): boolean {
+  return (p.compiler ?? 0) < COMPILER_VERSION;
+}
+
+/** Either way a profile is behind: undriven beam channels or an old stamp. */
+export function profileNeedsRebuild(p: {
+  channels?: { name?: string; cases?: unknown[] }[];
+  compiler?: number;
+}): boolean {
+  return hasUndrivenBeamChannels(p) || isStaleProfile(p);
 }

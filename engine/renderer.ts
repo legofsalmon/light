@@ -1,4 +1,4 @@
-import type { HeadRef, HeadSnap, LayerSnap, LookPart, MotorMode } from '../shared/types.ts';
+import type { HeadRef, HeadSnap, LayerSnap, LookPart, MotorMode, StrobeMode } from '../shared/types.ts';
 import { clamp, lerp } from '../shared/types.ts';
 import type { HeadKind, ResolvedParams } from '../shared/profiles.ts';
 import { PROFILES, defaultResolved } from '../shared/profiles.ts';
@@ -24,8 +24,8 @@ const NUM_FIELDS: NumField[] = ['dimmer', 'white', 'ringFx', 'strobe', 'pan', 't
 // existing merge untouched, so a saved show still renders byte for byte.
 // Mirrors BeamField/ALL_BEAM in core/src/renderer.rs — order is not load
 // bearing here, but keeping the two lists identical is how they stay in step.
-type BeamField = 'zoom' | 'focus' | 'iris' | 'frost' | 'cto';
-const BEAM_FIELDS: BeamField[] = ['zoom', 'focus', 'iris', 'frost', 'cto'];
+type BeamField = 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'goboRotate' | 'prismRotate';
+const BEAM_FIELDS: BeamField[] = ['zoom', 'focus', 'iris', 'frost', 'cto', 'goboRotate', 'prismRotate'];
 
 type Acc = {
   num: Partial<Record<NumField, { v: number; w: number }>>;
@@ -33,6 +33,11 @@ type Acc = {
   col: { r: number; g: number; b: number; w: number } | null;
   motorMode: MotorMode | null;
   macro: number | undefined;
+  // banded like macro: the wheel slots and the shutter pattern snap, they
+  // never blend — half a gobo is not a thing
+  gobo: number | undefined;
+  prism: number | undefined;
+  strobeMode: StrobeMode | null;
 };
 
 export type TickResult = {
@@ -322,7 +327,7 @@ export class Renderer {
             const prm = applyEffects(effParams, effEffects, this.effBeat, corr, j, n, g, ext);
             let a = acc.get(key);
             if (!a) {
-              a = { num: {}, beam: {}, col: null, motorMode: null, macro: undefined };
+              a = { num: {}, beam: {}, col: null, motorMode: null, macro: undefined, gobo: undefined, prism: undefined, strobeMode: null };
               acc.set(key, a);
             }
             const addNum = (field: NumField, v: number | undefined) => {
@@ -359,6 +364,9 @@ export class Renderer {
             // Banded/snap fields take the incoming look's value from fade start.
             if (prm.motorMode !== undefined && (src.incoming || a.motorMode === null)) a.motorMode = prm.motorMode;
             if (prm.macro !== undefined && (src.incoming || a.macro === undefined)) a.macro = prm.macro;
+            if (prm.gobo !== undefined && (src.incoming || a.gobo === undefined)) a.gobo = prm.gobo;
+            if (prm.prism !== undefined && (src.incoming || a.prism === undefined)) a.prism = prm.prism;
+            if (prm.strobeMode !== undefined && (src.incoming || a.strobeMode === null)) a.strobeMode = prm.strobeMode;
           }
         }
       }
@@ -401,6 +409,9 @@ export class Renderer {
         }
         if (a.motorMode !== null) out.motorMode = a.motorMode;
         if (a.macro !== undefined) out.macro = a.macro;
+        if (a.gobo !== undefined) out.gobo = a.gobo;
+        if (a.prism !== undefined) out.prism = a.prism;
+        if (a.strobeMode !== null) out.strobeMode = a.strobeMode;
       }
     }
 

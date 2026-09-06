@@ -20,7 +20,7 @@ export function register_profile(json: string): number;
 
 /**
  * Render one fixture's heads through a registered profile.
- * `params` is heads × 20 f64 (layout above). Returns the footprint bytes.
+ * `params` is heads × PARAMS_PER_HEAD f64 (layout above). Returns the footprint bytes.
  */
 export function render(handle: number, params: Float64Array): Uint8Array;
 

@@ -214,6 +214,36 @@ pub enum MotorMode {
     Rotate,
 }
 
+/// How the shutter strobes while `strobe` is above zero. Mirrors StrobeMode in
+/// shared/types.ts: plain (the default, and all an older save knows), a pulse
+/// that ramps each flash open and shut, or random flashes around the set rate.
+/// A fixture without the pattern falls back to its plain strobe band.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum StrobeMode {
+    #[default]
+    Strobe,
+    Pulse,
+    Random,
+}
+
+/// A pattern this build does not know is dropped, not failed: the Node
+/// sanitizer deletes it too, so both engines strobe plain.
+fn de_strobe_mode<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<StrobeMode>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(v.and_then(|x| serde_json::from_value(x).ok()))
+}
+
+/// A wheel slot: a finite, non-negative number, rounded — mirrors the Node
+/// sanitizer, so a hand-edited "2.4" lands on slot 2 in both engines.
+fn de_slot<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<f64>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(match v.as_ref().and_then(|x| x.as_f64()) {
+        Some(n) if n.is_finite() && n >= 0.0 => Some(n.round()),
+        _ => None,
+    })
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PartParams {
@@ -253,6 +283,20 @@ pub struct PartParams {
     pub frost: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cto: Option<f64>,
+    /// Shutter pattern while strobing; absent is a plain strobe.
+    #[serde(default, deserialize_with = "de_strobe_mode", skip_serializing_if = "Option::is_none")]
+    pub strobe_mode: Option<StrobeMode>,
+    // Optics. A slot is an INDEX into the fixture's own wheel (0 = open, no
+    // prism), never a DMX value, so one look reads the same on two different
+    // fixtures. Absent leaves the wheel where the profile parks it.
+    #[serde(default, deserialize_with = "de_slot", skip_serializing_if = "Option::is_none")]
+    pub gobo: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gobo_rotate: Option<f64>,
+    #[serde(default, deserialize_with = "de_slot", skip_serializing_if = "Option::is_none")]
+    pub prism: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prism_rotate: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -269,6 +313,8 @@ pub enum EffectTarget {
     Iris,
     Frost,
     Cto,
+    GoboRotate,
+    PrismRotate,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -332,6 +378,8 @@ pub enum SoftField {
     Iris,
     Frost,
     Cto,
+    GoboRotate,
+    PrismRotate,
     Hue,
     Sat,
     Rate,

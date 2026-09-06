@@ -76,6 +76,8 @@ pub fn soft_base(params: &PartParams, field: crate::types::SoftField) -> f64 {
         F::Iris => params.iris.unwrap_or(0.5),
         F::Frost => params.frost.unwrap_or(0.5),
         F::Cto => params.cto.unwrap_or(0.5),
+        F::GoboRotate => params.gobo_rotate.unwrap_or(0.5),
+        F::PrismRotate => params.prism_rotate.unwrap_or(0.5),
         F::White => params.white.unwrap_or(0.0),
         F::RingFx => params.ring_fx.unwrap_or(0.0),
         F::Strobe => params.strobe.unwrap_or(0.0),
@@ -298,6 +300,16 @@ pub fn apply_effects(
             EffectTarget::Cto => {
                 let dry = out.cto.unwrap_or(0.5);
                 out.cto = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
+            }
+            // The optics rotations are continuous like the beam parameters, so
+            // a wave swings the spin speed about its set value the same way.
+            EffectTarget::GoboRotate => {
+                let dry = out.gobo_rotate.unwrap_or(0.5);
+                out.gobo_rotate = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
+            }
+            EffectTarget::PrismRotate => {
+                let dry = out.prism_rotate.unwrap_or(0.5);
+                out.prism_rotate = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
             }
         }
     }

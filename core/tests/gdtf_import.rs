@@ -576,3 +576,268 @@ fn beam_physicals_survive_import() {
     assert!((bare.field_deg() - 11.5 * 1.55).abs() < 1e-9);
     assert!(bare.lumens_or_guess() > 0.0);
 }
+
+// ---------------------------------------------------------------------------
+// Optics: gobo and prism wheels, their rotation, shutter patterns, and the
+// resting value a channel's InitialFunction names (backlog #3).
+
+const OPTICS: &str = include_str!("data/synthetic-optics.gdtf.xml");
+
+fn zipped(xml: &str) -> Vec<u8> {
+    let mut buf = Vec::new();
+    {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        zip.start_file::<_, ()>("description.xml", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(xml.as_bytes()).unwrap();
+        zip.finish().unwrap();
+    }
+    buf
+}
+
+/// A minimal fixture around the given wheels and DMX channels, for the cases
+/// the shipped synthetic file does not show.
+fn fixture_xml(wheels: &str, channels: &str) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<GDTF DataVersion="1.2"><FixtureType Name="Inline" Manufacturer="ACME">
+  <Wheels>{wheels}</Wheels>
+  <Geometries><Geometry Name="Base"><Beam Name="Beam1" BeamAngle="10"/></Geometry></Geometries>
+  <DMXModes><DMXMode Name="M" Geometry="Base"><DMXChannels>
+    <DMXChannel DMXBreak="1" Offset="1" Geometry="Base"><LogicalChannel Attribute="Dimmer"><ChannelFunction Attribute="Dimmer" DMXFrom="0/1" Default="0/1"/></LogicalChannel></DMXChannel>
+    {channels}
+  </DMXChannels></DMXMode></DMXModes>
+</FixtureType></GDTF>"#
+    )
+}
+
+fn optics_profile() -> light_core::cprofile::CompiledProfile {
+    let profiles = parse_gdtf(&zipped(OPTICS)).expect("optics fixture parses");
+    assert_eq!(profiles.len(), 1);
+    profiles.into_iter().next().unwrap()
+}
+
+fn optics_params() -> ResolvedParams {
+    ResolvedParams { dimmer: 1.0, pan: 0.5, tilt: 0.5, ..Default::default() }
+}
+
+fn render8(p: &light_core::cprofile::CompiledProfile, prm: &ResolvedParams) -> [u8; 8] {
+    let mut buf = [0u8; 8];
+    render_compiled(p, &[prm], &mut buf, 0);
+    buf
+}
+
+fn channel<'a>(p: &'a light_core::cprofile::CompiledProfile, name: &str) -> &'a light_core::cprofile::CChannel {
+    p.channels.iter().find(|c| c.name == name).unwrap_or_else(|| panic!("no channel {name}"))
+}
+
+#[test]
+fn optics_park_until_a_look_asks() {
+    let p = optics_profile();
+    assert_eq!(p.footprint, 8);
+    assert_eq!(p.heads[0].kind, HeadKind::Mover);
+    assert_eq!(p.compiler, light_core::cprofile::COMPILER_VERSION, "the importer stamps its version");
+    // shutter rests OPEN (12, from InitialFunction) and the prism rotation at
+    // its Stop function's default — neither wheel moves for a look that never
+    // mentions them
+    assert_eq!(render8(&p, &optics_params()), [128, 128, 255, 12, 0, 0, 0, 128]);
+}
+
+#[test]
+fn gobo_slot_is_an_index_into_the_wheel() {
+    let p = optics_profile();
+    let with = |slot: f64| {
+        let mut prm = optics_params();
+        prm.gobo = Some(slot);
+        render8(&p, &prm)[4]
+    };
+    assert_eq!(with(0.0), 4, "slot 0 = the open band's midpoint (0..9)");
+    assert_eq!(with(1.0), 14, "slot 1 = 10..19");
+    assert_eq!(with(2.0), 24, "slot 2 = 20..29");
+    assert_eq!(with(3.0), 34, "the last slot ends where the shake function begins (39)");
+    assert_eq!(with(9.0), 34, "past the wheel clamps to the last slot");
+    assert_eq!(with(-3.0), 4, "below it clamps to open");
+    assert_eq!(with(1.4), 14, "a fractional slot rounds");
+}
+
+#[test]
+fn gobo_slot_names_come_from_the_sets_or_the_wheel() {
+    let p = optics_profile();
+    let ch = channel(&p, "Gobo1");
+    let sets = ch
+        .cases
+        .iter()
+        .find_map(|c| match &c.func {
+            light_core::cprofile::Func::Slot { sets, source } => {
+                assert_eq!(*source, light_core::cprofile::Source::Gobo);
+                Some(sets)
+            }
+            _ => None,
+        })
+        .expect("a slot case");
+    let names: Vec<&str> = sets.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["Open", "Breakup", "Stars", "Dots"], "the nameless set is named from its wheel slot");
+    let bands: Vec<(u8, u8, u8)> = sets.iter().map(|s| (s.min, s.max, s.value)).collect();
+    assert_eq!(bands, [(0, 9, 4), (10, 19, 14), (20, 29, 24), (30, 39, 34)]);
+    assert!(sets.iter().all(|s| !s.auto), "gobo slots never take part in colour quantisation");
+}
+
+#[test]
+fn rotation_sweeps_the_union_of_the_rotate_functions() {
+    let p = optics_profile();
+    let with = |g: Option<f64>, pr: Option<f64>| {
+        let mut prm = optics_params();
+        prm.beam.gobo_rotate = g;
+        prm.beam.prism_rotate = pr;
+        render8(&p, &prm)
+    };
+    // Gobo1Pos: index 0..127 stays untouched; CCW / stop / CW functions from
+    // 128 make one 128..255 band
+    assert_eq!(with(Some(0.0), None)[5], 128);
+    assert_eq!(with(Some(0.5), None)[5], 192);
+    assert_eq!(with(Some(1.0), None)[5], 255);
+    // Prism1PosRotate names the whole channel: 0..255
+    assert_eq!(with(None, Some(0.25))[7], 64);
+    assert_eq!(with(None, Some(1.0))[7], 255);
+    assert_eq!(with(None, None)[7], 128, "unset rests at the Stop function's default");
+}
+
+#[test]
+fn prism_slots_span_two_functions() {
+    let p = optics_profile();
+    let with = |slot: f64| {
+        let mut prm = optics_params();
+        prm.prism = Some(slot);
+        render8(&p, &prm)[6]
+    };
+    assert_eq!(with(0.0), 31, "Open is 0..63");
+    assert_eq!(with(1.0), 95, "3-facet is 64..127 on the second function");
+    assert_eq!(with(2.0), 191, "5-facet runs to the channel end");
+}
+
+#[test]
+fn shutter_patterns_have_bands_of_their_own_and_fall_back_to_plain() {
+    use light_core::types::StrobeMode;
+    let p = optics_profile();
+    let with = |mode: StrobeMode| {
+        let mut prm = optics_params();
+        prm.strobe = 0.5;
+        prm.strobe_mode = mode;
+        render8(&p, &prm)[3]
+    };
+    assert_eq!(with(StrobeMode::Strobe), 72, "plain: 16..127");
+    assert_eq!(with(StrobeMode::Pulse), 164, "pulse: 128..199");
+    assert_eq!(with(StrobeMode::Random), 228, "random: 200..255");
+
+    // the older synthetic fixture has a pulse band but no random one
+    let plain = parse_gdtf(&synthetic_gdtf()).unwrap().remove(0);
+    let with = |mode: StrobeMode| {
+        let mut prm = params();
+        prm.strobe = 0.5;
+        prm.strobe_mode = mode;
+        let mut buf = [0u8; 16];
+        render_compiled(&plain, &[&prm], &mut buf, 0);
+        buf[5]
+    };
+    assert_eq!(with(StrobeMode::Strobe), 108, "plain strobe band 16..199, exactly as before");
+    assert_eq!(with(StrobeMode::Pulse), 228, "its pulse band 200..255");
+    assert_eq!(with(StrobeMode::Random), 108, "no random band: falls through to plain");
+    let mut open = params();
+    open.strobe_mode = StrobeMode::Random;
+    let mut buf = [0u8; 16];
+    render_compiled(&plain, &[&open], &mut buf, 0);
+    assert_eq!(buf[5], 8, "a pattern with no strobe rate is no strobe at all");
+}
+
+#[test]
+fn initial_function_names_the_resting_value() {
+    let p = optics_profile();
+    assert_eq!(channel(&p, "Shutter1").default, 12, "Open's default, not Closed's (listed first)");
+    assert_eq!(channel(&p, "Prism1PosRotate").default, 128, "Stop's default, not CCW's");
+    // and a file without the attribute keeps the first function's, as before
+    let plain = parse_gdtf(&synthetic_gdtf()).unwrap().remove(0);
+    assert_eq!(channel(&plain, "Shutter1").default, 8);
+}
+
+#[test]
+fn the_rotating_gobo_wheel_is_the_one_light_drives() {
+    // A MegaPointe: Gobo1 is a static wheel, Gobo2 rotates. "The gobo" an
+    // operator means is the one that spins, so slot and spin both go to 2.
+    let xml = fixture_xml(
+        r#"<Wheel Name="Static"><Slot Name="Open"/><Slot Name="S1"/></Wheel>
+           <Wheel Name="Rotating"><Slot Name="Open"/><Slot Name="R1"/><Slot Name="R2"/></Wheel>"#,
+        r#"<DMXChannel DMXBreak="1" Offset="2" Geometry="Base"><LogicalChannel Attribute="Gobo1">
+             <ChannelFunction Attribute="Gobo1" DMXFrom="0/1" Default="0/1" Wheel="Static">
+               <ChannelSet Name="Open" DMXFrom="0/1"/><ChannelSet Name="S1" DMXFrom="10/1"/></ChannelFunction></LogicalChannel></DMXChannel>
+           <DMXChannel DMXBreak="1" Offset="3" Geometry="Base"><LogicalChannel Attribute="Gobo2">
+             <ChannelFunction Attribute="Gobo2" DMXFrom="0/1" Default="0/1" Wheel="Rotating">
+               <ChannelSet Name="Open" DMXFrom="0/1"/><ChannelSet Name="R1" DMXFrom="10/1"/><ChannelSet Name="R2" DMXFrom="20/1"/></ChannelFunction></LogicalChannel></DMXChannel>
+           <DMXChannel DMXBreak="1" Offset="4" Geometry="Base"><LogicalChannel Attribute="Gobo2Pos">
+             <ChannelFunction Attribute="Gobo2Pos" DMXFrom="0/1" Default="0/1" Wheel="Rotating"/>
+             <ChannelFunction Attribute="Gobo2PosRotate" DMXFrom="128/1" Default="128/1" Wheel="Rotating"/></LogicalChannel></DMXChannel>"#,
+    );
+    let p = parse_gdtf(&zipped(&xml)).expect("parses").remove(0);
+    assert!(channel(&p, "Gobo1").cases.is_empty(), "the static wheel holds its default");
+    assert!(!channel(&p, "Gobo2").cases.is_empty());
+    assert!(!channel(&p, "Gobo2Pos").cases.is_empty());
+    let mut prm = ResolvedParams { dimmer: 1.0, ..Default::default() };
+    prm.gobo = Some(2.0);
+    prm.beam.gobo_rotate = Some(1.0);
+    let mut buf = [0u8; 4];
+    render_compiled(&p, &[&prm], &mut buf, 0);
+    assert_eq!(buf, [255, 0, 137, 255], "Gobo1 parked, Gobo2 on R2 (the 20..255 band's midpoint), Gobo2Pos full CW");
+}
+
+#[test]
+fn slot_and_rotation_on_one_channel() {
+    // A cheap head puts the wheel and its rotation on one channel: slots
+    // low, rotate band high.
+    let xml = fixture_xml(
+        r#"<Wheel Name="W"><Slot Name="Open"/><Slot Name="Breakup"/></Wheel>"#,
+        r#"<DMXChannel DMXBreak="1" Offset="2" Geometry="Base"><LogicalChannel Attribute="Gobo1">
+             <ChannelFunction Attribute="Gobo1" DMXFrom="0/1" Default="0/1" Wheel="W">
+               <ChannelSet Name="Open" DMXFrom="0/1"/><ChannelSet Name="Breakup" DMXFrom="20/1"/></ChannelFunction>
+             <ChannelFunction Attribute="Gobo1PosRotate" DMXFrom="128/1" Default="128/1" Wheel="W"/></LogicalChannel></DMXChannel>"#,
+    );
+    let p = parse_gdtf(&zipped(&xml)).expect("parses").remove(0);
+    assert_eq!(channel(&p, "Gobo1").cases.len(), 4);
+    let with = |slot: Option<f64>, rot: Option<f64>| {
+        let mut prm = ResolvedParams { dimmer: 1.0, ..Default::default() };
+        prm.gobo = slot;
+        prm.beam.gobo_rotate = rot;
+        let mut buf = [0u8; 2];
+        render_compiled(&p, &[&prm], &mut buf, 0);
+        buf[1]
+    };
+    assert_eq!(with(None, None), 0, "nothing asked: parked");
+    assert_eq!(with(None, Some(1.0)), 0, "a rotation with no slot chosen has nothing to spin");
+    assert_eq!(with(Some(1.0), None), 73, "slot 1 = 20..127, the rotate band starting at 128");
+    assert_eq!(with(Some(0.0), Some(1.0)), 9, "open stays open, whatever the rotation says");
+    assert_eq!(with(Some(1.0), Some(0.0)), 128, "slot 1 spinning: the rotate band");
+    assert_eq!(with(Some(1.0), Some(1.0)), 255);
+}
+
+#[test]
+fn a_wheel_without_channel_sets_spreads_its_slots() {
+    let xml = fixture_xml(
+        r#"<Wheel Name="W"><Slot Name="Open"/><Slot Name="A"/><Slot Name="B"/><Slot Name="C"/></Wheel>"#,
+        r#"<DMXChannel DMXBreak="1" Offset="2" Geometry="Base"><LogicalChannel Attribute="Gobo1">
+             <ChannelFunction Attribute="Gobo1" DMXFrom="0/1" Default="0/1" Wheel="W"/>
+             <ChannelFunction Attribute="Gobo1WheelSpin" DMXFrom="128/1" Default="128/1" Wheel="W"/></LogicalChannel></DMXChannel>"#,
+    );
+    let p = parse_gdtf(&zipped(&xml)).expect("parses").remove(0);
+    let sets = channel(&p, "Gobo1")
+        .cases
+        .iter()
+        .find_map(|c| match &c.func {
+            light_core::cprofile::Func::Slot { sets, .. } => Some(sets.clone()),
+            _ => None,
+        })
+        .expect("slot case");
+    let bands: Vec<(&str, u8, u8, u8)> = sets.iter().map(|s| (s.name.as_str(), s.min, s.max, s.value)).collect();
+    assert_eq!(
+        bands,
+        [("Open", 0, 31, 15), ("A", 32, 63, 47), ("B", 64, 95, 79), ("C", 96, 127, 111)],
+        "four slots share the function's 0..127, not the whole channel"
+    );
+}

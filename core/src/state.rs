@@ -42,6 +42,8 @@ pub fn apply_soft_param(params: &mut crate::types::PartParams, field: SoftField,
         SoftField::Iris => params.iris = Some(v),
         SoftField::Frost => params.frost = Some(v),
         SoftField::Cto => params.cto = Some(v),
+        SoftField::GoboRotate => params.gobo_rotate = Some(v),
+        SoftField::PrismRotate => params.prism_rotate = Some(v),
         // effect-only fields never reach a params patch (set_soft routes)
         SoftField::Rate | SoftField::Size | SoftField::Spread | SoftField::Width
         | SoftField::Phase | SoftField::Mix => {}

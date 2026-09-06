@@ -292,6 +292,7 @@ mod tests {
             lumens: None,
             beam_radius: None,
             virtual_dimmer: false,
+            compiler: 0,
             credit: None,
             form_override: None,
         };

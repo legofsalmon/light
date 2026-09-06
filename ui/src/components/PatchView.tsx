@@ -12,7 +12,7 @@ import { nextFreeAddress } from '../rig.ts';
 import { useStore } from '../store.ts';
 import { stageExtent } from '../../../shared/stageExtent.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
-import { hasUndrivenBeamChannels, isPlaceholderProfile } from '../../../shared/gdtfShare.ts';
+import { profileNeedsRebuild, isPlaceholderProfile } from '../../../shared/gdtfShare.ts';
 import { PixelLayout } from './PixelLayout.tsx';
 import { applyAutoGroups, planAutoGroups } from '../autoGroups.ts';
 import type { StageProp } from '../../../shared/types.ts';
@@ -189,19 +189,21 @@ export function PatchView() {
       ),
     [project],
   );
-  /** Profiles carrying beam channels — Zoom, Focus, Iris, Frost, CTO — that
-   *  nothing drives. The fixture works, but those parameters are missing from
-   *  the look editor with no explanation, because the editor only offers a
-   *  control when something in the group actually has that channel. It happens
-   *  to profiles compiled by an older importer, or imported from an MVR's flat
-   *  console exports: the channel is there by name with no function behind it.
-   *  Re-importing the real GDTF fixes it. Until this was surfaced the only
-   *  symptom was "why can't I set zoom?". */
+  /** Profiles behind this build's importer: beam channels — Zoom, Focus,
+   *  Iris, Frost, CTO — that nothing drives, or a compiler stamp older than
+   *  ours (gobo, prism and shutter patterns arrived with stamp 1). The fixture
+   *  works, but those parameters are missing from the look editor with no
+   *  explanation, because the editor only offers a control when something in
+   *  the group actually has that channel. It happens to profiles compiled by
+   *  an older importer, or imported from an MVR's flat console exports: the
+   *  channel is there by name with no function behind it. Re-importing the
+   *  real GDTF fixes it. Until this was surfaced the only symptom was "why
+   *  can't I set zoom?". */
   const beamlessProfiles = useMemo(
     () =>
       new Set(
         Object.entries(project.profiles ?? {})
-          .filter(([, pr]) => hasUndrivenBeamChannels(pr))
+          .filter(([, pr]) => profileNeedsRebuild(pr))
           .map(([id]) => id),
       ),
     [project],
@@ -531,7 +533,7 @@ export function PatchView() {
                       : stubProfiles.has(f.profileId)
                         ? 'placeholder profile: the MVR that brought this fixture in did not carry a real fixture definition, so it has a dimmer and nothing else. Fetch the real one in GDTF Share below, then set it here.'
                         : beamlessProfiles.has(f.profileId)
-                          ? 'this profile lists beam channels (zoom, focus, beam size, soften, warmth) that nothing drives, so the look editor cannot offer them. It was compiled from a thin GDTF or by an older importer — re-import the real GDTF for this fixture and the controls appear.'
+                          ? 'this profile was compiled by an older importer, so the look editor may be missing controls its fixture has — zoom, focus, beam size, soften, warmth, gobo, prism, shutter patterns. Re-import the real GDTF for this fixture, or rebuild from the library in the Fixtures tab, and the controls appear.'
                           : undefined
                   }
                 >

@@ -1,4 +1,4 @@
-import type { MotorMode } from './types.ts';
+import type { MotorMode, StrobeMode } from './types.ts';
 import { clamp } from './types.ts';
 import { derbyQuantize, rgbToHsv } from './color.ts';
 
@@ -36,6 +36,12 @@ export type ResolvedParams = {
   tilt: number;
   haze: number;
   fan: number;
+  /** Shutter pattern; plain unless a look picks another. Banded like
+   *  motorMode: the incoming look's value from fade start, never blended. */
+  strobeMode: StrobeMode;
+  /** Wheel slots, banded like macro: null until a look picks one. */
+  gobo: number | null;
+  prism: number | null;
   /** Beam parameters, null until a look sets one. Null means "nobody asked",
    *  and the channel holds whatever the fixture's profile parks it at. */
   zoom: number | null;
@@ -43,14 +49,19 @@ export type ResolvedParams = {
   iris: number | null;
   frost: number | null;
   cto: number | null;
+  /** The optics rotations: continuous like the beam parameters, crossfaded
+   *  between looks, unlike the slots they spin. */
+  goboRotate: number | null;
+  prismRotate: number | null;
 };
 
 export function defaultResolved(): ResolvedParams {
   return {
     dimmer: 0, r: 1, g: 1, b: 1, white: 0, ringFx: 0, strobe: 0,
     motorMode: 'off', motorValue: 0, macro: null, pan: 0.5, tilt: 0.5,
-    haze: 0, fan: 0,
+    haze: 0, fan: 0, strobeMode: 'strobe', gobo: null, prism: null,
     zoom: null, focus: null, iris: null, frost: null, cto: null,
+    goboRotate: null, prismRotate: null,
   };
 }
 

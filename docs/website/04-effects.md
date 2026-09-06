@@ -17,7 +17,8 @@ apply in the order they are listed.
 | **random** | sample-and-hold flicker, reproducible from its seed |
 
 **Targets:** dimmer, hue, white, strobe, pan, tilt, zoom, focus, beam size, soften,
-warmth. A target the group cannot take is flagged rather than silently ignored.
+warmth, gobo spin, prism spin. A target the group cannot take is flagged rather
+than silently ignored.
 
 ## The knobs
 

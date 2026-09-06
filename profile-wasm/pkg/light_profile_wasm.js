@@ -74,7 +74,7 @@ exports.register_profile = register_profile;
 
 /**
  * Render one fixture's heads through a registered profile.
- * `params` is heads × 20 f64 (layout above). Returns the footprint bytes.
+ * `params` is heads × PARAMS_PER_HEAD f64 (layout above). Returns the footprint bytes.
  * @param {number} handle
  * @param {Float64Array} params
  * @returns {Uint8Array}

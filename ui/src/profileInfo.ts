@@ -1,7 +1,8 @@
 // Unified fixture-profile metadata: built-ins (code) + imported GDTF (data).
 // The UI never renders DMX — it only needs shape, names, and previz hints.
 
-import type { Project } from '../../shared/types.ts';
+import type { Project, StrobeMode } from '../../shared/types.ts';
+import { STROBE_MODES } from '../../shared/types.ts';
 import type { HeadKind } from '../../shared/profiles.ts';
 import { PROFILES, PROFILE_LIST } from '../../shared/profiles.ts';
 
@@ -22,6 +23,14 @@ export type ProfileMeta = {
    *  compiled channels rather than their names, so a channel merely *called*
    *  "Zoom Mode" does not put a zoom fader on a fixture that has none */
   beam: BeamCaps;
+  /** the gobo wheel's slot names in index order (0 = open); empty = no wheel
+   *  LIGHT drives. A look stores the index, so the names are the picker. */
+  gobos: string[];
+  /** likewise the prism wheel (0 = no prism) */
+  prisms: string[];
+  /** shutter patterns with a band of their own — the plain strobe is always
+   *  there and is not listed */
+  strobeModes: StrobeMode[];
   beamDeg: number;
   imported: boolean;
 };
@@ -40,10 +49,14 @@ function compiledChannelNames(c: NonNullable<Project['profiles']>[string]): stri
   return names;
 }
 
-/** The optional beam parameters, in the order they are offered in the editor. */
-export const BEAM_PARAMS = ['zoom', 'focus', 'iris', 'frost', 'cto'] as const;
+/** The optional, continuous beam parameters — every one a 0..1 fader with an
+ *  enable, in the order they are offered in the editor. The two rotations
+ *  belong to the optics block and sit beside their wheel's slot picker. */
+export const BEAM_PARAMS = ['zoom', 'focus', 'iris', 'frost', 'cto', 'goboRotate', 'prismRotate'] as const;
 export type BeamParam = (typeof BEAM_PARAMS)[number];
 export type BeamCaps = Record<BeamParam, boolean>;
+/** The ones that are beam shaping proper, offered as a run of faders. */
+export const BEAM_FADERS: readonly BeamParam[] = ['zoom', 'focus', 'iris', 'frost', 'cto'];
 
 export const BEAM_LABELS: Record<BeamParam, string> = {
   zoom: 'zoom',
@@ -51,10 +64,14 @@ export const BEAM_LABELS: Record<BeamParam, string> = {
   iris: 'beam size',
   frost: 'soften',
   cto: 'warmth',
+  goboRotate: 'gobo spin',
+  prismRotate: 'prism spin',
 };
 
+export const noBeamCaps = (): BeamCaps =>
+  Object.fromEntries(BEAM_PARAMS.map((k) => [k, false])) as BeamCaps;
 /** Built-ins predate these parameters and none of them has one. */
-const NO_BEAM: BeamCaps = { zoom: false, focus: false, iris: false, frost: false, cto: false };
+const NO_BEAM: BeamCaps = noBeamCaps();
 
 /** A driven White source — the RGBW emitter. Asks the channels, not the name,
  *  so a "ColorAdd_W" reads as white and an undriven channel does not. */
@@ -67,12 +84,39 @@ function hasWhiteSource(c: NonNullable<Project['profiles']>[string]): boolean {
 function beamCaps(c: NonNullable<Project['profiles']>[string]): BeamCaps {
   const out: BeamCaps = { ...NO_BEAM };
   for (const ch of c.channels) {
-    for (const k of ch.cases as { func?: { source?: string } }[]) {
+    for (const k of ch.cases as { func?: { kind?: string; source?: string } }[]) {
+      // a slot function's source is the wheel index, not a fader
+      if (k?.func?.kind === 'slot') continue;
       const src = k?.func?.source;
       if (src && src in out) out[src as BeamParam] = true;
     }
   }
   return out;
+}
+
+type SlotCase = { func?: { kind?: string; source?: string; sets?: { name?: string }[] } };
+
+/** The slot names of the wheel a `slot` function reads, in index order. */
+function slotNames(c: NonNullable<Project['profiles']>[string], source: 'gobo' | 'prism'): string[] {
+  for (const ch of c.channels) {
+    for (const k of ch.cases as SlotCase[]) {
+      if (k?.func?.kind === 'slot' && k.func.source === source) {
+        return (k.func.sets ?? []).map((s, i) => s?.name || `slot ${i}`);
+      }
+    }
+  }
+  return [];
+}
+
+/** The shutter patterns the profile has a band for, in the canonical order. */
+function strobeModesOf(c: NonNullable<Project['profiles']>[string]): StrobeMode[] {
+  const found = new Set<string>();
+  for (const ch of c.channels) {
+    for (const k of ch.cases as { cond?: { kind?: string; mode?: string } }[]) {
+      if (k?.cond?.kind === 'strobeModeIs' && k.cond.mode) found.add(k.cond.mode);
+    }
+  }
+  return STROBE_MODES.filter((m) => found.has(m));
 }
 
 /** A 16-bit axis shows up as "Pan (coarse)"/"Pan (fine)", so match the stem.
@@ -121,6 +165,9 @@ function computeProfileMeta(project: Project | null, id: string): ProfileMeta | 
       hasTilt: hasAxis(b.channelNames, 'tilt', b.heads),
       hasWhite: b.channelNames.some((n) => /^white\b/i.test(n)),
       beam: NO_BEAM,
+      gobos: [],
+      prisms: [],
+      strobeModes: [],
       beamDeg: b.beamDeg,
       imported: false,
     };
@@ -138,6 +185,9 @@ function computeProfileMeta(project: Project | null, id: string): ProfileMeta | 
       hasTilt: hasAxis(names, 'tilt', c.heads),
       hasWhite: hasWhiteSource(c),
       beam: beamCaps(c),
+      gobos: slotNames(c, 'gobo'),
+      prisms: slotNames(c, 'prism'),
+      strobeModes: strobeModesOf(c),
       beamDeg: c.beamDeg,
       imported: true,
     };

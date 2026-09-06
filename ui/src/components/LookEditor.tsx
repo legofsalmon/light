@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import type { Distribute, Effect, EffectTarget, Look, LookPart, Project, SoftField, Wave } from '../../../shared/types.ts';
-import { EFFECT_TARGETS, uid } from '../../../shared/types.ts';
+import type { Distribute, Effect, EffectTarget, Look, LookPart, Project, SoftField, StrobeMode, Wave } from '../../../shared/types.ts';
+import { EFFECT_TARGETS, STROBE_MODES, uid } from '../../../shared/types.ts';
 import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
 import { type HeadKind } from '../../../shared/profiles.ts';
 import { TextField } from './inputs.tsx';
-import { BEAM_LABELS, BEAM_PARAMS, type BeamCaps, profileMeta } from '../profileInfo.ts';
+import { BEAM_FADERS, BEAM_LABELS, BEAM_PARAMS, type BeamCaps, type BeamParam, noBeamCaps, profileMeta } from '../profileInfo.ts';
+import { TARGET_LABEL } from '../labels.ts';
 import { hasUndrivenBeamChannels } from '../../../shared/gdtfShare.ts';
 import { useStore } from '../store.ts';
 import { WAVE_LABEL } from '../labels.ts';
@@ -113,7 +114,7 @@ function groupHasDeadBeamChannels(project: Project, groupId: string): boolean {
 }
 
 function groupBeamCaps(project: Project, groupId: string): BeamCaps {
-  const out: BeamCaps = { zoom: false, focus: false, iris: false, frost: false, cto: false };
+  const out: BeamCaps = noBeamCaps();
   const group = project.groups.find((g) => g.id === groupId);
   if (!group) return out;
   for (const ref of group.heads) {
@@ -123,6 +124,59 @@ function groupBeamCaps(project: Project, groupId: string): BeamCaps {
     for (const k of BEAM_PARAMS) if (meta.beam[k]) out[k] = true;
   }
   return out;
+}
+
+type GroupOptics = { gobos: string[]; prisms: string[]; strobeModes: StrobeMode[] };
+
+/** The wheel slots and shutter patterns something in this group can take.
+ *  Slot names come from the first fixture that has the wheel — a slot is an
+ *  index, so the same pick lands on every fixture in the group, "the second
+ *  gobo" on each — and the patterns are the union. */
+function groupOptics(project: Project, groupId: string): GroupOptics {
+  const out: GroupOptics = { gobos: [], prisms: [], strobeModes: [] };
+  const group = project.groups.find((g) => g.id === groupId);
+  if (!group) return out;
+  for (const ref of group.heads) {
+    const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
+    const meta = fixture ? profileMeta(project, fixture.profileId) : null;
+    if (!meta) continue;
+    if (out.gobos.length === 0) out.gobos = meta.gobos;
+    if (out.prisms.length === 0) out.prisms = meta.prisms;
+    for (const m of meta.strobeModes) if (!out.strobeModes.includes(m)) out.strobeModes.push(m);
+  }
+  out.strobeModes = STROBE_MODES.filter((m) => out.strobeModes.includes(m));
+  return out;
+}
+
+/** A wheel slot picker. "Not set" leaves the wheel where the fixture parks
+ *  it, the same absent-means-untouched rule as every beam parameter; a slot
+ *  past this list still shows, because another fixture in the group may
+ *  have it. */
+function SlotRow({ label, title, names, value, onChange }: {
+  label: string;
+  title: string;
+  names: string[];
+  value: number | undefined;
+  onChange: (v: number | undefined) => void;
+}) {
+  const beyond = value !== undefined && value >= names.length ? value : null;
+  return (
+    <div className="paramrow">
+      <span className="label" style={{ marginLeft: 20 }}>{label}</span>
+      <select
+        className="sel"
+        title={title}
+        value={value === undefined ? '' : String(value)}
+        onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+      >
+        <option value="">not set — leave it where the fixture parks it</option>
+        {names.map((n, i) => (
+          <option key={i} value={String(i)}>{i === 0 ? n : `${i} · ${n}`}</option>
+        ))}
+        {beyond !== null && <option value={String(beyond)}>slot {beyond}</option>}
+      </select>
+    </div>
+  );
 }
 
 function Enable({ on, toggle }: { on: boolean; toggle: () => void }) {
@@ -257,13 +311,13 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
       <select className="sel" title="which parameter the wave moves. Targets this group cannot take are still assignable, and flagged" value={fx.target} onChange={(e) => onEdit((x) => (x.target = e.target.value as EffectTarget))}>
         <optgroup label="drives this group">
           {capable.map((t) => (
-            <option key={t} value={t}>{t}</option>
+            <option key={t} value={t}>{TARGET_LABEL[t]}</option>
           ))}
         </optgroup>
         {others.length > 0 && (
           <optgroup label="no fixtures here (still assignable)">
             {others.map((t) => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>{TARGET_LABEL[t]}</option>
             ))}
           </optgroup>
         )}
@@ -372,6 +426,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
   const kinds = groupKinds(project, part.groupId);
   const canAim = groupCanAim(project, part.groupId);
   const beamCaps = groupBeamCaps(project, part.groupId);
+  const optics = groupOptics(project, part.groupId);
   // a derby's ring is on/off hardware and has its own control; this is the
   // faded white emitter on an RGBW head
   const canWhite = !kinds.has('derby') && groupCanWhite(project, part.groupId);
@@ -400,6 +455,30 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
     if (ride || softFor(field) !== undefined) send({ type: 'soft', lookId, partId: part.id, field, value: v });
     else edit(fallback);
   };
+
+  /** One optional 0..1 parameter: enable, label, fader. Beam shaping and the
+   *  two optics rotations share it. The middle is the default because on a
+   *  rotate band the middle is stopped and on a zoom it is the mid throw. */
+  const beamRow = (k: BeamParam) => (
+    <div className="paramrow" key={k}>
+      <Enable
+        on={prm[k] !== undefined}
+        toggle={() => edit((pt) => (pt.params[k] = pt.params[k] === undefined ? 0.5 : undefined))}
+      />
+      <span className="label">{BEAM_LABELS[k]}</span>
+      <div className={`grow paramrow ${prm[k] === undefined ? 'off' : ''}`}>
+        <Fader
+          help={`${BEAM_LABELS[k]} — greyed out until the ⏻ beside it enables this parameter for the part`}
+          value={softFor(k) ?? prm[k] ?? 0.5}
+          def={0.5}
+          onChange={(v) => setP(k, v, (pt) => (pt.params[k] = v))}
+          fmt={pct}
+          width={180}
+          variant="dim"
+        />
+      </div>
+    </div>
+  );
   const setE = (effectId: string, field: SoftField, v: number, fallback: (e: Effect) => void): void => {
     if (Date.now() - rideCutAt < 800) return;
     if (ride || softFor(field, effectId) !== undefined) send({ type: 'soft', lookId, partId: part.id, effectId, field, value: v });
@@ -608,8 +687,31 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
           <div className="paramrow">
             <Enable on={prm.strobe !== undefined} toggle={() => edit((pt) => (pt.params.strobe = pt.params.strobe === undefined ? 0.6 : undefined))} />
             <span className="label">strobe</span>
-            <div className={`grow paramrow ${prm.strobe === undefined ? 'off' : ''}`}>
+            <div className={`grow paramrow ${prm.strobe === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
               <Fader help="strobe rate — slow at the left, fastest at the right" value={softFor('strobe') ?? prm.strobe ?? 0.6} onChange={(v) => setP('strobe', v, (pt) => (pt.params.strobe = v))} fmt={pct} width={180} variant="dim" />
+              {/* the pattern, where something in the group has one: a band
+                  of its own on the shutter channel. A fixture without the
+                  pattern strobes plain, so this can never silence a head. */}
+              {optics.strobeModes.length > 0 && (
+                <div className="seg">
+                  {(['strobe', ...optics.strobeModes] as StrobeMode[]).map((m) => (
+                    <button
+                      key={m}
+                      className={(prm.strobeMode ?? 'strobe') === m ? 'on' : ''}
+                      title={
+                        m === 'strobe'
+                          ? 'plain strobe — hard cuts at the set rate'
+                          : m === 'pulse'
+                            ? 'each flash ramps open and shut instead of cutting'
+                            : 'irregular flashes around the set rate. A fixture without the pattern strobes plain'
+                      }
+                      onClick={() => edit((pt) => (pt.params.strobeMode = m === 'strobe' ? undefined : m))}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -647,26 +749,32 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
             </span>
           </div>
         )}
-        {BEAM_PARAMS.filter((k) => beamCaps[k]).map((k) => (
-          <div className="paramrow" key={k}>
-            <Enable
-              on={prm[k] !== undefined}
-              toggle={() => edit((pt) => (pt.params[k] = pt.params[k] === undefined ? 0.5 : undefined))}
-            />
-            <span className="label">{BEAM_LABELS[k]}</span>
-            <div className={`grow paramrow ${prm[k] === undefined ? 'off' : ''}`}>
-              <Fader
-                help={`${BEAM_LABELS[k]} — greyed out until the ⏻ beside it enables this parameter for the part`}
-                value={softFor(k) ?? prm[k] ?? 0.5}
-                def={0.5}
-                onChange={(v) => setP(k, v, (pt) => (pt.params[k] = v))}
-                fmt={pct}
-                width={180}
-                variant="dim"
-              />
-            </div>
-          </div>
-        ))}
+        {BEAM_FADERS.filter((k) => beamCaps[k]).map((k) => beamRow(k))}
+
+        {/* Optics: each wheel's slot picker, then its rotation where the
+            fixture has one. A slot is an index into the fixture's own wheel,
+            so the names are the picker and the same pick lands on every
+            fixture in the group. */}
+        {optics.gobos.length > 0 && (
+          <SlotRow
+            label="gobo"
+            title="which gobo the wheel shows — the fixture's own slots, 0 is open. Not set leaves the wheel where the fixture parks it"
+            names={optics.gobos}
+            value={prm.gobo}
+            onChange={(v) => edit((pt) => (pt.params.gobo = v))}
+          />
+        )}
+        {beamCaps.goboRotate && beamRow('goboRotate')}
+        {optics.prisms.length > 0 && (
+          <SlotRow
+            label="prism"
+            title="which prism is in the beam — the fixture's own slots, 0 is none. Not set leaves it where the fixture parks it"
+            names={optics.prisms}
+            value={prm.prism}
+            onChange={(v) => edit((pt) => (pt.params.prism = v))}
+          />
+        )}
+        {beamCaps.prismRotate && beamRow('prismRotate')}
 
         {kinds.has('hazer') && (
           <div className="paramrow">
