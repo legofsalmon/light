@@ -58,9 +58,38 @@ Developer-ID-signed, Apple-notarised bundle this copy is:
    offline, and unlike `spctl` it is not disabled by `spctl --master-disable`.
 5. `CFBundleIdentifier` matches, or the swap silently costs the operator their
    Keychain items and their Local Network permission.
+6. The version is the one that was offered.
+7. **This Mac can run it.** Both the app binary and the grafted previz binary
+   must carry a Mach-O slice this machine executes.
 
 Note 4 versus a signing key of our own: minisign would prove we signed it.
 Stapling proves Apple scanned it and the ticket travelled inside the file.
+
+### Why check 7 exists
+
+An arm64 bundle does not run on an Intel Mac at all. Rosetta translates x86_64
+to arm64 and never the other way. Checks 1 to 6 all pass for a perfectly good
+build of the wrong architecture, so without check 7 the first arm64-only stable
+release would have been offered to every Intel Mac still on the last universal
+build, verified, swapped in, and never opened again. The documented rollback
+covers a failed `mv`, not a failed launch.
+
+The slices are read out of the Mach-O headers directly rather than by running
+`lipo`, which is an Xcode Command Line Tools shim: on a Mac without those
+installed it pops the "install developer tools" panel, and firing that during
+an update is the class of surprise this whole path exists to avoid.
+
+Which architecture this Mac *is* comes from `sysctl.proc_translated`, not from
+the build LIGHT happens to be. On a universal build those are different
+questions: an x86_64 slice running under Rosetta is an Apple Silicon Mac, and
+reading the build would call it Intel and refuse a build that would have run
+perfectly. Rosetta is only ever credited when the running process proves it is
+there; a native arm64 build cannot cheaply know whether Rosetta was installed,
+so an x86_64-only download is refused rather than gambled on. LIGHT does not
+ship one.
+
+A refusal names both architectures and points at the releases page, and it
+lands before anything is replaced — the download is staged, not installed.
 
 ## Installing
 

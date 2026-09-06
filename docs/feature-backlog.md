@@ -455,24 +455,32 @@ masters — with key feedback derived from the snapshot exactly as
 (`ROADMAP.md:14-16`). Prerequisite for any non-local host: the WS auth token
 (decision under #13).
 
-### 21 · Intel / universal builds and an updater architecture guard — ◧ partial — M
+### 21 · Intel / universal builds and an updater architecture guard — ◧ guard shipped 2026-09-06; the build decision is still open
 **Touches:** src-tauri, CI, docs
-**Today:** 1.3.0 betas are arm64-only by choice (`release.yml:30`; universal
-v1.2.2 took 84 of a 90-minute CI cap). `/latest` still serves universal
-v1.2.2; the site and `docs/distribution.md` still say universal. **The updater
-has no architecture awareness**: it picks the newest `LIGHT.zip` and verifies
-signature, notarisation, bundle id and version — never the Mach-O arch. The
-first arm64-only *stable* release will be offered to every Intel Mac on v1.2.2,
-pass every check, swap, and fail to relaunch; the documented rollback covers a
-failed `mv`, not a failed launch.
-**Build:** (a) decision 3, then either raise `timeout-minutes` (up to 360) or
-split into per-arch jobs + an assemble/lipo/re-sign/notarise stage (M);
-(b) an arch check in `update_install.rs::verify()` — `lipo -archs` of both
-binaries against the host (plus `sysctl.proc_translated` for Rosetta),
-refusing with a message that points at the releases page, stubbed in tests
-like `open`/`lsof`/`xattr` — **needed whichever way (a) goes**; (c) site and
-distribution copy; (d) a real Intel Mac to test on — no 1.3.0 build has ever
-run on x86_64.
+**Shipped: (b), the guard, which was needed whichever way (a) goes.**
+`update_install.rs::verify()` gained check 7: both the app binary and the
+grafted previz binary must carry a Mach-O slice this Mac executes. Checks 1–6
+all pass for a perfectly good build of the wrong architecture, so nothing else
+caught it.
+
+Slices are read from the Mach-O headers directly, not via `lipo` — that is an
+Xcode Command Line Tools shim, and running it on a Mac without them pops the
+"install developer tools" panel mid-update. Fat and thin headers, bounded
+reads, hostile slice counts. `arm64e` reads as `arm64`: same cpu type, and an
+Apple Silicon Mac runs both. Cross-checked against `lipo -archs` on a real fat
+binary (`/bin/ls`) and a real thin one.
+
+Which architecture the MAC is comes from `sysctl.proc_translated`, not from
+the build LIGHT happens to be — on a universal build those are different
+questions, and reading the build would call a Rosetta-translated process an
+Intel Mac. Rosetta is credited only when the running process proves it is
+there. Nine unit tests including one that checks the guard agrees with the
+machine running it about its own binary.
+
+**Still open:** (a) decision 3, then either raise `timeout-minutes` or split
+into per-arch jobs with an assemble/lipo/re-sign/notarise stage; (c) site and
+`docs/distribution.md` still say universal; (d) no 1.3.0 build has ever run on
+x86_64, and a real Intel Mac is the only way to close that.
 
 ### 22 · Multi-head *moving* fixtures (per-head pan/tilt bars) — ◧ partial — L
 **Touches:** core, parity, previz, previz3d, ui, docs

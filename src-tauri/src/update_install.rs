@@ -246,6 +246,148 @@ fn unpack(install: &Install, zip: &Path, into: &Path) -> Result<PathBuf, String>
 }
 
 /// The security boundary. Everything before this is bytes off the network.
+// ------------------------------------------------------- Architecture guard
+//
+// An arm64 bundle does not run on an Intel Mac at all — Rosetta translates
+// x86_64 to arm64 and never the other way. The updater verified signature,
+// notarisation, bundle identity and version and never once asked whether the
+// Mach-O inside could execute here, so the first arm64-only stable release
+// would have been offered to every Intel Mac still on the last universal
+// build, passed every check, swapped itself in, and failed to open. The
+// documented rollback covers a failed `mv`, not a failed launch.
+
+const CPU_X86_64: u32 = 0x0100_0007;
+const CPU_ARM64: u32 = 0x0100_000c;
+
+/// The cpu TYPE only; the subtype is deliberately ignored. Apple's own
+/// binaries carry `arm64e`, the pointer-authentication variant, which shares
+/// this cpu type and differs only in subtype — so `lipo -archs /bin/ls` says
+/// "x86_64 arm64e" where this says "x86_64 arm64". That is the right answer to
+/// the question being asked: an Apple Silicon Mac runs both, and a Developer
+/// ID app is never arm64e anyway (it is restricted to the system).
+fn arch_name(cputype: u32) -> Option<&'static str> {
+    match cputype {
+        CPU_X86_64 => Some("x86_64"),
+        CPU_ARM64 => Some("arm64"),
+        _ => None,
+    }
+}
+
+/// The Mach-O slices in a file, named the way `lipo` names them.
+///
+/// Parsed here rather than shelled out to `lipo`, which is an Xcode Command
+/// Line Tools shim: on a Mac without those installed, running it pops the
+/// "install developer tools" panel. Firing that in the middle of an update is
+/// the exact class of surprise this path exists to avoid. The headers are
+/// eight bytes and a table, so reading them is cheaper than the fork anyway.
+fn macho_slices(path: &Path) -> Result<Vec<&'static str>, String> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(path)
+        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    // Bounded: a fat header is 8 bytes plus 20 (or 32) per slice, and nothing
+    // ships more than a handful. A hostile file must not become a memory
+    // question.
+    let mut buf = [0u8; 4096];
+    let n = f
+        .read(&mut buf)
+        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    Ok(slices_from_header(&buf[..n])?)
+}
+
+/// The header parse on its own, so the shapes can be tested without a file.
+fn slices_from_header(head: &[u8]) -> Result<Vec<&'static str>, String> {
+    let at = |o: usize| -> Option<[u8; 4]> { head.get(o..o + 4)?.try_into().ok() };
+    let be = |o: usize| at(o).map(u32::from_be_bytes);
+    let le = |o: usize| at(o).map(u32::from_le_bytes);
+    let magic = be(0).ok_or("not a Mach-O file")?;
+    // A fat header is big-endian on disk whatever the slices inside are.
+    if magic == 0xcafe_babe || magic == 0xcafe_babf {
+        let stride = if magic == 0xcafe_babf { 32 } else { 20 };
+        let count = be(4).ok_or("truncated fat header")?.min(64) as usize;
+        let mut out: Vec<&'static str> = Vec::new();
+        for i in 0..count {
+            let Some(t) = be(8 + i * stride) else { break };
+            if let Some(name) = arch_name(t) {
+                if !out.contains(&name) {
+                    out.push(name);
+                }
+            }
+        }
+        return if out.is_empty() {
+            Err("the download has no architecture this Mac understands".into())
+        } else {
+            Ok(out)
+        };
+    }
+    // Thin, little-endian — every macOS binary of the last decade.
+    let m = le(0).ok_or("not a Mach-O file")?;
+    if m != 0xfeed_facf && m != 0xfeed_face {
+        return Err("that is not a Mach-O binary".into());
+    }
+    let t = le(4).ok_or("truncated Mach-O header")?;
+    arch_name(t)
+        .map(|n| vec![n])
+        .ok_or_else(|| "the download has no architecture this Mac understands".into())
+}
+
+/// What this Mac can execute.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HostArch {
+    /// the slice this Mac runs natively
+    pub native: &'static str,
+    /// Rosetta is demonstrably present, because this process is running
+    /// through it. Never assumed the other way: on a native arm64 build there
+    /// is no cheap way to know whether Rosetta was ever installed.
+    pub rosetta: bool,
+}
+
+pub fn host_arch() -> HostArch {
+    // `sysctl.proc_translated` reads 1 when an x86_64 process is running on
+    // Apple Silicon under Rosetta, and does not exist at all on Intel. It is
+    // the only way to tell "this MAC is Intel" from "this BUILD is Intel",
+    // which on a universal build are different machines.
+    let translated = Command::new("/usr/sbin/sysctl")
+        .args(["-n", "sysctl.proc_translated"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "1")
+        .unwrap_or(false);
+    if cfg!(target_arch = "aarch64") {
+        HostArch { native: "arm64", rosetta: false }
+    } else if translated {
+        HostArch { native: "arm64", rosetta: true }
+    } else {
+        HostArch { native: "x86_64", rosetta: false }
+    }
+}
+
+/// Could a bundle with these slices run here?
+pub fn arch_runnable(slices: &[&str], host: HostArch) -> bool {
+    slices.contains(&host.native)
+        // We are living proof Rosetta is installed, so an x86_64-only build
+        // would run — slowly, but it would open.
+        || (host.rosetta && slices.contains(&"x86_64"))
+}
+
+fn friendly(arch: &str) -> &'static str {
+    if arch == "arm64" { "Apple Silicon" } else { "Intel" }
+}
+
+/// Why this Mac cannot run those slices, in words, or None if it can.
+pub fn arch_refusal(slices: &[&str], host: HostArch) -> Option<String> {
+    if arch_runnable(slices, host) {
+        return None;
+    }
+    let built: Vec<&str> = slices.iter().map(|a| friendly(a)).collect();
+    Some(format!(
+        "this download is built for {} and this is an {} Mac — it would install and then fail to open. \
+         Download a build for this Mac from the releases page instead.",
+        built.join(" and "),
+        friendly(host.native),
+    ))
+}
+
 fn verify(install: &Install, bundle: &Path, release: &Release) -> Result<(), String> {
     install.set_stage("verifying");
 
@@ -318,6 +460,20 @@ fn verify(install: &Install, bundle: &Path, release: &Release) -> Result<(), Str
         .ok_or("the download has no readable version")?;
     if v != release.version.raw.trim_start_matches('v') {
         return Err(format!("the download is version {v}, but {} was offered", release.version.raw));
+    }
+
+    // 7. this Mac can actually run it. Everything above passes for a perfectly
+    //    good build of the wrong architecture, so nothing else catches this.
+    //    BOTH binaries: a universal app around an arm64-only previz opens and
+    //    then has no stage window, which is worse than refusing.
+    let host = host_arch();
+    let exe = plist_string(bundle, "CFBundleExecutable")
+        .ok_or("the download has no executable name")?;
+    for bin in [bundle.join("Contents/MacOS").join(&exe), previz] {
+        let slices = macho_slices(&bin)?;
+        if let Some(why) = arch_refusal(&slices, host) {
+            return Err(why);
+        }
     }
     Ok(())
 }
@@ -469,6 +625,137 @@ mod tests {
 
     /// This is quoting for a script that runs `rm -rf`. The property is the
     /// whole point: whatever goes in comes back out as exactly one argument.
+    // ------------------------------------------------- architecture guard
+    //
+    // The header parse and the decision are pure, so they are tested on bytes
+    // and on values rather than by arranging four Macs.
+
+    /// A fat header with the given cpu types, laid out as the loader reads it:
+    /// big-endian magic, count, then one 20-byte entry each.
+    fn fat(types: &[u32]) -> Vec<u8> {
+        let mut v = Vec::new();
+        v.extend_from_slice(&0xcafe_babeu32.to_be_bytes());
+        v.extend_from_slice(&(types.len() as u32).to_be_bytes());
+        for t in types {
+            v.extend_from_slice(&t.to_be_bytes()); // cputype
+            v.extend_from_slice(&0u32.to_be_bytes()); // cpusubtype
+            v.extend_from_slice(&0u32.to_be_bytes()); // offset
+            v.extend_from_slice(&0u32.to_be_bytes()); // size
+            v.extend_from_slice(&0u32.to_be_bytes()); // align
+        }
+        v
+    }
+
+    /// A thin 64-bit Mach-O header: little-endian magic, then the cpu type.
+    fn thin(cputype: u32) -> Vec<u8> {
+        let mut v = Vec::new();
+        v.extend_from_slice(&0xfeed_facfu32.to_le_bytes());
+        v.extend_from_slice(&cputype.to_le_bytes());
+        v.extend_from_slice(&[0u8; 24]);
+        v
+    }
+
+    #[test]
+    fn the_header_parse_reads_thin_and_fat_binaries() {
+        assert_eq!(slices_from_header(&thin(CPU_ARM64)).unwrap(), ["arm64"]);
+        assert_eq!(slices_from_header(&thin(CPU_X86_64)).unwrap(), ["x86_64"]);
+        assert_eq!(
+            slices_from_header(&fat(&[CPU_X86_64, CPU_ARM64])).unwrap(),
+            ["x86_64", "arm64"],
+            "a universal build, in the order the table lists it"
+        );
+        assert_eq!(slices_from_header(&fat(&[CPU_ARM64])).unwrap(), ["arm64"]);
+    }
+
+    #[test]
+    fn an_arm64e_slice_reads_as_arm64() {
+        // Apple's own binaries are arm64e — same cpu type, different subtype,
+        // which this ignores. Checked against the real thing: `/bin/ls` is
+        // `cafebabe 00000002 01000007 00000003 …`, and `lipo -archs` calls it
+        // "x86_64 arm64e" where this says "x86_64 arm64". Both answers mean
+        // the same Mac can run it, which is the only question here.
+        let mut h = fat(&[CPU_X86_64, CPU_ARM64]);
+        h[16..20].copy_from_slice(&2u32.to_be_bytes()); // CPU_SUBTYPE_ARM64E
+        assert_eq!(slices_from_header(&h).unwrap(), ["x86_64", "arm64"]);
+    }
+
+    #[test]
+    fn a_file_that_is_not_a_binary_is_refused_rather_than_guessed_at() {
+        assert!(slices_from_header(b"#!/bin/sh\necho hello\n").is_err());
+        assert!(slices_from_header(&[]).is_err());
+        assert!(slices_from_header(&[0xca, 0xfe]).is_err(), "truncated magic");
+        // a fat header claiming slices it does not carry
+        assert!(slices_from_header(&fat(&[CPU_ARM64])[..10]).is_err());
+        // architectures no Mac has run this decade
+        assert!(slices_from_header(&fat(&[7, 12])).is_err(), "32-bit i386 and arm");
+    }
+
+    #[test]
+    fn an_absurd_slice_count_does_not_run_away() {
+        // the count is attacker-influenced; the loop is bounded and the reads
+        // are checked, so this must simply return what is actually there
+        let mut h = fat(&[CPU_ARM64]);
+        h[4..8].copy_from_slice(&u32::MAX.to_be_bytes());
+        assert_eq!(h.len(), 28);
+        assert_eq!(slices_from_header(&h).unwrap(), ["arm64"]);
+    }
+
+    #[test]
+    fn an_intel_mac_refuses_an_apple_silicon_build() {
+        // THE case this guard exists for: every other check passes, the swap
+        // happens, and the app never opens again.
+        let intel = HostArch { native: "x86_64", rosetta: false };
+        let why = arch_refusal(&["arm64"], intel).expect("refused");
+        assert!(why.contains("Apple Silicon"), "{why}");
+        assert!(why.contains("Intel"), "{why}");
+        assert!(why.contains("releases page"), "a refusal has to say what to do: {why}");
+        assert!(!arch_runnable(&["arm64"], intel));
+    }
+
+    #[test]
+    fn every_other_combination_a_real_release_can_produce_is_allowed() {
+        let intel = HostArch { native: "x86_64", rosetta: false };
+        let silicon = HostArch { native: "arm64", rosetta: false };
+        let translated = HostArch { native: "arm64", rosetta: true };
+
+        assert!(arch_runnable(&["x86_64", "arm64"], intel), "universal on Intel");
+        assert!(arch_runnable(&["x86_64", "arm64"], silicon), "universal on Apple Silicon");
+        assert!(arch_runnable(&["arm64"], silicon), "arm64 on Apple Silicon");
+        assert!(arch_runnable(&["x86_64"], intel), "x86_64 on Intel");
+        for h in [intel, silicon, translated] {
+            assert!(arch_refusal(&["x86_64", "arm64"], h).is_none(), "universal runs anywhere");
+        }
+    }
+
+    #[test]
+    fn rosetta_is_only_credited_when_it_is_proven() {
+        // Running translated IS the proof, so an x86_64-only build opens.
+        let translated = HostArch { native: "arm64", rosetta: true };
+        assert!(arch_runnable(&["x86_64"], translated));
+        // Running native, we cannot know whether Rosetta was ever installed,
+        // so an x86_64-only build is refused. LIGHT does not ship one, and
+        // refusing something that might work beats swapping in something that
+        // might not open.
+        let silicon = HostArch { native: "arm64", rosetta: false };
+        assert!(!arch_runnable(&["x86_64"], silicon));
+    }
+
+    #[test]
+    fn the_guard_agrees_with_this_machine_about_this_binary() {
+        // The one end-to-end strand: the test binary is a real Mach-O built
+        // for the machine running it, so the parse and the host probe have to
+        // agree that it could run here. Catches a byte-order or cputype
+        // mistake that synthetic headers would happily share.
+        let me = std::env::current_exe().expect("current exe");
+        let slices = macho_slices(&me).expect("the test binary parses");
+        assert!(!slices.is_empty());
+        assert_eq!(
+            arch_refusal(&slices, host_arch()),
+            None,
+            "a binary this Mac is running cannot be one it could not run: {slices:?}"
+        );
+    }
+
     #[test]
     fn shell_quote_survives_everything_a_path_can_contain() {
         let nasty = [
