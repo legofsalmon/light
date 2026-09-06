@@ -7,6 +7,7 @@ import { createGroupFromSelection } from '../selection.ts';
 import { ScrubNumInput, TextField } from './inputs.tsx';
 import { ShareFixtures } from './ShareFixtures.tsx';
 import { useStore } from '../store.ts';
+import { stageExtent } from '../../../shared/stageExtent.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
 import { hasUndrivenBeamChannels, isPlaceholderProfile } from '../../../shared/gdtfShare.ts';
 import { PixelLayout } from './PixelLayout.tsx';
@@ -1172,6 +1173,76 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
  *  Placing by dragging in the plan gets you close; a truss that has to be
  *  exactly 6 m, or a riser at exactly 0.6 m, needs numbers. Selection is shared
  *  with the plan through the store, so a row highlights what it refers to. */
+/** The stage as a box (backlog #14). Auto fits the plan, the in-app 3D and the
+ *  stage window to whatever is placed; a set size is drawn as typed, on the
+ *  plan's origin — the width across, the depth toward the audience, the
+ *  height to the grid. */
+function StageSizeRow() {
+  const project = useStore((s) => s.project)!;
+  const mutate = useStore((s) => s.mutate);
+  const stage = project.stage;
+  const ext = stageExtent(project);
+  const num = (value: number, title: string, set: (v: number) => void) => (
+    <ScrubNumInput
+      value={value}
+      scrubStep={0.1}
+      decimals={1}
+      width={52}
+      title={title}
+      onSet={(v) => set(round2(v))}
+      onDelta={(d) => set(round2(value + d))}
+    />
+  );
+  const setSide = (k: 'w' | 'd' | 'h', v: number) =>
+    mutate((p) => {
+      if (p.stage) p.stage = { ...p.stage, [k]: Math.max(1, v) };
+    }, 'resize the stage');
+  return (
+    <div className="row" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+      <span
+        className="label"
+        title="the stage as the plan, the 3D views and the stage window draw it — width across, depth toward the audience, height to the grid, centred on the plan's origin"
+      >
+        size
+      </span>
+      {stage ? (
+        <>
+          {num(stage.w, 'width across the stage, metres', (v) => setSide('w', v))}
+          <span className="label">×</span>
+          {num(stage.d, 'depth toward the audience, metres', (v) => setSide('d', v))}
+          <span className="label">×</span>
+          {num(stage.h, 'height to the grid, metres', (v) => setSide('h', v))}
+          <span className="label">m</span>
+          <button
+            className="btn small ghost"
+            title="back to fitting the stage to whatever is placed"
+            onClick={() => mutate((p) => { delete p.stage; }, 'stage size back to auto')}
+          >
+            auto
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="prose" style={{ flex: '0 1 auto' }}>
+            auto — fits whatever is placed, {ext.x1 - ext.x0} × {ext.z1 - ext.z0} m now
+          </span>
+          <button
+            className="btn small ghost"
+            title="give the stage a fixed size — the plan, the 3D views and the stage window all draw it as typed"
+            onClick={() =>
+              mutate((p) => {
+                p.stage = { w: ext.x1 - ext.x0, d: ext.z1 - ext.z0, h: ext.yTop };
+              }, 'set the stage size')
+            }
+          >
+            set a size
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function StageTable() {
   const project = useStore((s) => s.project)!;
   const mutate = useStore((s) => s.mutate);
@@ -1182,6 +1253,7 @@ function StageTable() {
     return (
       <div className="patchsec">
         <div className="sectionhead">Stage</div>
+        <StageSizeRow />
         <div className="prose">
           Nothing drawn yet — add truss, risers or screens from the stage's “+ structure…” menu,
           then drag them into place in the 2D plan.
@@ -1201,6 +1273,7 @@ function StageTable() {
   return (
     <div className="patchsec">
       <div className="sectionhead">Stage</div>
+      <StageSizeRow />
       <table className="tbl">
         <thead>
           <tr>

@@ -9,6 +9,7 @@ import { askConfirm } from '../dialog.tsx';
 import { LONG_PRESS_MS } from '../touch.ts';
 import { PROP_LABEL } from '../labels.ts';
 import { color } from '../tokens.ts';
+import { DEFAULT_VIEW, stageExtent, stageRect, type StageExtent } from '../../../shared/stageExtent.ts';
 
 /** Head world positions from the shared geometry module — the same builder the
  *  engines use, so the plan view can never disagree with the 3D previz (it
@@ -50,13 +51,10 @@ const STRUCTURE_LABEL: Record<string, string> = {
   trussBar: 'truss', trussLeg: 'leg', riser: 'riser', screen: 'screen',
 };
 
-const WORLD_W = 11; // metres shown horizontally (both views)
-// plan: depth axis (z), audience at the bottom
-const PLAN_Z0 = -3;
-const PLAN_D = 9;
-// front: height axis (y), floor near the bottom
-const FRONT_Y_TOP = 6.5;
-const FRONT_H = 7;
+// The window each view shows comes from shared/stageExtent.ts: the stage the
+// operator set, or the rig with a margin, never smaller than the club-sized
+// default. The front view keeps half a metre below the floor line.
+const FLOOR_BELOW = 0.5;
 const TRUSS_Y = 3.05; // matches the 3D scene truss
 
 type ViewKind = 'plan' | 'front';
@@ -103,6 +101,16 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
     });
     ro.observe(host);
 
+    // Frozen while a drag is in flight: the derived window steps on whole
+    // metres, and a step under the pointer mid-drag would move the world.
+    let lastExtent: StageExtent | null = null;
+    const extent = (): StageExtent => {
+      if (lastExtent && (dragRef.current || marqueeRef.current)) return lastExtent;
+      const { project } = useStore.getState();
+      lastExtent = project ? stageExtent(project) : { ...DEFAULT_VIEW, manual: false };
+      return lastExtent;
+    };
+
     const mapping = (view: ViewKind) => {
       // measure on demand — RO-cached w/h can be stale/zero in a freshly
       // (re)mounted effect closure (StrictMode double-mount), and a wrong
@@ -110,19 +118,22 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       const hr = host.getBoundingClientRect();
       const w = Math.max(1, hr.width);
       const h = Math.max(1, hr.height);
-      const depth = view === 'plan' ? PLAN_D : FRONT_H;
-      const scale = Math.min(w / WORLD_W, h / depth);
-      const mx = (w - WORLD_W * scale) / 2;
+      const e = extent();
+      const worldW = e.x1 - e.x0;
+      const depth = view === 'plan' ? e.z1 - e.z0 : e.yTop + FLOOR_BELOW;
+      const scale = Math.min(w / worldW, h / depth);
+      const mx = (w - worldW * scale) / 2;
       const my = (h - depth * scale) / 2;
       const toY = (v: number) =>
-        view === 'plan' ? my + (v - PLAN_Z0) * scale : my + (FRONT_Y_TOP - v) * scale;
+        view === 'plan' ? my + (v - e.z0) * scale : my + (e.yTop - v) * scale;
       return {
         scale,
-        toX: (x: number) => mx + (x + WORLD_W / 2) * scale,
+        e,
+        toX: (x: number) => mx + (x - e.x0) * scale,
         toY,
         fromPx: (px: number, py: number) => ({
-          x: (px - mx) / scale - WORLD_W / 2,
-          v: view === 'plan' ? (py - my) / scale + PLAN_Z0 : FRONT_Y_TOP - (py - my) / scale,
+          x: (px - mx) / scale + e.x0,
+          v: view === 'plan' ? (py - my) / scale + e.z0 : e.yTop - (py - my) / scale,
         }),
       };
     };
@@ -151,9 +162,38 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       // 1 m grid
       ctx.strokeStyle = showMeasure ? 'rgba(255,255,255,0.11)' : 'rgba(255,255,255,0.045)';
       ctx.lineWidth = 1;
-      const vTop = view === 'plan' ? PLAN_Z0 : FRONT_Y_TOP - FRONT_H;
-      const vBot = view === 'plan' ? PLAN_Z0 + PLAN_D : FRONT_Y_TOP;
-      for (let gx = -Math.floor(WORLD_W / 2); gx <= WORLD_W / 2; gx++) {
+      const e = m.e;
+      // the stage the operator set: its outline under the grid, its size in the corner
+      if (project.stage && e.manual) {
+        const r = stageRect(project.stage);
+        ctx.save();
+        ctx.strokeStyle = color['alpha/cyan-70'];
+        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (view === 'plan') {
+          ctx.rect(m.toX(r.x0), m.toY(r.z0), (r.x1 - r.x0) * m.scale, (r.z1 - r.z0) * m.scale);
+        } else {
+          ctx.moveTo(m.toX(r.x0), m.toY(0));
+          ctx.lineTo(m.toX(r.x0), m.toY(project.stage.h));
+          ctx.lineTo(m.toX(r.x1), m.toY(project.stage.h));
+          ctx.lineTo(m.toX(r.x1), m.toY(0));
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = color['cyan/500'];
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(
+          `${project.stage.w} × ${project.stage.d} × ${project.stage.h} m`,
+          m.toX(r.x1) - 4,
+          (view === 'plan' ? m.toY(r.z0) : m.toY(project.stage.h)) + 12,
+        );
+        ctx.restore();
+      }
+      const vTop = view === 'plan' ? e.z0 : -FLOOR_BELOW;
+      const vBot = view === 'plan' ? e.z1 : e.yTop;
+      for (let gx = Math.ceil(e.x0); gx <= Math.floor(e.x1); gx++) {
         ctx.beginPath();
         ctx.moveTo(m.toX(gx), m.toY(vTop));
         ctx.lineTo(m.toX(gx), m.toY(vBot));
@@ -165,7 +205,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
         ctx.fillStyle = 'rgba(190,196,210,0.75)';
         ctx.font = '9px -apple-system, sans-serif';
         ctx.textAlign = 'center';
-        for (let gx = -Math.floor(WORLD_W / 2); gx <= WORLD_W / 2; gx++) {
+        for (let gx = Math.ceil(e.x0); gx <= Math.floor(e.x1); gx++) {
           if (gx !== 0) ctx.fillText(`${gx}`, m.toX(gx), h - 3);
         }
         ctx.textAlign = 'left';
@@ -176,8 +216,8 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       }
       for (let gv = Math.ceil(Math.min(vTop, vBot)); gv <= Math.max(vTop, vBot); gv++) {
         ctx.beginPath();
-        ctx.moveTo(m.toX(-WORLD_W / 2), m.toY(gv));
-        ctx.lineTo(m.toX(WORLD_W / 2), m.toY(gv));
+        ctx.moveTo(m.toX(e.x0), m.toY(gv));
+        ctx.lineTo(m.toX(e.x1), m.toY(gv));
         ctx.stroke();
       }
 
@@ -185,14 +225,14 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       ctx.textAlign = 'center';
       if (view === 'plan') {
         ctx.fillStyle = 'rgba(255,255,255,0.12)';
-        ctx.fillText('A U D I E N C E', w / 2, m.toY(PLAN_Z0 + PLAN_D) - 8);
+        ctx.fillText('A U D I E N C E', w / 2, m.toY(e.z1) - 8);
       } else {
         // floor + truss reference lines
         ctx.strokeStyle = 'rgba(255,255,255,0.22)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(m.toX(-WORLD_W / 2), m.toY(0));
-        ctx.lineTo(m.toX(WORLD_W / 2), m.toY(0));
+        ctx.moveTo(m.toX(e.x0), m.toY(0));
+        ctx.lineTo(m.toX(e.x1), m.toY(0));
         ctx.stroke();
         ctx.strokeStyle = 'rgba(255,255,255,0.1)';
         ctx.lineWidth = 3;
@@ -202,7 +242,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
         ctx.stroke();
         ctx.fillStyle = 'rgba(255,255,255,0.14)';
         ctx.textAlign = 'left';
-        ctx.fillText('floor', m.toX(-WORLD_W / 2) + 6, m.toY(0) - 5);
+        ctx.fillText('floor', m.toX(e.x0) + 6, m.toY(0) - 5);
         ctx.fillText(`truss ${TRUSS_Y} m`, m.toX(-3.5) + 6, m.toY(TRUSS_Y) - 6);
         ctx.textAlign = 'center';
       }

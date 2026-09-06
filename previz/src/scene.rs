@@ -529,7 +529,37 @@ pub fn setup_stage(
     ));
 }
 
-/// Grow the floor, the back wall and the haze volume to enclose the rig.
+/// The room the floor, the back wall and the haze are fitted to: the stage as
+/// the operator set it, or the rig with a margin — never smaller than the
+/// demo scene, so a two-fixture test rig in a 16 m room still wants a room.
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct Room {
+    width: f32,
+    depth: f32,
+    /// height of the highest thing the room must hold (the grid, or the rig)
+    height: f32,
+    cx: f32,
+    cz: f32,
+}
+
+const ROOM_MARGIN: f32 = 3.0;
+
+fn room_for(bounds: Option<Bounds>, stage: Option<crate::protocol::StageLite>) -> Option<Room> {
+    if let Some(s) = stage {
+        // what was typed is what is drawn: the stage IS the room, on the origin
+        return Some(Room { width: s.w, depth: s.d, height: s.h, cx: 0.0, cz: 0.0 });
+    }
+    let b = bounds?;
+    Some(Room {
+        width: (b.max.x - b.min.x + ROOM_MARGIN * 2.0).max(16.0),
+        depth: (b.max.z - b.min.z + ROOM_MARGIN * 2.0).max(12.0),
+        height: (b.max.y + ROOM_MARGIN).max(7.0),
+        cx: (b.min.x + b.max.x) * 0.5,
+        cz: (b.min.z + b.max.z) * 0.5,
+    })
+}
+
+/// Grow the floor, the back wall and the haze volume to enclose the room.
 ///
 /// Everything is scaled rather than re-meshed: the floor and wall are unit-ish
 /// planes and the haze is a scaled cube, so this costs three transform writes
@@ -541,17 +571,9 @@ fn fit_backdrop(
     floor: &mut Query<&mut Transform, (With<Floor>, Without<Backdrop>, Without<HazeVolume>)>,
     haze: &mut Query<&mut Transform, (With<HazeVolume>, Without<Backdrop>, Without<Floor>)>,
 ) {
-    // An empty project keeps the demo scene exactly as it was.
-    let Some(b) = Bounds::of(project) else { return };
-
-    // Never shrink below the demo scene — a two-fixture test rig in a 16 m room
-    // still wants a room.
-    const MARGIN: f32 = 3.0;
-    let width = (b.max.x - b.min.x + MARGIN * 2.0).max(16.0);
-    let depth = (b.max.z - b.min.z + MARGIN * 2.0).max(12.0);
-    let height = (b.max.y + MARGIN).max(7.0);
-    let cx = (b.min.x + b.max.x) * 0.5;
-    let cz = (b.min.z + b.max.z) * 0.5;
+    // An empty project with no stage set keeps the demo scene exactly as it was.
+    let Some(Room { width, depth, height, cx, cz }) = room_for(Bounds::of(project), project.stage) else { return };
+    const MARGIN: f32 = ROOM_MARGIN;
 
     // floor: the base mesh is 16 x 12 in XZ
     if let Ok(mut t) = floor.single_mut() {
@@ -999,6 +1021,16 @@ pub fn rebuild_fixtures(
             (9.0, 12.0f32.min(q.light_range_cap))
         }
     };
+    // A stage the operator set is what the camera frames — the rig's own
+    // bounds still size the beams, which have to reach the fixtures wherever
+    // they hang.
+    if let Some(s) = project.stage {
+        live.rig_extent = Some(crate::state::RigExtent {
+            diag: (s.w * s.w + s.h * s.h + s.d * s.d).sqrt(),
+            height: s.h,
+            center: Vec3::ZERO,
+        });
+    }
 
     // (profile, in the air) — the two things that make one fixture
     // interchangeable with another for "does this type cast a shadow".
@@ -1673,6 +1705,22 @@ mod tests {
     /// shared/testdata/standingHeight.json — and adding one there adds it to
     /// both suites at once. The mirror of this loop is in engine/test/smoke.ts.
     #[test]
+    /// A stage the operator set is drawn as typed, on the origin; without one
+    /// the rig gets its margin and the demo floor is the floor.
+    #[test]
+    fn the_room_is_the_stage_when_one_is_set_and_the_rig_otherwise() {
+        let b = Bounds { min: Vec3::new(-10.0, 0.0, -4.0), max: Vec3::new(10.0, 9.0, 4.0) };
+        let derived = room_for(Some(b), None).unwrap();
+        assert_eq!((derived.width, derived.depth, derived.height, derived.cx, derived.cz), (26.0, 14.0, 12.0, 0.0, 0.0));
+        let small = room_for(Some(Bounds { min: Vec3::new(-1.0, 0.0, 0.0), max: Vec3::new(1.0, 3.0, 1.0) }), None).unwrap();
+        assert_eq!((small.width, small.depth, small.height), (16.0, 12.0, 7.0), "never below the demo scene");
+        assert_eq!(room_for(None, None), None, "nothing placed, nothing set: the demo scene stays");
+        let stage = crate::protocol::StageLite { w: 20.0, d: 12.0, h: 8.0 };
+        let manual = room_for(Some(b), Some(stage)).unwrap();
+        assert_eq!((manual.width, manual.depth, manual.height, manual.cx, manual.cz), (20.0, 12.0, 8.0, 0.0, 0.0), "the stage wins over the rig");
+        assert!(room_for(None, Some(stage)).is_some(), "a stage with nothing on it is still a room");
+    }
+
     fn floor_height_matches_the_shared_corpus() {
         let raw = include_str!("../../shared/testdata/standingHeight.json");
         let cases: serde_json::Value = serde_json::from_str(raw).expect("corpus parses");

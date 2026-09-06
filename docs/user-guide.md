@@ -247,6 +247,13 @@ itself.
 show from the floor. On a phone the look library folds itself away so the pads
 keep the width.
 
+**Stage size.** The plan, the 3D views and the stage window fit themselves to
+whatever is placed — a fixture or a piece of stage far out grows the floor to
+hold it. Rig view ▸ Stage ▸ size sets it instead: width across, depth toward
+the audience, height to the grid, in metres, centred on the plan's origin. A
+set stage is drawn as typed, outlined on the plan with its size in the corner;
+`auto` goes back to fitting.
+
 **On a tablet.** The console notices a fingertip and switches to touch sizing:
 every control is at least 24px, the pad's name strip is big enough to select a
 look without firing it, and the song chips show their × and ‹ › all the time.

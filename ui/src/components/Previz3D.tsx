@@ -25,6 +25,8 @@ const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
 import type { HeadSnap, Project } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
+import { color } from '../tokens.ts';
+import { stageExtent, stageRect } from '../../../shared/stageExtent.ts';
 import { buildOccluders, standingHeightAt, throwDistance, type Occluder } from '../../../shared/beamThrow.ts';
 
 type HeadHandle = {
@@ -678,12 +680,17 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
     controls.minDistance = 2;
     controls.maxDistance = 20;
 
-    // room
-    const grid = new THREE.GridHelper(14, 14, 0x2c2c34, 0x1b1b20);
+    // The room: the floor and its metre grid, sized to the stage the operator
+    // set or to the rig with a margin (shared/stageExtent.ts) — the same
+    // window the 2D plan shows, so a fixture on the plan is on the floor here.
+    // The plane is unit-sized and scaled; the grids are rebuilt when the room
+    // changes, because a GridHelper's size is baked at construction.
+    const hex = (name: keyof typeof color) => parseInt(color[name].slice(1, 7), 16);
+    let grid = new THREE.GridHelper(1, 1, hex('scene/3d-grid'), hex('scene/3d-grid-2'));
     scene.add(grid);
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(14, 10),
-      new THREE.MeshBasicMaterial({ color: 0x131316 })
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ color: hex('scene/3d-floor') })
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.01;
@@ -691,10 +698,40 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
 
     // Metre grid — the cheapest possible answer to "how big is that?", and the
     // reason a 7 m truss and a 2 m riser can be placed by eye.
-    const measureGrid = new THREE.GridHelper(20, 20, 0x4a4a58, 0x2a2a33);
+    let measureGrid = new THREE.GridHelper(1, 1, 0x4a4a58, 0x2a2a33);
     measureGrid.position.y = 0.002; // just off the floor, no z-fighting
     measureGrid.visible = false;
     scene.add(measureGrid);
+    let roomSig = '';
+    const fitRoom = (p: Project) => {
+      const ext = stageExtent(p);
+      // a set stage is drawn as typed; a derived window already carries its margin
+      const r = p.stage ? stageRect(p.stage) : ext;
+      const sig = `${r.x0},${r.x1},${r.z0},${r.z1}`;
+      if (sig === roomSig) return;
+      roomSig = sig;
+      const w = r.x1 - r.x0;
+      const d = r.z1 - r.z0;
+      const cx = (r.x0 + r.x1) / 2;
+      const cz = (r.z0 + r.z1) / 2;
+      floor.scale.set(w, d, 1);
+      floor.position.set(cx, -0.01, cz);
+      // square metre cells, so the grid stays honest on a rectangular stage
+      const size = Math.max(2, Math.ceil(Math.max(w, d)));
+      const wasVisible = measureGrid.visible;
+      for (const g of [grid, measureGrid]) {
+        scene.remove(g);
+        g.geometry.dispose();
+        (g.material as THREE.Material).dispose();
+      }
+      grid = new THREE.GridHelper(size, size, hex('scene/3d-grid'), hex('scene/3d-grid-2'));
+      grid.position.set(cx, 0, cz);
+      scene.add(grid);
+      measureGrid = new THREE.GridHelper(size + 4, size + 4, 0x4a4a58, 0x2a2a33);
+      measureGrid.position.set(cx, 0.002, cz);
+      measureGrid.visible = wasVisible;
+      scene.add(measureGrid);
+    };
 
     // dummy musicians from placed props — scale/blocking reference (true
     // illumination lives in the native previz window)
@@ -776,6 +813,7 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
 
       if (project && project !== lastProject) {
         lastProject = project;
+        fitRoom(project);
         const sig = fixtureSignature(project);
         if (sig !== lastSig) {
           lastSig = sig;

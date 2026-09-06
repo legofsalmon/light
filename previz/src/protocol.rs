@@ -63,12 +63,24 @@ pub struct PropPosLite {
     pub z: f32,
 }
 
+/// The stage as the operator set it, metres — width across, depth toward the
+/// audience, height to the grid, centred on the origin. Absent: fit to the rig.
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct StageLite {
+    pub w: f32,
+    pub d: f32,
+    pub h: f32,
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct ProjectLite {
     pub fixtures: Vec<FixtureLite>,
     /// dummy performers placed in the 2D plan
     #[serde(default)]
     pub props: Vec<PropLite>,
+    /// the stage box, when the operator set one (Rig view, Stage size)
+    #[serde(default)]
+    pub stage: Option<StageLite>,
     /// imported (GDTF-compiled) profiles — needed for head layout + beam angle
     #[serde(default, deserialize_with = "profiles_lenient")]
     pub profiles: std::collections::HashMap<String, light_core::cprofile::CompiledProfile>,

@@ -1434,6 +1434,35 @@ async function main(): Promise<void> {
     await sleep(300);
   }
 
+  // --- Stage size (backlog #14): the one repair rule, on both engines.
+  {
+    const withStage = async (c: Client, stage: unknown) => ({ ...structuredClone(await currentProject(c)), stage }) as Project;
+    // by value: the Rust echo passes through a key-sorted JSON map, so {w,d,h}
+    // comes back as {d,h,w} — the same stage, not the same string
+    const sides = (st: { w: number; d: number; h: number } | undefined) => (st ? `${st.w}x${st.d}x${st.h}` : 'none');
+    node.send({ type: 'updateProject', project: await withStage(node, { w: 20, d: 12, h: 8 }) });
+    rust.send({ type: 'updateProject', project: await withStage(rust, { w: 20, d: 12, h: 8 }) });
+    await sleep(400);
+    const sn = (await currentProject(nodeObs)).stage;
+    const sr = (await currentProject(rustObs)).stage;
+    check('stage: both engines keep a manual size', sides(sn) === '20x12x8' && sides(sr) === '20x12x8', `node=${sides(sn)} rust=${sides(sr)}`);
+    node.send({ type: 'updateProject', project: await withStage(node, { w: 9000, d: 0.5, h: 'tall' }) });
+    rust.send({ type: 'updateProject', project: await withStage(rust, { w: 9000, d: 0.5, h: 'tall' }) });
+    await sleep(400);
+    const bn = (await currentProject(nodeObs)).stage;
+    const br = (await currentProject(rustObs)).stage;
+    check('stage: both engines drop a size with a bad side', bn === undefined && br === undefined, `node=${JSON.stringify(bn)} rust=${JSON.stringify(br)}`);
+    node.send({ type: 'updateProject', project: await withStage(node, { w: 9000, d: 0.5, h: 3 }) });
+    rust.send({ type: 'updateProject', project: await withStage(rust, { w: 9000, d: 0.5, h: 3 }) });
+    await sleep(400);
+    const cn = (await currentProject(nodeObs)).stage;
+    const cr = (await currentProject(rustObs)).stage;
+    check('stage: both engines clamp the sides the same way', sides(cn) === '500x1x3' && sides(cr) === '500x1x3', `node=${sides(cn)} rust=${sides(cr)}`);
+    node.send({ type: 'updateProject', project: await withStage(node, undefined) });
+    rust.send({ type: 'updateProject', project: await withStage(rust, undefined) });
+    await sleep(300);
+  }
+
   // --- MVR import parity: both engines apply the same scene identically.
   const mvr = fs.readFileSync(path.join(ROOT, 'core', 'tests', 'data', 'synthetic.mvr'));
   node.project = null;

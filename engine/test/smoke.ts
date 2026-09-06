@@ -9,7 +9,8 @@ import { Renderer } from '../renderer.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Project } from '../../shared/types.ts';
-import { sanitizeProject } from '../../shared/types.ts';
+import { sanitizeProject, sanitizeStage } from '../../shared/types.ts';
+import { stageExtent } from '../../shared/stageExtent.ts';
 import type { ShareList } from '../../shared/gdtfShare.ts';
 import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
 
@@ -764,6 +765,27 @@ await new Promise<void>((resolve) => {
     'auto-groups: a promoted id is never re-created (no duplicate ids)',
     !plan6.create.some((g) => g.id === 'auto-truss-t1'),
   );
+
+// --- Stage size (backlog #14): the one repair rule, and the window the views draw
+{
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  check('stage: a valid size survives', same(sanitizeStage({ w: 12, d: 8, h: 6 }), { w: 12, d: 8, h: 6 }));
+  check('stage: sides are clamped to the limits', same(sanitizeStage({ w: 9000, d: 0.2, h: 3 }), { w: 500, d: 1, h: 3 }));
+  check('stage: a missing, wrong or non-positive side drops the field',
+    sanitizeStage({ w: 10, d: 8 }) === undefined && sanitizeStage({ w: 'ten', d: 8, h: 4 }) === undefined && sanitizeStage({ w: -1, d: 8, h: 6 }) === undefined && sanitizeStage(null) === undefined);
+  const kept = sanitizeProject({ ...demoProject(), stage: { w: 12, d: 8, h: 6 } })!;
+  check('stage: sanitizeProject keeps a good one', kept.stage?.w === 12 && kept.stage?.h === 6);
+  const dropped = sanitizeProject({ ...demoProject(), stage: { w: 12, d: 8 } } as unknown as Project)!;
+  check('stage: sanitizeProject drops a bad one', dropped.stage === undefined);
+  const empty = stageExtent({ fixtures: [], props: [], stage: undefined });
+  check('extent: nothing placed shows the default window', empty.x0 === -5.5 && empty.x1 === 5.5 && empty.z0 === -3 && empty.z1 === 6 && empty.yTop === 7 && !empty.manual);
+  const far = stageExtent({ fixtures: [{ ...kept.fixtures[0], pos: { x: 18, y: 10, z: -2 } }], props: [], stage: undefined });
+  check('extent: grows to hold a far fixture, with the margin, on whole metres', far.x1 === 21 && far.yTop === 13 && far.x0 === -5.5 && far.z0 === -5, JSON.stringify(far));
+  const prop = stageExtent({ fixtures: [], props: [{ id: 'p', kind: 'trussBar', pos: { x: 0, z: 0 }, size: { w: 30, h: 0.3, d: 0.3 }, y: 9 }], stage: undefined });
+  check('extent: a wide bar reaches by half its width, and its top counts', prop.x0 === -18 && prop.x1 === 18 && prop.yTop === 13, JSON.stringify(prop));
+  const manual = stageExtent({ fixtures: kept.fixtures, props: [], stage: { w: 20, d: 12, h: 8 } });
+  check('extent: a manual stage is the window, with a metre of apron', manual.manual && manual.x0 === -11 && manual.x1 === 11 && manual.z0 === -7 && manual.z1 === 7 && manual.yTop === 9, JSON.stringify(manual));
+}
 
 // --- Engine-side undo: one history per engine (backlog #12, review M16).
 // --- Mirrors history_tests in core/src/state.rs; parity holds the two to it.

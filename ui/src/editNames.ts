@@ -177,6 +177,7 @@ export function describeEdit(a: Project, b: Project): string {
     }
   }
 
+  if (j(a.stage) !== j(b.stage)) add(!b.stage ? 'stage size back to auto' : !a.stage ? 'set the stage size' : 'resize the stage');
   if (j(a.props) !== j(b.props)) {
     const d = diffList(a.props, b.props);
     if (d.added.length === 1) add(`add a ${PROP_LABEL[d.added[0].kind] ?? d.added[0].kind}`);

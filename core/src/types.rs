@@ -174,6 +174,32 @@ fn de_props<'de, D: serde::Deserializer<'de>>(
     Ok(if props.is_empty() { None } else { Some(props) })
 }
 
+/// The stage as a box, metres: `w` across (x), `d` toward the audience (z),
+/// `h` up to the grid (y), centred on the plan's origin. Absent, every view
+/// fits itself to whatever is placed. Twin of StageSize in shared/types.ts.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct StageSize {
+    pub w: f64,
+    pub d: f64,
+    pub h: f64,
+}
+
+/// The one repair rule both engines apply — the twin of `sanitizeStage` in
+/// shared/types.ts, and the parity suite holds them to it: every side a finite
+/// positive number or the field is dropped; sides clamped to the same limits.
+pub fn stage_from_value(v: &serde_json::Value) -> Option<StageSize> {
+    let side = |k: &str, lo: f64, hi: f64| -> Option<f64> {
+        let n = v.get(k)?.as_f64()?;
+        (n.is_finite() && n > 0.0).then(|| n.clamp(lo, hi))
+    };
+    Some(StageSize { w: side("w", 1.0, 500.0)?, d: side("d", 1.0, 500.0)?, h: side("h", 1.0, 100.0)? })
+}
+
+fn de_stage<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<StageSize>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(v.as_ref().and_then(stage_from_value))
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ColorHS {
     pub h: f64,
@@ -827,6 +853,9 @@ pub struct Project {
     pub groups: Vec<Group>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "de_props")]
     pub props: Option<Vec<StageProp>>,
+    /// The stage as a box; absent = every view fits itself to the rig.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "de_stage")]
+    pub stage: Option<StageSize>,
     #[serde(default)]
     pub looks: HashMap<String, Look>,
     pub layers: Vec<Layer>,
@@ -1264,5 +1293,38 @@ mod group_auto_tests {
         // authored groups (no tag) are unchanged
         let g: Group = serde_json::from_str(r#"{"id":"g","name":"G","heads":[]}"#).unwrap();
         assert_eq!(g.auto, None);
+    }
+}
+
+#[cfg(test)]
+mod stage_tests {
+    use super::*;
+
+    #[test]
+    fn the_repair_rule_matches_the_node_sanitiser() {
+        let v = |s: &str| serde_json::from_str::<serde_json::Value>(s).unwrap();
+        assert_eq!(stage_from_value(&v(r#"{"w":12,"d":8,"h":6}"#)), Some(StageSize { w: 12.0, d: 8.0, h: 6.0 }));
+        assert_eq!(stage_from_value(&v(r#"{"w":9000,"d":0.2,"h":3}"#)), Some(StageSize { w: 500.0, d: 1.0, h: 3.0 }), "clamped");
+        assert_eq!(stage_from_value(&v(r#"{"w":10,"d":8}"#)), None, "a missing side drops the field");
+        assert_eq!(stage_from_value(&v(r#"{"w":"ten","d":8,"h":4}"#)), None, "a wrong side drops the field");
+        assert_eq!(stage_from_value(&v(r#"{"w":-1,"d":8,"h":6}"#)), None, "a non-positive side drops the field");
+        assert_eq!(stage_from_value(&v("null")), None);
+    }
+
+    #[test]
+    fn a_project_keeps_its_stage_across_a_round_trip_and_repairs_a_bad_one() {
+        let mut p = crate::defaults::blank_project();
+        p.stage = Some(StageSize { w: 20.0, d: 12.0, h: 8.0 });
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(json.contains(r#""stage":{"w":20.0,"d":12.0,"h":8.0}"#), "{json}");
+        let back: Project = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.stage, p.stage);
+        // absent stays absent, and is not written
+        let none = crate::defaults::blank_project();
+        assert!(!serde_json::to_string(&none).unwrap().contains("\"stage\""));
+        // a bad one on the wire is dropped, not rejected — the project still loads
+        let bad = json.replace(r#""stage":{"w":20.0,"d":12.0,"h":8.0}"#, r#""stage":{"w":0,"d":12,"h":8}"#);
+        let repaired: Project = serde_json::from_str(&bad).unwrap();
+        assert_eq!(repaired.stage, None);
     }
 }

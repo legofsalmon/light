@@ -264,7 +264,7 @@ Mac-window-only (custom `LocalAuthentication` FFI; the tablet is a browser).
 authentication work (`docs/parked-work.md` §2, `ROADMAP.md:116`). Without it,
 layer 1 is "keeps a leaning elbow off the Patch tab", and should say so.
 
-### 14 · Manual stage size — ◧ partial — M (S first slice)
+### 14 · Manual stage size — ◼ shipped 2026-09-06
 **Touches:** shared/types.ts, core, engine, parity, ui, previz, previz3d, docs
 **Today:** no size field anywhere. The native Bevy previz *derives* bounds
 from fixtures and structural props (`Bounds::of`, 3 m margin, 16×12×7 m
@@ -275,6 +275,14 @@ and neither derive nor clamp — an arena-scale MVR renders off-canvas.
 strips it), `sanitizeProject` repair, `ProjectLite` on the previz wire, a row
 in the Stage table, and a policy for manual-vs-derived in native `fit_backdrop`.
 Off the tick path — DMX goldens untouched.
+**Shipped:** `Project.stage {w, d, h}` (metres, centred on the origin) in
+both engines with one repair rule (`sanitizeStage` / `de_stage`, parity-tested:
+a bad side drops the field, sides clamp to 1–500 / 1–100); `shared/stageExtent.ts`
+derives the window every web view shows (the rig with a 3 m margin on whole
+metres, never below the club default) or uses the set stage with a 1 m apron;
+the 2D plan fits and draws the outline, the in-app 3D floor and grids fit,
+the native previz fits its room and frames its camera to the set stage
+(`room_for`); the Rig view's Stage section has the size row (auto / set).
 
 ### 15 · Colour picker: wheel, Kelvin, palette — ◧ partial — S / M
 **Touches:** ui (+ shared/core/engine/parity for a palette or Kelvin-labelled CTO)

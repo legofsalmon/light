@@ -104,6 +104,33 @@ export const STRUCTURE_DEFAULTS: Record<string, { w: number; h: number; d: numbe
   riser: { w: 2, h: 0.4, d: 1.5, y: 0 },
   screen: { w: 4, h: 2.25, d: 0.12, y: 0.5 },
 };
+/** The stage as a box, in metres: `w` across (x), `d` toward the audience
+ *  (z), `h` up to the grid (y), centred on the plan's origin. Optional —
+ *  absent, every view fits itself to whatever is placed, the way the native
+ *  previz always has (shared/stageExtent.ts). Twin of StageSize in
+ *  core/src/types.rs. */
+export type StageSize = { w: number; d: number; h: number };
+export const STAGE_LIMITS = { w: [1, 500], d: [1, 500], h: [1, 100] } as const;
+
+/** The one repair rule both engines apply — the twin of `de_stage` in
+ *  core/src/types.rs, and the parity suite holds them to it: every side a
+ *  finite positive number or the field is dropped; sides clamped to
+ *  STAGE_LIMITS. */
+export function sanitizeStage(v: unknown): StageSize | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const o = v as Record<string, unknown>;
+  const side = (k: 'w' | 'd' | 'h'): number | undefined => {
+    const n = o[k];
+    if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return undefined;
+    const [lo, hi] = STAGE_LIMITS[k];
+    return Math.min(hi, Math.max(lo, n));
+  };
+  const w = side('w');
+  const d = side('d');
+  const h = side('h');
+  return w !== undefined && d !== undefined && h !== undefined ? { w, d, h } : undefined;
+}
+
 /** A dummy performer on the stage — previz-only scenery, placed like a
  *  fixture in the 2D plan, rendered as a figure in both 3D views. */
 export type StageProp = {
@@ -508,6 +535,8 @@ export type Project = {
   groups: Group[];
   /** dummy performers for the previz (optional; absent = empty stage) */
   props?: StageProp[];
+  /** the stage as a box; absent = every view fits itself to the rig */
+  stage?: StageSize;
   looks: Record<string, Look>;
   /** stack order: index 0 = bottom of the stack (UI shows it as the last row) */
   layers: Layer[];
@@ -868,6 +897,12 @@ export function sanitizeProject(p: Project): Project | null {
     if (!Array.isArray(g.heads)) g.heads = [];
     // mirror Rust's de_opt_string: a non-string provenance tag loads as absent
     if (g.auto !== undefined && typeof g.auto !== 'string') delete g.auto;
+  }
+  // the stage box: repaired by the one rule both engines share, or dropped
+  if (p.stage !== undefined) {
+    const stage = sanitizeStage(p.stage);
+    if (stage) p.stage = stage;
+    else delete p.stage;
   }
   if (p.props !== undefined) {
     if (!Array.isArray(p.props)) delete p.props;
