@@ -26,7 +26,8 @@ import { MAX_THROW, buildOccluders, hitsPropFootprint, standingHeightAt, throwDi
 import { FreezeHold, GO_DARK_FRAMES, OutputGate } from '../output.ts';
 import { aimIsIdentity, applyAim } from '../../shared/aim.ts';
 import { shapeAmps, shapeAt } from '../../shared/effects.ts';
-import { SHAPE_KINDS } from '../../shared/types.ts';
+import { BUILTIN_PROFILE_IDS, SHAPE_KINDS } from '../../shared/types.ts';
+import { PROFILES } from '../../shared/profiles.ts';
 import { FX_CATEGORIES, FX_LIBRARY, fxSearch } from '../../ui/src/fxLibrary.ts';
 import { SHORTCUTS, SHORTCUT_GROUPS, runShortcut } from '../../ui/src/shortcuts.ts';
 import { repairEffect } from '../../shared/types.ts';
@@ -1308,6 +1309,29 @@ await new Promise<void>((resolve) => {
     }
     check('shape: never past half the travel, whatever the aspect', capped);
   }
+}
+
+// --- profile lifecycle and the ids built-ins occupy (backlog #16) ----------
+{
+  check(
+    'profiles: the built-in id list matches the built-in profiles',
+    JSON.stringify([...BUILTIN_PROFILE_IDS].sort()) === JSON.stringify(Object.keys(PROFILES).sort()),
+    `list=${[...BUILTIN_PROFILE_IDS].sort().join(',')} profiles=${Object.keys(PROFILES).sort().join(',')}`,
+  );
+
+  // A project profile carrying a built-in id can never render — both engines
+  // resolve built-ins first — so it is dropped rather than kept as dead weight
+  // that looks like it works.
+  const shadow = demoProject();
+  const real = { id: 'gdtf-x', manufacturer: 'M', model: 'M', mode: 'M', footprint: 1,
+    heads: [{ kind: 'rgb', offset: 0, label: 'x' }], channels: [], beamDeg: 10, virtualDimmer: false };
+  shadow.profiles = {
+    'generic-rgb-par-3ch': { ...real, id: 'generic-rgb-par-3ch' },
+    'gdtf-x': real,
+  } as never;
+  const kept = sanitizeProject(shadow)!.profiles ?? {};
+  check('profiles: one shadowing a built-in id is dropped', !Object.hasOwn(kept, 'generic-rgb-par-3ch'), Object.keys(kept).join(','));
+  check('profiles: and the rest are left alone', Object.hasOwn(kept, 'gdtf-x'), Object.keys(kept).join(','));
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

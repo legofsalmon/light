@@ -496,19 +496,39 @@ is a schema field both engines must round-trip. Nothing here forecloses it.
 Size variable, marked `/* not a token: … */` rather than blocking on a Figma
 round-trip. Worth adding next time the design file is open.
 
-### 16 · In-app fixture profile editor — ◧ partial — M (MVP) / L (trustworthy)
-**Touches:** ui, shared/types.ts (sanitize), core (lenient load), parity, docs
-**Today:** the profile format is data-driven with one shared interpreter and is
-already written in-app (form override, pixel layout). No new/duplicate/edit/
-delete; an imported profile can never be removed; a malformed hand-authored
-channel fails the *whole* Rust project load; built-in ids silently shadow
-project profiles.
-**Build:** editor UI (metadata, footprint, heads, per-channel rows incl. 16-bit
-pairs, Linear/Fixed/Wheel cases, motor modes); duplicate-from-imported (free)
-and from-built-in (needs `compiled_builtins()` reachable — TS twin or request);
-a validation twin in `sanitizeProject` and a lenient per-profile Rust load path;
-lifecycle (delete/rename/"used by N"); a parity assertion for the hand-authored
-path; refuse built-in ids. `README.md:98` already lists it.
+### 16 · In-app fixture profile editor — ◧ trustworthy half shipped 2026-09-06; the channel editor is what remains
+**Touches:** ui, shared/types.ts, core, docs
+**Shipped: the reliability and lifecycle half, deliberately before the editor.**
+A per-channel editor on top of the old load path would have been a way to make
+a show unopenable from inside the app, so the order was not a matter of taste.
+
+**One unreadable profile no longer fails the whole project.** `de_profiles` in
+core deserialises them one at a time and skips what it cannot read — the
+pattern the previz has had since it rendered a permanently empty stage for the
+same reason. Before this, one hand-authored channel (or a show written by a
+newer build that knew a `Source` this one did not) failed the entire parse, and
+the engine fell back to the default show while renaming the operator's file
+`.corrupt-*`. Skipping is not silent: those fixtures land in the snapshot's
+`unknownProfiles`, which the Rig view already flags.
+
+**Built-in ids no longer shadow silently.** Both engines resolve a built-in
+before a project profile, so a project profile carrying a built-in id could
+never render. Both sanitizers now drop it rather than keep dead weight that
+looks like it works. `BUILTIN_PROFILE_IDS` lives in `shared/types.ts` — the
+list, not the implementations, because that module is the bottom of the import
+graph — and a smoke test pins it against `PROFILES` so it cannot drift.
+
+**Lifecycle:** a `Profiles` table in the Rig view — channel count, head count,
+"used by N", editable metadata, and remove. Removal is refused while a fixture
+still points at it, and the `.gdtf` stays in the library either way. Profiles
+used to accumulate with no way to take any out.
+
+**Still open: the channel editor** — per-channel rows with 16-bit pairs,
+Linear/Fixed/Wheel cases and motor modes, plus duplicate-from-built-in (which
+needs `compiled_builtins()` reachable from TS) and a parity assertion for the
+hand-authored path. Duplicate is deliberately absent until then: a copy you
+cannot change is not worth a button. The groundwork it needed is now in place —
+a bad edit can no longer take the project down with it.
 
 ### 17 · DAW-fired cues — ◧ partial — S (docs) / M (supported) / XL (plugin)
 **Touches:** shared/types.ts, core, engine, parity, ui, docs

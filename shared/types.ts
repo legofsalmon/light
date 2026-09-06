@@ -507,6 +507,26 @@ export type Settings = {
 // re-exported here so UI code has one import for "the shapes on the wire".
 export type { ShareEntry, ShareList, ShareMatch, MissingFixture } from './gdtfShare.ts';
 
+/** The ids the built-in profiles occupy.
+ *
+ *  The LIST lives here rather than being read from shared/profiles.ts because
+ *  this module is the bottom of the import graph and profiles.ts already
+ *  imports from it — the sanitizer needs the ids, not the implementations. A
+ *  test in the engine suite pins the two together, so the list cannot drift
+ *  away from the profiles it names.
+ *
+ *  Both engines resolve a built-in BEFORE a project profile, so a project
+ *  profile carrying one of these ids can never render. */
+export const BUILTIN_PROFILE_IDS: readonly string[] = [
+  'varytec-derby-st-4ch',
+  'kam-partybar-wfs-20ch',
+  'generic-hazer-2ch',
+  'generic-dimmer-1ch',
+  'generic-rgb-par-3ch',
+  'generic-rgbw-par-4ch',
+  'generic-mover-10ch',
+];
+
 /** The importer's current version — mirrors COMPILER_VERSION in
  *  core/src/cprofile.rs, where the history of what changed at each step lives.
  *  A profile stamped lower than this was compiled by an older build. */
@@ -1134,6 +1154,14 @@ export function sanitizeProject(p: Project): Project | null {
   // Rust's de_metres/de_index repair non-finite to 0 and indices to floor≥0,
   // and this is the Node mirror. Kind/channels stay untouched: they were
   // machine-generated and unvalidated long before B1.
+  // A profile carrying a BUILT-IN id can never render: both engines resolve
+  // built-ins first, so it is dead weight that looks like it works. Dropped so
+  // the two engines agree on the shape — Rust's de_profiles drops it too.
+  if (p.profiles) {
+    for (const id of Object.keys(p.profiles)) {
+      if (BUILTIN_PROFILE_IDS.includes(id)) delete p.profiles[id];
+    }
+  }
   for (const prof of Object.values(p.profiles ?? {})) {
     if (!prof || !Array.isArray(prof.heads)) continue;
     for (const h of prof.heads) {

@@ -126,6 +126,27 @@ count, and nothing that drives anything. LIGHT flags those:
 The fix for both is the same: fetch the real definition from **GDTF Share** (or
 the manufacturer) and re-import it, then point the fixtures at the new profile.
 
+### The profiles a show carries
+
+A show stores its compiled profiles, which is what lets it open on a machine
+that has never seen the fixture. The **Profiles** table lists them with their
+channel count, head count and how many fixtures point at each.
+
+- **Rename** any of the three name fields. That is what the fixture dropdowns
+  show; the channels, and therefore every byte on the wire, are untouched.
+  Imported names are often unreadable, and this is where to fix that.
+- **Remove** one nothing points at. Profiles used to accumulate with no way to
+  take any out, so a show that had been through a few fixtures carried
+  definitions nothing had used for months. Removal is refused while a fixture
+  still uses it — those fixtures would render as nothing at all — and the
+  `.gdtf` stays in the fixture library either way, so it can be imported again.
+
+**One unreadable profile no longer costs you the show.** A profile the engine
+cannot parse — hand-edited, or written by a newer build that knows something
+this one does not — is skipped, and the fixtures using it show as having a
+missing profile. It used to fail the whole project load, and the engine then
+started from the demo show and renamed your file.
+
 ### Re-importing
 
 Re-importing a corrected file **replaces** the stored profile, which rewrites

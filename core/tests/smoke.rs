@@ -687,3 +687,45 @@ fn fixture_form_inference() {
     let back: CompiledProfile = serde_json::from_str(&json).unwrap();
     assert_eq!(back.form_override, Some(FixtureForm::Panel));
 }
+
+/// One malformed profile used to fail the WHOLE project parse, and the engine
+/// then fell back to the default show while renaming the operator's file
+/// `.corrupt-*`. A hand-authored channel, a file edited by hand, or a show
+/// written by a newer build that knows a Source this one does not were all
+/// enough to do it (backlog #16).
+#[test]
+fn one_unreadable_profile_costs_its_fixtures_not_the_show() {
+    let good = r#"{
+        "id": "gdtf-good", "manufacturer": "M", "model": "M", "mode": "M",
+        "footprint": 1, "heads": [{"kind":"rgb","offset":0,"label":"x"}],
+        "channels": [], "beamDeg": 10, "virtualDimmer": false
+    }"#;
+    let json = format!(
+        r#"{{"version":1,"name":"T","universes":[],"fixtures":[],"groups":[],"layers":[],"columns":[],
+             "looks":{{}},"profiles":{{
+               "gdtf-good": {good},
+               "gdtf-bad": {{"id":"gdtf-bad","channels":[{{"offsets":[0],"head":0,"default":0,"name":"C",
+                 "cases":[{{"cond":{{"kind":"neverHeardOfIt"}},"dmxFrom":0,"dmxTo":255,
+                 "func":{{"kind":"linear","source":"dimmer"}}}}]}}]}}
+             }}}}"#
+    );
+    let p: light_core::types::Project = serde_json::from_str(&json).expect("the project still parses");
+    assert!(p.profiles.contains_key("gdtf-good"), "the readable one survives");
+    assert!(!p.profiles.contains_key("gdtf-bad"), "the unreadable one is skipped, not fatal");
+    assert_eq!(p.profiles.len(), 1);
+}
+
+/// A project profile carrying a BUILT-IN id can never render — the resolver
+/// tries built-ins first — so it is dropped rather than kept as dead weight
+/// that looks like it works. Mirrors the Node sanitizer.
+#[test]
+fn a_profile_shadowing_a_builtin_id_is_dropped() {
+    let json = r#"{"version":1,"name":"T","universes":[],"fixtures":[],"groups":[],"layers":[],
+        "columns":[],"looks":{},"profiles":{
+          "generic-rgb-par-3ch": {"id":"generic-rgb-par-3ch","manufacturer":"M","model":"M","mode":"M",
+            "footprint":1,"heads":[{"kind":"rgb","offset":0,"label":"x"}],"channels":[],
+            "beamDeg":10,"virtualDimmer":false}
+        }}"#;
+    let p: light_core::types::Project = serde_json::from_str(json).expect("parses");
+    assert!(p.profiles.is_empty(), "a shadowed id is not kept");
+}

@@ -896,6 +896,52 @@ fn repair_effect(obj: &serde_json::Map<String, serde_json::Value>) -> Option<Eff
     })
 }
 
+/// Deserialize profiles ONE AT A TIME, skipping any that fail.
+///
+/// A CompiledProfile embeds a strict enum contract (Cond / Func / Source,
+/// internally tagged, with no `#[serde(other)]` fallback), and the project
+/// parse is otherwise all-or-nothing: ONE malformed profile — a hand-authored
+/// channel, a file edited by hand, a show written by a newer build that knows
+/// a Source this one does not — failed the WHOLE project, and the engine fell
+/// back to the default show while renaming the operator's file `.corrupt-*`.
+///
+/// One unreadable profile should cost the fixtures that use it, not the show.
+/// Skipping is not silent: a fixture whose profile is missing already lands in
+/// the snapshot's `unknownProfiles`, which the Rig view flags as "this
+/// fixture's profile is missing — it renders as nothing at all".
+///
+/// The previz has done this since it was one build behind the engine and
+/// rendered a permanently empty stage because of it (previz/src/protocol.rs).
+/// The engine had the same hole and a worse consequence.
+fn de_profiles<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<HashMap<String, crate::cprofile::CompiledProfile>, D::Error> {
+    let raw: HashMap<String, serde_json::Value> = HashMap::deserialize(d)?;
+    let mut out = HashMap::with_capacity(raw.len());
+    let mut skipped: Vec<String> = Vec::new();
+    for (id, v) in raw {
+        // A profile carrying a BUILT-IN id can never render: both engines
+        // resolve built-ins first, so it is dead weight that looks like it
+        // works. Dropped here so the two engines agree on the shape, matching
+        // the Node sanitizer.
+        if crate::profiles::profile_of(&id).is_some() {
+            skipped.push(id);
+            continue;
+        }
+        match serde_json::from_value::<crate::cprofile::CompiledProfile>(v) {
+            Ok(p) => {
+                out.insert(id, p);
+            }
+            Err(_) => skipped.push(id),
+        }
+    }
+    if !skipped.is_empty() {
+        skipped.sort();
+        eprintln!("[project] skipped {} unreadable profile(s): {}", skipped.len(), skipped.join(", "));
+    }
+    Ok(out)
+}
+
 fn de_effects<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Effect>, D::Error> {
     let v = Option::<serde_json::Value>::deserialize(d)?;
     let Some(serde_json::Value::Array(items)) = v else { return Ok(Vec::new()) };
@@ -1067,7 +1113,7 @@ pub struct Project {
     #[serde(default)]
     pub settings: Settings,
     /// imported (GDTF-compiled) fixture profiles — travel with the project
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    #[serde(default, deserialize_with = "de_profiles", skip_serializing_if = "HashMap::is_empty")]
     pub profiles: HashMap<String, crate::cprofile::CompiledProfile>,
     /// grid pages (one per song); layer.cells mirrors the active deck
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
