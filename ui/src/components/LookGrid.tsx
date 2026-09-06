@@ -720,7 +720,12 @@ function RigHint() {
   // three that looks like a fault, so it gets the go-live button right here
   // rather than a trip to another tab.
   const offline = useStore((s) => s.snap?.transmit) !== true;
-  if (!noFixtures && !noOutput && !offline) return null;
+  // The fourth: everything is set up and going out, but the rig is repeating a
+  // frame on purpose. Freezing and forgetting is the failure mode — you walk
+  // away believing the show is following the pads — so it says so where the
+  // pads are, not only in the top bar.
+  const frozen = useStore((s) => s.snap?.frozen) === true;
+  if (!noFixtures && !noOutput && !offline && !frozen) return null;
   return (
     <div className="gridhint">
       <span className="prose">
@@ -728,17 +733,20 @@ function RigHint() {
           ? 'Nothing is patched yet — pads light the stage, but there is no rig for them to reach. Add fixtures in the Rig view.'
           : noOutput
             ? 'Outputs are off — the stage shows what the rig would do, and nothing reaches it. Turn on Art-Net or sACN in the Output tab when you want it live.'
-            : 'LIGHT is offline — the stage shows what the rig would do, and nothing reaches it. The universes are set up, so this is the only step left.'}
+            : offline
+              ? 'LIGHT is offline — the stage shows what the rig would do, and nothing reaches it. The universes are set up, so this is the only step left.'
+              : 'The rig is held on one frame. Everything here is still running and the stage view is following it — the room is not.'}
       </span>
       <button
         className={`btn small ${!noFixtures && !noOutput ? 'warn on' : ''}`}
         onClick={() => {
           if (noFixtures) setView('patch');
           else if (noOutput) { setView('split'); setTab('output'); }
-          else send({ type: 'setTransmit', v: true });
+          else if (offline) send({ type: 'setTransmit', v: true });
+          else send({ type: 'setFreeze', v: false });
         }}
       >
-        {noFixtures ? 'Rig view' : noOutput ? 'Output tab' : 'go live'}
+        {noFixtures ? 'Rig view' : noOutput ? 'Output tab' : offline ? 'go live' : 'release'}
       </button>
     </div>
   );

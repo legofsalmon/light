@@ -1,4 +1,11 @@
-//! The transmit gate: whether rendered frames actually reach the wire.
+//! What reaches the wire: whether anything does (the transmit gate), and
+//! which frame it is (the freeze hold).
+//!
+//! Both live here because both answer the same question at the same moment,
+//! and an operator asks them together: "is the rig following me, and if not,
+//! why not."
+//!
+//! ## The transmit gate
 //!
 //! Distinct from blackout, and deliberately so. Blackout is a SHOW state — the
 //! rig is dark because the engine is transmitting frames of zeros, and it is
@@ -21,6 +28,8 @@
 //! a room full of people in it. UDP drops frames, so it is sent more than once.
 //!
 //! Mirrors engine/output.ts. The two must decide identically.
+
+use std::collections::HashMap;
 
 /// Frames of zeros sent on the way out, so a node that drops one still goes
 /// dark. Three at 40 Hz is 75 ms.
@@ -74,6 +83,60 @@ impl OutputGate {
             return Wire::Dark;
         }
         Wire::Silent
+    }
+}
+
+/// Holds the frame the rig is showing while the show carries on underneath.
+///
+/// Freeze exists for the thing every operator does mid-set: opening a look to
+/// change it, with the rig live. Every edit is live, so a half-built look is
+/// on stage while it is being built. Frozen, the wire repeats the frame it was
+/// already showing and the renderer keeps running — so the stage view, the
+/// pads and the previz all follow the edit while the room does not.
+///
+/// It holds EVERYTHING, including the raw channel check tool and find-this-
+/// light. Both are diagnostics and there is a case for letting them through,
+/// but only one of them could be: the override pass is separable and identify
+/// is baked into the render long before this. One diagnostic punching through
+/// while the other silently does not is worse than a rule that is simply true,
+/// and "frozen means the wire does not change" is a promise worth being able
+/// to make. The DMX monitor shows the held frame for the same reason: it
+/// reports what is leaving the app, and while frozen that is this.
+///
+/// Blackout and ALL STOP release it rather than being held by it — blackout
+/// always wins, and a panic that a hold could swallow is not a panic.
+///
+/// Mirrors engine/output.ts, beside the gate.
+#[derive(Debug, Default)]
+pub struct FreezeHold {
+    held: HashMap<String, [u8; 512]>,
+}
+
+impl FreezeHold {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Substitute the held frame while frozen. Call once per tick with the
+    /// buffers this tick rendered; what comes back out is what should reach
+    /// the wire and the monitor.
+    ///
+    /// Each universe latches on the first frozen tick it is present for, so a
+    /// universe added mid-freeze holds from the moment it exists rather than
+    /// going live on its own.
+    pub fn apply(&mut self, frozen: bool, buffers: &mut HashMap<String, [u8; 512]>) {
+        if !frozen {
+            self.held.clear();
+            return;
+        }
+        for (id, buf) in buffers.iter_mut() {
+            match self.held.get(id) {
+                Some(h) => *buf = *h,
+                None => {
+                    self.held.insert(id.clone(), *buf);
+                }
+            }
+        }
     }
 }
 
@@ -146,5 +209,81 @@ mod tests {
         assert_eq!(g.tick(), Wire::Dark);
         assert_eq!(g.tick(), Wire::Dark);
         assert_eq!(g.tick(), Wire::Silent);
+    }
+}
+
+#[cfg(test)]
+mod freeze_tests {
+    use super::*;
+
+    fn frame(v: u8) -> HashMap<String, [u8; 512]> {
+        HashMap::from([("u1".to_string(), [v; 512])])
+    }
+
+    #[test]
+    fn not_frozen_passes_every_frame_through() {
+        let mut f = FreezeHold::new();
+        for v in [1u8, 2, 3] {
+            let mut b = frame(v);
+            f.apply(false, &mut b);
+            assert_eq!(b["u1"][0], v);
+        }
+    }
+
+    #[test]
+    fn frozen_repeats_the_frame_it_latched() {
+        let mut f = FreezeHold::new();
+        let mut b = frame(7);
+        f.apply(true, &mut b);
+        assert_eq!(b["u1"][0], 7, "the first frozen tick is the one held");
+        // the show carries on underneath and the wire does not
+        for v in [9u8, 40, 255] {
+            let mut b = frame(v);
+            f.apply(true, &mut b);
+            assert_eq!(b["u1"][0], 7);
+        }
+    }
+
+    #[test]
+    fn releasing_goes_live_again_and_forgets() {
+        let mut f = FreezeHold::new();
+        let mut b = frame(7);
+        f.apply(true, &mut b);
+        let mut b = frame(9);
+        f.apply(false, &mut b);
+        assert_eq!(b["u1"][0], 9, "released, this tick's frame goes out");
+        // and a later freeze latches the NEW frame, not the old hold
+        let mut b = frame(11);
+        f.apply(true, &mut b);
+        assert_eq!(b["u1"][0], 11);
+    }
+
+    #[test]
+    fn a_universe_added_mid_freeze_holds_from_the_moment_it_exists() {
+        // otherwise it would be the one thing on the rig still moving
+        let mut f = FreezeHold::new();
+        let mut b = frame(7);
+        f.apply(true, &mut b);
+        let mut two = frame(9);
+        two.insert("u2".to_string(), [4u8; 512]);
+        f.apply(true, &mut two);
+        assert_eq!(two["u1"][0], 7, "the one already held keeps its frame");
+        assert_eq!(two["u2"][0], 4, "the new one latches now");
+        let mut three = frame(9);
+        three.insert("u2".to_string(), [200u8; 512]);
+        f.apply(true, &mut three);
+        assert_eq!(three["u2"][0], 4, "and holds from then on");
+    }
+
+    #[test]
+    fn a_universe_that_goes_away_does_not_come_back() {
+        let mut f = FreezeHold::new();
+        let mut two = frame(7);
+        two.insert("u2".to_string(), [4u8; 512]);
+        f.apply(true, &mut two);
+        let mut one = frame(9);
+        f.apply(true, &mut one);
+        assert_eq!(one.len(), 1, "a deleted universe is not resurrected by the hold");
+        assert_eq!(one["u1"][0], 7);
     }
 }

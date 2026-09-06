@@ -6,7 +6,7 @@ import { EngineState, LOCAL_CLIENT } from './state.ts';
 import { Renderer } from './renderer.ts';
 import { ArtnetOut } from './artnet.ts';
 import { SacnOut } from './sacn.ts';
-import { OutputGate } from './output.ts';
+import { FreezeHold, OutputGate } from './output.ts';
 import { OscIn, type OscMessage } from './osc.ts';
 import { Server } from './server.ts';
 import type { WebSocket } from 'ws';
@@ -269,6 +269,8 @@ const sacn = new SacnOut();
 // Whether any of it reaches the wire. Off until an operator says otherwise,
 // every boot — engine/output.ts.
 const gate = new OutputGate();
+// ...and which frame, when the operator is editing a look with the rig up.
+const freeze = new FreezeHold();
 /** Sent on the way offline, so a node holding its last look lets go of it. */
 const ZERO_FRAME = new Uint8Array(512);
 
@@ -476,10 +478,13 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       break;
     }
     case 'setBlackout':
-      state.blackout = !!cmd.v;
+      state.setBlackout(!!cmd.v);
       break;
     case 'setTransmit':
       state.transmit = !!cmd.v;
+      break;
+    case 'setFreeze':
+      state.frozen = !!cmd.v;
       break;
     case 'setHaze':
       state.project.settings.haze = clamp(cmd.v);
@@ -504,7 +509,7 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       break;
     case 'allStop': {
       // panic: everything dark and quiet, right now
-      state.blackout = true;
+      state.setBlackout(true);
       for (const l of state.project.layers) state.clearLayer(l.id);
       state.releaseAllHeld();
       state.identify = null;
@@ -784,6 +789,11 @@ function loopBody(): void {
 
   flushProject(); // one project echo per tick, however many edits arrived
   const res = renderer.tick(now);
+  // Substituted before ANYTHING reads the buffers, so the wire and the DMX
+  // monitor agree: the monitor reports what is leaving the app, and while
+  // frozen that is the held frame. `heads` and `layers` are untouched, so the
+  // stage view and the pads follow the edit.
+  freeze.apply(state.frozen, res.buffers);
   // Discovery follows the PATCH, not the gate. ArtPoll is a question, not
   // output, and which nodes are out there is exactly what an operator wants to
   // know while still offline and setting one up.
@@ -828,6 +838,7 @@ function loopBody(): void {
       master: state.master,
       blackout: state.blackout,
       transmit: state.transmit,
+      frozen: state.frozen,
       haze: state.project.settings.haze,
       hazeFan: state.project.settings.hazeFan,
       heads: res.heads,

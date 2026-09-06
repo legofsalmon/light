@@ -297,6 +297,11 @@ pub struct EngineState {
     pub master: f64,
     pub speed: f64,
     pub blackout: bool,
+    /// Whether the rig is holding the frame it was showing while the show
+    /// carries on underneath (crate::output). Runtime-only, and released by
+    /// blackout, ALL STOP and a project switch: a hold that could swallow a
+    /// panic is not a hold anyone should trust.
+    pub frozen: bool,
     /// Whether rendered frames reach the wire at all (crate::output).
     ///
     /// Runtime-only and OFF at every boot, whatever the show says — see
@@ -352,6 +357,7 @@ impl EngineState {
             master: 1.0,
             speed: 1.0,
             blackout: false,
+            frozen: false,
             transmit: false,
             muted: std::collections::HashSet::new(),
             identify: None,
@@ -829,7 +835,7 @@ impl EngineState {
             }
             MidiAction::Blackout => {
                 if pressed {
-                    self.blackout = !self.blackout;
+                    self.set_blackout(!self.blackout);
                 }
                 false
             }
@@ -1088,6 +1094,16 @@ impl EngineState {
         });
     }
 
+    /// Blackout always wins. Turning it on releases any freeze, because a hold
+    /// that could keep a lit frame on the rig through a blackout is exactly
+    /// the thing blackout exists to be incapable of.
+    pub fn set_blackout(&mut self, v: bool) {
+        self.blackout = v;
+        if v {
+            self.frozen = false;
+        }
+    }
+
     pub fn replace_project(&mut self, p: Project) {
         self.project = p;
         self.ensure_decks();
@@ -1099,6 +1115,9 @@ impl EngineState {
         self.identify = None;
         self.muted.clear();
         self.preview_look = None;
+        // A hold belongs to the show it was taken in; repeating the old show's
+        // frame over the new one would be nobody's idea of frozen.
+        self.frozen = false;
         self.project.settings.haze = 0.0;
         self.project.settings.haze_fan = 0.0;
         // A wholesale swap is the biggest project change there is — advance the
@@ -1284,8 +1303,9 @@ impl EngineState {
                     out.project_changed = true;
                 }
             }
-            Command::SetBlackout { v } => self.blackout = v,
+            Command::SetBlackout { v } => self.set_blackout(v),
             Command::SetTransmit { v } => self.transmit = v,
+            Command::SetFreeze { v } => self.frozen = v,
             Command::Projects
             | Command::NewProject { .. }
             | Command::OpenProject { .. }
@@ -1305,7 +1325,7 @@ impl EngineState {
             Command::PreviewLook { look_id } => self.preview_look = look_id,
             Command::AllStop => {
                 // panic: everything dark and quiet, right now
-                self.blackout = true;
+                self.set_blackout(true);
                 let layer_ids: Vec<String> =
                     self.project.layers.iter().map(|l| l.id.clone()).collect();
                 for id in layer_ids {

@@ -297,6 +297,8 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
     // Whether any of it reaches the wire. Off until an operator says otherwise,
     // every boot — crate::output.
     let mut gate = crate::output::OutputGate::new();
+    // ...and which frame, when the operator is editing a look with the rig up.
+    let mut freeze = crate::output::FreezeHold::new();
     let mut osc = OscIn::new();
     // APC40 LED feedback shares the with_midi gate — the parity harness runs
     // with LIGHT_NO_MIDI and must never touch a controller
@@ -462,7 +464,12 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
         if let Some(bpm) = link.poll_tempo(state.clock.bpm) {
             state.clock.set_bpm(bpm, t);
         }
-        let res = renderer.tick(&mut state, t);
+        let mut res = renderer.tick(&mut state, t);
+        // Substituted before ANYTHING reads the buffers, so the wire and the
+        // DMX monitor agree: the monitor reports what is leaving the app, and
+        // while frozen that is the held frame. `heads` and `layers` are
+        // untouched, so the stage view and the pads follow the edit.
+        freeze.apply(state.frozen, &mut res.buffers);
         {
             // Discovery follows the PATCH, not the gate. ArtPoll is a question,
             // not output, and which nodes are out there is exactly what an
@@ -1262,6 +1269,7 @@ fn build_snapshot(
         },
         blackout: state.blackout,
         transmit: state.transmit,
+        frozen: state.frozen,
         haze: state.project.settings.haze,
         haze_fan: state.project.settings.haze_fan,
         heads: res.heads.clone(),

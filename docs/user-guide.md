@@ -184,6 +184,12 @@ any edit applies to the whole selection. The toolbar then offers
 `→ universe`, `⇢ re-address`, `⧉ duplicate`, `✕ delete`, and
 `⊕ group from N selected`.
 
+**Freeze.** `freeze` in the top bar holds the rig on the frame it is showing while
+the show carries on underneath, so a look can be edited with the rig up without
+the room watching it being built. The stage view keeps following the edits. It
+holds everything, including the channel check tool, and blackout and ALL STOP
+release it.
+
 **Head calibration.** `Aim pan` / `Aim tilt` are a moving head's focus, shown as
 a percentage and as an angle against that fixture's own travel. `Cal` is how the
 head is wired rather than where it points: reverse either axis, swap them for a

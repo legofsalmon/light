@@ -1431,6 +1431,81 @@ async function main(): Promise<void> {
     await settle(node, rust);
   }
 
+  // --- freeze: the rig holds while the show carries on underneath (backlog
+  // --- #7). The point of the feature is that the wire stops moving and
+  // --- nothing else does, so the DMX has to be provably unchanged across an
+  // --- edit that provably reached the engine.
+  {
+    await armWash('wash-rainbow', 0.9);
+    both({ type: '_pinClock', effBeat: 0.9 });
+    await settle(node, rust);
+    const wire = () => JSON.stringify(node.dmx['u1'] ?? []);
+    const lit = wire();
+    check('freeze: something is actually lit to hold', lit !== JSON.stringify([]) && /[1-9]/.test(lit));
+    check(
+      'freeze: both engines start unfrozen',
+      node.snap?.frozen === false && rust.snap?.frozen === false,
+      `node=${node.snap?.frozen} rust=${rust.snap?.frozen}`,
+    );
+
+    both({ type: 'setFreeze', v: true });
+    await sleep(300);
+    check(
+      'freeze: both engines agree they are holding',
+      node.snap?.frozen === true && rust.snap?.frozen === true,
+      `node=${node.snap?.frozen} rust=${rust.snap?.frozen}`,
+    );
+
+    // an edit big enough that nothing could mistake it for rounding
+    const dim = async (v: number) => {
+      const p = structuredClone(await currentProject(node));
+      p.looks['wash-rainbow'].parts[0].params.dimmer = v;
+      both({ type: 'updateProject', project: p });
+      await sleep(600);
+    };
+    await dim(0.05);
+    check(
+      'freeze: the edit reached the engines',
+      (await currentProject(node)).looks['wash-rainbow'].parts[0].params.dimmer === 0.05,
+    );
+    check('freeze: and the wire did not move', wire() === lit, 'the held frame changed under an edit');
+    compareDmx('freeze: held parity', node, rust);
+    check(
+      'freeze: the stage view followed the edit even though the wire did not',
+      (node.snap?.heads ?? []).some((h) => h.i > 0 && h.i < 0.2),
+      'no head dimmed in the snapshot — the renderer stopped instead of the wire',
+    );
+
+    both({ type: 'setFreeze', v: false });
+    await settle(node, rust);
+    check('freeze: releasing lets the edit through', wire() !== lit);
+    compareDmx('freeze: released parity', node, rust);
+
+    // blackout always wins, and so does the panic key
+    both({ type: 'setFreeze', v: true });
+    await sleep(300);
+    both({ type: 'setBlackout', v: true });
+    await sleep(300);
+    check(
+      'freeze: blackout releases the hold on both engines',
+      node.snap?.frozen === false && rust.snap?.frozen === false,
+      `node=${node.snap?.frozen} rust=${rust.snap?.frozen}`,
+    );
+    both({ type: 'setBlackout', v: false });
+    both({ type: 'setFreeze', v: true });
+    await sleep(300);
+    both({ type: 'allStop' });
+    await settle(node, rust);
+    check(
+      'freeze: ALL STOP releases it too — a hold cannot swallow a panic',
+      node.snap?.frozen === false && rust.snap?.frozen === false,
+      `node=${node.snap?.frozen} rust=${rust.snap?.frozen}`,
+    );
+    compareDmx('freeze: after the panic, parity', node, rust);
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
+  }
+
   // --- P2 modulators (LFO slice): beat-locked offsets over stored → soft,
   // byte-identical on both engines at pinned beats, across part fields,
   // effect knobs, hue scaling, the disabled path and a dangling binding.

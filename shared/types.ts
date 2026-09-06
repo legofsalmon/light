@@ -671,6 +671,10 @@ export type Snapshot = {
   speed: number;
   master: number;
   blackout: boolean;
+  /** Whether the rig is holding the frame it was showing while the show runs
+   *  on underneath. The stage view and the pads follow the edits; the wire
+   *  does not. */
+  frozen: boolean;
   /** Whether the engine is putting DMX on the wire. Not derivable from the
    *  project: the universes say WHERE output would go, this says whether any
    *  of it leaves the machine. Off at every boot. */
@@ -764,6 +768,10 @@ export type Command =
    *  LIGHT not speaking to the network. Runtime-only and off at every boot,
    *  whatever the show says — engine/output.ts. */
   | { type: 'setTransmit'; v: boolean }
+  /** Hold the frame the rig is showing while the show carries on underneath,
+   *  so a look can be edited live without the room watching it being built.
+   *  Runtime-only; blackout and ALL STOP release it — engine/output.ts. */
+  | { type: 'setFreeze'; v: boolean }
   | { type: 'setHaze'; v: number }
   | { type: 'setHazeFan'; v: number }
   // baseGen: the project generation this edit was composed against. The engine

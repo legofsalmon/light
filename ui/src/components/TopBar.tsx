@@ -405,6 +405,19 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
           </button>
         );
       })()}
+      {/* Freeze. Beside the transmit gate because they are the same question
+          asked twice: is the rig following me, and if not, why not. */}
+      <button
+        className={`btn ${snap?.frozen ? 'warn on' : 'ghost'}`}
+        title={
+          snap?.frozen
+            ? 'HELD — the rig is repeating the frame it was on. The show, the pads and the stage view are all still running, so you can build a look without the room watching you build it. Click to let it through. Blackout and ALL STOP release it on their own.'
+            : 'hold the rig on the frame it is showing while you edit. The stage view keeps following your edits; the room does not see them until you release it.'
+        }
+        onClick={() => send({ type: 'setFreeze', v: !snap?.frozen })}
+      >
+        {snap?.frozen ? 'held' : 'freeze'}
+      </button>
       <button
         className="btn allstop"
         title="ALL STOP — blackout, clear every layer, release holds, haze and motors off"

@@ -23,7 +23,7 @@ const demoProject = (): Project =>
   JSON.parse(fs.readFileSync(path.join(process.cwd(), 'core/tests/data/demo_project.json'), 'utf8'));
 import { readFileSync } from 'node:fs';
 import { MAX_THROW, buildOccluders, hitsPropFootprint, standingHeightAt, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
-import { GO_DARK_FRAMES, OutputGate } from '../output.ts';
+import { FreezeHold, GO_DARK_FRAMES, OutputGate } from '../output.ts';
 import { aimIsIdentity, applyAim } from '../../shared/aim.ts';
 import { FX_CATEGORIES, FX_LIBRARY, fxSearch } from '../../ui/src/fxLibrary.ts';
 import { repairEffect } from '../../shared/types.ts';
@@ -1050,6 +1050,84 @@ await new Promise<void>((resolve) => {
     'sanitize: a block that corrects nothing is removed rather than stored',
     sanitizeProject(empty)!.fixtures[0].cal === undefined,
   );
+}
+
+// --- freeze: holding the frame while the show runs on (backlog #7) ---------
+// Mirrors the unit tests in core/src/output.rs.
+{
+  const frame = (v: number) => new Map([['u1', new Uint8Array(512).fill(v)]]);
+  {
+    const f = new FreezeHold();
+    let live = true;
+    for (const v of [1, 2, 3]) {
+      const b = frame(v);
+      f.apply(false, b);
+      if (b.get('u1')![0] !== v) live = false;
+    }
+    check('freeze: not frozen passes every frame through', live);
+  }
+  {
+    const f = new FreezeHold();
+    const first = frame(7);
+    f.apply(true, first);
+    check('freeze: the first frozen tick is the one held', first.get('u1')![0] === 7);
+    let held = true;
+    for (const v of [9, 40, 255]) {
+      const b = frame(v);
+      f.apply(true, b);
+      if (b.get('u1')![0] !== 7) held = false;
+    }
+    check('freeze: and the wire repeats it while the show runs on', held);
+  }
+  {
+    const f = new FreezeHold();
+    f.apply(true, frame(7));
+    const out = frame(9);
+    f.apply(false, out);
+    check('freeze: releasing goes live again', out.get('u1')![0] === 9);
+    const again = frame(11);
+    f.apply(true, again);
+    check('freeze: and a later freeze latches the new frame, not the old hold', again.get('u1')![0] === 11);
+  }
+  {
+    // otherwise it would be the one thing on the rig still moving
+    const f = new FreezeHold();
+    f.apply(true, frame(7));
+    const two = frame(9);
+    two.set('u2', new Uint8Array(512).fill(4));
+    f.apply(true, two);
+    check('freeze: a universe already held keeps its frame', two.get('u1')![0] === 7);
+    check('freeze: one added mid-freeze latches now', two.get('u2')![0] === 4);
+    const three = frame(9);
+    three.set('u2', new Uint8Array(512).fill(200));
+    f.apply(true, three);
+    check('freeze: and holds from then on', three.get('u2')![0] === 4);
+  }
+  {
+    const f = new FreezeHold();
+    const two = frame(7);
+    two.set('u2', new Uint8Array(512).fill(4));
+    f.apply(true, two);
+    const one = frame(9);
+    f.apply(true, one);
+    check('freeze: a deleted universe is not resurrected by the hold', one.size === 1 && one.get('u1')![0] === 7);
+  }
+  {
+    // blackout always wins: a hold that could swallow a panic is not a hold
+    // Read through a function: assigning the field narrows its type to the
+    // literal, and the compiler then calls the assertion unreachable — which
+    // is exactly the assertion worth making, because setBlackout is what is
+    // meant to change it.
+    const st = new EngineState(sanitizeProject(demoProject())!);
+    const held = (): boolean => st.frozen;
+    st.frozen = true;
+    st.setBlackout(true);
+    check('freeze: blackout releases it', !held() && st.blackout);
+    st.frozen = true;
+    st.setBlackout(false);
+    check('freeze: clearing blackout does not', held());
+    check('freeze: the engine boots unfrozen', !new EngineState(sanitizeProject(demoProject())!).frozen);
+  }
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

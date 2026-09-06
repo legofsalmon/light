@@ -246,17 +246,40 @@ put every head in a per-type *and* a per-truss group — `min` is the console
 answer, product double-scales. Respect `ROADMAP.md:23` "masters only scale
 intensity". See decision 4 on persistence.
 
-### 7 · Freeze (hold output while editing) — ⬜ absent — M
+### 7 · Freeze (hold output while editing) — ◼ shipped 2026-09-06
 **Touches:** shared/types.ts, core, engine, parity, ui, docs
-**Today:** Audition is a second render that never reaches DMX; the only hold is
-the per-channel `setChannel` check tool. Every edit is live.
-**Build:** an engine-side `freeze` command holding the last sent frame per
-universe while the renderer keeps ticking (previz and snapshot follow edits);
-runtime-only; `AllStop` and blackout release it ("blackout always wins");
-decide whether raw overrides punch through and what the DMX monitor shows
-(probably the wire); snapshot flag + top-bar toggle + persistent warning chip;
-parity case (freeze → edit → DMX unchanged → unfreeze → live; AllStop releases).
-Do not build it UI-side — a client-held frame violates engine isolation.
+**Shipped:** `setFreeze` command, `frozen` snapshot flag, runtime-only.
+`FreezeHold` lives in `core/src/output.rs` / `engine/output.ts` beside the
+transmit gate, because both answer the same question at the same moment: is
+the rig following me, and if not, why not.
+
+The substitution happens in the engine loop immediately after `tick()`, before
+anything reads the buffers, so the wire and the DMX monitor agree while
+`heads`/`layers` stay fresh — the stage view, the pads and the previz all
+follow the edit. Each universe latches on the first frozen tick it is present
+for, so one added mid-freeze holds from the moment it exists instead of being
+the only thing on the rig still moving.
+
+**Decisions the entry left open.** Raw overrides do NOT punch through, and
+neither does identify: the override pass is separable and identify is baked
+into the render long before this, so only one of the two diagnostics *could*
+be let through, and one working while the other silently did not is worse than
+a rule that is simply true. The DMX monitor shows the held frame, for the same
+reason it exists — it reports what is leaving the app.
+
+Blackout, ALL STOP and a project switch release it (`set_blackout` /
+`setBlackout` is now the one door, so the MIDI toggle releases it too). A hold
+that could swallow a panic is not a hold anyone should trust.
+
+UI: a `freeze`/`held` toggle beside the transmit gate, and the pads-view grid
+hint gains a fourth case with a release button — freezing and forgetting is
+the failure this feature can cause, so it is not left to a lit button in a
+busy top bar.
+
+Tests: 5 unit tests each side plus 12 parity checkpoints, including the one
+that proves the whole design — the snapshot follows an edit that the wire does
+not. Verified live: the wire latched while the stage view fell to 1.4%, and
+released to catch up.
 
 ### 8 · In-app help, shortcut sheet, first-run card — ◧ partial — M
 **Touches:** ui, src-tauri, docs

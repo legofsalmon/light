@@ -1,4 +1,11 @@
-// The transmit gate: whether rendered frames actually reach the wire.
+// What reaches the wire: whether anything does (the transmit gate), and which
+// frame it is (the freeze hold).
+//
+// Both live here because both answer the same question at the same moment, and
+// an operator asks them together: "is the rig following me, and if not, why
+// not."
+//
+// ## The transmit gate
 //
 // Distinct from blackout, and deliberately so. Blackout is a SHOW state — the
 // rig is dark because the engine is transmitting frames of zeros, and it is the
@@ -50,5 +57,51 @@ export class OutputGate {
       return 'dark';
     }
     return 'silent';
+  }
+}
+
+/** Holds the frame the rig is showing while the show carries on underneath.
+ *
+ *  Freeze exists for the thing every operator does mid-set: opening a look to
+ *  change it, with the rig live. Every edit is live, so a half-built look is on
+ *  stage while it is being built. Frozen, the wire repeats the frame it was
+ *  already showing and the renderer keeps running — so the stage view, the pads
+ *  and the previz all follow the edit while the room does not.
+ *
+ *  It holds EVERYTHING, including the raw channel check tool and find-this-
+ *  light. Both are diagnostics and there is a case for letting them through,
+ *  but only one of them could be: the override pass is separable and identify
+ *  is baked into the render long before this. One diagnostic punching through
+ *  while the other silently does not is worse than a rule that is simply true.
+ *  The DMX monitor shows the held frame for the same reason: it reports what is
+ *  leaving the app, and while frozen that is this.
+ *
+ *  Blackout and ALL STOP release it rather than being held by it — blackout
+ *  always wins, and a panic a hold could swallow is not a panic.
+ *
+ *  Mirrors FreezeHold in core/src/output.rs. */
+export class FreezeHold {
+  private held = new Map<string, Uint8Array>();
+
+  /** Substitute the held frame while frozen. Call once per tick with the
+   *  buffers this tick rendered; what comes back out is what should reach the
+   *  wire and the monitor.
+   *
+   *  Each universe latches on the first frozen tick it is present for, so a
+   *  universe added mid-freeze holds from the moment it exists rather than
+   *  going live on its own. */
+  apply(frozen: boolean, buffers: Map<string, Uint8Array>): void {
+    if (!frozen) {
+      this.held.clear();
+      return;
+    }
+    for (const [id, buf] of buffers) {
+      const h = this.held.get(id);
+      // A copy each way: the renderer reuses nothing between ticks today, but
+      // a hold that aliased this tick's buffer would follow the show it is
+      // meant to be holding if that ever changed.
+      if (h) buf.set(h);
+      else this.held.set(id, buf.slice());
+    }
   }
 }

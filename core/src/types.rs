@@ -1133,6 +1133,9 @@ pub struct Snapshot {
     /// project: the universes say WHERE output would go, this says whether any
     /// of it leaves the machine.
     pub transmit: bool,
+    /// Whether the rig is holding the frame it was showing while the show runs
+    /// on underneath.
+    pub frozen: bool,
     pub haze: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<LinkSnap>,
@@ -1248,6 +1251,9 @@ pub enum Command {
     /// Open or close the transmit gate: whether rendered frames reach the wire
     /// at all. Runtime-only, off at every boot — crate::output.
     SetTransmit { v: bool },
+    /// Hold the frame the rig is showing while the show carries on underneath.
+    /// Runtime-only; blackout and ALL STOP release it — crate::output.
+    SetFreeze { v: bool },
     SetHaze { v: f64 },
     SetHazeFan { v: f64 },
     /// Subscribe this client to raw DMX for the given universes; an empty list

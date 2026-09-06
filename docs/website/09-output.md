@@ -54,7 +54,33 @@ there.
 - **Speed** multiplies every effect rate, 0.25× to 4×, without jumping phase.
 - **Haze** is merged highest-wins with whatever the looks are asking for.
 
-## The four ways to stop
+## Freeze
+
+**freeze** in the top bar holds the rig on the frame it is showing. The show
+carries on underneath: the pads still fire, the stage view still follows, the
+look you are editing changes on screen exactly as it would live. The room does
+not see any of it until you press **held** again to release.
+
+It is for the thing everyone does mid-set — opening a look to change it with
+the rig up — where every edit is otherwise live and a half-built look is on
+stage while it is being built.
+
+Freeze holds **everything**, including the raw channel check tool and find this
+light. There is a case for letting a diagnostic through, but only one of the
+two could be, and one punching through while the other silently did not would
+be worse than a rule that is simply true. The DMX monitor shows the held frame
+for the same reason: it reports what is leaving the app, and while frozen that
+is the held frame.
+
+Blackout and ALL STOP release it rather than being held by it. A hold that
+could swallow a panic is not a hold worth having. Opening a different show
+releases it too.
+
+While it is held, the pads view says so above the grid, with a release button —
+freezing and forgetting is the failure this feature can cause, so it is not
+left to a lit button in a busy top bar.
+
+## The ways to stop
 
 **Blackout** (top bar, or `B`) zeroes intensity and strobe instantly and always
 wins, while the layers keep running underneath. Release it and the stage returns
@@ -62,6 +88,9 @@ exactly as it was. This is the one to use when something needs to go dark *now*
 and come back in a moment.
 
 **Clear layer** (`✕` on a layer head) stops that layer and leaves the rest.
+
+**Freeze** holds the rig on one frame while you work. It is the only one of
+these that leaves the rig lit, which is the point of it.
 
 **Going offline** stops LIGHT talking to the rig at all, after blacking it out.
 Use it when the rig belongs to someone else for a while, or when you want to

@@ -103,6 +103,11 @@ export class EngineState {
   /** Whether rendered frames reach the wire at all (engine/output.ts).
    *  Runtime-only and OFF at every boot, whatever the show says. */
   transmit = false;
+  /** Whether the rig is holding the frame it was showing while the show
+   *  carries on underneath (engine/output.ts). Runtime-only, and released by
+   *  blackout, ALL STOP and a project switch: a hold that could swallow a
+   *  panic is not a hold anyone should trust. */
+  frozen = false;
   learnTarget: MidiAction | null = null;
   /** Monotonic project generation. Bumped once per project-changing command by
    *  the transport layer (engine/index.ts) — matching the per-command bump in
@@ -451,7 +456,7 @@ export class EngineState {
         if (pressed) this.clock.tap();
         break;
       case 'blackout':
-        if (pressed) this.blackout = !this.blackout;
+        if (pressed) this.setBlackout(!this.blackout);
         break;
       case 'deckNext':
         if (pressed) this.deckStep(1);
@@ -506,6 +511,14 @@ export class EngineState {
   // must never start pumping on its own, and the operator's reflex will not
   // stop it, because blackout deliberately leaves haze alone. The fan goes with
   // it — it runs independently of the haze level and it is the audible one.
+  /** Blackout always wins. Turning it on releases any freeze, because a hold
+   *  that could keep a lit frame on the rig through a blackout is exactly the
+   *  thing blackout exists to be incapable of. */
+  setBlackout(v: boolean): void {
+    this.blackout = v;
+    if (v) this.frozen = false;
+  }
+
   replaceProject(p: Project): void {
     const clean = sanitizeProject(p);
     if (!clean) return;
@@ -518,6 +531,9 @@ export class EngineState {
     this.identify = null;
     this.muted.clear();
     this.previewLook = null;
+    // A hold belongs to the show it was taken in; repeating the old show's
+    // frame over the new one would be nobody's idea of frozen.
+    this.frozen = false;
     this.project.settings.haze = 0;
     this.project.settings.hazeFan = 0;
     this.onChange?.();
