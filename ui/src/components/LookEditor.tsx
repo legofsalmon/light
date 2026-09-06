@@ -7,6 +7,7 @@ import { TextField } from './inputs.tsx';
 import { BEAM_LABELS, BEAM_PARAMS, type BeamCaps, profileMeta } from '../profileInfo.ts';
 import { hasUndrivenBeamChannels } from '../../../shared/gdtfShare.ts';
 import { useStore } from '../store.ts';
+import { WAVE_LABEL } from '../labels.ts';
 import { askConfirm } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
 
@@ -27,7 +28,7 @@ const WAVES: Wave[] = ['sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase'
 
 /** Fan bases in display order, with the labels the operators know. */
 const DISTRIBUTE_LABELS: { v: Distribute; label: string; title: string }[] = [
-  { v: 'index', label: 'idx', title: 'patch order — the classic fan' },
+  { v: 'index', label: 'order', title: 'patch order — the classic spread, one after another' },
   { v: 'x', label: 'X', title: 'sweep stage left → right (world position)' },
   { v: 'y', label: 'Y', title: 'sweep bottom → top' },
   { v: 'z', label: 'Z', title: 'sweep upstage → downstage' },
@@ -228,7 +229,7 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
       )}
       <select className="sel" title="the wave shape — chase runs one head at a time and forces a full spread" value={fx.wave} onChange={(e) => onEdit((x) => (x.wave = e.target.value as Wave))}>
         {WAVES.map((w) => (
-          <option key={w} value={w}>{w}</option>
+          <option key={w} value={w}>{WAVE_LABEL[w]}</option>
         ))}
       </select>
       <select
@@ -250,10 +251,10 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
       {/* wet/dry: how much of the effect lands. 100% is full effect. */}
       <Fader label="mix" width={80} value={soft('mix') ?? fx.mix} def={1} onChange={(v) => onField('mix', v, (x) => (x.mix = v))} fmt={pct} variant="dim" />
       <button className="btn small ghost" title="save this effect to the FX pool as a reusable preset" onClick={onSaveToPool}>☆</button>
-      <button title="remove this step from the cue list" className="btn small ghost" onClick={onRemove}>✕</button>
+      <button title="remove this effect" className="btn small ghost" onClick={onRemove}>✕</button>
     </div>
     <div className="fxrow" style={{ ...(fx.bypass ? { opacity: 0.5 } : {}), paddingLeft: 34 }}>
-      <span className="label">fan</span>
+      <span className="label">spread</span>
       <div className="seg">
         {DISTRIBUTE_LABELS.map((d) => (
           <button
@@ -282,17 +283,17 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
       </button>
       <button
         className={`btn small ${fx.reverse ? 'on' : 'ghost'}`}
-        title="run the fan backwards"
+        title="run the spread backwards"
         onClick={() => onEdit((x) => (x.reverse = !x.reverse))}
       >
         ⇄
       </button>
-      <span className="label">parts</span>
+      <span className="label">tile</span>
       <IntInput
         value={fx.parts}
         min={1}
         max={64}
-        title="tile the fan into k repeats across the group"
+        title="tile the spread into k repeats across the group"
         onCommit={(v) => onEdit((x) => (x.parts = v))}
       />
       <span className="label">buddy</span>
@@ -372,7 +373,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
         <span className="label">group</span>
         <select
           className="sel"
-          title="the fixtures this part drives. Group ORDER is chase order, so it decides how a chase or an index fan runs through them"
+          title="the fixtures this part drives. Group ORDER is chase order, so it decides how a chase or an in-order spread runs through them"
           value={part.groupId}
           onChange={(e) => edit((pt) => (pt.groupId = e.target.value))}
         >
@@ -479,10 +480,10 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
         {kinds.has('derby') && (
           <>
             <div className="paramrow">
-              <span className="label" style={{ marginLeft: 20 }}>derby macro</span>
+              <span className="label" style={{ marginLeft: 20 }}>derby colour</span>
               <select
                 className="sel"
-                title="derbies mix colour by macro slot rather than by RGB — auto picks the slot nearest the colour above"
+                title="derbies mix colour from fixed slots rather than RGB — auto picks the slot nearest the colour above"
                 value={prm.macro === undefined ? 'auto' : String(prm.macro)}
                 onChange={(e) => edit((pt) => (pt.params.macro = e.target.value === 'auto' ? undefined : Number(e.target.value)))}
               >
@@ -586,7 +587,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
           <div className="row">
             <span className="label" style={{ color: 'var(--warn)' }}>⚠</span>
             <span className="label" style={{ whiteSpace: 'normal', lineHeight: 1.5 }}>
-              this group's fixtures list zoom/focus/iris/frost/cto channels that their
+              this group's fixtures list zoom, focus, beam size, soften or warmth channels that their
               profile does not drive — re-import their GDTF in the Fixtures tab to get
               the controls
             </span>
@@ -627,7 +628,7 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
             <span className="label">haze</span>
             <div className={`grow paramrow ${prm.haze === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
               <Fader label="output" width={140} value={softFor('haze') ?? prm.haze ?? 0.5} onChange={(v) => setP('haze', v, (pt) => (pt.params.haze = v))} fmt={pct} variant="dim" />
-              <Fader label="fan" width={140} value={softFor('fan') ?? prm.fan ?? 0.35} onChange={(v) => setP('fan', v, (pt) => (pt.params.fan = v))} fmt={pct} variant="dim" />
+              <Fader label="haze fan" width={140} value={softFor('fan') ?? prm.fan ?? 0.35} onChange={(v) => setP('fan', v, (pt) => (pt.params.fan = v))} fmt={pct} variant="dim" />
             </div>
           </div>
         )}
@@ -731,7 +732,7 @@ export function LookEditor() {
   const ride = useStore((s) => s.ride);
   const setRide = useStore((s) => s.setRide);
 
-  if (!sel) return <div className="hint">Select a cell in the grid to edit its look — click an empty cell to start a new one (it won't fire the layer).</div>;
+  if (!sel) return <div className="hint">Select a pad to edit its look — click an empty pad to start a new one (it won't fire the layer).</div>;
 
   const layer = project.layers.find((l) => l.id === sel.layerId);
   if (!layer) return <div className="hint">Layer no longer exists.</div>;
@@ -750,7 +751,7 @@ export function LookEditor() {
     return (
       <div className="hint">
         <div style={{ marginBottom: 10 }}>
-          Empty cell — {layer.name} · column {sel.col + 1}
+          Empty pad — {layer.name} · column {sel.col + 1}
         </div>
         <div className="row">
           <button
@@ -775,7 +776,7 @@ export function LookEditor() {
             className="sel"
             value=""
             disabled={pool.length === 0}
-            title="put an existing look from the pool into this cell"
+            title="put an existing look from the pool onto this pad"
             onChange={(e) => {
               const id = e.target.value;
               if (!id) return;
@@ -795,7 +796,7 @@ export function LookEditor() {
         </div>
         <div className="label" style={{ marginTop: 8 }}>
           {pool.length} look{pool.length === 1 ? '' : 's'} in this project’s pool — the same look can sit in
-          many cells and decks.
+          many pads and songs.
         </div>
       </div>
     );
@@ -842,16 +843,16 @@ export function LookEditor() {
         </button>
         <button
           className={`btn small ${ride ? 'on' : 'ghost'}`}
-          title="RIDE: fader moves become live soft overrides (~40 bytes, no project write, no undo spam) — Store writes them into the look, Discard drops them. Cleared by ALL STOP and project switch."
+          title="NUDGE: fader moves become live nudges — they drive the rig without touching the show (no project write, no undo spam). Keep writes them into the look, Discard drops them. Cleared by ALL STOP and project switch."
           onClick={() => setRide(!ride)}
           style={ride ? { background: 'var(--amber, #f0a63e)', color: '#000' } : undefined}
         >
-          ride
+          nudge
         </button>
         <select
           className="sel"
           value={lookId}
-          title="swap this cell for another look from the pool"
+          title="swap this pad's look for another from the pool"
           onChange={(e) => {
             const id = e.target.value;
             if (!id || id === lookId) return;
@@ -878,7 +879,7 @@ export function LookEditor() {
           })}
         
             title="empty this pad. The look stays in the library and on any other pad using it.">
-          clear cell
+          clear pad
         </button>
         <button
           className="btn small ghost"
@@ -909,19 +910,19 @@ export function LookEditor() {
                 const parts: string[] = [];
                 if (liveCells > 0) {
                   parts.push(
-                    `It is in ${liveCells} cell(s) of the song you are on. Those cells will be emptied.`,
+                    `It is on ${liveCells} pad(s) of the song you are on. Those pads will be emptied.`,
                   );
                 }
                 if (decksHit.length > 0) {
                   parts.push(
-                    `It is used in ${cellCount} cell(s) across ${decksHit.length} song(s): ${decksHit
+                    `It is on ${cellCount} pad(s) across ${decksHit.length} song(s): ${decksHit
                       .map((d) => d.name)
-                      .join(', ')}. Those cells will be emptied.`,
+                      .join(', ')}. Those pads will be emptied.`,
                   );
                 }
                 if (refs.length > 0) {
                   parts.push(
-                    `It is a step in ${refs.length} cue list(s): ${refs.map((l) => l.name).join(', ')}. Those steps will go dark.`,
+                    `It is a step in ${refs.length} look(s): ${refs.map((l) => l.name).join(', ')}. Those steps will go dark.`,
                   );
                 }
                 const ok = await askConfirm(`Delete "${look.name}"?`, {
@@ -952,7 +953,7 @@ export function LookEditor() {
       {look.steps?.length ? (
         <div>
           <div className="sectionhead" style={{ marginTop: 10 }}>
-            Cue steps — hard cuts on the beat, loops, starts at step 1 when fired
+            Steps — hard cuts on the beat, loops, starts at step 1 when fired
           </div>
           {look.steps.map((st, i) => (
             <div className="row" key={i} style={{ marginBottom: 4 }}>
@@ -969,7 +970,7 @@ export function LookEditor() {
                   const stepLook = Object.hasOwn(project.looks, st.lookId) ? project.looks[st.lookId] : undefined;
                   return !stepLook || stepLook.steps?.length ? (
                     <option value={st.lookId}>
-                      {stepLook ? '(cue list - renders dark)' : '(missing look)'}
+                      {stepLook ? '(has steps — renders dark)' : '(missing look)'}
                     </option>
                   ) : null;
                 })()}
@@ -1008,7 +1009,7 @@ export function LookEditor() {
               </button>
               <button
                 className="btn small ghost"
-                title="remove this step from the cue list"
+                title="remove this step"
                 onClick={() => editLook((lk) => {
                   lk.steps?.splice(i, 1);
                   if (lk.steps?.length === 0) delete lk.steps;
@@ -1066,9 +1067,9 @@ export function LookEditor() {
                   disabled={referencedBy > 0 || !eligible}
                   title={
                     referencedBy > 0
-                      ? `used as a step by ${referencedBy} cue list(s) - cue lists cannot nest`
+                      ? `used as a step by ${referencedBy} look(s) — steps cannot nest`
                       : eligible
-                        ? 'turn this look into a cue list that steps through other looks on the beat'
+                        ? 'give this look steps — it then plays other looks in turn, on the beat'
                         : 'needs at least one other plain look to step through'
                   }
                   onClick={() => editLook((lk) => {
@@ -1076,7 +1077,7 @@ export function LookEditor() {
                     if (first) lk.steps = [{ lookId: first.id, beats: 1 }];
                   })}
                 >
-                  ⛓ cue list
+                  ⛓ steps
                 </button>
               );
             })()}

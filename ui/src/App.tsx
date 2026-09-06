@@ -274,10 +274,10 @@ export function App() {
       {bandHidden && (
         <div
           className="previzstrip"
-          title="show the previz (hidden in this view only)"
+          title="show the stage (hidden in this view only)"
           onClick={() => togglePreviz(view)}
         >
-          <span className="label">previz ▾</span>
+          <span className="label">stage ▾</span>
         </div>
       )}
       {view !== 'previz' && !bandHidden && (

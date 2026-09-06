@@ -136,10 +136,10 @@ function ProjectMenu({ name }: { name: string }) {
 /** The four layouts, in the order they sit on the bar. Alt-1..4 matches the
  *  position, so the shortcut is readable off the screen. */
 const VIEWS: { id: ViewMode; label: string; title: string; key: string }[] = [
-  { id: 'pads', label: 'Pads', title: 'Perform — previz over the pads, look library at the right', key: '1' },
-  { id: 'previz', label: 'Previz', title: 'Previz, full screen', key: '2' },
-  { id: 'patch', label: 'Patch', title: 'Rig — the 2D plan over the patch: drag fixtures into place', key: '3' },
-  { id: 'split', label: 'All', title: 'Build — previz over the pads and the editor', key: '4' },
+  { id: 'pads', label: 'Pads', title: 'Perform — the stage over the pads, look library at the right', key: '1' },
+  { id: 'previz', label: 'Stage', title: 'Stage — the 3D stage, full screen', key: '2' },
+  { id: 'patch', label: 'Rig', title: 'Rig — the 2D plan over the fixtures: drag them into place', key: '3' },
+  { id: 'split', label: 'Build', title: 'Build — the stage over the pads and the look editor', key: '4' },
 ];
 
 export function TopBar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
@@ -324,20 +324,20 @@ export function TopBar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
         // click; blackout and 'B' will not touch it, only this or ALL STOP.
         <span
           className="mutedchip identifychip"
-          title="a fixture is held at full white for identify — it ignores blackout. Click to release it."
+          title="a fixture is held at full white so you can find it — it ignores blackout. Click to release it."
           onClick={() => send({ type: 'identify', fixtureId: null })}
           style={{ cursor: 'pointer' }}
         >
-          ◎ identify: {project.fixtures.find((f) => f.id === snap.identify)?.name ?? 'fixture'}
+          ◎ finding: {project.fixtures.find((f) => f.id === snap.identify)?.name ?? 'fixture'}
         </span>
       )}
       {(snap?.soft?.length ?? 0) > 0 && (
         <span
           className="chip"
           style={{ background: 'rgba(240,166,62,0.18)', border: '1px solid var(--amber, #f0a63e)', color: 'var(--amber, #f0a63e)', fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
-          title="live soft overrides are driving the rig — Store writes them into the show, Discard drops them. Always visible here, whatever panel is open."
+          title="live nudges are driving the rig — Keep writes them into the show, Discard drops them. Always visible here, whatever panel is open."
         >
-          RIDING {snap!.soft!.length}
+          NUDGED {snap!.soft!.length}
           <button
             className="btn small"
             title="write these live positions into the show, so the looks keep them next time they fire (undoable)"
@@ -348,7 +348,7 @@ export function TopBar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
               send({ type: 'softCommit' });
             }}
           >
-            Store
+            Keep
           </button>
           <button
             className="btn small ghost"
@@ -364,7 +364,7 @@ export function TopBar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
         title="ALL STOP — blackout, clear every layer, release holds, haze and motors off"
         onClick={() => {
           void askConfirm('All stop?', {
-            body: 'Blackout on, every layer cleared, holds released, haze and fan off. Use this when something must stop NOW.',
+            body: 'Blackout on, every layer cleared, holds released, haze off. Use this when something must stop NOW.',
             confirmLabel: 'ALL STOP',
             danger: true,
           }).then((ok) => {
@@ -390,17 +390,17 @@ export function TopBar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
       </button>
       <button
         className={`btn warn ${learnMode ? 'on' : ''}`}
-        title="MIDI learn: arm, click any control or cell, then move/press your controller"
+        title="MIDI learn: arm, click any pad, dial or fader, then move/press your controller"
         onClick={() => useStore.getState().toggleLearnMode()}
       >
         midi learn
       </button>
       <button
         className="btn ghost"
-        title="open the native previz window"
+        title="open the stage in its own window — the native renderer, for a second screen"
         onClick={() => send({ type: 'launchPreviz' })}
       >
-        previz
+        stage window
       </button>
       {toast && (
         <span className="label" style={{ color: toast.ok ? 'var(--good)' : 'var(--hot)' }}>
@@ -422,14 +422,14 @@ export function TopBar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
           const nodes = snap?.artnetNodes ?? [];
           const fresh = nodes.filter((n) => n.ageMs < 8000);
           const failed = snap?.artnetPoll === 'failed';
-          const label = fresh.length > 0 ? `art-net ·${fresh.length}` : 'art-net';
+          const label = fresh.length > 0 ? `sending ·${fresh.length}` : failed ? 'no discovery' : sending ? 'no reply' : 'output off';
           const title = fresh.length
-            ? fresh.map((n) => `${n.name} (${n.ip})`).join(', ')
+            ? 'sending Art-Net to ' + fresh.map((n) => `${n.name} (${n.ip})`).join(', ')
             : failed
-              ? 'discovery unavailable — UDP 6454 is held by another app'
+              ? 'Art-Net discovery unavailable — port 6454 is held by another app (QLC+? a second engine?)'
               : sending
-                ? 'sending, but no node has answered ArtPoll — check network'
-                : 'art-net output is off';
+                ? 'sending Art-Net, but no node has answered — check the network and node power'
+                : 'Art-Net output is off on every universe — turn it on in the Output tab';
           return (
             <StatusDot
               ok={fresh.length > 0}

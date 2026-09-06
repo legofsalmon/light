@@ -9,9 +9,9 @@ import { ControlsView } from './ControlsView.tsx';
 const TABS: { id: Tab; label: string; help: string }[] = [
   { id: 'look', label: 'Look', help: 'edit the selected pad: parts, colour, position, beam and effects' },
   { id: 'patch', label: 'Fixtures', help: 'the patch — addresses, profiles, positions, groups, and GDTF/MVR import' },
-  { id: 'controls', label: 'Controls', help: 'macro faders and their links, and the beat-locked modulators' },
+  { id: 'controls', label: 'Controls', help: 'dials and their links, and the beat-locked pulses' },
   { id: 'output', label: 'Output', help: 'universes, Art-Net and sACN, and a live DMX monitor' },
-  { id: 'sync', label: 'Sync · MIDI', help: 'tempo, Ableton Link, OSC from Resolume, and MIDI mappings' },
+  { id: 'sync', label: 'Sync · MIDI', help: 'tempo, Ableton Link, the Resolume link, and MIDI mappings' },
 ];
 
 export function BottomPanel() {

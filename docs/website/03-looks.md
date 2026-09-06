@@ -31,19 +31,19 @@ deliberate stop is the `✕` on the layer head.
 
 Each layer has a master and a blend mode, and they merge bottom to top:
 
-- **normal** — replaces what is below on the channels the look touches. For base
+- **replaces** — replaces what is below on the channels the look touches. For base
   washes.
-- **multiply** — scales the intensity below it. This is what an FX layer wants:
+- **dims through** — scales the intensity below it. This is what an FX layer wants:
   a chase or a pulse that carves whatever colour the wash is showing, without
   owning colour itself.
-- **htp** — highest takes precedence. For strobes and blinders that ride on top
+- **brightest wins** — the brighter of the two layers. For strobes and blinders that sit on top
   and must never *remove* light.
 
-Blend affects intensity only. Colour, position, strobe and macros always take
+Blend affects intensity only. Colour, position, strobe and colour slots always take
 the upper layer's value — worth knowing, because "multiply" reads like it should
 multiply colours and it does not.
 
-## Songs (decks)
+## Songs
 
 The chips under the top bar are pages of the grid. Click to switch, double-click
 to rename, `⧉ duplicate` copies the current song's pads into a new one — the
@@ -60,12 +60,12 @@ A look is a list of **parts**. Each part points at one fixture group and carries
 
 - **Dimmer** — intensity.
 - **Colour** — hue and saturation, plus swatches. Fixtures that cannot mix
-  colour quantise to their nearest fixed macro.
+  colour quantise to their nearest fixed colour slot.
 - **White** — the dedicated white emitter on an RGBW head. Offered when
   something in the group actually drives one.
 - **Position** — pan and tilt, offered when something in the group has the
   channels for it.
-- **Beam** — zoom, focus, iris, frost, CTO. Each offered only if a fixture in
+- **Beam** — zoom, focus, beam size, soften, warmth. Each offered only if a fixture in
   the group has it. Absent means the look says nothing about that parameter and
   the fixture keeps whatever its profile parks it at — not that it is zero.
 - **Strobe**, and the derby-specific ring controls where they apply.
@@ -82,7 +82,7 @@ look and a position look can live on different layers without fighting.
 ## Fades
 
 Each layer has a default fade; a look can override it with its own. Colours fade
-through RGB, intensities fade linearly, and *banded* values — colour macros,
+through RGB, intensities fade linearly, and *banded* values — colour slots,
 motor modes — snap at the start of the fade, because the hardware cannot cross
 between bands.
 
@@ -92,13 +92,13 @@ Mark a look **FLASH** and it becomes momentary: active only while the pad or the
 mapped MIDI note is held. If the client holding one disconnects, the engine
 releases it rather than leaving a blinder on.
 
-## Cue lists
+## Steps
 
-Any look can become a chaser. Open it, press `⛓ cue list`, and add steps — each
+Any look can become a chaser. Open it, press `⛓ steps`, and add steps — each
 a look and a beat count. It hard-cuts through them on the beat, loops, and
-follows the speed master. Cue lists cannot nest.
+follows the speed master. Steps cannot nest.
 
-A cue list is anchored at the moment you fire it, so a chase started on the
+A look with steps is anchored at the moment you fire it, so a chase started on the
 downbeat stays on the downbeat.
 
 ## Editing while the show runs

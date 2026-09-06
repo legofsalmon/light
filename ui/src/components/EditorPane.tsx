@@ -32,7 +32,7 @@ export function EditorPane() {
           ▸
         </button>
         <span className="label">look editor</span>
-        {ride && <span className="label" style={{ color: 'var(--warn)' }}>riding</span>}
+        {ride && <span className="label" style={{ color: 'var(--warn)' }}>nudging</span>}
       </div>
       <div className="editorbody" ref={bodyRef}>
         <LookEditor />

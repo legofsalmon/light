@@ -95,10 +95,10 @@ export function LicencePanel(): React.ReactElement | null {
       {claims && (
         <div className="col" style={{ gap: 2, fontFamily: 'var(--mono)', fontSize: 12 }}>
           <div>
-            {claims.edition} · {claims.seats} seat{claims.seats === 1 ? '' : 's'} · {claims.key}
+            {claims.edition} · {claims.key} · {claims.seats === 1 ? 'one Mac' : `${claims.seats} Macs`}
           </div>
           <div style={{ color: 'var(--text-dim)' }}>
-            {claims.edition.toLowerCase() === 'trial' ? 'trial ends' : 'check in by'}{' '}
+            {claims.edition.toLowerCase() === 'trial' ? 'trial ends' : 'works offline until'}{' '}
             {stamp(claims.exp)} ({until(claims.exp)}) · updates until {stamp(claims.maintUntil)}
           </div>
         </div>
@@ -152,11 +152,11 @@ export function LicencePanel(): React.ReactElement | null {
 
       <div className="row" style={{ gap: 6 }}>
         <button disabled={busy !== ''} onClick={() => run('heartbeat', licenceHeartbeat)}>
-          {busy === 'heartbeat' ? 'Checking…' : 'Check in now'}
+          {busy === 'heartbeat' ? 'Refreshing…' : 'Refresh licence'}
         </button>
         {claims && (
           <button disabled={busy !== ''} onClick={() => run('deactivate', licenceDeactivate)}>
-            {busy === 'deactivate' ? 'Releasing…' : 'Release this machine'}
+            {busy === 'deactivate' ? 'Deactivating…' : 'Deactivate this Mac'}
           </button>
         )}
       </div>

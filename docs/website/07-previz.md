@@ -1,10 +1,10 @@
-# Previz
+# Stage
 
 Two renderers, for two different questions.
 
 ## The 3D stage
 
-![The 3D previz — the demo show's Drop cue](img/previz-3d.jpg)
+![The 3D stage — the demo show's Drop cue](img/previz-3d.jpg)
 
 What the rig looks like from the room: beams through haze, colour on people,
 shadows where they land. It is for judging whether a look *works* — whether the
@@ -40,11 +40,11 @@ head, which is what it does on the truss.
 
 ## The 2D plan
 
-The drafting view. Top-down by default, with a **Front** elevation for trim
+The drafting view. Top-down by default, with a **Front** elevation for hang
 heights. This is where fixtures get placed, snapped to truss and grouped, and
 where a metre grid (`measure`) makes it possible to judge sizes by eye.
 
-Selection is shared with the patch table: select rows in the table and they
+Selection is shared with the fixtures table: select rows in the table and they
 light up in the plan, and `⊕ group from N selected` turns a marquee into a
 group.
 
@@ -57,16 +57,16 @@ resizing the riser moves whoever is on it.
 
 ## The audition pane
 
-The right edge of the previz band shows the **selected** look rendered but never
+The right edge of the stage band shows the **selected** look rendered but never
 sent to the rig — a separate head set the engine resolves alongside the live
 one. It is how you check the next look mid-song.
 
-It is a second renderer, and firing a pad selects it, so `preview` in the previz
+It is a second renderer, and firing a pad selects it, so `preview` in the stage
 bar switches it off when you want the live view to have the whole band.
 
 ## The native window
 
-`PREVIZ` in the top bar opens a separate, natively rendered window: volumetric
+`STAGE WINDOW` in the top bar opens a separate, natively rendered window: volumetric
 haze, real shadow-casting beams, bloom. It speaks the same protocol as the
 browser view and follows the same show.
 

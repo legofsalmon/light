@@ -106,6 +106,24 @@ under the same conventions and are in `tokens.json`:
 - Size: `num-w`, `swatch-mini-w/h`, `deckchip-max-w`, `bpm-w`, `nowplaying`, `tab-indicator`, `param-label-w`, `menu-w`, `progress-h`
 - Text styles: `text/hint` `text/segment` `text/chip-muted` `text/chip-warn` `text/chip-head` `text/chip-deck` `text/chip-riding` `text/offline` `text/colhead` `text/control-name` `text/control-midi` `text/library-hint` `text/table-head` `text/project-name` `text/cog` `text/control-sm` `text/strip-vertical` `text/crashed` `text/control-head`
 
+## Language
+
+One name per thing, and the name says what it does. The words: **pad**, **look**,
+**song**, **rig**, **stage**, **dial**, **pulse**, **nudge**, **steps**, **spread**
+(an effect across a group), **haze fan** (the hazer's), **brightest wins / dims
+through / replaces** (layer blends), **ramp up / ramp down** (waves), **beam
+size / soften / warmth** (beam channels), **find this light** (identify),
+**Keep / Discard** (a nudge's two outcomes). Retired: deck, cell, previz, patch
+(as a name), LFO, modulator, macro, named control, ride, soft override, cue
+list, htp, cto, iris, frost, trim, sawUp, idx, seat, lease, heartbeat.
+
+`scripts/check-language.mjs` walks every user-visible string in `ui/src`
+(JSX text, title/placeholder/label props, dialog and toast copy, `describe*`
+return values) and fails `npm run typecheck` on a retired word. Protocol names
+(ArtPoll, unicast, UDP, E1.31, OSC) are allowed in tooltips and in the steps
+that tell a tech what to click in Arena, never as the name of something in
+LIGHT. `ui/src/labels.ts` maps wire values (`sawUp`) to what a person reads.
+
 ## What the system resolves
 
 These are the places where the same intent had different values in the CSS.

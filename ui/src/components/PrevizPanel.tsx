@@ -81,13 +81,13 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
         {view !== 'previz' && (
           <button
             className="btn small ghost pin"
-            title="hide the previz (this view only — the strip left behind brings it back)"
+            title="hide the stage (this view only — the strip left behind brings it back)"
             onClick={() => togglePreviz(view)}
           >
             ▴
           </button>
         )}
-        <span className="label">previz</span>
+        <span className="label">stage</span>
         <div className="seg">
           <button
             className={mode === '3d' ? 'on' : ''}
@@ -140,7 +140,7 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
           <>
             <button
               className={`btn small ${showBand ? 'on' : 'ghost'}`}
-              title="dummy band figures for scale (native previz window: press M)"
+              title="dummy band figures for scale (stage window: press M)"
               onClick={() => setShowBand(!showBand)}
             >
               band
@@ -204,7 +204,7 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
               </button>
               <button
                 className={view2d === 'front' ? 'on' : ''}
-                title="front elevation: dragging a fixture sets its trim HEIGHT, not its position"
+                title="front elevation: dragging a fixture sets its HANG HEIGHT, not its position"
                 onClick={() => setView2d('front')}
               >
                 Front
@@ -239,7 +239,7 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
           <div className="previewpane">
             <div className="previzbar previewbar">
               <span className="label">preview</span>
-              <span className="previewname">{selName ?? 'empty cell'}</span>
+              <span className="previewname">{selName ?? 'empty pad'}</span>
               <span className="label dim">not on the rig</span>
             </div>
             <div className="previzview previewview">

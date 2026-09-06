@@ -64,8 +64,8 @@ export function UnicastInput({ value, onCommit }: {
       ref={ref}
       className="text"
       style={{ width: 110, ...(bad ? { borderColor: 'var(--hot)', color: 'var(--hot)' } : {}) }}
-      placeholder="broadcast"
-      title={bad ? 'not an IPv4 address — output will fall back to broadcast' : 'unicast IP (empty = broadcast)'}
+      placeholder="everyone"
+      title={bad ? 'not an IPv4 address — output will fall back to everyone (broadcast)' : 'one node\'s IP address (unicast) — empty sends to everyone on the network (broadcast)'}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}

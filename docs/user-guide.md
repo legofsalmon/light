@@ -6,51 +6,51 @@ How to operate LIGHT: looks, layers, cues, effects, and the controls that matter
 
 - A **look** is a lighting state: colour, intensity, positions, and effects for one or more fixture groups.
 - Looks live in a **grid**: rows are **layers**, columns are **cues**. The layer stack runs bottom-to-top (WASH at the bottom, STROBE on top — the UI shows the top of the stack as the top row). Four layer rows, plus a fifth **control row** ruled off underneath them — the same shape as an APC40 mk2's clip grid.
-- Clicking a cell fires its look on that layer with a crossfade. Clicking a **column header** fires the whole column as a cue.
+- Clicking a pad fires its look on that layer with a crossfade. Clicking a **column header** fires the whole column as a cue.
 - Everything time-based (effects, fades shown in beats) follows the **beat clock** — tap it, drag it, or let Resolume drive it.
 
 ## Firing looks
 
 | Action | How |
 |---|---|
-| Fire a cell | Click it (also selects it for editing) |
+| Fire a pad | Click it (also selects it for editing) |
 | Fire a column (cue) | Click the column header, or keys `1`–`8` |
-| Hold a flash look | Press and hold the cell — it releases on mouse-up |
+| Hold a flash look | Press and hold the pad — it releases on mouse-up |
 | Clear a layer | `✕` in the layer header |
 | From MIDI | Map pads/faders with MIDI learn (below) |
 | From Resolume | Enable OSC output in Arena — column launches follow automatically |
 
-**Column = cue.** Firing a column fires every layer's cell in that column and *clears* layers whose cell is empty — so a column fully describes the stage. Momentary **flash** looks are skipped by cues on purpose: a cue can never latch a blinder on.
+**Column = cue.** Firing a column fires every layer's pad in that column and *clears* layers whose pad is empty — so a column fully describes the stage. Momentary **flash** looks are skipped by cues on purpose: a cue can never latch a blinder on.
 
 **Flash looks** are momentary: active only while the mouse button or mapped MIDI note is held. If the client holding a flash look disconnects entirely, the engine releases it automatically.
 
 ## Crossfades
 
-Each layer has a default fade (seconds) in the project; a look can override it with its own **fade** field in the look editor. Colours fade through RGB space (exactly what the fixture's channels do), intensities fade linearly, and *banded* values — derby colour macros, motor modes — snap at the start of the fade because the hardware can't fade between bands.
+Each layer has a default fade (seconds) in the project; a look can override it with its own **fade** field in the look editor. Colours fade through RGB space (exactly what the fixture's channels do), intensities fade linearly, and *banded* values — derby colour slots, motor modes — snap at the start of the fade because the hardware can't fade between bands.
 
 ## Layers and blend modes
 
 Layers apply bottom-to-top. Each has a **master** (scales that layer's intensity contribution) and a **blend mode**:
 
-- **normal** — replaces what's below on the channels the look touches. For base washes.
-- **multiply** — multiplies intensity (dimmer/white) below. This is the FX layer's mode: a chase or pulse modulates *whatever colour the wash is showing* without owning colour itself.
-- **htp** — highest takes precedence on intensity. For strobes and blinders that ride on top.
+- **replaces** — replaces what's below on the channels the look touches. For base washes.
+- **dims through** — scales the intensity (dimmer/white) below. This is the FX layer's mode: a chase or pulse modulates *whatever colour the wash is showing* without owning colour itself.
+- **brightest wins** — the brighter of the two layers, on intensity. For strobes and blinders that sit on top.
 
 The **grand master** (top bar) scales all dimmer/white output. **Blackout** (top bar or `B`) zeroes intensity and strobing instantly — it always wins.
 
 ## The look editor
 
-Select a cell → the Look tab shows its editor. A look is a list of **parts**; each part targets one fixture **group** and carries:
+Select a pad → the Look tab shows its editor. A look is a list of **parts**; each part targets one fixture **group** and carries:
 
 - **Dimmer** — intensity 0–100%.
-- **Colour** — hue + saturation faders plus swatches. Derbies can't mix colour: they quantise to the nearest of their 14 fixed macros ("auto"), or pick an explicit macro from the dropdown.
+- **Colour** — hue + saturation faders plus swatches. Derbies can't mix colour: they quantise to the nearest of their 14 fixed colour slots ("auto"), or pick a slot from the dropdown.
 - **Derby extras** — *ring blinder* toggle (the white LED ring is on/off hardware — there is no ring dimmer), *ring FX* (the ring's built-in strobe patterns), *motor* (off / static aim / rotate + speed).
 - **White** — the dedicated white emitter on an RGBW head, offered whenever
   something in the group actually drives one. Distinct from a derby's *ring
   blinder*, which is on/off hardware.
 - **Strobe** — shutter rate, slow → fast.
 - **Position** — pan/tilt for moving heads.
-- **Haze** — output + fan for hazer-type fixtures (merged highest-wins with the manual haze slider in the top bar).
+- **Haze** — output + haze fan for hazer-type fixtures (merged highest-wins with the manual haze slider in the top bar).
 
 Enable a parameter with the checkbox to its left; a look only writes the parameters it has enabled, which is what lets layers combine cleanly.
 
@@ -61,7 +61,7 @@ Each part can stack effects. An effect modulates one target (`dimmer`, `hue`, `w
 | Wave | Feels like |
 |---|---|
 | sine / triangle | smooth swells |
-| sawUp / sawDown | builds / beat-pulses |
+| ramp up / ramp down | builds / beat-pulses |
 | square | on/off gate (set *width* for duty) |
 | chase | one-at-a-time run across the group (*width* = how many are lit) |
 | random | sample-and-hold flicker |
@@ -83,14 +83,14 @@ The **speed** fader in the top bar multiplies all effect rates (0.25×–4×) wi
 ## MIDI learn
 
 1. Click **MIDI LEARN** in the top bar (it arms).
-2. Click any cell, column header, layer master, or top-bar control.
+2. Click any pad, column header, layer master, or top-bar control.
 3. Touch the control on your device — pad or encoder. Done; the mapping is stored in the project.
 
-Notes fire cells (note-off releases flash looks); CCs drive faders. Manage or delete mappings in the **Sync · MIDI** tab.
+Notes fire pads (note-off releases flash looks); CCs drive faders. Manage or delete mappings in the **Sync · MIDI** tab.
 
 A control in the grid's control row is learnable the same way — arm learn, click
 its fader, touch an encoder. Prefer an encoder or fader to a pad: a pad drives a
-continuous target by its velocity on press only (so a release cannot slam a macro
+continuous target by its velocity on press only (so a release cannot slam a dial
 to zero), which means a pad can push a control up but never bring it back down.
 
 **The APC40's eight device knobs drive the eight controls.** Load the APC40 mk2
@@ -104,7 +104,7 @@ same pickup behaviour as the track faders on the layer masters. And in the
 APC40's generic mode the knobs are *banked* by the `[TRACK SELECTION]` buttons,
 which silently moves them to a different MIDI channel; the preset therefore binds
 all nine banks to the same eight controls, so a stray press of a track button
-cannot take your macros away mid-set.
+cannot take your dials away mid-set.
 
 ## Saving
 
@@ -118,16 +118,16 @@ Everything autosaves ~1 second after any edit, with five rotating backups (`.bak
 
 ## Since the first release notes — what else is in the app
 
-**Songs (decks).** The chips under the top bar are pages of the grid, one per
+**Songs.** The chips under the top bar are pages of the grid, one per
 song. Click to switch, double-click to rename, `⧉ duplicate` copies the current
-song's cells into a new one (the usual way to start the next song), and the
+song's pads into a new one (the usual way to start the next song), and the
 APC40's bank ◀ ▶ arrows step through them. Looks live in one shared pool, so the
-same look can sit in many cells and songs — an empty cell offers
+same look can sit in many pads and songs — an empty pad offers
 **use existing look…** as well as **+ create look here**.
 
-**Cue lists (⛓).** Any look can become a chaser: open it and press `⛓ cue list`,
+**Steps (⛓).** Any look can become a chaser: open it and press `⛓ steps`,
 then add steps (a look + a beat count each). It hard-cuts through the steps on
-the beat, loops, and follows the speed master. Cue lists cannot nest.
+the beat, loops, and follows the speed master. Steps cannot nest.
 
 **Undo/redo.** `⌘Z` / `⇧⌘Z`, or the ↺ ↻ buttons. Thirty steps, and a drag counts
 as one. History belongs to the loaded project: switching projects clears it
@@ -137,7 +137,7 @@ rather than risking one show's state landing in another.
 `+ new project…`, or `save as…`. Files live beside the app's data; the app
 remembers which one you had open.
 
-**Patch table.** Number fields (position, rotation, tilt, roll) accept typed
+**Fixtures table.** Number fields (position, mount rotation, tilt, roll) accept typed
 values including negatives, or **drag left/right on the field to scrub**. Select
 rows first — click, ⇧-click for a range, ⌘-click to toggle, or drag a box — and
 any edit applies to the whole selection. The toolbar then offers
@@ -146,7 +146,7 @@ any edit applies to the whole selection. The toolbar then offers
 
 **Fixture aim.** `Rot°` is yaw, `Tilt°` is the mounting pitch, `Roll°` the roll.
 They compose on top of each fixture type's default aim, so a bar hung at an
-angle can be pointed where it actually points — visible in both previz views.
+angle can be pointed where it actually points — visible in both stage views.
 
 **Art-Net node health.** The `art-net` dot goes green only when a node has
 answered an ArtPoll, with its name in the tooltip; amber means LIGHT is sending
@@ -155,10 +155,10 @@ but nothing is answering. The Output tab lists the nodes it found.
 **Ableton Link.** `link` in the top bar joins a Link session (native engine
 only) and shows the peer count. Tapping tempo in LIGHT leads the session.
 
-**Stage previz.** The `+ musician…` picker in the 2D bar drops dummy performers
+**The band.** The `+ musician…` picker in the 2D bar drops dummy performers
 on the plan — drag to place, double-click to remove. They appear in both 3D
 views (`band` toggles them in-app, `M` in the pop-out window), so you can judge
-how a look actually lands on people. `PREVIZ` in the top bar opens the native
+how a look actually lands on people. `STAGE WINDOW` in the top bar opens the native
 window with real beams, haze, and shadows.
 
 **The native window.** It opens framed on your whole rig — however big the plot
@@ -174,32 +174,32 @@ show file carries, so a rig that is not hung in rows will not get bars drawn
 through it.
 
 **Risers.** Drag a musician onto a riser in the 2D plan and they stand on top of
-it, kit and all — in both 3D views. There is no height to set: the previz reads
+it, kit and all — in both 3D views. There is no height to set: the stage reads
 it off the riser your performer is standing inside, so moving or resizing the
 riser moves whoever is on it. Only risers hold someone up, and standing beside
 one leaves you on the deck.
 
-**Exposure.** `auto exp` in the previz bar is eye adaptation: the view stops
+**Exposure.** `auto exp` in the stage bar is eye adaptation: the view stops
 down when the rig comes up and opens back up in the quiet parts, the way your
 eyes do. It is partial, so a brighter look still reads brighter, and a blackout
 is never brightened. Switch it off to judge absolute levels or to compare two
 looks without the view re-metering between them.
 
-**Layout.** The previz is a band across the **top** of every view — stages are
-wider than they are tall, so that is the shape that reads. `Pads` / `Previz` /
-`Patch` / `All` (⌥1–⌥4) choose what sits under it:
+**Layout.** The stage is a band across the **top** of every view — stages are
+wider than they are tall, so that is the shape that reads. `Pads` / `Stage` /
+`Rig` / `Build` (⌥1–⌥4) choose what sits under it:
 
 | View | Under the band | |
 |---|---|---|
-| **Pads** | the pad grid, with the **look library** and the **look editor** at the right | the audition rides the band's right edge |
-| **Patch** | the fixtures table, with the **2D plan** above it | arriving picks the plan; your previous view comes back when you leave |
-| **All** | pads and the editor tabs | |
-| **Previz** | — | full screen |
+| **Pads** | the pad grid, with the **look library** and the **look editor** at the right | the audition sits at the band's right edge |
+| **Rig** | the fixtures table, with the **2D plan** above it | arriving picks the plan; your previous view comes back when you leave |
+| **Build** | pads and the editor tabs | |
+| **Stage** | — | full screen |
 
 Drag the edges between panels to resize them, and the layout is remembered. Each
-view has its own **hide** for the band (`▴` at the left of the previz bar, and
+view has its own **hide** for the band (`▴` at the left of the stage bar, and
 the slim strip it leaves behind brings it back), so you can run a show
-full-height on the pads while the patch view keeps its plan. **preview** in the
+full-height on the pads while the Rig view keeps its plan. **preview** in the
 same bar switches the audition pane off — it is a second render, and firing a
 pad selects it, so a show run from the pads may not want it.
 
@@ -221,19 +221,19 @@ turns amber on screen to say so — fire it again to swap. On the APC that pad
 keeps reporting the *stage*: it stays lit in the colour of what is actually
 playing, not the colour of the look now sitting on it.
 
-**The control row.** Under the four layer rows, ruled off from them, sits a row
-of **Named Controls**. They are not looks and not effects: a control is a macro
-fader that reaches *into* whatever is playing, each of its links driving one
+**The dial row.** Under the four layer rows, ruled off from them, sits a row
+of **Dials**. They are not looks and not effects: a dial is one fader that
+reaches *into* whatever is playing, each of its links driving one
 parameter of one look's part between a `min` and a `max` you set. So it changes
-nothing until the looks it links to are on stage, and it rides live — the amber
-**RIDING** chip appears, and `Store` writes the positions into the show while
-`Discard` throws them away. A control with no links yet is flagged ⚠.
+nothing until the looks it links to are on stage, and it nudges live — the amber
+**NUDGED** chip appears, and `Keep` writes the positions into the show while
+`Discard` throws them away. A dial with no links yet is flagged ⚠.
 
 The row is eight slots wide and the grid is capped at four layer rows for a
-reason: four layers plus the control row is exactly the 5 × 8 clip grid of an
+reason: four layers plus the dial row is exactly the 5 × 8 clip grid of an
 APC40 mk2, so what is on screen is the shape of what is under your hands. Click
-`+` on the next free slot to add a control; `edit` opens the Controls tab, where
-links, brackets and modulators live. Each fader is MIDI-learnable from the row
+`+` on the next free slot to add a dial; `edit` opens the Controls tab, where
+links, brackets and pulses live. Each fader is MIDI-learnable from the row
 itself.
 
 **On the network.** The engine serves this UI over HTTP too — open

@@ -10,14 +10,14 @@ apply in the order they are listed.
 |---|---|
 | **sine** | smooth swell |
 | **triangle** | swell with a harder turn |
-| **sawUp** | build, then reset |
-| **sawDown** | beat-pulse — hit, then decay |
+| **ramp up** | build, then reset |
+| **ramp down** | beat-pulse — hit, then decay |
 | **square** | on/off gate; `width` sets the duty |
 | **chase** | one head at a time across the group; `width` is how many are lit |
 | **random** | sample-and-hold flicker, reproducible from its seed |
 
-**Targets:** dimmer, hue, white, strobe, pan, tilt, zoom, focus, iris, frost,
-cto. A target the group cannot take is flagged rather than silently ignored.
+**Targets:** dimmer, hue, white, strobe, pan, tilt, zoom, focus, beam size, soften,
+warmth. A target the group cannot take is flagged rather than silently ignored.
 
 ## The knobs
 
@@ -26,7 +26,7 @@ cto. A target the group cannot take is flagged rather than silently ignored.
   tempo moves.
 - **size** — depth. How far the parameter is pushed from where the look set it.
 - **spread** — how far the phase is fanned across the group. At 0 every head
-  moves together; at 1 the fan covers a full cycle. Chase forces full spread.
+  moves together; at 1 the spread covers a full cycle. Chase forces full spread.
 - **width** — duty, for square and chase.
 - **phase** — a fixed offset, for running two effects against each other.
 - **mix** — wet/dry. Useful for easing an effect in without changing its depth.
@@ -36,17 +36,17 @@ The **speed** master in the top bar multiplies every rate at once, 0.25× to 4×
 without jumping any phase — so you can halve the whole rig's motion mid-song and
 nothing stutters.
 
-## The fan
+## The spread
 
-The fan is the part worth understanding, because it is what separates a rig that
+The spread is the part worth understanding, because it is what separates a rig that
 looks programmed from a rig that looks switched on.
 
-![A hue fan sweeping across the rig](img/fan-sweep.gif)
+![A hue spread sweeping across the rig](img/fan-sweep.gif)
 
 *One effect: a saw on hue, `spread` at 100 %, `distribute: x`. The phase is laid
 across the stage by world position, so the colour walks the rig from one side to
 the other. Nothing is programmed per fixture, and moving a fixture in the patch
-moves its place in the fan.* ([MP4](img/fan-sweep.mp4))
+moves its place in the spread.* ([MP4](img/fan-sweep.mp4))
 
 `spread` says *how much* phase difference there is across the group. **distribute**
 says *in what order the heads are counted*:
@@ -70,14 +70,14 @@ Then three modifiers:
 - **fold** — `mirror` puts the ends in phase and sweeps toward the centre (the
   wings figure); `centre` leads from the middle and trails at the ends.
 - **reverse** — run the order backwards.
-- **parts** — tile the fan into *k* repeats across the group.
+- **tile** — tile the spread into *k* repeats across the group.
 - **buddy** — clump adjacent heads so pairs (or threes) share a phase.
 
 These compose. A saw on dimmer, `distribute: x`, `fold: mirror`, `parts: 2` is
 two mirrored wipes running outward from two points on the truss — one effect,
 four numbers, and no per-fixture programming.
 
-Because positions come from the patch, a fan by `x` keeps working when you move
+Because positions come from the patch, a spread by `x` keeps working when you move
 a fixture. Nothing needs re-teaching.
 
 ## Reusing an effect
@@ -93,7 +93,7 @@ distribute `x`, fold `mirror`. The room lifts and falls, the ends leading.
 **Beat chase across the bar.** chase on dimmer, rate 1, width 0.18,
 distribute `x`. One head per beat, left to right, regardless of patch order.
 
-**Rainbow spread.** sawUp on hue, rate 8, size 1.0, spread 1.0, distribute `x`.
+**Rainbow spread.** ramp up on hue, rate 8, size 1.0, spread 1.0, distribute `x`.
 A full spectrum laid across the stage, cycling once per two bars.
 
 **Nervous flicker.** random on dimmer, rate 0.25, size 0.7, spread 1.0,

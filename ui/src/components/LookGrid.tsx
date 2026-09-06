@@ -200,9 +200,9 @@ const Cell = React.memo(function Cell({
  *  take the upper layer's value whatever the mode says. Worth saying on hover,
  *  because "multiply" reads like it should multiply colours and it does not. */
 const BLEND_HELP: Record<LayerBlend, string> = {
-  normal: 'normal — this layer replaces what is under it (intensity only)',
-  multiply: 'multiply — scales what is under it; can only take light away',
-  htp: 'htp — highest takes precedence; can only add light, never remove it',
+  normal: 'replaces — this layer replaces what is under it (intensity only)',
+  multiply: 'dims through — scales what is under it; can only take light away',
+  htp: 'brightest wins — the brighter of this layer and what is under it; can only add light, never remove it',
 };
 
 function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined }) {
@@ -234,9 +234,9 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
             });
           }}
         >
-          <option value="normal">normal</option>
-          <option value="multiply">multiply</option>
-          <option value="htp">htp</option>
+          <option value="normal">replaces</option>
+          <option value="multiply">dims through</option>
+          <option value="htp">brightest wins</option>
         </select>
         <button
           className="btn small ghost clearbtn"
@@ -306,7 +306,7 @@ function DeckBar() {
 
   return (
     <div className="deckbar">
-      <span className="label">deck</span>
+      <span className="label">song</span>
       <button
         className="btn small ghost"
         title="previous song ( [ )"
@@ -356,7 +356,7 @@ function DeckBar() {
               switchTimer.current = null; // the pending switch was the first click of this double
             }
             void (async () => {
-              const name = await askPrompt('Rename deck', d.name);
+              const name = await askPrompt('Rename song', d.name);
               if (!name) return;
               mutate((p) => {
                 const dk = p.decks?.find((x) => x.id === d.id);
@@ -401,13 +401,13 @@ function DeckBar() {
           {decks.length > 1 && d.id !== project.activeDeckId && (
             <span
               className="deckx"
-              title="delete deck"
+              title="delete song"
               onClick={(e) => {
                 e.stopPropagation();
                 void (async () => {
-                  const ok = await askConfirm(`Delete deck "${d.name}"?`, {
-                    body: 'Its cell layout is lost. The looks themselves are kept in the pool.',
-                    confirmLabel: 'Delete deck',
+                  const ok = await askConfirm(`Delete song "${d.name}"?`, {
+                    body: 'Its pad layout is lost. The looks themselves are kept in the pool.',
+                    confirmLabel: 'Delete song',
                     danger: true,
                   });
                   if (!ok) return;
@@ -436,7 +436,7 @@ function DeckBar() {
       })()}
       <button
         className="btn small ghost"
-        title="new empty deck"
+        title="new empty song"
         onClick={() => {
           const id = uid('deck');
           mutate((p) => {
@@ -450,11 +450,11 @@ function DeckBar() {
           send({ type: 'switchDeck', deckId: id }); // land on the deck you just made
         }}
       >
-        + deck
+        + song
       </button>
       <button
         className="btn small ghost"
-        title="copy the current deck's cells into a new deck — the usual way to start the next song"
+        title="copy this song's pads into a new song — the usual way to start the next one"
         onClick={() => {
           const id = uid('deck');
           mutate((p) => {
@@ -568,10 +568,10 @@ function ControlRow() {
     <div className="controlrow">
       <div className="layerhead controlhead">
         <div className="row">
-          <div className="name grow">CONTROLS</div>
+          <div className="name grow">DIALS</div>
           <button
             className="btn small ghost"
-            title="open the Controls tab — where a control's links, brackets and modulators are edited"
+            title="open the Controls tab — where a dial's links, brackets and pulses are edited"
             onClick={() => {
               setView('split');
               setTab('controls');
@@ -581,7 +581,7 @@ function ControlRow() {
           </button>
         </div>
         <div className="label" style={{ whiteSpace: 'normal', lineHeight: 1.45 }}>
-          macros over whatever is playing
+          dials — tweak whatever is playing
         </div>
       </div>
       {slots.map((c, i) => {
@@ -624,7 +624,7 @@ function ControlRow() {
               {c.name}
             </div>
             <Fader
-              help={`${c.name} — moving this is a ride: live, not stored. Use Store in the top bar to keep it`}
+              help={`${c.name} — moving this is a nudge: live, not stored. Keep in the top bar writes it into the look`}
               value={liveValue ?? c.value}
               def={c.value}
               onChange={(v) => send({ type: 'setControl', controlId: c.id, value: v })}
@@ -715,7 +715,7 @@ export function LookGrid() {
     void askConfirm(`Delete column ${col + 1}${cols[col] ? ` · ${cols[col]}` : ''}?`, {
       body:
         filled > 0
-          ? `${filled} cell(s) in this column will be removed from this song. The looks themselves stay in the pool.`
+          ? `${filled} pad(s) in this column will be emptied in this song. The looks themselves stay in the pool.`
           : 'The column is empty.',
       confirmLabel: 'Delete',
       danger: true,

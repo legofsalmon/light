@@ -9,7 +9,7 @@ no tracking sheet. There is a grid: rows are **layers**, columns are the
 **sections of a song**, and each pad holds a **look**. You fire looks, or you
 fire a whole column as a cue, and the rig follows the beat.
 
-![A full look on the demo rig, in the 3D previz](img/hero.jpg)
+![A full look on the demo rig, on the 3D stage](img/hero.jpg)
 
 ## The mental model
 
@@ -18,8 +18,8 @@ fire a whole column as a cue, and the rig follows the beat.
   show, so the same wash can sit on a pad in twelve songs.
 - A **layer** is a row. Layers merge bottom to top, each with its own master and
   blend mode, exactly like video layers in Arena.
-- A **deck** is a song. The chips under the top bar are pages of the grid, one
-  per song, and the APC40's bank arrows step through them.
+- A **song** is a page of the grid. The chips under the top bar switch between
+  them, and the APC40's bank arrows step through them.
 - A **column** is a cue. Firing one fires every layer's pad in that column *and
   clears the layers whose pad is empty*, so a column fully describes the stage.
 - Everything time-based — effect rates, fades measured in beats — follows the
@@ -34,8 +34,8 @@ Forty times a second, for every fixture head in the rig:
 Two things in that chain are worth holding on to.
 
 **The resolution order is stored → soft → modulation.** The value saved in the
-look is the floor. On top of it sits the *soft* layer: a fader you are riding,
-or a named control someone is moving. On top of that sits any modulator offset.
+look is the floor. On top of it sits the *soft* layer: a fader you are nudging,
+or a dial someone is moving. On top of that sits any pulse offset.
 Nothing you do live rewrites the show until you say so, which is what makes it
 safe to grab a fader mid-song.
 
@@ -50,7 +50,7 @@ underneath it, so releasing it puts the stage back exactly where it was.
 - **Resolume**, over OSC: Arena's tempo and downbeat drive the clock, and column
   launches in Arena fire the matching cue in LIGHT.
 - **MIDI**, for an APC40 or anything else — pads fire looks, faders and encoders
-  ride parameters, and everything is learnable in three clicks.
+  nudge parameters, and everything is learnable in three clicks.
 - **Ableton Link**, to share a tempo with everything else in the room.
 
 ## Two engines, one answer
@@ -59,7 +59,7 @@ There are two implementations of the show engine: a TypeScript reference and the
 Rust core that ships in the app. They are held byte-identical by a parity test
 that boots both and compares the DMX they produce. That sounds like an
 implementation detail and mostly is — but it is the reason the numbers in this
-documentation can be stated exactly, and the reason a change to how a fan is
+documentation can be stated exactly, and the reason a change to how a spread is
 computed is caught before it reaches a stage.
 
 ## What it will not do

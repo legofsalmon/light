@@ -126,7 +126,7 @@ export function PixelLayout(): React.ReactElement | null {
             <div className="row" style={{ marginTop: 6 }}>
               <button
                 className="btn small"
-                title="write this layout onto the profile — every fixture using it inherits the pixel positions, which is what row/col fans and the previz read"
+                title="write this layout onto the profile — every fixture using it inherits the pixel positions, which is what row/col spreads and the stage read"
                 onClick={() =>
                   mutate((p) => {
                     const prof = p.profiles?.[active[0]];

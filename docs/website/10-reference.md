@@ -11,7 +11,7 @@
 | `Esc` | deselect |
 | `⌘S` | save now |
 | `⌘Z` / `⇧⌘Z` | undo / redo |
-| `⌥1`–`⌥4` | Pads / Previz / Patch / All |
+| `⌥1`–`⌥4` | Pads / Stage / Rig / Build |
 
 Shortcuts are ignored while you are typing in a field. A text field left focused
 would otherwise swallow your cue keys, so the search box in the look library
@@ -21,7 +21,7 @@ hands the keyboard back on `Esc`, on `Enter`, and when you start dragging a look
 
 Every control in the app carries a tooltip — buttons, pickers, number fields
 and faders alike. Where behaviour is deliberate but invisible it says so: which
-fields commit on Enter rather than per keystroke, which gestures are a ride
+fields commit on Enter rather than per keystroke, which gestures are a nudge
 rather than an edit, and what a warning badge is warning about. If something on
 screen is not obvious, rest on it before going looking in here.
 
@@ -35,7 +35,7 @@ one or more groups. Lives in a pool shared by the whole show.
 **Layer** — a row of the grid. Merges bottom to top with a master and a blend
 mode.
 
-**Deck** — a song. A page of the grid.
+**Song** — a page of the grid: its own pad on every layer and column.
 
 **Column / cue** — a vertical slice of the grid. Firing it sets every layer,
 clearing the ones whose pad is empty.
@@ -46,22 +46,22 @@ chase order.
 **Profile** — how a fixture's DMX channels work, usually compiled from a GDTF
 file and stored inside the show.
 
-**Fan** — how an effect's phase is distributed across a group: a basis (patch
+**Spread** — how an effect's phase is distributed across a group: a basis (patch
 order, world position, radial, the fixture's own pixel grid), optionally folded,
 reversed, tiled or clumped.
 
-**Soft override / ride** — a live value sitting on top of what the look stored,
-not saved until you Store it.
+**Nudge** — a live value sitting on top of what the look stored,
+not saved until you Keep it.
 
-**Control** — a named macro fader with links into many parameters, each with its
+**Dial** — one fader with links into many parameters, each with its
 own min/max bracket.
 
-**Modulator** — a beat-locked LFO bound to parameters, running without a hand on
+**Pulse** — a beat-locked wave bound to parameters, running without a hand on
 anything.
 
 **Flash look** — momentary: held while the pad or note is held, skipped by cues.
 
-**Cue list** — a look that is a chaser: steps of look + beats, hard-cutting on
+**Steps** — a look that is a chaser: steps of look + beats, hard-cutting on
 the beat.
 
 ## Where things live
@@ -80,8 +80,8 @@ as one file.
 ## Limits worth knowing
 
 - Undo is thirty steps and does not cross projects.
-- Cue lists cannot nest.
-- Effect **rate** cannot be driven by a control or a modulator — everything else
+- Steps cannot nest.
+- Effect **rate** cannot be driven by a dial or a pulse — everything else
   can. See [Controls](05-controls.md) for why.
 - A column fires up to the number of columns the song has; the APC's grid
   reaches the first eight.

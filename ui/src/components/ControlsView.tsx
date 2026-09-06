@@ -2,6 +2,7 @@ import React from 'react';
 import type { Control, ControlLink, ModBinding, Modulator, SoftField, Wave } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
+import { WAVE_LABEL } from '../labels.ts';
 import { Fader } from './Fader.tsx';
 import { TextField } from './inputs.tsx';
 
@@ -83,7 +84,7 @@ function LinkRow({ link, onEdit, onRemove }: {
       >
         {!look && <option value={link.lookId}>(missing look)</option>}
         {look && !!look.steps?.length && (
-          <option value={link.lookId}>{look.name} (cue list — fans nothing)</option>
+          <option value={link.lookId}>{look.name} (steps — spreads nothing)</option>
         )}
         {Object.values(project.looks)
           .filter((l) => !l.steps?.length)
@@ -171,14 +172,14 @@ function BindingRow({ b, onEdit, onRemove }: {
   return (
     <div className="row" style={{ marginBottom: 4, paddingLeft: 16 }}>
       {dangling && (
-        <span className="label" title="this binding's look, part or effect no longer exists — the modulator skips it" style={{ color: 'var(--amber, #f0a63e)' }}>
+        <span className="label" title="this binding's look, part or effect no longer exists — the pulse skips it" style={{ color: 'var(--amber, #f0a63e)' }}>
           ⚠
         </span>
       )}
       <select
         className="sel"
         value={b.lookId}
-        title="which look this binding rides — it offsets whatever the look and any ride have already set"
+        title="which look this binding nudges — it offsets whatever the look and any nudge have already set"
         onChange={(e) => onEdit((x) => {
           x.lookId = e.target.value;
           const lk = project.looks[e.target.value];
@@ -188,7 +189,7 @@ function BindingRow({ b, onEdit, onRemove }: {
       >
         {!look && <option value={b.lookId}>(missing look)</option>}
         {look && !!look.steps?.length && (
-          <option value={b.lookId}>{look.name} (cue list — fans nothing)</option>
+          <option value={b.lookId}>{look.name} (steps — spreads nothing)</option>
         )}
         {Object.values(project.looks)
           .filter((l) => !l.steps?.length)
@@ -215,7 +216,7 @@ function BindingRow({ b, onEdit, onRemove }: {
       <select
         className="sel"
         value={b.effectId !== undefined ? `fx:${b.effectId}:${b.field}` : `p:${b.field}`}
-        title="which parameter the LFO rides — part fields, or a knob of one of the part's effects. Rate is deliberately absent: a continuously moving rate would drift the two engines apart"
+        title="which parameter the pulse moves — part fields, or a knob of one of the part's effects. Rate is deliberately absent: a continuously moving rate would drift the two engines apart"
         onChange={(e) => onEdit((x) => {
           const v = e.target.value;
           if (v.startsWith('p:')) {
@@ -252,7 +253,7 @@ function BindingRow({ b, onEdit, onRemove }: {
         fmt={(v) => `${Math.round(v * 100)}%`}
         variant="dim"
       />
-      <button title="remove this binding — the modulator stops driving that parameter" className="btn small ghost" onClick={onRemove}>✕</button>
+      <button title="remove this binding — the pulse stops driving that parameter" className="btn small ghost" onClick={onRemove}>✕</button>
     </div>
   );
 }
@@ -277,10 +278,10 @@ export function ControlsView(): React.ReactElement {
 
   return (
     <div>
-      <div className="sectionhead">Named Controls — live faders fanning to parameters</div>
+      <div className="sectionhead">Dials — one fader, many parameters</div>
       <div className="label" style={{ marginBottom: 8 }}>
         One fader, many parameters, each through its own min→max bracket (min above max inverts).
-        Moves ride the soft layer: Store/Discard in the top bar apply. MIDI-learnable like any fader.
+        Moves are nudges — live, not stored: Keep/Discard in the top bar apply. MIDI-learnable like any fader.
       </div>
       {controls.map((c) => {
         const liveValue = live?.find((x) => x.id === c.id)?.value;
@@ -297,7 +298,7 @@ export function ControlsView(): React.ReactElement {
               />
               <Fader
                 width={220}
-                help={`${c.name} — moving this is a ride: live, not stored. Use Store in the top bar to keep it`}
+                help={`${c.name} — moving this is a nudge: live, not stored. Keep in the top bar writes it into the look`}
                 value={liveValue ?? c.value}
                 def={c.value}
                 onChange={(v) => send({ type: 'setControl', controlId: c.id, value: v })}
@@ -361,13 +362,13 @@ export function ControlsView(): React.ReactElement {
           p.controls = [...(p.controls ?? []), { id: uid('ctl'), name: `Control ${(p.controls?.length ?? 0) + 1}`, value: 0, links: [] }];
         })}
       
-            title="a named macro fader: one knob driving many parameters at once, MIDI-mappable">
-        + add control
+            title="a dial: one knob driving many parameters at once, MIDI-mappable">
+        + add dial
       </button>
 
-      <div className="sectionhead" style={{ marginTop: 18 }}>Modulators — beat-locked LFOs</div>
+      <div className="sectionhead" style={{ marginTop: 18 }}>Pulses — beat-locked waves</div>
       <div className="label" style={{ marginBottom: 8 }}>
-        Pure functions of the beat clock (they follow the speed master and tap for free), riding each
+        Pure functions of the beat clock (they follow the speed master and tap for free), nudging each
         bound parameter about its value with a ± depth. Depth 0 is silent; negative inverts.
       </div>
       {(project.modulators ?? []).map((m) => (
@@ -384,15 +385,15 @@ export function ControlsView(): React.ReactElement {
             </button>
             <TextField
               className="text"
-              title="modulator name"
+              title="pulse name"
               style={{ width: 150, fontSize: 13 }}
               entityId={m.id}
               value={m.name}
               onCommit={(v) => editMod(m.id, (x) => (x.name = v))}
             />
-            <select className="sel" title="the LFO's shape" value={m.wave} onChange={(e) => editMod(m.id, (x) => (x.wave = e.target.value as Wave))}>
+            <select className="sel" title="the pulse's wave shape" value={m.wave} onChange={(e) => editMod(m.id, (x) => (x.wave = e.target.value as Wave))}>
               {MOD_WAVES.map((w) => (
-                <option key={w} value={w}>{w}</option>
+                <option key={w} value={w}>{WAVE_LABEL[w]}</option>
               ))}
             </select>
             <select className="sel" title="beats per cycle — musical, not hertz, so it stays in time when the tempo moves" value={String(m.rate)} onChange={(e) => editMod(m.id, (x) => (x.rate = Number(e.target.value)))}>
@@ -403,7 +404,7 @@ export function ControlsView(): React.ReactElement {
             <div className="grow" />
             <button
               className="btn small ghost"
-              title="delete this modulator and all of its bindings"
+              title="delete this pulse and all of its bindings"
               onClick={() => mutate((p) => {
                 p.modulators = (p.modulators ?? []).filter((x) => x.id !== m.id);
                 if (p.modulators.length === 0) delete p.modulators;
@@ -429,7 +430,7 @@ export function ControlsView(): React.ReactElement {
                 if (first) x.bindings.push({ lookId: first.id, partId: first.parts[0].id, field: 'dimmer', depth: 0.5 });
               })}
             
-            title="bind this modulator to one more parameter; depth sets how far it swings">
+            title="bind this pulse to one more parameter; depth sets how far it swings">
               + binding
             </button>
           </div>
@@ -438,11 +439,11 @@ export function ControlsView(): React.ReactElement {
       <button
         className="btn small"
         onClick={() => mutate((p) => {
-          p.modulators = [...(p.modulators ?? []), { id: uid('lfo'), name: `LFO ${(p.modulators?.length ?? 0) + 1}`, wave: 'sine', rate: 4, phase: 0, on: true, bindings: [] }];
+          p.modulators = [...(p.modulators ?? []), { id: uid('lfo'), name: `Pulse ${(p.modulators?.length ?? 0) + 1}`, wave: 'sine', rate: 4, phase: 0, on: true, bindings: [] }];
         })}
       
-            title="a beat-locked LFO that rides parameters continuously — no pad press needed">
-        + add modulator
+            title="a beat-locked pulse that moves parameters continuously — no pad press needed">
+        + add pulse
       </button>
     </div>
   );

@@ -37,7 +37,7 @@ and come back in a moment.
 **Clear layer** (`✕` on a layer head) stops that layer and leaves the rest.
 
 **ALL STOP** is the panic key: blackout on, every layer cleared, held flashes
-released, haze and motors off, and any live ride dropped. It asks for
+released, haze and motors off, and any live nudge dropped. It asks for
 confirmation, because it ends the state of the show — everything needs re-firing
 afterwards. On an APC40 it is STOP ALL CLIPS.
 

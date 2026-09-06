@@ -1,6 +1,6 @@
 # Patching and fixtures
 
-The **Patch** view (`⌥3`) puts the 2D plan over the fixtures table, because
+The **Rig** view (`⌥3`) puts the 2D plan over the fixtures table, because
 patching is drag-a-row-into-the-plan and the two have to share a screen.
 
 ![The 2D plan of a 129-fixture rig](img/plan-view.jpg)
@@ -24,17 +24,17 @@ is marked as well: it renders as nothing at all until you give it one.
 
 `Rot°` is yaw, `Tilt°` the mounting pitch, `Roll°` the roll. They compose on top
 of each fixture type's default aim, so a bar hung at an angle points where it
-actually points — and the previz and every position effect agree with the rig.
+actually points — and the stage and every position effect agree with the rig.
 
 In the **2D plan**, drag a fixture to place it; `⌥`-drag rotates. Drag near a
 truss bar with `snap` on and it clamps onto the bar and rigs there, so moving
 the bar later moves everything on it. The **Front** elevation is the same view
-from the side, where a drag sets *trim height* rather than position.
+from the side, where a drag sets *hang height* rather than position.
 
 ## Groups
 
 A group is a named set of heads, and groups are what looks point at. Their
-**order is chase order** — the sequence a chase or a fan by `index` runs
+**order is chase order** — the sequence a chase or a spread in patch `order` runs
 through — so it is worth arranging.
 
 `⟳` generates groups automatically: one per fixture type, one per truss bar.
@@ -50,7 +50,7 @@ was built against and imports the rest from **GDTF**.
 
 Import a `.gdtf` and every DMX mode inside it becomes a profile you can select
 in the table. The importer maps the standard attributes — dimmer, pan/tilt,
-RGB/W, shutter, and the beam parameters zoom, focus, iris, frost and CTO — onto
+RGB/W, shutter, and the beam parameters zoom, focus, beam size, soften and warmth — onto
 the parameters the look editor offers.
 
 Attributes are matched including their indexed spellings: GDTF writes `Dimmer`
@@ -74,7 +74,7 @@ count, and nothing that drives anything. LIGHT flags those:
 
 - **Placeholder profile** — a definition with essentially only dimmers behind it.
   It works as a dimmer and does nothing else.
-- **Undriven beam channels** — the profile lists zoom, focus, iris, frost or CTO
+- **Undriven beam channels** — the profile lists zoom, focus, beam size, soften or warmth
   by name but has no function behind them, so the look editor cannot offer those
   controls. The look editor says so where the faders would be.
 
@@ -100,5 +100,5 @@ The layout editor offers **strip**, **grid** (wired serpentine, as real matrix
 panels are) and **ring**, and writes the result onto the profile so every
 fixture using it inherits the positions.
 
-The layout is what `row`/`col` fans and the previz read, so getting it right
+The layout is what `row`/`col` spreads and the stage read, so getting it right
 once makes every pixel effect behave on every fixture of that type.

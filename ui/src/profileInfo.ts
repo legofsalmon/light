@@ -48,9 +48,9 @@ export type BeamCaps = Record<BeamParam, boolean>;
 export const BEAM_LABELS: Record<BeamParam, string> = {
   zoom: 'zoom',
   focus: 'focus',
-  iris: 'iris',
-  frost: 'frost',
-  cto: 'cto',
+  iris: 'beam size',
+  frost: 'soften',
+  cto: 'warmth',
 };
 
 /** Built-ins predate these parameters and none of them has one. */

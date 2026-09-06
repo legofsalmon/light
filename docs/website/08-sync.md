@@ -3,7 +3,7 @@
 ## The beat clock
 
 Everything time-based follows it: effect rates in beats, fades measured in
-beats, cue-list steps.
+beats, steps.
 
 - **TAP** (or `T`) — tap the tempo. Every tap also lands the downbeat.
 - Drag the BPM number vertically for fine adjustment.
@@ -33,7 +33,7 @@ way to find out whether Arena is actually sending what you think.
    a control's fader, blackout.
 3. Touch the control on your device.
 
-Notes fire cells and release flash looks on note-off. CCs drive faders. Mappings
+Notes fire pads and release flash looks on note-off. CCs drive faders. Mappings
 are stored in the project, and the Sync · MIDI tab lists them for editing or
 deletion.
 
@@ -43,7 +43,7 @@ There is a preset. It maps:
 
 - the **top four pad rows** to the four layer rows of the grid, with matching
   colours on the pads;
-- the **eight device knobs** to the eight named controls, bound across all nine
+- the **eight device knobs** to the eight dials, bound across all nine
   track-selection banks so a stray track button cannot unbind them;
 - **scene buttons** to layer clears, **STOP ALL CLIPS** to blackout,
   **TAP TEMPO** to tap, the **bank arrows** to previous/next song;
@@ -51,7 +51,7 @@ There is a preset. It maps:
   **master fader** to grand master.
 
 The bottom pad row is deliberately left unmapped: it is the control row on
-screen, and a pad cannot drive a continuous macro in both directions.
+screen, and a pad cannot drive a continuous dial in both directions.
 
 The pad LEDs mirror the grid — bright is what the layer is playing, dim is
 available, coloured by each look's own swatch. A pad in the live column that no

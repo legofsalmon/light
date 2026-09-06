@@ -152,7 +152,7 @@ function FormSelect(
       className="sel"
       style={{ width: 130 }}
       value={prof.formOverride ?? 'auto'}
-      title={`how the previz draws and lights this fixture. Applies to every fixture on the "${prof.model}" profile. Auto reads it from the profile — beam angle, whether it steers in both axes, and how its cells are laid out.`}
+      title={`how the stage draws and lights this fixture. Applies to every fixture on the "${prof.model}" profile. Auto reads it from the profile — beam angle, whether it steers in both axes, and how its pixels are laid out.`}
       onChange={(e) => mutate((p) => {
         const target = p.profiles?.[profileId];
         if (!target) return;
@@ -497,22 +497,22 @@ export function PatchView() {
         );
       })()}
       <div onPointerDown={onTablePointerDown}>
-        <div className="sectionhead">Patch</div>
+        <div className="sectionhead">Fixtures</div>
         <table className="tbl">
           <thead>
             <tr>
               <SortTh k="name" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Fixture</SortTh>
               <SortTh k="profile" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Profile</SortTh>
-              <th title="what shape of fixture this is — decides how the previz draws and lights it. Set on the PROFILE, so it applies to every fixture using it.">Form</th>
+              <th title="what shape of fixture this is — decides how the stage draws and lights it. Set on the PROFILE, so it applies to every fixture using it.">Form</th>
               <SortTh k="universe" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Universe</SortTh>
               <SortTh k="address" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Address</SortTh>
-              <SortTh k="channels" sortKey={sortKey} sortDir={sortDir} onSort={onSort}>Ch</SortTh>
-              <th>X</th><th>Y</th><th>Z</th><th>Rot°</th><th>Tilt°</th><th>Roll°</th>
+              <SortTh k="channels" sortKey={sortKey} sortDir={sortDir} onSort={onSort} title="how many DMX channels the fixture takes from its address">Channels</SortTh>
+              <th>X</th><th>Y</th><th>Z</th><th title="how the fixture is hung: turned about the vertical">Mount rot°</th><th title="how the fixture is hung: tipped forward or back — not where it aims">Mount tilt°</th><th title="how the fixture is hung: rolled about its beam">Mount roll°</th>
               <SortTh k="rigged" sortKey={sortKey} sortDir={sortDir} onSort={onSort} title="rigged on a stage structure — X/Y/Z above stay in room coordinates">
                 Rigged on
               </SortTh>
-              {anyPan && <th title="base pan aim — a look's pan moves relative to this">Pan %</th>}
-              {anyTilt && <th title="base tilt aim — a look's tilt moves relative to this">Tilt %</th>}
+              {anyPan && <th title="base aim: 50% is centre — a look's pan moves relative to this">Aim pan</th>}
+              {anyTilt && <th title="base aim: 50% is centre — a look's tilt moves relative to this">Aim tilt</th>}
               <th>Live</th><th></th>
             </tr>
           </thead>
@@ -531,7 +531,7 @@ export function PatchView() {
                       : stubProfiles.has(f.profileId)
                         ? 'placeholder profile: the MVR that brought this fixture in did not carry a real fixture definition, so it has a dimmer and nothing else. Fetch the real one in GDTF Share below, then set it here.'
                         : beamlessProfiles.has(f.profileId)
-                          ? 'this profile lists beam channels (zoom, focus, iris, frost, CTO) that nothing drives, so the look editor cannot offer them. It was compiled from a thin GDTF or by an older importer — re-import the real GDTF for this fixture and the controls appear.'
+                          ? 'this profile lists beam channels (zoom, focus, beam size, soften, warmth) that nothing drives, so the look editor cannot offer them. It was compiled from a thin GDTF or by an older importer — re-import the real GDTF for this fixture and the controls appear.'
                           : undefined
                   }
                 >
@@ -723,7 +723,7 @@ export function PatchView() {
                       </button>
                       <button
                         className={`btn small ${identify === f.id ? 'on' : 'ghost'}`}
-                        title="identify: drive this fixture to full white so you can find it on the truss"
+                        title="find this light: drive it to full white so you can spot it on the truss"
                         onClick={() => send({ type: 'identify', fixtureId: identify === f.id ? null : f.id })}
                       >
                         ◎
@@ -1171,7 +1171,7 @@ function StageTable() {
       <div className="patchsec">
         <div className="sechead">STAGE</div>
         <div className="label">
-          Nothing drawn yet — add truss, risers or screens from the previz “+ structure…” menu,
+          Nothing drawn yet — add truss, risers or screens from the stage's “+ structure…” menu,
           then drag them into place in the 2D plan.
         </div>
       </div>

@@ -288,7 +288,7 @@ function PollStatusLine({ artnetOn }: { artnetOn: boolean }) {
   return (
     <span className="label">
       {poll === 'failed'
-        ? 'discovery unavailable — UDP 6454 is held by another app (QLC+? a second engine?)'
+        ? 'discovery unavailable — port 6454 is held by another app (QLC+? a second engine?)'
         : artnetOn
           ? 'polling… no nodes have answered yet — check network / node power'
           : 'Art-Net output is off on every universe'}
@@ -358,8 +358,8 @@ export function OutputView() {
         <table className="tbl">
           <thead>
             <tr>
-              <th>Label</th><th>Art-Net</th><th>ArtNet uni</th><th>sACN</th><th>sACN uni</th>
-              <th>Destination</th><th>Fixtures</th><th></th>
+              <th title="a universe is one DMX line of 512 channels">Universe</th><th>Art-Net</th><th>Art-Net universe</th><th>sACN</th><th>sACN universe</th>
+              <th title="where Art-Net packets go: everyone on the network, or one node's address">Send to</th><th>Fixtures</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -373,7 +373,7 @@ export function OutputView() {
               return (
                 <tr key={u.id}>
                   <td>
-                    <TextField className="text" title="universe label — for your own reference; it is not sent anywhere" style={{ width: 140 }} entityId={u.id} value={u.label} onCommit={(v) => editU((x) => (x.label = v))} />
+                    <TextField className="text" title="this universe's name — for your own reference; it is not sent anywhere. A universe is one DMX line of 512 channels." style={{ width: 140 }} entityId={u.id} value={u.label} onCommit={(v) => editU((x) => (x.label = v))} />
                   </td>
                   <td>
                     <button

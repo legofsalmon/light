@@ -96,8 +96,8 @@ export function describe(s: LicenceStatus): { title: string; detail: string; ton
       };
     case 'check_in_required':
       return {
-        title: 'Needs a check-in',
-        detail: 'The lease lapsed. LIGHT will retry on its own; nothing is restricted in the meantime.',
+        title: 'Needs to refresh',
+        detail: 'The offline period has lapsed. LIGHT will refresh on its own; nothing is restricted in the meantime.',
         tone: 'warn',
       };
     case 'expired':
@@ -110,7 +110,7 @@ export function describe(s: LicenceStatus): { title: string; detail: string; ton
       return {
         title: 'Licensed to another machine',
         detail:
-          'This licence is activated on a different machine. Sign in to your account to release that seat, then activate here.',
+          'This licence is activated on a different Mac. Sign in to your account to deactivate it there, then activate here.',
         tone: 'bad',
       };
     case 'invalid':

@@ -18,6 +18,15 @@
         "dev:ui"
       ],
       "port": 5178
+    },
+    {
+      "name": "light-engine-scratch",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "LIGHT_PORT=9912 LIGHT_PROJECT_DIR=/private/tmp/claude-501/-Users-colmhewson-Documents-Web-light/2e738bd4-7df3-449c-b1cc-6d6453c6f75a/scratchpad/scratch-projects LIGHT_NO_ARTPOLL=1 LIGHT_NO_MIDI=1 node engine/index.ts"
+      ],
+      "port": 9912
     }
   ]
 }

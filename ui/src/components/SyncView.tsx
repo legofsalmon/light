@@ -131,7 +131,7 @@ function describeAction(p: Project, a: MidiAction): string {
       const layer = p.layers.find((l) => l.id === a.layerId);
       const lookId = layer?.cells[a.col];
       const look = lookId ? p.looks[lookId] : null;
-      return `Cell ${layer?.name ?? '?'} · ${a.col + 1}${look ? ` (${look.name})` : ''}`;
+      return `Pad ${layer?.name ?? '?'} · ${a.col + 1}${look ? ` (${look.name})` : ''}`;
     }
     case 'column':
       return `Column ${a.col + 1}`;
@@ -140,7 +140,7 @@ function describeAction(p: Project, a: MidiAction): string {
     case 'layerClear':
       return `Clear layer · ${p.layers.find((l) => l.id === a.layerId)?.name ?? '?'}`;
     case 'control':
-      return `Control · ${p.controls?.find((c) => c.id === a.controlId)?.name ?? a.controlId}`;
+      return `Dial · ${p.controls?.find((c) => c.id === a.controlId)?.name ?? a.controlId}`;
     case 'grand':
       return 'Grand master';
     case 'speed':
@@ -152,9 +152,9 @@ function describeAction(p: Project, a: MidiAction): string {
     case 'blackout':
       return 'Blackout';
     case 'deckNext':
-      return 'Next deck (song page)';
+      return 'Next song';
     case 'deckPrev':
-      return 'Previous deck (song page)';
+      return 'Previous song';
   }
 }
 
@@ -172,7 +172,7 @@ export function SyncView() {
   return (
     <div className="row" style={{ alignItems: 'flex-start', gap: 24 }}>
       <div className="col grow" style={{ maxWidth: 520 }}>
-        <div className="sectionhead">Resolume sync (OSC in)</div>
+        <div className="sectionhead">Resolume link</div>
         <div className="row">
           <button
             className={`btn small ${sync.oscEnabled ? 'on' : ''}`}
@@ -204,9 +204,9 @@ export function SyncView() {
           Column launches then fire the matching column here, and Arena's BPM drives all effects.
           Extra addresses: /light/bpm (float) · /light/column (int, 1-based) · /light/blackout (0/1).
         </div>
-        <div className="sectionhead" style={{ marginTop: 10 }}>OSC monitor</div>
+        <div className="sectionhead" style={{ marginTop: 10 }}>Incoming from Arena</div>
         <div className="oscmon">
-          {oscLog.length === 0 && <span style={{ color: 'var(--text-faint)' }}>waiting for OSC…</span>}
+          {oscLog.length === 0 && <span style={{ color: 'var(--text-faint)' }}>waiting for Arena…</span>}
           {oscLog.map((e, i) => (
             <div key={`${e.t}-${i}`}>
               <span className="addr">{e.addr}</span> <span className="args">{e.args.map((a) => (typeof a === 'number' ? +a.toFixed(4) : a)).join(' ')}</span>
@@ -231,13 +231,13 @@ export function SyncView() {
         </div>
         <div className="label" style={{ lineHeight: 1.7 }}>
           {learnMode
-            ? 'LEARN ARMED — click a cell, column, or fader, then press/move the control on your device.'
-            : 'Click MIDI LEARN in the top bar, click any cell / column / fader, then touch your controller.'}
+            ? 'LEARN ARMED — click a pad, column, or fader, then press/move the control on your device.'
+            : 'Click MIDI LEARN in the top bar, click any pad / column / fader, then touch your controller.'}
         </div>
         <div className="row">
           <button
             className="btn small"
-            title="top 4 grid rows → layers (the bottom row is the control row, left unmapped) · 8 device knobs → the 8 named controls, on every track-selection bank · scene buttons → layer clears · STOP ALL CLIPS → blackout · TAP → tempo · bank ◀ ▶ → prev / next song · track faders 1–4 → layer masters, 6 → haze, 7 → speed · master → grand"
+            title="top 4 grid rows → layers (the bottom row is the control row, left unmapped) · 8 device knobs → the 8 dials, on every track-selection bank · scene buttons → layer clears · STOP ALL CLIPS → blackout · TAP → tempo · bank ◀ ▶ → prev / next song · track faders 1–4 → layer masters, 6 → haze, 7 → speed · master → grand"
             onClick={() => {
               void (async () => {
                 const ok = await askConfirm('Load the APC40 mk2 preset?', {
