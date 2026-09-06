@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The synthetic MVR scene: two fixtures (one inside a transformed
+     GroupObject), absolute and dot address forms, and a fixture whose GDTF is
+     missing so the skip-with-a-warning path is exercised.
+
+     This file is the ONLY copy. core/tests/mvr_import.rs includes it and builds
+     the archive from it, and data/synthetic.mvr is written from that same
+     builder (bless it with LIGHT_BLESS_GOLDEN=1 in the mvr_import test), so
+     the archive the parity harness and the benchmark read cannot drift from
+     the scene the tests assert against.
+
+     UnitNumber is here because the v1.2.2 review found it missing and MVR
+     Table 26 lists it as mandatory: LIGHT's parser is lenient and ignores it,
+     which meant the tests were proving the parser against data no conforming
+     tool would ever emit. -->
+<GeneralSceneDescription verMajor="1" verMinor="6">
+ <Scene>
+  <Layers>
+   <Layer name="Front Truss">
+    <ChildList>
+     <Fixture name="Spot L" uuid="a">
+      <Matrix>{1,0,0}{0,1,0}{0,0,1}{-2000,1000,3000}</Matrix>
+      <GDTFSpec>TestSpot.gdtf</GDTFSpec>
+      <GDTFMode>Standard</GDTFMode>
+      <UnitNumber>1</UnitNumber>
+      <Addresses><Address break="0">513</Address></Addresses>
+     </Fixture>
+     <GroupObject name="SR cluster">
+      <Matrix>{1,0,0}{0,1,0}{0,0,1}{4000,0,0}</Matrix>
+      <ChildList>
+       <Fixture name="Spot R" uuid="b">
+        <Matrix>{1,0,0}{0,1,0}{0,0,1}{-2000,1000,3000}</Matrix>
+        <GDTFSpec>TestSpot</GDTFSpec>
+        <GDTFMode>Nonexistent Mode</GDTFMode>
+        <UnitNumber>2</UnitNumber>
+        <Addresses><Address break="0">2.25</Address></Addresses>
+       </Fixture>
+      </ChildList>
+     </GroupObject>
+     <Fixture name="Ghost" uuid="c">
+      <GDTFSpec>Missing.gdtf</GDTFSpec>
+      <UnitNumber>3</UnitNumber>
+      <Addresses><Address break="0">1</Address></Addresses>
+     </Fixture>
+    </ChildList>
+   </Layer>
+  </Layers>
+ </Scene>
+</GeneralSceneDescription>

@@ -629,20 +629,35 @@ hand-authored path. Duplicate is deliberately absent until then: a copy you
 cannot change is not worth a button. The groundwork it needed is now in place —
 a bad edit can no longer take the project down with it.
 
-### 17 · DAW-fired cues — ◧ partial — S (docs) / M (supported) / XL (plugin)
+### 17 · DAW-fired cues — ◧ S slice half shipped 2026-09-06 (docs); the virtual port, M and XL still open
 **Touches:** shared/types.ts, core, engine, parity, ui, docs
-**Today — undocumented but working:** the native engine connects every CoreMIDI
+**Was — undocumented but working:** the native engine connects every CoreMIDI
 input, so a MIDI clip on an IAC bus fires a pad or column like an APC pad, in
-the next 40 Hz frame. Transport bytes (clock, start/stop, SPP, MTC) are
-discarded; Link is tempo-only (no `beat_at_time`, no `is_playing`); OSC
-timetags skipped; MIDI `cell` actions address the *active* deck so the same
-note means a different look after a deck switch.
-**Slices:** S — document the IAC recipe and publish a "LIGHT" virtual input
-port. M — transport-locked downbeat/arm via MIDI Start/SPP or Link transport,
-plus a fire-by-look-id / deck-qualified action so DAW notes survive deck
-switches (parity on the effBeat/resync path). XL — a Lightkey-class DAW plugin.
-Stated design intent (v1.2.2 review, road item 04): timecode reaches LIGHT via
-Arena's column-follow, not a direct DAW hook. Frame the item against that.
+the next 40 Hz frame.
+
+**Shipped: the documentation half of S.** `docs/resolume-and-midi.md` now has
+the one-time Audio MIDI Setup recipe, the DAW-side routing, and the two things
+that will bite somebody who builds a show on it, both verified against the code
+rather than assumed:
+- A mapping is `MidiAction::Cell { layer_id, col }` — a **position**, and each
+  song has its own page at that position, so the same note fires a different
+  look after a song switch.
+- There is no timeline lock. Beat clock now gives tempo and a downbeat on a
+  transport start (#10), but **song position pointer and MTC are still unread**,
+  so starting mid-song gives tempo without position. The stated design intent
+  (v1.2.2 review, road item 04) is that timecode arrives through Arena's column
+  follow, and the docs now say so rather than leaving it implied.
+
+**Still open in S: publishing a virtual "LIGHT" input port**, so a DAW can send
+to LIGHT without the operator creating an IAC bus. `midir`'s `VirtualInput` does
+this in a few lines (`--example surfacesink` uses it), but LIGHT's own input
+scanner enumerates every CoreMIDI source, so it needs a guard against connecting
+to its own port — otherwise the engine attaches to itself. Not hard, but it is a
+behaviour change at startup rather than a docs fix, which is why it is not in
+this slice.
+**M:** transport-locked downbeat/arm via SPP, plus a fire-by-look-id or
+song-qualified action so DAW notes survive song switches (parity on the
+effBeat/resync path). **XL:** a Lightkey-class DAW plugin.
 
 ### 18 · USB DMX interfaces — ⬜ absent — L (Enttec Pro family) / XL (Lightkey breadth)
 **Touches:** shared/types.ts, core, engine, parity, ui, docs

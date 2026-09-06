@@ -128,6 +128,13 @@ The **speed** fader in the top bar multiplies all effect rates (0.25×–4×) wi
 
 Notes fire pads (note-off releases flash looks); CCs drive faders. Manage or delete mappings in the **Sync · MIDI** tab.
 
+A MIDI clip in a DAW can fire pads the same way — LIGHT connects to every MIDI
+input on the Mac, so a virtual bus is just another controller.
+[resolume-and-midi.md](resolume-and-midi.md) has the one-time Audio MIDI Setup
+recipe, and the two things to know before building a show on it: a mapping
+points at a position rather than a look, so it follows the song, and nothing
+chases a timeline.
+
 A control in the grid's control row is learnable the same way — arm learn, click
 its fader, touch an encoder. Prefer an encoder or fader to a pad: a pad drives a
 continuous target by its velocity on press only (so a release cannot slam a dial

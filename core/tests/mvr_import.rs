@@ -6,38 +6,7 @@ use std::io::Write;
 
 use light_core::mvr::parse_mvr;
 
-const SCENE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
-<GeneralSceneDescription verMajor="1" verMinor="6">
- <Scene>
-  <Layers>
-   <Layer name="Front Truss">
-    <ChildList>
-     <Fixture name="Spot L" uuid="a">
-      <Matrix>{1,0,0}{0,1,0}{0,0,1}{-2000,1000,3000}</Matrix>
-      <GDTFSpec>TestSpot.gdtf</GDTFSpec>
-      <GDTFMode>Standard</GDTFMode>
-      <Addresses><Address break="0">513</Address></Addresses>
-     </Fixture>
-     <GroupObject name="SR cluster">
-      <Matrix>{1,0,0}{0,1,0}{0,0,1}{4000,0,0}</Matrix>
-      <ChildList>
-       <Fixture name="Spot R" uuid="b">
-        <Matrix>{1,0,0}{0,1,0}{0,0,1}{-2000,1000,3000}</Matrix>
-        <GDTFSpec>TestSpot</GDTFSpec>
-        <GDTFMode>Nonexistent Mode</GDTFMode>
-        <Addresses><Address break="0">2.25</Address></Addresses>
-       </Fixture>
-      </ChildList>
-     </GroupObject>
-     <Fixture name="Ghost" uuid="c">
-      <GDTFSpec>Missing.gdtf</GDTFSpec>
-      <Addresses><Address break="0">1</Address></Addresses>
-     </Fixture>
-    </ChildList>
-   </Layer>
-  </Layers>
- </Scene>
-</GeneralSceneDescription>"#;
+const SCENE: &str = include_str!("data/synthetic.mvr.xml");
 
 fn synthetic_mvr() -> Vec<u8> {
     // embedded GDTF = the synthetic archive from the GDTF tests
@@ -60,6 +29,25 @@ fn synthetic_mvr() -> Vec<u8> {
         z.finish().unwrap();
     }
     buf
+}
+
+/// The committed archive must BE what the builder makes. `data/synthetic.mvr`
+/// is read by the parity harness and the benchmark while these tests assert
+/// against a freshly built one — two copies of the same scene, and nothing was
+/// holding them together. Regenerate with
+/// `LIGHT_BLESS_GOLDEN=1 cargo test -p light-core --test mvr_import`.
+#[test]
+fn the_committed_archive_is_the_one_the_tests_assert_against() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/synthetic.mvr");
+    let built = synthetic_mvr();
+    // the builder has to be deterministic or this test is a coin toss
+    assert_eq!(built, synthetic_mvr(), "the archive builder is not reproducible");
+    if std::env::var("LIGHT_BLESS_GOLDEN").is_ok() {
+        std::fs::write(path, &built).expect("write archive");
+        return;
+    }
+    let have = std::fs::read(path).expect("archive missing");
+    assert_eq!(have, built, "data/synthetic.mvr drifted from the scene the tests use");
 }
 
 #[test]

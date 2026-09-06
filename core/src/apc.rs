@@ -448,6 +448,26 @@ mod tests {
         leds.get(&note).map(|&(_, v)| v)
     }
 
+    /// A look that stays on stage once fired, chosen the same way every run.
+    ///
+    /// `looks.keys().next()` is what these tests used to do, and `looks` is a
+    /// HashMap: the look was whatever the hash seed handed over that run. 14 of
+    /// the demo's 190 looks are `flash` — momentary, so triggering one does not
+    /// leave it live — and picking one of those made a test fail about once in
+    /// fifteen runs with nothing in the diff to explain it. Sorted, and skipping
+    /// flash and cue lists, so the choice is a property of the file.
+    fn steady_look(p: &crate::types::Project) -> String {
+        let mut ids: Vec<&String> = p.looks.keys().collect();
+        ids.sort();
+        ids.into_iter()
+            .find(|id| {
+                let l = &p.looks[*id];
+                l.flash != Some(true) && l.steps.as_ref().is_none_or(|s| s.is_empty())
+            })
+            .expect("the demo has a look that stays up")
+            .clone()
+    }
+
     /// Colours chosen to land on every palette anchor, plus the greys the
     /// low-chroma rule catches and a few that sit between anchors.
     const PROBES: &[(u8, u8, u8)] = &[
@@ -601,7 +621,7 @@ mod tests {
         let extra = p.layers[0].clone();
         p.layers.insert(0, crate::types::Layer { id: "layer-fifth".into(), ..extra });
         let mut state = EngineState::new(p, 0.0);
-        let look_id = state.project.looks.keys().next().unwrap().clone();
+        let look_id = steady_look(&state.project);
         if let Some(layer) = state.project.layers.iter_mut().find(|l| l.id == "layer-fifth") {
             layer.cells[0] = Some(look_id);
         }
@@ -624,7 +644,7 @@ mod tests {
             // strobe layer, so searching found nothing and this test quietly
             // returned without asserting anything. What is under test is the
             // pad mapping, not the artistic content of song one.
-            let look_id = state.project.looks.keys().next().unwrap().clone();
+            let look_id = steady_look(&state.project);
             let col = 0usize;
             if let Some(layer) = state.project.layers.last_mut() {
                 layer.cells[col] = Some(look_id);
@@ -647,7 +667,7 @@ mod tests {
         let p = default_project();
         let top_layer = p.layers.last().unwrap().id.clone();
         let mut state = EngineState::new(p, 0.0);
-        let look_id = state.project.looks.keys().next().unwrap().clone();
+        let look_id = steady_look(&state.project);
         if let Some(layer) = state.project.layers.last_mut() {
             layer.cells[0] = Some(look_id.clone());
             layer.cells[1] = Some(look_id);
@@ -681,7 +701,7 @@ mod tests {
         let p = default_project();
         let top_layer = p.layers.last().unwrap().id.clone();
         let mut state = EngineState::new(p, 0.0);
-        let look_id = state.project.looks.keys().next().unwrap().clone();
+        let look_id = steady_look(&state.project);
         if let Some(layer) = state.project.layers.last_mut() {
             layer.cells[0] = Some(look_id);
         }
@@ -699,7 +719,7 @@ mod tests {
         // same thing back: dim while the column merely holds something, bright
         // only while every layer holding something there is playing it.
         let mut p = default_project();
-        let look_id = p.looks.keys().next().unwrap().clone();
+        let look_id = steady_look(&p);
         for layer in &mut p.layers {
             layer.cells[0] = Some(look_id.clone());
         }
@@ -719,6 +739,31 @@ mod tests {
 
         // and the APC40 has no column row at all
         assert!(!compute_leds(&state, &APC40_MK2, OFFBEAT).contains_key(&0));
+    }
+
+    #[test]
+    fn a_column_of_flash_looks_never_reads_as_up() {
+        // A flash look is momentary: firing the column lights it while it is
+        // held and lets go. So the column is not holding the stage and must not
+        // claim to be. This is the behaviour that made the column test flaky
+        // before `steady_look` — worth pinning rather than rediscovering, and
+        // worth stating so nobody "fixes" it into always-bright.
+        let mut p = default_project();
+        let flash = {
+            let mut ids: Vec<&String> = p.looks.keys().collect();
+            ids.sort();
+            ids.into_iter().find(|id| p.looks[*id].flash == Some(true)).expect("a flash look").clone()
+        };
+        for layer in &mut p.layers {
+            layer.cells[0] = Some(flash.clone());
+        }
+        let mut state = EngineState::new(p, 0.0);
+        state.trigger_column(0, 0.0);
+        assert_eq!(
+            compute_leds(&state, &APC_MINI_MK2, OFFBEAT)[&0],
+            APC_MINI_MK2.pad(WHITE, false),
+            "a flash look is not holding the stage"
+        );
     }
 
     #[test]
@@ -748,7 +793,7 @@ mod tests {
         // with blackout off. Every note the map can produce must be inside the
         // ranges the attach blanks.
         let mut p = default_project();
-        let look_id = p.looks.keys().next().unwrap().clone();
+        let look_id = steady_look(&p);
         for layer in &mut p.layers {
             for col in 0..8.min(layer.cells.len()) {
                 layer.cells[col] = Some(look_id.clone());

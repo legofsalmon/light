@@ -37,7 +37,7 @@ The **OSC monitor** (Sync tab) shows the last messages received live. If nothing
 ### Current limits
 
 - Clip-level follows (`/composition/layers/N/clips/M/connect`) aren't mapped yet — columns are the sync unit. Per-clip mapping is on the roadmap.
-- Tempo follows Arena's tempo slider. Ableton Link is also supported: the LINK button in the top bar joins the session (native engine / packaged app only) and shows the peer count; a local tap or BPM drag is pushed back to the session.
+- Tempo follows Arena's tempo slider. Two other sources can take it instead, both native-engine only: **Ableton Link**, where a local tap or BPM drag is pushed back to the session, and **MIDI beat clock**, where the first input sending clock owns the tempo until it goes quiet. Link and beat clock are one choice, not two, and while the beat clock is following it wins over Arena.
 
 ## MIDI
 
@@ -59,6 +59,44 @@ Because the engine owns the mapping, it works identically whether the MIDI arriv
 
 - **Browser (dev)**: Chrome's WebMIDI is used; the page will ask for MIDI permission once. The browser forwards events to the engine.
 - **App**: the Rust core talks to CoreMIDI directly and hot-plugs devices (rescan every few seconds). When the engine has native inputs, the UI stops forwarding WebMIDI so a device connected to both paths can't double-trigger.
+
+### Firing pads from a DAW
+
+A MIDI clip in Ableton, Logic or Bitwig can fire pads and columns exactly like a
+controller pad, in the next 40 Hz frame. Nothing in LIGHT needs enabling: the
+app connects to **every** CoreMIDI input it finds and rescans for new ones, so a
+virtual bus is just another controller as far as the mapping is concerned.
+
+**One-time setup on the Mac.** Open *Audio MIDI Setup* (in Applications ▸
+Utilities), choose *Window ▸ Show MIDI Studio*, and double-click **IAC Driver**.
+Tick *Device is online*, and add a bus if there is none. The bus appears to
+every app on the Mac as both an input and an output, named for the device and
+the bus together — "IAC Driver Bus 1", say. Open **Sync · MIDI** in LIGHT and
+you should see it listed under *inputs*; if it is not there, the driver is
+offline or the bus has not been added.
+
+**Then, in the DAW**, set a MIDI track's output to that bus and put notes on it.
+**In LIGHT**, arm MIDI LEARN, click the pad you want, and play the note from the
+DAW. That is the whole recipe — the mapping stores in the project like any
+other.
+
+Two things to know before you build a show on it.
+
+**A pad mapping is a position, not a look.** A mapping points at a layer and a
+column, and each song has its own page of pads at those positions. So the same
+note fires a different look after a song switch, which is either exactly what
+you want (the DAW plays the same arrangement of hits through every song) or a
+trap (you wanted *that* look). If you want one note to mean one look, keep it in
+one song, or map the song switch to the DAW too and let the two move together.
+
+**There is no timeline lock.** LIGHT reads MIDI beat clock for tempo, and a
+transport start lands the downbeat, so a DAW can drive the tempo and the
+downbeat (see *Tempo* in the [user guide](user-guide.md)). It does **not** read
+song position pointer or MIDI timecode, so starting playback from the middle of
+a song gives you the tempo but not the position — nothing chases the timeline.
+Notes fire when they arrive and that is all. Locking a show to a timeline is
+meant to come through Arena's column follow rather than a direct DAW hook, which
+is why the OSC path above is the one with the sequencing in it.
 
 ### Suggested starter layout (pad + fader controller)
 
