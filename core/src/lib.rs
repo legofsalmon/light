@@ -1,4 +1,5 @@
 // Always available (wasm-safe): the data model and profile machinery.
+pub mod aim;
 pub mod color;
 pub mod cprofile;
 pub mod defaults;

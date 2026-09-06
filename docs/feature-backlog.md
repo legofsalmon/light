@@ -187,27 +187,50 @@ maths, not auditioned on Colm's rig: they are structurally correct and each
 one renders, but which of them are actually *good* is a judgement only the
 real rig can make.
 
-### 5 · Pan/tilt calibration — ◧ partial — L (M without the wizard)
+### 5 · Pan/tilt calibration — ◧ shipped 2026-09-06 without the wizard; mounting compensation still open
 **Touches:** shared/types.ts, core, engine, parity, ui, previz, previz3d, docs
-**Today:** per-fixture base aim ("focus", 0..1, no degrees, parity-pinned);
-mounting yaw/pitch/roll exists but is previz-only — a fixture hung backwards
-pans the wrong way on the wire and only the previz knows. Pan/tilt travel is
-hardcoded 540°/270° in both previz; the GDTF importer drops `PhysicalFrom/To`.
-No invert, no limits, no wizard.
-**Build:**
-- Profile physical range from GDTF into `CompiledProfile` (540/270 defaults
-  for built-ins).
-- Optional per-fixture calibration block (invert pan/tilt, swap, home in
-  degrees, soft limits), absent-by-default so old saves load byte-identically.
-- Both renderers: invert → home offset → clamp to limits, after the focus
-  delta and before quantisation; new parity checkpoints beside the "focus:"
-  ones.
-- UI: degree read-out in the patch table, invert/limit controls, a wizard:
-  identify → drive live → "point at stage centre" → "does it go stage-left?" →
-  optional perspective step that also sets `rotY` so previz and wire agree.
-- Both previz honour range and invert.
-**Carry separately:** mounting orientation is not compensated on the wire — a
-correctness item on its own even without the wizard.
+**Shipped:** the correctness half, which is the "M without the wizard" this
+entry scoped.
+
+**Travel from the file.** The GDTF importer reads Pan/Tilt `PhysicalFrom/To`
+into `CompiledProfile.pan_deg` / `tilt_deg`, with `pan_travel()` /
+`tilt_travel()` supplying the 540/270 both previz used to hardcode. Magnitude
+only: the sign is real (a Lyra declares 270 to -270, a MegaPointe -270 to 270)
+but it describes the fixture's axes rather than the room's, and acting on it
+would silently reverse every imported mover. Both stage views now draw a
+Spiider's 220° of tilt and a Nero's 180° instead of assuming 270°.
+
+**Calibration.** `Fixture.cal` — `invertPan`, `invertTilt`, `swap`, and soft
+limits per axis — absent by default and absent-means-nothing, so every show
+written before it renders byte for byte. The rule is one module per engine
+(`shared/aim.ts`, `core/src/aim.rs`, 8 unit tests each side): deltas from
+centre, then swap, then invert (naming the FIXTURE's axis, so it reads the
+same either way), then the base aim, then clamp. Inverting the DELTA is the
+point — the head stays where it was focused and only the movement mirrors,
+the same trick the effect engine plays on a folded pan spread. Limits given
+the wrong way round park the head at the low one rather than nowhere.
+
+Both renderers call it in place of the old base-aim block, with ten parity
+checkpoints beside the "focus:" ones. `de_cal` and the Node sanitizer both
+drop a block that corrects nothing, each pinned in its own suite.
+
+**No home in degrees.** The entry asked for one; it would have been a second
+way to say what the base aim already says. The Rig table shows the existing
+0..1 base aim AS degrees instead, read against the profile's travel — one
+source of truth, and the read-out the wizard would have needed anyway.
+
+**UI:** `Aim pan` / `Aim tilt` carry an angle beside the percentage; a `Cal`
+column opens a panel with the three flags and the four limits, measured and
+clamped into the window because the Rig table scrolls sideways.
+
+**Not done:** the wizard (identify → drive live → "point at stage centre" →
+"does it go stage-left?" → set `rotY` from the answer). It needs a live rig to
+be worth anything, and the controls above let an operator calibrate by eye
+against one in the meantime. **Mounting orientation is still not compensated
+on the wire** — the carry-separately item, and still separate: deriving pan
+direction from `rotY` automatically would change the output of every existing
+show with a rotated fixture, which is a decision rather than a fix. `invertPan`
+is the explicit form, and it reaches the wire and both stage views together.
 
 ### 6 · Group / fixture submasters — ⬜ absent — M (L with per-fixture + APC)
 **Touches:** shared/types.ts, core, engine, parity, ui, docs

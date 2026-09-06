@@ -31,6 +31,42 @@ truss bar with `snap` on and it clamps onto the bar and rigs there, so moving
 the bar later moves everything on it. The **Front** elevation is the same view
 from the side, where a drag sets *hang height* rather than position.
 
+### Base aim
+
+`Aim pan` and `Aim tilt` are where a moving head points when a look says
+nothing — its **focus**. A look's pan and tilt then apply as a delta from
+centre on top of it, so a rig focused head by head keeps that focus while looks
+move around it. Fifty percent is centre and is also the default, so an
+untouched head is stored with no aim at all.
+
+The angle beside each one is the same number read against the fixture's own
+travel, taken from its definition rather than assumed: 60% of a 540° pan is
+54°, and 60% of a Nero's 180° tilt is 18°. Both stage views use the same
+figures, so a head that swings 220° is no longer drawn as though it swung 270°.
+
+### Calibration
+
+`Cal` is how a head is **wired**, not where it points — the base aim stays
+exactly where you focused it when any of this changes.
+
+- **pan runs backwards** / **tilt runs backwards** mirror a look's movement on
+  that axis. The head stays where it was focused and only the movement flips,
+  so one head hung facing upstage can sweep with the rest instead of against
+  them.
+- **hung on its side** swaps pan and tilt, for a head rigged on its side.
+  Applied before the inversions, which name the fixture's own axes.
+- **limits** are a percentage of travel, and the head may not be driven outside
+  them whatever a look or an effect asks for. This is the head that must not
+  sweep into the video wall, or down into the front row.
+
+Nothing here is on by default, and a fixture with no corrections renders
+exactly as it did before any of it existed.
+
+**Mounting rotation is still not compensated on the wire.** `Rot°` tells the
+stage view which way the box faces; it does not change which way the head pans
+for a given DMX value. If a head sweeps the wrong way, say so with **pan runs
+backwards** — that reaches the rig and the stage view together.
+
 ## Groups
 
 A group is a named set of heads, and groups are what looks point at. Their

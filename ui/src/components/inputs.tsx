@@ -83,7 +83,7 @@ export function UnicastInput({ value, onCommit }: {
  *  4 px becomes a scrub and never focuses the input; a plain click edits.
  *  `onDelta` receives throttled increments so a multi-selection can move
  *  together; `onSet` receives typed absolute values. */
-export function ScrubNumInput({ value, scrubStep, decimals, width, title, onSet, onDelta }: {
+export function ScrubNumInput({ value, scrubStep, decimals, width, title, onSet, onDelta, suffix }: {
   value: number;
   /** value change per pixel of horizontal drag */
   scrubStep: number;
@@ -92,6 +92,8 @@ export function ScrubNumInput({ value, scrubStep, decimals, width, title, onSet,
   title?: string;
   onSet: (v: number) => void;
   onDelta: (d: number) => void;
+  /** read-only text alongside the field — the same number in a second unit */
+  suffix?: React.ReactNode;
 }) {
   const fmt = (v: number) => v.toFixed(decimals).replace(/\.0+$|(\.\d*?)0+$/, '$1');
   const [draft, setDraft] = useState(fmt(value));
@@ -176,7 +178,7 @@ export function ScrubNumInput({ value, scrubStep, decimals, width, title, onSet,
     window.addEventListener('pointercancel', onUp);
   };
 
-  return (
+  const field = (
     <input
       ref={ref}
       className="num"
@@ -193,6 +195,13 @@ export function ScrubNumInput({ value, scrubStep, decimals, width, title, onSet,
       onPointerDown={onPointerDown}
       onDragStart={(e) => e.preventDefault()}
     />
+  );
+  if (!suffix) return field;
+  return (
+    <span className="row" style={{ gap: 4, display: 'inline-flex', alignItems: 'center' }}>
+      {field}
+      {suffix}
+    </span>
   );
 }
 

@@ -174,6 +174,7 @@ fn gdtf_import_end_to_end() {
         rot_z: None,
         pan: None,
         tilt: None,
+        cal: None,
         parent_id: None,
     });
     st.project.groups.push(Group {
@@ -614,6 +615,8 @@ fn fixture_form_inference() {
             lumens: None,
             beam_radius: None,
             virtual_dimmer: false,
+            pan_deg: None,
+            tilt_deg: None,
             compiler: 0,
             credit: None,
             form_override: None,

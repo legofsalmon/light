@@ -527,6 +527,73 @@ async function main(): Promise<void> {
     compareDmx('focus: cleared parity', node, rust);
   }
 
+  // --- pan/tilt calibration (backlog #5). The look aims pan centre, tilt full,
+  // --- so every case below is read off the tilt delta of +0.5 and the pan
+  // --- delta of 0. shared/aim.ts and core/src/aim.rs must agree to the bit.
+  {
+    const withCal = (p: Project, cal: unknown) => {
+      const f = p.fixtures.find((x) => x.id === 'spot1')!;
+      if (cal === undefined) delete f.cal;
+      else f.cal = cal as NonNullable<Project['fixtures'][number]['cal']>;
+      return p;
+    };
+    const aim = () => {
+      const u = node.dmx['u1'] ?? [];
+      return [u[199], u[200], u[201], u[202]];
+    };
+    const set = async (cal: unknown) => {
+      both({ type: 'updateProject', project: withCal(structuredClone(await currentProject(node)), cal) });
+      await sleep(400);
+    };
+
+    await set({ invertTilt: true });
+    compareDmx('cal: inverted tilt parity', node, rust);
+    check(
+      'cal: inverting tilt mirrors the look delta about the focus',
+      JSON.stringify(aim()) === JSON.stringify([128, 0, 0, 0]),
+      `got ${JSON.stringify(aim())} (expected pan centre, tilt bottom)`,
+    );
+
+    await set({ swap: true });
+    compareDmx('cal: swapped parity', node, rust);
+    check(
+      'cal: swap sends the look tilt to the pan channel and back',
+      JSON.stringify(aim()) === JSON.stringify([255, 255, 128, 0]),
+      `got ${JSON.stringify(aim())}`,
+    );
+
+    await set({ tiltMax: 0.75 });
+    compareDmx('cal: soft limit parity', node, rust);
+    check(
+      'cal: a soft limit holds the head whatever the look asks for',
+      aim()[2] === 191 && aim()[3] === 255,
+      `got ${JSON.stringify(aim())} (expected tilt clamped to 75% = 191,255)`,
+    );
+
+    // A block that corrects nothing must RENDER as no calibration at all in
+    // both engines. Whether each one also rewrites the stored shape is a
+    // different question and not one parity can ask here: an updateProject
+    // echo is deliberately withheld from the client that sent it, so this
+    // harness would be reading back its own submission rather than the
+    // engine's repair. Each sanitizer is pinned in its own suite instead
+    // (engine/test/smoke.ts, core/src/types.rs).
+    await set({ invertPan: false });
+    compareDmx('cal: a calibration that corrects nothing changes no byte', node, rust);
+    check(
+      'cal: and leaves the head exactly where the look put it',
+      JSON.stringify(aim()) === JSON.stringify([128, 0, 255, 255]),
+      `got ${JSON.stringify(aim())}`,
+    );
+
+    await set(undefined);
+    compareDmx('cal: cleared parity', node, rust);
+    check(
+      'cal: clearing it returns the head to the uncalibrated bytes',
+      JSON.stringify(aim()) === JSON.stringify([128, 0, 255, 255]),
+      `got ${JSON.stringify(aim())}`,
+    );
+  }
+
   // --- beam parameters: a look that never mentions zoom must leave the zoom
   // --- channel exactly where the fixture's own GDTF parks it. The golden bytes
   // --- above already pin that (offset 10 = 128); this drives it and back.

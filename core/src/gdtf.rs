@@ -236,6 +236,12 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
         let mut footprint = 0usize;
         let mut has_pan = false;
         let mut has_tilt = false;
+        // How far the head actually swings, from the file rather than from the
+        // 540/270 both previz used to assume. A Spiider tilts 220, a Nero 180
+        // and does not pan at all — drawn as 270 they all point at the wrong
+        // part of the room.
+        let mut pan_deg: Option<f64> = None;
+        let mut tilt_deg: Option<f64> = None;
         let mut has_rgb = false;
         let mut has_dimmer = false;
 
@@ -350,10 +356,12 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
                 }
                 a if indexed_base(a) == "Pan" => {
                     has_pan = true;
+                    pan_deg = pan_deg.or_else(|| travel_deg(&functions));
                     cases.push(simple(Source::Pan));
                 }
                 a if indexed_base(a) == "Tilt" => {
                     has_tilt = true;
+                    tilt_deg = tilt_deg.or_else(|| travel_deg(&functions));
                     cases.push(simple(Source::Tilt));
                 }
                 "ColorAdd_R" | "ColorRGB_Red" => {
@@ -546,6 +554,8 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             lumens,
             beam_radius,
             virtual_dimmer: !has_dimmer,
+            pan_deg,
+            tilt_deg,
             compiler: COMPILER_VERSION,
             credit: credit.clone(),
             form_override: None,
@@ -555,6 +565,29 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
         return Err("no usable DMX modes found".into());
     }
     Ok(out)
+}
+
+/// Total travel in degrees across a Pan or Tilt channel's functions, from
+/// GDTF's PhysicalFrom/PhysicalTo.
+///
+/// Magnitude only. The SIGN is meaningful — a Lyra declares pan 270 to -270
+/// and a MegaPointe -270 to 270, so the two heads swing opposite ways for the
+/// same DMX — but it describes the fixture's own axes, not the room's, and
+/// acting on it would silently change which way every imported mover sweeps.
+/// Which way a head should move in a given rig is the operator's `invertPan`
+/// (shared/types.ts FixtureCal), where it reaches the wire and the stage view
+/// together. This is only "how far".
+fn travel_deg(functions: &[roxmltree::Node]) -> Option<f64> {
+    let span = |f: &roxmltree::Node| -> Option<f64> {
+        let from: f64 = f.attribute("PhysicalFrom")?.trim().parse().ok()?;
+        let to: f64 = f.attribute("PhysicalTo")?.trim().parse().ok()?;
+        let d = (to - from).abs();
+        (d.is_finite() && d > 0.0 && d <= 1440.0).then_some(d)
+    };
+    functions
+        .iter()
+        .filter_map(span)
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
 }
 
 /// A function's band ends where the next function begins (GDTF functions

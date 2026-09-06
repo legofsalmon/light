@@ -1202,6 +1202,9 @@ impl EngineState {
                 rot_z: None,
                 pan: None,
                 tilt: None,
+                // An MVR says where a head hangs, never how its axes are
+                // wired — that is something only the rig can tell you.
+                cal: None,
                 // MVR carries its own rigging hierarchy; we do not map it onto
                 // hand-drawn structure, so an imported fixture starts unparented.
                 parent_id: None,

@@ -32,6 +32,12 @@ export type ProfileMeta = {
    *  there and is not listed */
   strobeModes: StrobeMode[];
   beamDeg: number;
+  /** How far the head swings, in degrees, from the fixture's own definition.
+   *  540 and 270 stand in where it does not say — what both stage views used
+   *  to assume for every mover. Also what the Rig table reads a base aim
+   *  against, so "50%" can be shown as an angle. */
+  panDeg: number;
+  tiltDeg: number;
   imported: boolean;
 };
 
@@ -169,6 +175,8 @@ function computeProfileMeta(project: Project | null, id: string): ProfileMeta | 
       prisms: [],
       strobeModes: [],
       beamDeg: b.beamDeg,
+      panDeg: 540,
+      tiltDeg: 270,
       imported: false,
     };
   }
@@ -189,6 +197,8 @@ function computeProfileMeta(project: Project | null, id: string): ProfileMeta | 
       prisms: slotNames(c, 'prism'),
       strobeModes: strobeModesOf(c),
       beamDeg: c.beamDeg,
+      panDeg: c.panDeg && c.panDeg > 0 ? c.panDeg : 540,
+      tiltDeg: c.tiltDeg && c.tiltDeg > 0 ? c.tiltDeg : 270,
       imported: true,
     };
   }

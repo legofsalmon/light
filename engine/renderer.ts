@@ -4,6 +4,7 @@ import type { HeadKind, ResolvedParams } from '../shared/profiles.ts';
 import { PROFILES, defaultResolved } from '../shared/profiles.ts';
 import { renderImported } from './wasmProfiles.ts';
 import { applyEffects, modWave, softBase } from '../shared/effects.ts';
+import { aimIsIdentity, applyAim } from '../shared/aim.ts';
 import { NO_EXTENTS, NO_GEOM, buildGeometry, buildGroupExtents, type GroupExtents, type HeadGeom } from '../shared/geometry.ts';
 import { DERBY_MACROS, derbyMacroForValue, derbyQuantize, hsvToRgb, rgbToHsv } from '../shared/color.ts';
 import type { EngineState } from './state.ts';
@@ -469,21 +470,24 @@ export class Renderer {
       }
     }
 
-    // --- per-fixture base aim: FOCUS for moving heads ---
+    // --- per-fixture aim: focus, then calibration ---
     // A look's pan/tilt is a delta from centre, applied on top of the
     // fixture's own base. Focus 24 movers individually and a look that sweeps
     // pan sweeps around each one's focus instead of flattening them all to the
-    // same angle. Base 0.5 (the default) makes this arithmetically identical
-    // to having no base at all, so existing shows are untouched.
+    // same angle. Then the fixture's calibration says which way its axes
+    // actually run and how far they may go. The whole rule lives in
+    // shared/aim.ts so the two engines cannot drift, and a fixture with
+    // neither a base nor a calibration skips the pass entirely.
     for (const f of p.fixtures) {
       const bp = f.pan ?? 0.5;
       const bt = f.tilt ?? 0.5;
-      if (bp === 0.5 && bt === 0.5) continue;
+      if (aimIsIdentity(bp, bt, f.cal)) continue;
       for (let i = 0; ; i++) {
         const o = heads.get(`${f.id}:${i}`);
         if (!o) break;
-        o.pan = clamp(bp + (o.pan - 0.5));
-        o.tilt = clamp(bt + (o.tilt - 0.5));
+        const aimed = applyAim(o.pan, o.tilt, bp, bt, f.cal);
+        o.pan = aimed.pan;
+        o.tilt = aimed.tilt;
       }
     }
 

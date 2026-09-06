@@ -96,6 +96,10 @@ pub struct Fixture {
     pub pan: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tilt: Option<f64>,
+    /// How this head's own axes are wired and how far it may swing. Absent on
+    /// every show written before it existed, and absent means "no calibration".
+    #[serde(default, deserialize_with = "de_cal", skip_serializing_if = "Option::is_none")]
+    pub cal: Option<FixtureCal>,
     /// Stage structure this fixture is rigged on. `pos` stays in ROOM
     /// coordinates — the parent link is bookkeeping for the editor, and the
     /// engine never needs it to render.
@@ -218,6 +222,106 @@ pub enum MotorMode {
 /// shared/types.ts: plain (the default, and all an older save knows), a pulse
 /// that ramps each flash open and shut, or random flashes around the set rate.
 /// A fixture without the pattern falls back to its plain strobe band.
+/// Per-fixture pan and tilt calibration. Mirrors FixtureCal in
+/// shared/types.ts; the maths that reads it lives in crate::aim.
+///
+/// It is NOT where the head points — that is the base aim, which an operator
+/// sets by eye and which stays put when this changes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FixtureCal {
+    /// a look's pan delta drives this head the other way
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub invert_pan: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub invert_tilt: bool,
+    /// the head is hung on its side; applied BEFORE the inversions, which
+    /// name the fixture's own axes
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub swap: bool,
+    /// soft limits as a fraction of travel, 0..1
+    #[serde(default, deserialize_with = "de_opt_unit", skip_serializing_if = "Option::is_none")]
+    pub pan_min: Option<f64>,
+    #[serde(default, deserialize_with = "de_opt_unit", skip_serializing_if = "Option::is_none")]
+    pub pan_max: Option<f64>,
+    #[serde(default, deserialize_with = "de_opt_unit", skip_serializing_if = "Option::is_none")]
+    pub tilt_min: Option<f64>,
+    #[serde(default, deserialize_with = "de_opt_unit", skip_serializing_if = "Option::is_none")]
+    pub tilt_max: Option<f64>,
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
+/// A limit is a finite fraction of travel or it is not there — clamped, the
+/// same way the Node sanitizer clamps it, so a hand-edited 5 means "the top".
+fn de_opt_unit<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<f64>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(match v.as_ref().and_then(|x| x.as_f64()) {
+        Some(n) if n.is_finite() => Some(clamp01(n)),
+        _ => None,
+    })
+}
+
+/// A calibration block this build cannot read is dropped, not failed — the
+/// head then behaves as it did before calibration existed, which is the
+/// safest thing an unreadable correction can do. An empty block is dropped
+/// too, so it never round-trips as `"cal": {}`.
+fn de_cal<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<FixtureCal>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    let cal: Option<FixtureCal> = v.and_then(|x| serde_json::from_value(x).ok());
+    Ok(cal.filter(|c| *c != FixtureCal::default()))
+}
+
+#[cfg(test)]
+mod cal_tests {
+    use super::*;
+
+    fn cal_of(json: &str) -> Option<FixtureCal> {
+        #[derive(Deserialize)]
+        struct Holder {
+            #[serde(default, deserialize_with = "de_cal")]
+            cal: Option<FixtureCal>,
+        }
+        serde_json::from_str::<Holder>(json).expect("parses").cal
+    }
+
+    #[test]
+    fn a_block_that_corrects_nothing_is_dropped() {
+        // Mirrors the Node sanitizer, which deletes the block rather than
+        // storing an empty one — otherwise the same show has two shapes.
+        assert_eq!(cal_of(r#"{"cal":{}}"#), None);
+        assert_eq!(cal_of(r#"{"cal":{"invertPan":false}}"#), None);
+        assert_eq!(cal_of(r#"{}"#), None);
+    }
+
+    #[test]
+    fn an_unreadable_block_is_dropped_rather_than_failing_the_load() {
+        // The head then behaves as it did before calibration existed, which is
+        // the safest thing an unreadable correction can do.
+        assert_eq!(cal_of(r#"{"cal":"nonsense"}"#), None);
+        assert_eq!(cal_of(r#"{"cal":{"invertPan":"yes"}}"#), None);
+    }
+
+    #[test]
+    fn limits_are_clamped_into_range_not_dropped() {
+        let c = cal_of(r#"{"cal":{"panMin":5,"tiltMax":-2}}"#).expect("kept");
+        assert_eq!(c.pan_min, Some(1.0));
+        assert_eq!(c.tilt_max, Some(0.0));
+        // and a non-numeric one goes, leaving the rest
+        let c = cal_of(r#"{"cal":{"panMin":0.25,"panMax":"x"}}"#).expect("kept");
+        assert_eq!((c.pan_min, c.pan_max), (Some(0.25), None));
+    }
+
+    #[test]
+    fn a_real_block_round_trips_without_the_defaults() {
+        let c = cal_of(r#"{"cal":{"swap":true,"tiltMax":0.75}}"#).expect("kept");
+        let out = serde_json::to_string(&c).unwrap();
+        assert_eq!(out, r#"{"swap":true,"tiltMax":0.75}"#, "false flags must not travel");
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum StrobeMode {

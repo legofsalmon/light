@@ -24,6 +24,13 @@ struct ProfMeta {
     /// otherwise inferred. Decides the body mesh, the emitter primitive and the
     /// default flux, none of which the head kinds can answer on their own.
     form: FixtureForm,
+    /// How far the head actually swings, in degrees. Both stage views used to
+    /// assume 540 and 270 for every mover, so a Spiider (220 of tilt) and a
+    /// Nero (180, and no pan at all) drew beams pointing at the wrong part of
+    /// the room. The compiled profile carries the real figures now, and these
+    /// are the same defaults for anything that does not say.
+    pan_deg: f64,
+    tilt_deg: f64,
     /// The head whose snapshot pan/tilt steers the WHOLE fixture, when the
     /// fixture aims but its emitters are not `Mover` heads.
     ///
@@ -78,6 +85,8 @@ fn prof_meta(project: &ProjectLite, id: &str) -> Option<ProfMeta> {
                 _ if p.heads.len() > 1 => FixtureForm::Bar,
                 _ => FixtureForm::Par,
             },
+            pan_deg: 540.0,
+            tilt_deg: 270.0,
             aim_head: None,
         });
     }
@@ -85,6 +94,8 @@ fn prof_meta(project: &ProjectLite, id: &str) -> Option<ProfMeta> {
         heads: c.heads.iter().map(|h| (h.kind, h.offset, h.offset_y)).collect(),
         beam_deg: c.beam_deg,
         form: c.form(),
+        pan_deg: c.pan_travel(),
+        tilt_deg: c.tilt_travel(),
         field_deg: c.field_deg(),
         beam_radius: c.beam_radius.unwrap_or(0.035),
         lumens: c.lumens_or_guess(),
@@ -1236,8 +1247,8 @@ pub fn rebuild_fixtures(
                     MoverHead {
                         aim_head: prof.aim_head.unwrap_or(0),
                         rest: Transform::default().looking_to(rest_dir, Vec3::Y).rotation,
-                        pan_range: 540f32.to_radians(),
-                        tilt_range: 270f32.to_radians(),
+                        pan_range: (prof.pan_deg as f32).to_radians(),
+                        tilt_range: (prof.tilt_deg as f32).to_radians(),
                         root_rot: root_tf.rotation,
                         height: f.pos.y,
                         outer: (prof.beam_deg.max(2.0) as f32).to_radians() / 2.0,
@@ -1258,8 +1269,8 @@ pub fn rebuild_fixtures(
                     MoverHead {
                         aim_head: prof.aim_head.unwrap_or(0),
                         rest: Transform::default().looking_to(rest_dir, Vec3::Y).rotation,
-                        pan_range: 540f32.to_radians(),
-                        tilt_range: 270f32.to_radians(),
+                        pan_range: (prof.pan_deg as f32).to_radians(),
+                        tilt_range: (prof.tilt_deg as f32).to_radians(),
                         root_rot: root_tf.rotation,
                         height: f.pos.y,
                         outer: (prof.beam_deg.max(2.0) as f32).to_radians() / 2.0,

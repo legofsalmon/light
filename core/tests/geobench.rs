@@ -21,6 +21,7 @@ fn geometry_build_cost() {
             rot_z: Some(-0.05),
             pan: None,
             tilt: None,
+            cal: None,
             parent_id: None,
         })
         .collect();

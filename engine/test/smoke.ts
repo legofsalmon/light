@@ -24,6 +24,7 @@ const demoProject = (): Project =>
 import { readFileSync } from 'node:fs';
 import { MAX_THROW, buildOccluders, hitsPropFootprint, standingHeightAt, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
 import { GO_DARK_FRAMES, OutputGate } from '../output.ts';
+import { aimIsIdentity, applyAim } from '../../shared/aim.ts';
 import { FX_CATEGORIES, FX_LIBRARY, fxSearch } from '../../ui/src/fxLibrary.ts';
 import { repairEffect } from '../../shared/types.ts';
 import { parseOsc } from '../osc.ts';
@@ -991,6 +992,64 @@ await new Promise<void>((resolve) => {
   check('fx library: search matches a category label', fxSearch(FX_LIBRARY, 'movement').length > 0);
   check('fx library: an unmatched search returns nothing rather than everything', fxSearch(FX_LIBRARY, 'zzzznope').length === 0);
   check('fx library: an empty search returns the lot', fxSearch(FX_LIBRARY, '  ').length === FX_LIBRARY.length);
+}
+
+// --- pan/tilt calibration (backlog #5) --------------------------------------
+// Mirrors the unit tests in core/src/aim.rs. Both engines run the same rule
+// from their own copy, so the two files have to agree to the last bit — and a
+// fixture with nothing calibrated has to render exactly as it always did.
+{
+  const near = (got: { pan: number; tilt: number }, p: number, t: number) =>
+    Math.abs(got.pan - p) < 1e-12 && Math.abs(got.tilt - t) < 1e-12;
+
+  check('aim: nothing calibrated is the identity', aimIsIdentity(0.5, 0.5, undefined));
+  const untouched = [[0, 0], [0.5, 0.5], [1, 1], [0.25, 0.9]].every(([p, t]) =>
+    near(applyAim(p, t, 0.5, 0.5, undefined), p, t));
+  check('aim: and passes every value through unchanged', untouched);
+
+  check('aim: a base aim moves the centre', near(applyAim(0.5, 0.5, 0.25, 0.25, undefined), 0.25, 0.25));
+  check('aim: and the look is a delta on top of it', near(applyAim(1, 1, 0.25, 0.25, undefined), 0.75, 0.75));
+  check('aim: a base aim is not the identity', !aimIsIdentity(0.25, 0.5, undefined));
+
+  const invP = { invertPan: true };
+  check('aim: invert leaves the focus where it was', near(applyAim(0.5, 0.5, 0.3, 0.5, invP), 0.3, 0.5));
+  check('aim: invert mirrors the movement only', near(applyAim(0.7, 0.5, 0.3, 0.5, invP), 0.1, 0.5));
+  check('aim: a pan inversion leaves tilt alone', near(applyAim(0.5, 0.8, 0.3, 0.5, invP), 0.3, 0.8));
+
+  const sw = { swap: true };
+  check('aim: swap sends the look tilt to the pan channel', near(applyAim(0.5, 0.9, 0.5, 0.5, sw), 0.9, 0.5));
+  check('aim: and the look pan to the tilt channel', near(applyAim(0.9, 0.5, 0.5, 0.5, sw), 0.5, 0.9));
+  check(
+    'aim: invert names the fixture axis, not the look one',
+    near(applyAim(0.5, 0.9, 0.5, 0.5, { swap: true, invertPan: true }), 0.1, 0.5),
+  );
+
+  const lim = { panMin: 0.3, panMax: 0.7, tiltMax: 0.6 };
+  check('aim: soft limits hold whatever a look asks for', near(applyAim(1, 1, 0.5, 0.5, lim), 0.7, 0.6));
+  check('aim: at both ends', near(applyAim(0, 0, 0.5, 0.5, lim), 0.3, 0));
+  check('aim: and move nothing already inside them', near(applyAim(0.6, 0.5, 0.5, 0.5, lim), 0.6, 0.5));
+  check(
+    'aim: limits the wrong way round park the head low rather than nowhere',
+    applyAim(0.5, 0.5, 0.5, 0.5, { panMin: 0.8, panMax: 0.2 }).pan === 0.8,
+  );
+  check('aim: a calibration that corrects nothing is still the identity', aimIsIdentity(0.5, 0.5, { panMin: 0, panMax: 1 }));
+  check('aim: one that corrects something is not', !aimIsIdentity(0.5, 0.5, { invertTilt: true }));
+
+  // the sanitizer's job: a hand-edited block lands on one answer in both engines
+  const raw = demoProject();
+  raw.fixtures[0].cal = { invertPan: 'yes', swap: true, panMin: 5, tiltMax: 'x', bogus: 1 } as never;
+  const cal = sanitizeProject(raw)!.fixtures[0].cal;
+  check('sanitize: a non-boolean flag is dropped', cal?.invertPan === undefined, JSON.stringify(cal));
+  check('sanitize: a true flag is kept', cal?.swap === true);
+  check('sanitize: an out-of-range limit is clamped, not dropped', cal?.panMin === 1, `panMin=${cal?.panMin}`);
+  check('sanitize: a non-numeric limit is dropped', cal?.tiltMax === undefined);
+
+  const empty = demoProject();
+  empty.fixtures[0].cal = { invertPan: false } as never;
+  check(
+    'sanitize: a block that corrects nothing is removed rather than stored',
+    sanitizeProject(empty)!.fixtures[0].cal === undefined,
+  );
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

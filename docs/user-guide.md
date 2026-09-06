@@ -184,6 +184,13 @@ any edit applies to the whole selection. The toolbar then offers
 `→ universe`, `⇢ re-address`, `⧉ duplicate`, `✕ delete`, and
 `⊕ group from N selected`.
 
+**Head calibration.** `Aim pan` / `Aim tilt` are a moving head's focus, shown as
+a percentage and as an angle against that fixture's own travel. `Cal` is how the
+head is wired rather than where it points: reverse either axis, swap them for a
+head hung on its side, or set limits it may not be driven outside. Nothing is on
+by default. Mounting rotation is still not compensated on the wire — if a head
+sweeps the wrong way, reverse it here and the rig and the stage view agree.
+
 **Fixture aim.** `Rot°` is yaw, `Tilt°` is the mounting pitch, `Roll°` the roll.
 They compose on top of each fixture type's default aim, so a bar hung at an
 angle can be pointed where it actually points — visible in both stage views.

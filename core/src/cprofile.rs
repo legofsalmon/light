@@ -289,6 +289,13 @@ pub struct CompiledProfile {
     pub beam_radius: Option<f64>,
     /// no dimmer channel exists: fold intensity into colour/white sources
     pub virtual_dimmer: bool,
+    /// Total pan travel in degrees, from the file. Absent on built-ins and on
+    /// anything imported before it was read — `pan_deg()` supplies the figure
+    /// both previz used to hardcode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pan_deg: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tilt_deg: Option<f64>,
     /// `COMPILER_VERSION` of the importer that wrote this; 0 on anything
     /// compiled before the stamp existed, which is exactly what it should say.
     #[serde(default)]
@@ -326,6 +333,19 @@ impl CompiledProfile {
     /// Always at least the beam angle: a file claiming a field narrower than
     /// its beam is describing something that cannot exist, and clamping beats
     /// rendering an inside-out cone.
+    /// Pan travel to draw and to read degrees against. 540 is the figure both
+    /// previz assumed for every mover and is right for most of them, so it is
+    /// what a profile with nothing to say still gets.
+    pub fn pan_travel(&self) -> f64 {
+        self.pan_deg.filter(|d| *d > 0.0).unwrap_or(540.0)
+    }
+
+    /// Tilt travel, likewise. 270 was the old assumption; real heads run from
+    /// about 180 (a Nero) to 270.
+    pub fn tilt_travel(&self) -> f64 {
+        self.tilt_deg.filter(|d| *d > 0.0).unwrap_or(270.0)
+    }
+
     pub fn field_deg(&self) -> f64 {
         self.field_deg.unwrap_or(self.beam_deg * 1.55).max(self.beam_deg)
     }
@@ -648,6 +668,8 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: false,
+        pan_deg: None,
+        tilt_deg: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
@@ -751,6 +773,8 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: false,
+        pan_deg: None,
+        tilt_deg: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
@@ -773,6 +797,8 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: false,
+        pan_deg: None,
+        tilt_deg: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
@@ -792,6 +818,8 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: false,
+        pan_deg: None,
+        tilt_deg: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
@@ -815,6 +843,8 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: true,
+        pan_deg: None,
+        tilt_deg: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
@@ -839,6 +869,8 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: true,
+        pan_deg: None,
+        tilt_deg: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,
@@ -867,6 +899,8 @@ pub fn compiled_builtins() -> Vec<CompiledProfile> {
         lumens: None,
         beam_radius: None,
         virtual_dimmer: false,
+        pan_deg: None,
+        tilt_deg: None,
         compiler: COMPILER_VERSION,
         credit: None,
         form_override: None,

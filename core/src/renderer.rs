@@ -751,22 +751,25 @@ impl Renderer {
         }
 
 
-        // --- per-fixture base aim: FOCUS for moving heads ---
+        // --- per-fixture aim: focus, then calibration ---
         // A look's pan/tilt is a delta from centre applied on top of the
         // fixture's own base, so a rig focused fixture-by-fixture keeps its
-        // focus while looks move around it. Base 0.5 (the default) is
-        // arithmetically identical to having no base — existing shows are
-        // untouched. Mirrors engine/renderer.ts.
+        // focus while looks move around it — then the fixture's calibration
+        // says which way its axes actually run and how far they may go. The
+        // whole rule lives in crate::aim so the two engines cannot drift, and
+        // a fixture with neither a base nor a calibration skips the pass
+        // entirely. Mirrors engine/renderer.ts.
         for f in &st.project.fixtures {
             let bp = f.pan.unwrap_or(0.5);
             let bt = f.tilt.unwrap_or(0.5);
-            if bp == 0.5 && bt == 0.5 {
+            if crate::aim::aim_is_identity(bp, bt, f.cal.as_ref()) {
                 continue;
             }
             for i in 0.. {
                 let Some(o) = heads.get_mut(&(f.id.clone(), i)) else { break };
-                o.pan = clamp01(bp + (o.pan - 0.5));
-                o.tilt = clamp01(bt + (o.tilt - 0.5));
+                let (p, t) = crate::aim::apply_aim(o.pan, o.tilt, bp, bt, f.cal.as_ref());
+                o.pan = p;
+                o.tilt = t;
             }
         }
 

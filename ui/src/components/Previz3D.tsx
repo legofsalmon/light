@@ -43,6 +43,12 @@ type HeadHandle = {
    *  head that happens to own the yoke handle. */
   aimBeams?: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>[];
   spin: number;
+  /** How far this head actually swings, in RADIANS. Both stage views used to
+   *  assume 540 and 270 degrees for every mover, so a Spiider (220 of tilt)
+   *  and a Nero (180, and no pan at all) drew beams pointing at the wrong part
+   *  of the room. Read off the fixture's own definition where it says. */
+  panRange: number;
+  tiltRange: number;
   /** last zoom applied to this head's cones, so static beams re-cut only on change */
   lastZoom: number | undefined;
   cur: { r: number; g: number; b: number; i: number };
@@ -259,6 +265,8 @@ function buildRig(project: Project): {
         pan: null,
         tilt: null,
         spin: 0,
+        panRange: THREE.MathUtils.degToRad(prof?.panDeg ?? 540),
+        tiltRange: THREE.MathUtils.degToRad(prof?.tiltDeg ?? 270),
         lastZoom: undefined,
         cur: { r: 0, g: 0, b: 0, i: 0 },
       };
@@ -921,8 +929,8 @@ export function Previz3D({ source = 'live' }: { source?: 'live' | 'preview' } = 
           }
 
           if (h.pan && h.tilt && hs) {
-            h.pan.rotation.y = (0.5 - hs.pan) * Math.PI * 3; // 540°
-            h.tilt.rotation.x = (hs.tilt - 0.5) * Math.PI * 1.5; // 270°
+            h.pan.rotation.y = (0.5 - hs.pan) * h.panRange;
+            h.tilt.rotation.x = (hs.tilt - 0.5) * h.tiltRange;
             // The cone has to follow the aim, or a head pointed at the floor
             // draws the same length as one pointed at the back wall. Update
             // from PAN, not tilt: updateMatrixWorld composes with the parent's

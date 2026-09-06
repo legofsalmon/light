@@ -841,3 +841,52 @@ fn a_wheel_without_channel_sets_spreads_its_slots() {
         "four slots share the function's 0..127, not the whole channel"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Pan and tilt travel: how far the head actually swings, from the file rather
+// than from the 540/270 both stage views used to assume (backlog #5).
+
+#[test]
+fn travel_comes_from_the_file_and_falls_back_when_it_does_not_say() {
+    let p = parse_gdtf(&synthetic_gdtf()).expect("parses").remove(0);
+    // Pan declares PhysicalFrom -270 / PhysicalTo 270
+    assert_eq!(p.pan_deg, Some(540.0));
+    assert_eq!(p.pan_travel(), 540.0);
+    // Tilt declares no physical range at all, so nothing is invented...
+    assert_eq!(p.tilt_deg, None);
+    // ...and the accessor supplies the figure the previz used to hardcode
+    assert_eq!(p.tilt_travel(), 270.0);
+}
+
+#[test]
+fn travel_is_a_magnitude_whichever_way_the_file_writes_it() {
+    // A Lyra declares pan 270 -> -270 and a MegaPointe -270 -> 270. Both swing
+    // 540 degrees; the sign is about the fixture's own axes, and acting on it
+    // would silently reverse every imported mover. Which way a head should
+    // move is the operator's invertPan.
+    let descending = fixture_xml(
+        "",
+        r#"<DMXChannel DMXBreak="1" Offset="2" Geometry="Base"><LogicalChannel Attribute="Pan">
+             <ChannelFunction Attribute="Pan" DMXFrom="0/1" PhysicalFrom="270" PhysicalTo="-270"/></LogicalChannel></DMXChannel>
+           <DMXChannel DMXBreak="1" Offset="3" Geometry="Base"><LogicalChannel Attribute="Tilt">
+             <ChannelFunction Attribute="Tilt" DMXFrom="0/1" PhysicalFrom="110" PhysicalTo="-110"/></LogicalChannel></DMXChannel>"#,
+    );
+    let p = parse_gdtf(&zipped(&descending)).expect("parses").remove(0);
+    assert_eq!(p.pan_deg, Some(540.0));
+    assert_eq!(p.tilt_deg, Some(220.0), "a Spiider's 110 either side");
+}
+
+#[test]
+fn an_absurd_or_zero_travel_is_ignored_rather_than_drawn() {
+    let junk = fixture_xml(
+        "",
+        r#"<DMXChannel DMXBreak="1" Offset="2" Geometry="Base"><LogicalChannel Attribute="Pan">
+             <ChannelFunction Attribute="Pan" DMXFrom="0/1" PhysicalFrom="0" PhysicalTo="0"/></LogicalChannel></DMXChannel>
+           <DMXChannel DMXBreak="1" Offset="3" Geometry="Base"><LogicalChannel Attribute="Tilt">
+             <ChannelFunction Attribute="Tilt" DMXFrom="0/1" PhysicalFrom="-100000" PhysicalTo="100000"/></LogicalChannel></DMXChannel>"#,
+    );
+    let p = parse_gdtf(&zipped(&junk)).expect("parses").remove(0);
+    assert_eq!(p.pan_deg, None, "a zero swing is not a swing");
+    assert_eq!(p.tilt_deg, None, "nor is one no yoke could make");
+    assert_eq!((p.pan_travel(), p.tilt_travel()), (540.0, 270.0));
+}

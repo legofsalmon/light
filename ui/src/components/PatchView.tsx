@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { FixtureForm, Project } from '../../../shared/types.ts';
+import type { Fixture, FixtureForm, Project } from '../../../shared/types.ts';
 import { FIXTURE_FORMS, inferFixtureForm, uid } from '../../../shared/types.ts';
 import { PROFILES } from '../../../shared/profiles.ts';
 import { allProfileMetas, profileMeta } from '../profileInfo.ts';
@@ -513,8 +513,11 @@ export function PatchView() {
               <SortTh k="rigged" sortKey={sortKey} sortDir={sortDir} onSort={onSort} title="rigged on a stage structure — X/Y/Z above stay in room coordinates">
                 Rigged on
               </SortTh>
-              {anyPan && <th title="base aim: 50% is centre — a look's pan moves relative to this">Aim pan</th>}
-              {anyTilt && <th title="base aim: 50% is centre — a look's tilt moves relative to this">Aim tilt</th>}
+              {anyPan && <th title="base aim: 50% is centre — a look's pan moves relative to this. The angle beside it is read against the fixture's own travel.">Aim pan</th>}
+              {anyTilt && <th title="base aim: 50% is centre — a look's tilt moves relative to this. The angle beside it is read against the fixture's own travel.">Aim tilt</th>}
+              {(anyPan || anyTilt) && (
+                <th title="calibration: which way this head's axes actually run, and how far it may swing. Nothing to do with where it points.">Cal</th>
+              )}
               <th>Live</th><th></th>
             </tr>
           </thead>
@@ -691,6 +694,7 @@ export function PatchView() {
                           title="base pan: 50% is centre — looks move relative to this"
                           onSet={(v) => setAim(f.id, 'pan', v)}
                           onDelta={(d) => nudgeAim(f.id, 'pan', d)}
+                          suffix={<AimDegrees value={f.pan} travel={profileMeta(project, f.profileId)?.panDeg ?? 540} />}
                         />
                       ) : (
                         <span className="label dim">—</span>
@@ -707,7 +711,17 @@ export function PatchView() {
                           title="base tilt: 50% is centre — looks move relative to this"
                           onSet={(v) => setAim(f.id, 'tilt', v)}
                           onDelta={(d) => nudgeAim(f.id, 'tilt', d)}
+                          suffix={<AimDegrees value={f.tilt} travel={profileMeta(project, f.profileId)?.tiltDeg ?? 270} />}
                         />
+                      ) : (
+                        <span className="label dim">—</span>
+                      )}
+                    </td>
+                  )}
+                  {(anyPan || anyTilt) && (
+                    <td>
+                      {profileMeta(project, f.profileId)?.hasPan || profileMeta(project, f.profileId)?.hasTilt ? (
+                        <CalCell fixture={f} />
                       ) : (
                         <span className="label dim">—</span>
                       )}
@@ -1175,6 +1189,188 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
  *  stage window to whatever is placed; a set size is drawn as typed, on the
  *  plan's origin — the width across, the depth toward the audience, the
  *  height to the grid. */
+/** The base aim as an angle, beside the percentage it is stored as.
+ *
+ *  A percentage is what the wire carries and what a look's delta rides on; an
+ *  angle is what someone standing under the truss can check. Read against the
+ *  fixture's own travel, so 60% of a 540-degree pan is 54 degrees and 60% of a
+ *  Nero's 180-degree tilt is 18. */
+function AimDegrees({ value, travel }: { value: number | undefined; travel: number }) {
+  const deg = ((value ?? 0.5) - 0.5) * travel;
+  const shown = Math.abs(deg) < 0.5 ? '0°' : `${deg > 0 ? '+' : '−'}${Math.round(Math.abs(deg))}°`;
+  return (
+    <span
+      className="label dim"
+      style={{ fontFamily: 'var(--mono)' }}
+      title={`${Math.round(travel)}° of travel on this fixture, centre to centre`}
+    >
+      {shown}
+    </span>
+  );
+}
+
+/** Per-fixture calibration: which way this head's axes run, and how far it may
+ *  swing. A column of its own would need six, so the cell is a summary that
+ *  opens the controls — and the summary is the point, because the whole reason
+ *  this exists is the one head in the rig that is not like the others. */
+/** The calibration panel's minimum content width. Its real width is measured
+ *  once it is up — padding and borders make an estimate wrong by tens of
+ *  pixels, which is exactly enough to leave an edge off the screen. */
+const CAL_POPOVER_W = 260;
+
+function CalCell({ fixture }: { fixture: Fixture }) {
+  const mutate = useStore((s) => s.mutate);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const btnRef = React.useRef<HTMLButtonElement>(null);
+  const popRef = React.useRef<HTMLDivElement>(null);
+  const cal = fixture.cal;
+
+  // Pull it back into the window once it has a real size. The Rig table
+  // scrolls sideways, so the button it hangs off is regularly at an x the
+  // window does not reach, and the panel's own width is not knowable before
+  // it renders.
+  React.useLayoutEffect(() => {
+    const el = popRef.current;
+    if (!open || !el) return;
+    const r = el.getBoundingClientRect();
+    const left = Math.max(8, Math.min(pos.left, window.innerWidth - r.width - 8));
+    const top = Math.max(8, Math.min(pos.top, window.innerHeight - r.height - 8));
+    if (Math.abs(left - pos.left) > 0.5 || Math.abs(top - pos.top) > 0.5) setPos({ top, left });
+  }, [open, pos.left, pos.top]);
+
+  const edit = (fn: (c: NonNullable<Fixture['cal']>) => void, label: string) =>
+    mutate((p) => {
+      const f = p.fixtures.find((x) => x.id === fixture.id);
+      if (!f) return;
+      const c = { ...(f.cal ?? {}) };
+      fn(c);
+      // A block that corrects nothing is removed rather than stored: both
+      // engines drop it on the way in, so keeping it here would mean the same
+      // show had two shapes depending on who last touched it.
+      const live = Object.entries(c).filter(([k, v]) =>
+        typeof v === 'boolean' ? v : k.endsWith('Min') ? (v as number) > 0 : (v as number) < 1);
+      if (live.length === 0) delete f.cal;
+      else f.cal = Object.fromEntries(live) as Fixture['cal'];
+    }, label);
+
+  const flags: string[] = [];
+  if (cal?.swap) flags.push('swapped');
+  if (cal?.invertPan) flags.push('pan reversed');
+  if (cal?.invertTilt) flags.push('tilt reversed');
+  const limited =
+    (cal?.panMin ?? 0) > 0 || (cal?.panMax ?? 1) < 1 || (cal?.tiltMin ?? 0) > 0 || (cal?.tiltMax ?? 1) < 1;
+  if (limited) flags.push('limited');
+
+  const pct = (v: number | undefined, def: number) => Math.round((v ?? def) * 100);
+  const setLimit = (key: 'panMin' | 'panMax' | 'tiltMin' | 'tiltMax', v: number) =>
+    edit((c) => {
+      c[key] = Math.min(1, Math.max(0, v / 100));
+    }, `set ${fixture.name} ${key.startsWith('pan') ? 'pan' : 'tilt'} limit`);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        className={`btn small ${flags.length ? 'on' : 'ghost'}`}
+        title={
+          flags.length
+            ? `${flags.join(', ')} — click to change. This is how the head is WIRED, not where it points.`
+            : 'nothing corrected on this head. Click if it sweeps the wrong way, is hung on its side, or must not swing somewhere.'
+        }
+        onClick={() => {
+          const r = btnRef.current?.getBoundingClientRect();
+          // Clamped into the viewport on both axes. The Rig table scrolls
+          // sideways, so this button is regularly at an x the window does not
+          // reach — hung off it unclamped, the panel opened where nobody could
+          // see it.
+          // A first guess below and slightly left of the button; the layout
+          // effect above corrects it once the panel has a measurable size.
+          if (r) setPos({ top: r.bottom + 2, left: Math.max(8, r.left - 150) });
+          setOpen((o) => !o);
+        }}
+      >
+        {flags.length ? flags.length : '—'}
+      </button>
+      {open && (
+        <>
+          {/* click anywhere else to dismiss, without swallowing that click */}
+          <div className="modalveil" style={{ background: 'transparent' }} onPointerDown={() => setOpen(false)} />
+          <div ref={popRef} className="popover" style={{ top: pos.top, left: pos.left, minWidth: CAL_POPOVER_W }}>
+            <span className="label">{fixture.name}</span>
+            <span className="prose">
+              How this head is wired, not where it points. The base aim stays exactly where you
+              focused it.
+            </span>
+            <div className="popover-rule" />
+            {([
+              ['invertPan', 'pan runs backwards'],
+              ['invertTilt', 'tilt runs backwards'],
+              ['swap', 'hung on its side (pan and tilt swapped)'],
+            ] as const).map(([k, label]) => (
+              <button
+                key={k}
+                className={`btn small ${cal?.[k] ? 'on' : 'ghost'}`}
+                onClick={() => edit((c) => {
+                  if (c[k]) delete c[k];
+                  else c[k] = true;
+                }, `${cal?.[k] ? 'clear' : 'set'} ${fixture.name} ${label}`)}
+              >
+                {cal?.[k] ? '✓ ' : ''}{label}
+              </button>
+            ))}
+            <div className="popover-rule" />
+            <span className="label">limits — the head may not go outside these</span>
+            {([
+              ['pan', 'panMin', 'panMax'],
+              ['tilt', 'tiltMin', 'tiltMax'],
+            ] as const).map(([axis, lo, hi]) => (
+              <div className="row" key={axis} style={{ gap: 6 }}>
+                <span className="label" style={{ width: 34 }}>{axis}</span>
+                <ScrubNumInput
+                  value={pct(cal?.[lo], 0)}
+                  scrubStep={0.5}
+                  decimals={0}
+                  title={`lowest this head may be driven, as a percentage of its ${axis} travel`}
+                  onSet={(v) => setLimit(lo, v)}
+                  onDelta={(d) => setLimit(lo, pct(cal?.[lo], 0) + d)}
+                />
+                <span className="label dim">to</span>
+                <ScrubNumInput
+                  value={pct(cal?.[hi], 1)}
+                  scrubStep={0.5}
+                  decimals={0}
+                  title={`highest this head may be driven, as a percentage of its ${axis} travel`}
+                  onSet={(v) => setLimit(hi, v)}
+                  onDelta={(d) => setLimit(hi, pct(cal?.[hi], 1) + d)}
+                />
+              </div>
+            ))}
+            {flags.length > 0 && (
+              <>
+                <div className="popover-rule" />
+                <button
+                  className="btn small ghost"
+                  title="clear every correction on this head"
+                  onClick={() => {
+                    mutate((p) => {
+                      const f = p.fixtures.find((x) => x.id === fixture.id);
+                      if (f) delete f.cal;
+                    }, `clear ${fixture.name} calibration`);
+                    setOpen(false);
+                  }}
+                >
+                  clear all
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 function StageSizeRow() {
   const project = useStore((s) => s.project)!;
   const mutate = useStore((s) => s.mutate);

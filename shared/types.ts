@@ -37,6 +37,10 @@ export type Fixture = {
    *  Absent = 0.5 = centre, which is exactly today's behaviour. */
   pan?: number;
   tilt?: number;
+  /** How this head's own axes are wired and how far it may swing. Absent on
+   *  every show written before it existed, and absent means "no calibration",
+   *  which renders byte for byte as it always did. */
+  cal?: FixtureCal;
   /** id of the stage structure this fixture is rigged on.
    *
    *  `pos` stays in ROOM coordinates — it is the one source of truth, so
@@ -301,6 +305,33 @@ export type Effect = {
   seed: number;
 };
 
+/** Per-fixture pan and tilt calibration.
+ *
+ *  A rig is not a diagram: heads get hung backwards, upside down and on their
+ *  sides, and one of them is always the one that sweeps the wrong way when
+ *  every other head sweeps right. This is where that is written down, per
+ *  fixture, so a look can go on saying "pan left" and mean it everywhere.
+ *
+ *  It is NOT where the head points — that is the base aim above, which an
+ *  operator sets by eye and which stays put when this changes. Every field is
+ *  optional and absent means "nothing to correct".
+ */
+export type FixtureCal = {
+  /** a look's pan delta drives this head the other way */
+  invertPan?: boolean;
+  invertTilt?: boolean;
+  /** the head is hung on its side: a look's tilt drives pan, and the reverse.
+   *  Applied BEFORE the inversions, which name the fixture's own axes. */
+  swap?: boolean;
+  /** Soft limits as a fraction of travel, 0..1. The head may not be driven
+   *  outside them, whatever a look or an effect asks for — the fixture that
+   *  must not sweep into the video wall, or down into the front row. */
+  panMin?: number;
+  panMax?: number;
+  tiltMin?: number;
+  tiltMax?: number;
+};
+
 export type LookPart = {
   id: string;
   groupId: string;
@@ -483,6 +514,13 @@ export type CompiledProfile = {
    *  1/r² beam integral finite when the camera looks straight at a lamp. */
   beamRadius?: number;
   virtualDimmer: boolean;
+  /** Total pan travel in degrees, read from the fixture's own definition.
+   *  Absent on built-ins and on anything imported before it was read, where
+   *  540 and 270 — what both stage views used to assume for every mover —
+   *  stand in. Magnitude only: which WAY a head swings is the operator's
+   *  `invertPan`, because the file describes the fixture's axes, not the room's. */
+  panDeg?: number;
+  tiltDeg?: number;
   /** Which importer wrote this profile — COMPILER_VERSION at the time. A
    *  project stores compiled profiles, so an old one keeps whatever the
    *  compiler understood the day it was imported; the Rig view offers a
@@ -1016,6 +1054,26 @@ export function sanitizeProject(p: Project): Project | null {
     if (!Number.isFinite(f.rotY)) f.rotY = 0;
     if (f.rotX !== undefined && !Number.isFinite(f.rotX)) delete f.rotX;
     if (f.rotZ !== undefined && !Number.isFinite(f.rotZ)) delete f.rotZ;
+    // Calibration: flags become booleans, limits become finite fractions, and
+    // anything else is dropped. Rust's de_cal does the same, so a hand-edited
+    // file lands on one answer in both engines. A block with nothing left in
+    // it is removed rather than stored empty.
+    if (f.cal !== undefined) {
+      const c = f.cal as Record<string, unknown>;
+      if (!c || typeof c !== 'object') delete f.cal;
+      else {
+        for (const k of ['invertPan', 'invertTilt', 'swap'] as const) {
+          if (c[k] === true) c[k] = true;
+          else delete c[k];
+        }
+        for (const k of ['panMin', 'panMax', 'tiltMin', 'tiltMax'] as const) {
+          const v = c[k];
+          if (typeof v === 'number' && Number.isFinite(v)) c[k] = clamp(v);
+          else delete c[k];
+        }
+        if (Object.keys(c).length === 0) delete f.cal;
+      }
+    }
   }
   // Profile head spatial fields (B1): geometry consumes offset/offsetY/row/col
   // now, so both engines must land on identical values for any wire shape —
