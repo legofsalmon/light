@@ -159,7 +159,15 @@ impl Licence {
 /// The whole offline decision: cached token plus this machine plus the clock.
 /// No network, no Keychain write, nothing that can fail loudly.
 fn decide(machine: &str) -> Verdict {
-    match load(TOKEN_ACCOUNT) {
+    decide_from(load(TOKEN_ACCOUNT), machine)
+}
+
+/// The decision itself, given whatever the Keychain answered. Split from the
+/// read so the "nothing readable" case can be asserted without a Keychain —
+/// `load` answers `None` for absent, locked and denied alike, so a test that
+/// hands this `None` is testing the real thing.
+fn decide_from(stored: Option<String>, machine: &str) -> Verdict {
+    match stored {
         Some(token) => check(&token, machine, BUILD_DATE, now(), PUBLIC_KEY, PRODUCT),
         None => Verdict { status: Status::Invalid, claims: None },
     }
@@ -392,11 +400,22 @@ mod tests {
         assert_eq!(DEFAULT_PUBLIC_KEY.len(), 64);
     }
 
-    /// A key that cannot verify must never block a session — the console runs
-    /// unlicensed rather than refusing to open.
+    /// A licence the Keychain will not give up decides to `Invalid` with no
+    /// claims, and a build that cannot verify opens the console anyway rather
+    /// than refusing to start.
+    ///
+    /// Hermetic on purpose. This used to call `startup_verdict()`, which reads
+    /// the real Keychain, and on macOS the login keychain's ACL trusts one
+    /// exact binary: every rebuild made the test binary a stranger, so the
+    /// suite stopped dead on an "allow access" dialog at zero CPU. It also
+    /// asserted nothing about the licence — `blocks_new_session(_, false)` is
+    /// false for every status, so whatever the Keychain said, it passed.
     #[test]
     fn a_licence_that_cannot_be_read_never_locks_the_console() {
-        assert!(!blocks_new_session(startup_verdict().status, false));
+        let v = decide_from(None, &"0".repeat(32));
+        assert!(matches!(v.status, Status::Invalid), "an unreadable licence decided {:?}", v.status);
+        assert!(v.claims.is_none(), "nothing verified, so there are no claims to trust");
+        assert!(!blocks_new_session(v.status, false), "a build with no verifying key must open");
     }
 
     #[test]

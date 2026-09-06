@@ -21,6 +21,7 @@ Building, testing, and extending LIGHT.
 | `npm run app:build` | `LIGHT.app` → `target/release/bundle/macos/` |
 | `npm test` | Node engine smoke suite |
 | `cargo test -p light-core` | Rust core suite (same checks + protocol shapes) |
+| `cargo test -p light-app` | Tauri shell: licensing, Keychain, updater, fixture library |
 | `npm run test:parity` | **Differential test: both engines, byte-identical DMX** |
 | `npm run typecheck` | `tsc` over engine+shared and ui |
 
@@ -192,7 +193,7 @@ hour of the beams simply not existing.
 
 ## Release checklist
 
-1. `npm test` · `cargo test -p light-core` · `npm run typecheck` · `npm run test:parity` — all green.
+1. `npm test` · `cargo test -p light-core` · `cargo test -p light-app` · `npm run typecheck` · `npm run test:parity` — all green.
 2. `npm run build` then `npm run app:build`.
 3. **`cargo build --release -p light-previz`.** The PREVIZ button launches a
    PREBUILT binary (`spawn_previz` in `core/src/engine.rs`) and never compiles
