@@ -1,140 +1,52 @@
-// APC40 mk2 LED feedback: the pad grid mirrors the look grid (bright = what
-// the layer is playing, in the colour of what is playing; dim = available
-// cells, coloured by each look's swatch); the scene
-// LEDs light when their layer has something to clear, and STOP ALL CLIPS
-// (note 81) blinks while blackout is armed.
+// Connections to Akai control surfaces, and the LED diff that keeps the wire
+// quiet. What the LEDs should SAY lives in surfaces.ts, which the Node suite
+// tests against the Rust mirror (core/src/apc.rs).
 //
-// The surface is 5 x 8 and the screen is laid out to match it exactly: FOUR
-// layer rows plus the control row underneath them. That is why the layer cap
-// below is 4 and not 5 — the fifth row belongs to the controls, and a fifth
-// layer would silently steal it. (An even earlier layout put cue columns on
-// the bottom row; don't "restore" either of those here.)
-//
-// Hardware notes (mk2, generic mode): only the 5×8 clip grid is RGB — pads
-// take a 128-entry palette index as note-on velocity (channel 0 = solid).
-// Scene-launch LEDs are single-colour: velocity 0 off / 1 on / 2 blink.
+// Both surfaces can be plugged in at once and each keeps its own diff cache:
+// they paint different notes, and on the mini the MIDI channel is part of a
+// pad's state rather than a constant, so a shared cache keyed on velocity
+// alone would leave pads stuck at the wrong brightness.
 
-import type { Project, Snapshot } from '../../shared/types.ts';
 import { useStore } from './store.ts';
-import { lookSwatch } from './lookColors.ts';
+import { SURFACES, computeLeds, type Surface } from './surfaces.ts';
 
-/** The clip grid's shape, and the contract the on-screen grid keeps with it:
- *  APC_ROWS = 4 layer rows + 1 control row. */
-export const APC_LAYER_ROWS = 4;
-export const APC_COLS = 8;
-export const APC_ROWS = APC_LAYER_ROWS + 1;
-/** Track-selection banks the DEVICE CONTROL knobs are spread across in generic
- *  mode — the knobs send on a different MIDI channel per bank, so a binding is
- *  only gig-proof if it covers all nine. */
-export const APC_KNOB_BANKS = 9;
+// Re-exported so callers keep one import for "the surface": the grid shape is
+// a contract the on-screen look grid keeps with the hardware.
+export { APC_COLS, APC_LAYER_ROWS, APC_ROWS, APC_KNOB_BANKS, SURFACES } from './surfaces.ts';
 
-// Palette anchors (APC40 mk2 shares the Launchpad-style 128 palette):
-// {rgb → bright index, dim index}
-const PALETTE: { r: number; g: number; b: number; bright: number; dim: number }[] = [
-  { r: 255, g: 0, b: 0, bright: 5, dim: 7 },
-  { r: 255, g: 127, b: 0, bright: 9, dim: 11 },
-  { r: 255, g: 255, b: 0, bright: 13, dim: 15 },
-  { r: 127, g: 255, b: 0, bright: 17, dim: 19 },
-  { r: 0, g: 255, b: 0, bright: 21, dim: 23 },
-  { r: 0, g: 255, b: 127, bright: 25, dim: 27 },
-  { r: 0, g: 255, b: 255, bright: 37, dim: 39 },
-  { r: 0, g: 127, b: 255, bright: 41, dim: 43 },
-  { r: 0, g: 0, b: 255, bright: 45, dim: 47 },
-  { r: 127, g: 0, b: 255, bright: 49, dim: 51 },
-  { r: 255, g: 0, b: 255, bright: 53, dim: 55 },
-  { r: 255, g: 0, b: 127, bright: 57, dim: 59 },
-  { r: 255, g: 255, b: 255, bright: 3, dim: 1 },
-];
+/** One attached surface, with the diff cache that belongs to it. Two surfaces
+ *  plugged in at once must not share a cache — they paint different notes. */
+type Attached = { surface: Surface; out: MIDIOutput; lastSent: Map<number, [number, number]> };
 
-function nearest(hex: string): { bright: number; dim: number } {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  // low-chroma greys read best as white on the pads
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  if (max - min < 40) return { bright: 3, dim: 1 };
-  let best = PALETTE[0];
-  let bd = Infinity;
-  for (const p of PALETTE) {
-    const d = (r - p.r) ** 2 + (g - p.g) ** 2 + (b - p.b) ** 2;
-    if (d < bd) {
-      bd = d;
-      best = p;
-    }
-  }
-  return best;
-}
-
-/** note → [channel, velocity]; everything not present = off */
-function computeLeds(project: Project, snap: Snapshot | null): Map<number, [number, number]> {
-  const leds = new Map<number, [number, number]>();
-  const visual = [...project.layers].reverse();
-  const liveOf = (id: string) => snap?.layers.find((l) => l.id === id);
-
-  visual.slice(0, APC_LAYER_ROWS).forEach((layer, row) => {
-    const base = 32 - row * 8;
-    const live = liveOf(layer.id);
-    for (let col = 0; col < Math.min(8, project.columns.length); col++) {
-      const lookId = layer.cells[col];
-      if (!lookId) continue;
-      const look = project.looks[lookId];
-      if (!look) continue;
-      const pal = nearest(lookSwatch(look, project.looks)[0] ?? '#666666');
-      const active = live?.lookId === lookId && live?.col === col;
-      // The pad can hold a look the layer is NOT playing while still being the
-      // live column — a library drag onto a live pad, where the engine keeps
-      // playing what it captured at trigger time. Dim would report "idle" on a
-      // layer that is lighting the rig, and a fixed "stale" colour collides
-      // with any look that happens to use it (white looks land on the same
-      // index — a Rust test pins this). So the surface reports the STAGE:
-      // bright, in the colour of whatever is actually playing. The screen
-      // carries the nuance that the pad holds something else.
-      const stalePlaying =
-        !active && live?.col === col && live?.lookId
-          ? project.looks[live.lookId] ?? null
-          : null;
-      const vel = active
-        ? pal.bright
-        : stalePlaying
-          ? nearest(lookSwatch(stalePlaying, project.looks)[0] ?? '#666666').bright
-          : pal.dim;
-      leds.set(base + col, [0, vel]);
-    }
-    // scene LED (single-colour): on when the layer has something to clear
-    if (live?.lookId) leds.set(82 + row, [0, 1]);
-  });
-
-  // stop-all-clips = blackout: blink while armed
-  if (snap?.blackout) leds.set(81, [0, 2]);
-
-  return leds;
-}
-
-let output: MIDIOutput | null = null;
-const lastSent = new Map<number, number>(); // note → velocity (channel folded in)
+let attached: Attached[] = [];
 
 export function attachApcOutput(access: MIDIAccess): void {
-  output = null;
-  for (const out of access.outputs.values()) {
-    if (/apc40/i.test(out.name ?? '')) output = out;
+  attached = [];
+  const outputs = [...access.outputs.values()];
+  for (const surface of SURFACES) {
+    const out = outputs.find((o) => {
+      const n = (o.name ?? '').toLowerCase();
+      return surface.matches.some((m) => n.includes(m));
+    });
+    if (!out) continue;
+    // Blank the whole surface once on attach. This has to cover every note the
+    // map can produce, including ones it only ever INSERTS: computeLeds adds
+    // the blackout LED when blackout is armed and never sets it to zero, so the
+    // diff loop cannot turn it off either. Quitting with blackout armed left it
+    // blinking "armed" on the hardware while blackout was actually off — a
+    // false safety indicator on the physical surface. A Rust test now pins
+    // every lit note against these ranges.
+    for (const [from, to] of surface.clear) {
+      for (let n = from; n <= to; n++) out.send([0x90, n, 0]);
+    }
+    attached.push({ surface, out, lastSent: new Map() });
   }
-  lastSent.clear();
-  if (!output) return;
-  // clear the whole surface once on attach
-  for (let n = 0; n <= 39; n++) output.send([0x90, n, 0]);
-  // 81, not 82: STOP ALL CLIPS is the blackout LED, and computeLeds only ever
-  // INSERTS it (when blackout is armed), so the diff loop can never turn it off
-  // either. Quitting with blackout armed left it blinking "armed" on the
-  // hardware while blackout was actually off — a false safety indicator on the
-  // physical surface. The Rust mirror already clears 81-86 (core/src/apc.rs).
-  for (let n = 81; n <= 86; n++) output.send([0x90, n, 0]);
 }
 
 let pending = false;
 
 export function scheduleFeedback(): void {
-  if (!output || pending) return;
+  if (attached.length === 0 || pending) return;
   // when the engine owns native MIDI (Rust core / packaged app), it also
   // drives the LEDs — two writers with independent diff caches would fight
   if (useStore.getState().engineMidi) return;
@@ -142,19 +54,26 @@ export function scheduleFeedback(): void {
   setTimeout(() => {
     pending = false;
     const { project, snap } = useStore.getState();
-    if (!output || !project) return;
-    const leds = computeLeds(project, snap);
-    // diff: send only changes; explicitly turn off notes that vanished
-    for (const [note, vel] of lastSent) {
-      if (!leds.has(note) && vel !== 0) {
-        output.send([0x90, note, 0]);
-        lastSent.set(note, 0);
+    if (!project) return;
+    for (const { surface, out, lastSent } of attached) {
+      const leds = computeLeds(project, snap, surface);
+      // diff: send only changes; explicitly turn off notes that vanished
+      for (const [note, [ch, vel]] of lastSent) {
+        if (!leds.has(note) && vel !== 0) {
+          out.send([0x90 | ch, note, 0]);
+          lastSent.set(note, [ch, 0]);
+        }
       }
-    }
-    for (const [note, [ch, vel]] of leds) {
-      if (lastSent.get(note) !== vel) {
-        output.send([0x90 | ch, note, vel]);
-        lastSent.set(note, vel);
+      // The CHANNEL is part of the state, not just the velocity: on the mini a
+      // pad that stays the same colour and changes brightness changes only the
+      // channel, and folding it away would leave that pad stuck at its old
+      // brightness while its layer lights the rig.
+      for (const [note, [ch, vel]] of leds) {
+        const was = lastSent.get(note);
+        if (!was || was[0] !== ch || was[1] !== vel) {
+          out.send([0x90 | ch, note, vel]);
+          lastSent.set(note, [ch, vel]);
+        }
       }
     }
   }, 66); // ~15 Hz is plenty for LEDs

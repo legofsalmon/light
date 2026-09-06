@@ -146,6 +146,20 @@ which silently moves them to a different MIDI channel; the preset therefore bind
 all nine banks to the same eight controls, so a stray press of a track button
 cannot take your dials away mid-set.
 
+**The pads light up.** Both the APC40 mk2 and the APC mini mk2 get LED feedback,
+and both can be plugged in at once. A pad glows dim in the colour of the look it
+holds and bright in the colour of what its layer is actually playing; a layer
+button lights while that layer has something to clear; the blackout button
+blinks while blackout is armed; and the tap button pulses on the beat, so the
+tempo is readable on the surface with the house lights down. On the mini the
+bottom pad row is the column row, and a column button glows bright only while
+every layer holding something in that column is playing it — the whole column
+up, which is exactly what pressing it does.
+
+Nothing to configure: LIGHT looks for the surfaces by port name and attaches to
+whatever it finds. The packaged app drives the LEDs from the engine; a browser
+session drives them itself over Web MIDI, and only one of the two ever writes.
+
 ## Saving
 
 Everything autosaves ~1 second after any edit, with five rotating backups (`.bak1`–`.bak5`) next to the project file. `⌘S` (or the save button) forces a save. Live-performance state (which looks are active, grand master, blackout) is deliberately *not* saved — a restart always comes up dark and safe.

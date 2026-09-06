@@ -435,18 +435,70 @@ throughout.
 clock (most CDJs) gives tempo but never a downbeat; `sync` still has to place it
 by hand. Song position pointer (0xF2) would fix that and is not read.
 
-### 11 · MIDI feedback breadth (APC mini LEDs, Launchpad, X-Touch) — ◧ partial — M → XL
-**Touches:** core, ui, docs (+ shared/engine/parity only if surface choice enters the schema)
-**Today:** APC40 mk2 LEDs in two mirrored implementations (`core/src/apc.rs`,
-`ui/src/apcFeedback.ts`), one connection, channel 0 only, port name must
-contain "apc40". APC mini mk2 has an input preset and no LED path. Traktor F1
-and Stream Deck are HID, not MIDI — no path at all.
-**Slices:** M — APC mini mk2 LEDs (channel-aware LED map, second note table,
-multi-surface connections, mirrored tests). L — a surface abstraction
-(detect-by-port, note→(channel, velocity), SysEx init for Launchpad programmer
-mode; `midi.ts` currently requests `sysex: false`). L each — X-Touch (Mackie:
-motor faders, scribble strips). The full claim is XL.
-`ROADMAP.md:111` "MIDI feedback (APC/Launchpad)" is stale for the APC40.
+### 11 · MIDI feedback breadth — ◧ M slice shipped 2026-09-06; Launchpad and X-Touch (L each) still open
+**Touches:** core, ui, docs
+**Was:** APC40 mk2 LEDs in two mirrored implementations, one connection,
+channel 0 only, port name must contain "apc40". APC mini mk2 had an input preset
+and no LED path.
+
+**Shipped: the M slice.** A `Surface` table — data, not a trait, because the two
+devices differ in note numbers and in exactly one encoding decision — in
+`core/src/apc.rs` and `ui/src/surfaces.ts`. Both surfaces attach at once, each
+with its own diff cache.
+
+**One picture, two encodings.** The APC40 takes a palette index as velocity on
+channel 0 and bakes brightness into the palette (each hue has a bright index and
+a dim one); the mini takes the same palette index but the CHANNEL selects
+behaviour (6 = 100%, 1 = 25%). So the map is computed once as note → (channel,
+velocity) and `Surface::pad` encodes the same decision each way. **This exposed
+a latent bug:** the browser's diff cache was keyed on velocity alone
+(`lastSent.set(note, vel)`), which is invisible on the APC40 and would have left
+every mini pad stuck at its boot brightness — a pad going from available to
+playing there changes only the channel.
+
+New on both surfaces: the tap button pulses on the beat (driven from the beat,
+not the hardware blink, which runs at its own fixed rate and would sit there
+contradicting the tempo; a quarter beat outlasts the 66 ms update period at any
+tempo a rig runs at, so no beat is skipped). New on the mini: the bottom pad row
+is the column row, lit dim while a column holds anything and bright only while
+every layer holding something there is playing it.
+
+**Scanning moved off the DMX tick thread.** Creating the first CoreMIDI output
+client in a process costs ~580 ms (measured, `cargo run -p light-core --example
+scanbench`; steady-state scans are 0.07 ms at p50) and attaching then blanks up
+to 72 notes. That ran inline on the first tick — twenty-odd dropped frames,
+exactly what `ROADMAP.md` forbids — and the multi-surface change would have made
+rescans permanent whenever only one of the two was plugged in. A worker does the
+client, the enumeration, the connect and the blanking, and hands back only what
+it opened. Worst tick jitter is now identical with two surfaces attached and
+with none.
+
+**Three test seams, because the duplication is real:**
+- `ui/src/surfaces.ts` split out of `apcFeedback.ts` (pure: no store, no
+  connection) so `engine/test/smoke.ts` can run the same function the browser
+  runs. Until this split, nothing checked the two implementations against each
+  other at all.
+- `core/tests/data/surface-leds.json` is a golden for the data both sides
+  duplicate as literals — the palette anchors and the note tables. A property
+  test passes happily while one side has a typo in a palette index; the two
+  would simply light different colours. Rust writes it with
+  `LIGHT_BLESS_GOLDEN=1`, the Node suite checks it. Verified to fail on a
+  one-digit change to either.
+- `ui/src/controllerPresets.ts` extracted from `SyncView.tsx` so the LED tables
+  and the input presets can be held against each other: a button that lights up
+  has to do the thing its light claims, and the two note tables were written
+  months apart in different files. (The extraction also found `APC_KNOB_BANKS`
+  unused beside a literal `bank <= 8`.)
+
+Verified end to end against virtual CoreMIDI destinations named like the two
+surfaces — `cargo run -p light-core --example surfacesink -- <secs> [name…]`
+prints what LIGHT actually sends — with output off throughout. Both attached
+together and painted the same picture in their own encodings.
+
+**Still open:** Launchpad (L) needs SysEx for programmer mode and `midi.ts`
+requests `sysex: false`; X-Touch (L) is Mackie Control, so motor faders and
+scribble strips. Traktor F1 and Stream Deck are HID, not MIDI — no path at all.
+`ROADMAP.md:111` "MIDI feedback (APC/Launchpad)" is stale for both APCs now.
 
 ### 12 · Engine-side undo — ◼ shipped 2026-09-06 (project journal; live state out by decision 5)
 **Touches:** shared/types.ts, core, engine, parity, ui, docs

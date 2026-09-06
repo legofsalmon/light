@@ -543,7 +543,8 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
         }
 
         if let Some(apc) = apc.as_mut() {
-            apc.update(&state); // self-throttled to ~15 Hz, diff-only sends
+            // beat drives the tap pulse; self-throttled to ~15 Hz, diff-only sends
+            apc.update(&state, res.beat);
         }
 
         // Snapshots to the UI at 20 fps.

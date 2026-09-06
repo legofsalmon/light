@@ -14,6 +14,9 @@ import { stageExtent } from '../../shared/stageExtent.ts';
 import type { ShareList } from '../../shared/gdtfShare.ts';
 import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, isStaleProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
 import { COMPILER_VERSION } from '../../shared/types.ts';
+import type { MidiMapping, Snapshot } from '../../shared/types.ts';
+import { APC40_MK2, APC_COLS, APC_LAYER_ROWS, APC_MINI_MK2, SURFACES, computeLeds, nearest } from '../../ui/src/surfaces.ts';
+import { apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
 
 /** The demo show these tests were written against — five fixtures at known
  *  addresses, looks with known ids. Deliberately NOT the shipped default: that
@@ -198,6 +201,194 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
   check('and the clock floor and ceiling still apply (high)', f.bpm === 500, `got ${f.bpm}`);
   f.setTempoAndBeat(1, 0, 6000);
   check('and the clock floor and ceiling still apply (low)', f.bpm === 20, `got ${f.bpm}`);
+}
+
+// ---------- control-surface LEDs: the browser map, held against the Rust one ----------
+{
+  // ui/src/surfaces.ts and core/src/apc.rs must paint the same picture from the
+  // same state, and until the pure map was split out of apcFeedback.ts nothing
+  // checked that. These are the same assertions the Rust module makes, in the
+  // same order, so a change to one that is not made to the other fails here.
+  const OFFBEAT = 4.5; // tap pulse out of the way
+  const surfaceProject = (): Project => {
+    const p = sanitizeProject(demoProject())!;
+    return p;
+  };
+  const snapOf = (
+    live: { id: string; lookId: string | null; col: number | null }[],
+    extra: Partial<Snapshot> = {},
+  ): Snapshot =>
+    ({
+      beat: OFFBEAT,
+      blackout: false,
+      layers: live.map((l) => ({ ...l, prevId: null, t: 1 })),
+      ...extra,
+    }) as Snapshot;
+
+  const p = surfaceProject();
+  const top = p.layers[p.layers.length - 1];
+  const lookId = Object.keys(p.looks)[0];
+  top.cells[0] = lookId;
+  top.cells[1] = lookId;
+
+  const idle = snapOf([]);
+  const playing = snapOf([{ id: top.id, lookId, col: 0 }]);
+
+  // idle: no layer buttons, no blackout blink, everything on channel 0 for the
+  // APC40, every velocity a legal palette index
+  const big = computeLeds(p, idle, APC40_MK2);
+  check('surface: no layer button lit while idle', ![82, 83, 84, 85, 86].some((n) => big.has(n)));
+  check(
+    'surface: APC40 paints everything on channel 0 with a legal velocity',
+    [...big.values()].every(([ch, v]) => ch === 0 && v > 0 && v < 128),
+  );
+
+  // the same decision, two encodings
+  const bigLive = computeLeds(p, playing, APC40_MK2);
+  const miniLive = computeLeds(p, playing, APC_MINI_MK2);
+  check('surface: APC40 separates playing from available by palette index',
+    bigLive.get(32)![0] === 0 && bigLive.get(33)![0] === 0 && bigLive.get(32)![1] !== bigLive.get(33)![1],
+    JSON.stringify([bigLive.get(32), bigLive.get(33)]));
+  check('surface: the mini separates them by channel, not colour',
+    miniLive.get(56)![1] === miniLive.get(57)![1] && miniLive.get(56)![0] === 6 && miniLive.get(57)![0] === 1,
+    JSON.stringify([miniLive.get(56), miniLive.get(57)]));
+  check('surface: the mini uses the full-brightness hue', miniLive.get(56)![1] === bigLive.get(32)![1]);
+
+  // the channel alone can be the whole change, which is why the diff holds it
+  const miniIdle = computeLeds(p, idle, APC_MINI_MK2);
+  check('surface: playing changes only the channel on the mini',
+    miniIdle.get(56)![1] === miniLive.get(56)![1] && miniIdle.get(56)![0] !== miniLive.get(56)![0],
+    JSON.stringify([miniIdle.get(56), miniLive.get(56)]));
+
+  // a live column holding a different look still reports the stage
+  const other = Object.keys(p.looks)[1];
+  const repointed = surfaceProject();
+  repointed.layers[repointed.layers.length - 1].cells[0] = other;
+  const stale = computeLeds(repointed, playing, APC40_MK2).get(32);
+  check('surface: a re-pointed live pad still reports what is on stage',
+    JSON.stringify(stale) === JSON.stringify(bigLive.get(32)), JSON.stringify(stale));
+
+  // the APC40's bottom row belongs to the control row
+  const fifth = surfaceProject();
+  fifth.layers.unshift({ ...fifth.layers[0], id: 'layer-fifth', cells: [lookId] } as never);
+  const capped = computeLeds(fifth, idle, APC40_MK2);
+  check('surface: a fifth layer never steals the control row',
+    ![0, 1, 2, 3, 4, 5, 6, 7].some((n) => capped.has(n)));
+
+  // the column row reports the whole column (mini only)
+  const colProject = surfaceProject();
+  for (const l of colProject.layers) l.cells[0] = lookId;
+  const held = computeLeds(colProject, idle, APC_MINI_MK2).get(0);
+  const allUp = computeLeds(
+    colProject,
+    snapOf(colProject.layers.map((l) => ({ id: l.id, lookId, col: 0 }))),
+    APC_MINI_MK2,
+  ).get(0);
+  const partial = computeLeds(
+    colProject,
+    snapOf(colProject.layers.slice(1).map((l) => ({ id: l.id, lookId, col: 0 }))),
+    APC_MINI_MK2,
+  ).get(0);
+  check('surface: a column holding content reads dim', JSON.stringify(held) === JSON.stringify([1, 3]), JSON.stringify(held));
+  check('surface: the whole column up reads bright', JSON.stringify(allUp) === JSON.stringify([6, 3]), JSON.stringify(allUp));
+  check('surface: a partly-up column reads as not up', JSON.stringify(partial) === JSON.stringify(held), JSON.stringify(partial));
+  check('surface: the APC40 has no column row', !computeLeds(colProject, idle, APC40_MK2).has(0));
+
+  // tap pulses once a beat and is never skipped
+  for (const surface of SURFACES) {
+    const lit = (beat: number) => computeLeds(p, snapOf([], { beat }), surface).has(surface.tap);
+    check(`surface: ${surface.name} tap lights on the beat`, lit(0) && lit(4.05));
+    check(`surface: ${surface.name} tap is dark between beats`, !lit(0.5) && !lit(0.99));
+  }
+
+  // The palette anchors and the note tables are LITERAL DATA duplicated in
+  // core/src/apc.rs and ui/src/surfaces.ts. Every assertion above is a
+  // property, and a property passes happily while one side has a typo in a
+  // palette index — the two would simply light different colours on the same
+  // look. This holds both against one file. Regenerate with
+  // LIGHT_BLESS_GOLDEN=1 cargo test -p light-core the_palette_and_note.
+  {
+    const golden = JSON.parse(
+      fs.readFileSync(new URL('../../core/tests/data/surface-leds.json', import.meta.url), 'utf8'),
+    ) as {
+      surfaces: Record<string, unknown>[];
+      nearest: [string, number, number][];
+    };
+    const mine = SURFACES.map((s) => ({
+      name: s.name,
+      matches: s.matches,
+      layerBase: s.layerBase,
+      sceneBase: s.sceneBase,
+      blackout: s.blackout,
+      tap: s.tap,
+      columnBase: s.columnBase ?? null,
+      brightChannels: s.brightChannels ?? null,
+      clear: s.clear,
+    }));
+    check('surface: note tables match the Rust golden',
+      JSON.stringify(mine) === JSON.stringify(golden.surfaces), JSON.stringify(mine));
+    const drift = golden.nearest.filter(([hex, bright, dim]) => {
+      const got = nearest(hex);
+      return got.bright !== bright || got.dim !== dim;
+    });
+    check('surface: the palette matches the Rust golden', drift.length === 0,
+      drift.map(([hex]) => `${hex} → ${JSON.stringify(nearest(hex))}`).join(' '));
+  }
+
+  // A button that lights up has to DO the thing its light claims. The LED
+  // tables (surfaces.ts) and the input presets (controllerPresets.ts) were
+  // written months apart in different files, and nothing tied them together:
+  // move the blackout LED and the surface would blink "armed" over a button
+  // that clears a layer.
+  {
+    const presets: [string, MidiMapping[], typeof APC40_MK2][] = [
+      ['APC40 mk2', apc40Mk2Mappings(p), APC40_MK2],
+      ['APC mini mk2', apcMiniMk2Mappings(p), APC_MINI_MK2],
+    ];
+    for (const [name, maps, surface] of presets) {
+      const noteAction = (n: number) => maps.find((m) => m.type === 'note' && m.number === n)?.action;
+      check(`preset: ${name} tap LED sits on the tap button`,
+        noteAction(surface.tap)?.kind === 'tap', JSON.stringify(noteAction(surface.tap)));
+      check(`preset: ${name} blackout LED sits on the blackout button`,
+        noteAction(surface.blackout)?.kind === 'blackout', JSON.stringify(noteAction(surface.blackout)));
+      const visual = [...p.layers].reverse().slice(0, APC_LAYER_ROWS);
+      const layerButtons = visual.every((l, row) => {
+        const a = noteAction(surface.sceneBase + row);
+        return a?.kind === 'layerClear' && a.layerId === l.id;
+      });
+      check(`preset: ${name} layer LEDs sit on that layer's clear button`, layerButtons);
+      const padsAgree = visual.every((l, row) =>
+        [...Array(APC_COLS).keys()].every((col) => {
+          const a = noteAction(surface.layerBase - row * 8 + col);
+          return a?.kind === 'cell' && a.layerId === l.id && a.col === col;
+        }),
+      );
+      check(`preset: ${name} pad LEDs sit on that pad`, padsAgree);
+      if (surface.columnBase !== undefined) {
+        const colsAgree = [...Array(APC_COLS).keys()].every((col) => {
+          const a = noteAction(surface.columnBase! + col);
+          return a?.kind === 'column' && a.col === col;
+        });
+        check(`preset: ${name} column LEDs sit on that column`, colsAgree);
+      } else {
+        // the APC40's bottom row is left unmapped for the control row, so
+        // nothing there may light either
+        check(`preset: ${name} leaves the control row unmapped and unlit`,
+          [...Array(APC_COLS).keys()].every((n) => noteAction(n) === undefined));
+      }
+    }
+  }
+
+  // every note the map can produce must be inside the ranges attach blanks
+  const busy = surfaceProject();
+  for (const l of busy.layers) for (let c = 0; c < 8; c++) l.cells[c] = lookId;
+  const loud = snapOf(busy.layers.map((l) => ({ id: l.id, lookId, col: 0 })), { beat: 0, blackout: true });
+  for (const surface of SURFACES) {
+    const leds = computeLeds(busy, loud, surface);
+    check(`surface: ${surface.name} exercises tap and blackout`, leds.has(surface.tap) && leds.has(surface.blackout));
+    const stray = [...leds.keys()].filter((n) => !surface.clear.some(([a, b]) => n >= a && n <= b));
+    check(`surface: ${surface.name} lights only notes it blanks on attach`, stray.length === 0, `stray ${stray.join(',')}`);
+  }
 }
 
 // ---------- beat clock: the project flag, which is all this engine carries ----------

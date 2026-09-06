@@ -114,7 +114,9 @@ Roughly in order of expected value:
   choice rather than two (backlog #10).
 - **Cue-lists / chasers per cell** — a cell that steps through looks on beats
   or go-presses; the bridge from "looks" toward console cue stacks.
-- **MIDI feedback** — controller LEDs mirror active cells (APC/Launchpad).
+- ~~**MIDI feedback** — controller LEDs mirror active pads~~ — shipped for the
+  APC40 mk2 and the APC mini mk2, both at once. Launchpad still open: it needs
+  SysEx for programmer mode (backlog #11).
 - **Per-cell fade overrides in the grid UI**, cell copy/paste, drag-reorder.
 - **Art-Net discovery** (ArtPoll/PollReply, per-node routing) and **sACN
   priority** per universe.
