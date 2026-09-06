@@ -31,7 +31,7 @@ on menus and modals, which float.
 | Foundations / Type | one specimen per text style, set in the style itself |
 | Foundations / Space, size & elevation | spacing bars, radius cards, the size ledger, the four effect styles, motion |
 | 19 component pages | one family each, `_Doc` frame on the left, component set(s) to the right, State on the columns |
-| Template / Pads · Build · Rig · Stage | the four views at 1440×900 assembled from instances (72 · 72 · 27 · 30); Stage has an *offline* twin showing the Offline bar + Splash |
+| Template / Pads · Build · Rig · Stage | the four views at 1440×900 assembled from instances (72 · 72 · 27 · 30); Stage has an *offline* twin. The shells and look grids are **Figma Grid** layouts mirroring the CSS grids; Pads and Build carry 1280 and 1024 breakpoint frames, Rig a 1024 |
 
 Fonts: **SF Pro** (what the Mac renders for `-apple-system`); **Geist Mono**
 stands in for SF Mono, which Figma cannot load.
@@ -125,6 +125,40 @@ The token set picks one; the Figma library enforces it; the CSS follows.
 12. **Chrome sizes** duplicated across CSS templates, `App.tsx` constants and inline strings → `size/*`.
 13. **No focus-visible** anywhere → every interactive set has `State=Focus`.
 14. **Uppercase** by CSS transform in some places and literal caps in JSX in others → the style's text case, always.
+
+## Layout: grid and flex, both ways
+
+Auto-layout frames are flexbox; the components are built with them (FILL ≈ `flex: 1`,
+HUG ≈ fit-content, wrap, min/max). The two structures that are CSS grids in the app
+are Figma Grid layouts in the templates, so the mapping is one-to-one:
+
+| CSS | Figma Grid | Read back as |
+|---|---|---|
+| `.app.view-pads` — rows `auto 46px var(--previz-h) 6px minmax(0,1fr)`, columns `minmax(0,1fr) 6px 280px 6px 380px` | template frame, 4 × 5, bars spanning 5 columns | `gridRowSizingCSS` = `46px 270px 6px minmax(0,1fr)`, `gridColumnSizingCSS` = `minmax(0,1fr) 6px 280px 6px 380px` |
+| `.app.view-split` — `auto 46px … 6px minmax(0,1fr) 6px 292px` | 6 × 1 | `46px 270px 6px minmax(0,1fr) 6px 292px` |
+| `.app.view-patch` / `.app.view-previz` | 4 × 1 / 2 × 1 (offline twin 3 × 1) | likewise |
+| `.lookgrid` — `168px repeat(N, 108px) 30px`, `gap: 3px`, control row `grid-column: 1 / -1` | N+2 columns, HUG rows, control row spanning | `168px 108px … 30px` |
+
+The 1px seam is the grid gap, bound to `space/1`; the look grid's gap is bound to
+`space/3`. **Track sizes cannot bind to variables** in Figma (only gaps can), so
+the numbers are literal and the components sitting in the cells carry the
+bindings. What has no Figma form stays in the `_Doc` frames: named areas,
+`minmax()`, the user-resizable `--library-w` / `--previz-h` tracks, `position:
+sticky`, `overflow: auto`.
+
+**Breakpoint frames.** Each dense template is cloned and resized — the `1fr`
+tracks absorb the difference exactly as the CSS does — so the frames show what
+the app actually does at a laptop and a tablet, not a redesign:
+
+- Pads at 1024×768: library 280 + editor 380 are fixed, so the pad grid gets
+  348px — a column and a half. That is the review's tablet finding (M14/M15) in
+  one picture; the fix is a tablet density mode, not a smaller pad.
+- Build at 1024×768: previz 270 + bottom panel 292 are fixed, so the grid gets
+  143px — one layer row. The bottom panel needs to scale, or collapse to its tabs.
+- The top bar's content is ~1780px at every width; below that it scrolls
+  (`overflow-x: auto`, hidden scrollbar) with the cog pinned — the review's M4.
+- The audition pane is 432px fixed in Figma where the CSS says 30% (min 230,
+  max 44%) — Figma has no percentage widths; the doc frame says so.
 
 ## Keeping Figma and the code in sync
 
