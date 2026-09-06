@@ -31,9 +31,13 @@ These block more than one item and are product calls, not engineering.
 2. **Network-only output, or not.** `ROADMAP.md:57-59` and the README build the
    architecture around an Art-Net node. Either commit to USB DMX (#18) or say
    "network only" plainly on the download page. Blocks #18 and the site copy.
-3. **Universal or arm64 for stable 1.3.0.** The betas are arm64 by choice (CI
-   time). `/latest` is still the universal v1.2.2. Blocks #21 — and the updater
-   arch guard in #21 is needed *whichever* way this goes.
+3. ~~**Universal or arm64 for stable 1.3.0.**~~ **Decided 2026-09-06: arm64.**
+   v1.3.0 is tagged Apple Silicon only. The consequence was handled with it —
+   `/releases/latest` is what the site's download button points at, so the page
+   now says Apple Silicon plainly and sends Intel users to v1.2.2, the last
+   universal build. Revisit if an Intel user actually turns up; a universal
+   build is the `LIGHT_TARGET` line in release.yml plus the toolchain targets,
+   at roughly double the CI time.
 4. **Submaster persistence.** Saved-at-zero would kill a group on next boot,
    against the "comes up dark and safe" promise. Runtime-only is recommended
    (#6).
@@ -747,10 +751,14 @@ Intel Mac. Rosetta is credited only when the running process proves it is
 there. Nine unit tests including one that checks the guard agrees with the
 machine running it about its own binary.
 
-**Still open:** (a) decision 3, then either raise `timeout-minutes` or split
-into per-arch jobs with an assemble/lipo/re-sign/notarise stage; (c) site and
-`docs/distribution.md` still say universal; (d) no 1.3.0 build has ever run on
-x86_64, and a real Intel Mac is the only way to close that.
+**Decision 3 went arm64 (2026-09-06)** and v1.3.0 shipped on it, so (a) and (c)
+are closed: the site and `docs/distribution.md` say Apple Silicon and point
+Intel users at v1.2.2. Going universal later is the `LIGHT_TARGET` line plus the
+toolchain targets, and then either raising `timeout-minutes` or splitting into
+per-arch jobs with an assemble/lipo/re-sign/notarise stage — a universal build
+compiles Bevy twice and took 84 minutes at v1.2.2 against a 90-minute cap.
+**Still open:** (d) no 1.3.x build has ever run on x86_64, and a real Intel Mac
+is the only way to close that — which is now moot until someone asks for one.
 
 ### 22 · Multi-head *moving* fixtures (per-head pan/tilt bars) — ◧ partial — L
 **Touches:** core, parity, previz, previz3d, ui, docs

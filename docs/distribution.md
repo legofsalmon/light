@@ -8,7 +8,7 @@ two years, so check the dates before trusting any of it.
 
 | | Status |
 |---|---|
-| Architecture | universal (arm64 + x86_64) for stable releases ✅ — the 1.3 betas are arm64-only for CI time, see `release.yml` |
+| Architecture | arm64 only from v1.3.0 (decision 3, 2026-09-06) — halves CI time and every tester is on Apple Silicon; v1.2.2 is the last universal build and the site sends Intel users there. One `LIGHT_TARGET` line in `release.yml` to reverse |
 | Format | `.dmg` (drag to Applications) + `.zip` ✅ |
 | Signature | Developer ID Application, hardened runtime ✅ |
 | Notarisation | accepted by Apple, ticket stapled to both the app and the dmg ✅ |
