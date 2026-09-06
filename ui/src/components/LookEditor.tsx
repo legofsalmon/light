@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import type { Distribute, Effect, EffectTarget, Look, LookPart, Project, SoftField, StrobeMode, Wave } from '../../../shared/types.ts';
-import { EFFECT_TARGETS, STROBE_MODES, uid } from '../../../shared/types.ts';
+import type { Distribute, Effect, EffectTarget, Look, LookPart, Project, ShapeKind, SoftField, StrobeMode, Wave } from '../../../shared/types.ts';
+import { EFFECT_TARGETS, SHAPE_KINDS, STROBE_MODES, uid } from '../../../shared/types.ts';
 import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
 import { type HeadKind } from '../../../shared/profiles.ts';
 import { TextField } from './inputs.tsx';
 import { BEAM_FADERS, BEAM_LABELS, BEAM_PARAMS, type BeamCaps, type BeamParam, noBeamCaps, profileMeta } from '../profileInfo.ts';
-import { TARGET_LABEL } from '../labels.ts';
+import { SHAPE_LABEL, TARGET_LABEL } from '../labels.ts';
 import { FxPicker } from './FxPicker.tsx';
 import type { FxFactoryPreset } from '../fxLibrary.ts';
 import { hasUndrivenBeamChannels } from '../../../shared/gdtfShare.ts';
@@ -188,7 +188,8 @@ function capableTargets(kinds: Set<HeadKind>, canAim: boolean, beamCaps: BeamCap
   const capable: EffectTarget[] = ['dimmer'];
   if (kinds.has('rgb') || kinds.has('derby') || kinds.has('mover')) capable.push('hue', 'strobe');
   if (kinds.has('derby')) capable.push('white');
-  if (canAim) capable.push('pan', 'tilt');
+  // `shape` drives pan AND tilt from one effect, so it needs both.
+  if (canAim) capable.push('pan', 'tilt', 'shape');
   for (const k of BEAM_PARAMS) if (beamCaps[k]) capable.push(k);
   return capable;
 }
@@ -336,11 +337,24 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
           ⚠
         </span>
       )}
-      <select className="sel" title="the wave shape — chase runs one head at a time and forces a full spread" value={fx.wave} onChange={(e) => onEdit((x) => (x.wave = e.target.value as Wave))}>
-        {WAVES.map((w) => (
-          <option key={w} value={w}>{WAVE_LABEL[w]}</option>
-        ))}
-      </select>
+      {fx.target === 'shape' ? (
+        <select
+          className="sel"
+          title="which figure the heads trace. The figure IS the waveform here, so there is no wave to pick"
+          value={fx.shape ?? 'circle'}
+          onChange={(e) => onEdit((x) => (x.shape = e.target.value as ShapeKind))}
+        >
+          {SHAPE_KINDS.map((k) => (
+            <option key={k} value={k}>{SHAPE_LABEL[k]}</option>
+          ))}
+        </select>
+      ) : (
+        <select className="sel" title="the wave shape — chase runs one head at a time and forces a full spread" value={fx.wave} onChange={(e) => onEdit((x) => (x.wave = e.target.value as Wave))}>
+          {WAVES.map((w) => (
+            <option key={w} value={w}>{WAVE_LABEL[w]}</option>
+          ))}
+        </select>
+      )}
       <select
         className="sel"
         title="beats per cycle — 4 is one cycle per bar in 4/4. Musical, not hertz, so the rig stays in time when the tempo moves"
@@ -353,8 +367,39 @@ function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool
       </select>
       <Fader label="size" width={90} value={soft('size') ?? fx.size} def={1} onChange={(v) => onField('size', v, (x) => (x.size = v))} fmt={pct} variant="dim" />
       <Fader label="spread" width={90} value={soft('spread') ?? fx.spread} def={0} onChange={(v) => onField('spread', v, (x) => (x.spread = v))} fmt={pct} variant="dim" />
-      {(fx.wave === 'square' || fx.wave === 'chase') && (
+      {fx.target !== 'shape' && (fx.wave === 'square' || fx.wave === 'chase') && (
         <Fader label="width" width={90} value={soft('width') ?? fx.width} def={0.5} onChange={(v) => onField('width', v, (x) => (x.width = v))} fmt={pct} variant="dim" />
+      )}
+      {fx.target === 'shape' && (
+        <>
+          <Fader
+            label="aspect"
+            width={90}
+            value={fx.shapeAspect ?? 0.5}
+            def={0.5}
+            help="round in the middle; all the way left is a flat pan sweep and all the way right a vertical bounce"
+            onChange={(v) => onEdit((x) => (x.shapeAspect = v))}
+            fmt={pct}
+            variant="dim"
+          />
+          <Fader
+            label="turn"
+            width={90}
+            value={fx.shapeRotate ?? 0}
+            def={0}
+            help="turn the whole figure — a sideways figure of eight becomes an upright one at 25%"
+            onChange={(v) => onEdit((x) => (x.shapeRotate = v))}
+            fmt={pct}
+            variant="dim"
+          />
+          <button
+            className={`btn small ${fx.shapeCcw ? 'on' : 'ghost'}`}
+            title={fx.shapeCcw ? 'tracing anticlockwise — click for clockwise' : 'tracing clockwise — click for anticlockwise'}
+            onClick={() => onEdit((x) => (x.shapeCcw = !x.shapeCcw))}
+          >
+            {fx.shapeCcw ? '↺' : '↻'}
+          </button>
+        </>
       )}
       <Fader label="phase" width={80} value={soft('phase') ?? fx.phase} def={0} onChange={(v) => onField('phase', v, (x) => (x.phase = v))} fmt={pct} variant="dim" />
       {/* wet/dry: how much of the effect lands. 100% is full effect. */}

@@ -215,7 +215,19 @@ export type PartParams = {
 
 export type EffectTarget =
   | 'dimmer' | 'hue' | 'white' | 'strobe' | 'pan' | 'tilt'
-  | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'goboRotate' | 'prismRotate';
+  | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'goboRotate' | 'prismRotate'
+  // The one target that drives TWO parameters. Pan and tilt have always been
+  // separate targets with a free phase, so a circle could be hand-built from
+  // two effects a quarter-cycle apart — and then it was two rows that had to
+  // be edited in step, could not be saved to the pool as one thing, and fell
+  // apart the moment somebody changed the rate of one of them.
+  | 'shape';
+
+/** The figures a `shape` effect can trace. Each one reads differently on a
+ *  rig, which is the bar for being here: a circle sweeps, a figure-8 crosses
+ *  itself, and a square has corners you can see the heads hit. */
+export type ShapeKind = 'circle' | 'figure8' | 'square';
+export const SHAPE_KINDS: readonly ShapeKind[] = ['circle', 'figure8', 'square'];
 export type Wave = 'sine' | 'triangle' | 'sawUp' | 'sawDown' | 'square' | 'chase' | 'random';
 /** How an effect's phase fans across the group: patch order (the legacy
  *  behaviour), a world-position sweep, a ripple from the group's centre, a
@@ -231,7 +243,7 @@ export type Fold = 'none' | 'mirror' | 'centre';
  *  validator draw from. */
 export const EFFECT_TARGETS: ReadonlySet<EffectTarget> = new Set<EffectTarget>([
   'dimmer', 'hue', 'white', 'strobe', 'pan', 'tilt', 'zoom', 'focus', 'iris', 'frost', 'cto',
-  'goboRotate', 'prismRotate',
+  'goboRotate', 'prismRotate', 'shape',
 ]);
 export const WAVES: ReadonlySet<Wave> = new Set<Wave>([
   'sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random',
@@ -303,6 +315,17 @@ export type Effect = {
   buddy: number;
   /** seed for the shuffle basis — re-roll for a different reproducible scatter */
   seed: number;
+  // --- `shape` target only; ignored by every other target, and absent on
+  // --- every effect written before shapes existed. Absent means the default,
+  // --- so nothing is added to an effect that has no use for it.
+  /** which figure to trace (default: circle) */
+  shape?: ShapeKind;
+  /** 0 = all pan and no tilt, 0.5 = even, 1 = all tilt (default: 0.5) */
+  shapeAspect?: number;
+  /** turn the whole figure, 0..1 = 0..360 degrees (default: 0) */
+  shapeRotate?: number;
+  /** trace it the other way round (default: false) */
+  shapeCcw?: boolean;
 };
 
 /** Per-fixture pan and tilt calibration.
@@ -904,6 +927,13 @@ export function repairEffect(e: unknown): Effect | null {
     // clamped, not wrapped: JS ToInt32 and Rust saturating casts disagree on
     // absurd magnitudes, so both engines clamp to i32 range instead
     seed: Number.isFinite(x.seed) ? clamp(Math.floor(x.seed), -2147483648, 2147483647) : 0,
+    // Shape fields are validate-or-DROP, never defaulted in. An effect that is
+    // not a shape must come out of here exactly as it went in — the factory
+    // catalogue is pinned on that — and the renderer reads its own defaults.
+    ...(SHAPE_KINDS.includes(x.shape as ShapeKind) ? { shape: x.shape } : { shape: undefined }),
+    shapeAspect: Number.isFinite(x.shapeAspect) ? clamp(x.shapeAspect as number) : undefined,
+    shapeRotate: Number.isFinite(x.shapeRotate) ? clamp(x.shapeRotate as number) : undefined,
+    shapeCcw: x.shapeCcw === true ? true : undefined,
   };
 }
 

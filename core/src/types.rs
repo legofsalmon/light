@@ -407,6 +407,8 @@ pub struct PartParams {
 #[serde(rename_all = "camelCase")]
 pub enum EffectTarget {
     Dimmer,
+    /// The one target that drives TWO parameters — see ShapeKind.
+    Shape,
     Hue,
     White,
     Strobe,
@@ -543,6 +545,37 @@ pub struct Effect {
     /// Seed for the shuffle basis.
     #[serde(default)]
     pub seed: i32,
+    // `Shape` target only; ignored by every other target, and absent on every
+    // effect written before shapes existed. None means the default, so nothing
+    // is added to an effect that has no use for it.
+    /// Which figure to trace. None = circle.
+    #[serde(default, deserialize_with = "de_shape", skip_serializing_if = "Option::is_none")]
+    pub shape: Option<ShapeKind>,
+    /// 0 = all pan, 0.5 = even, 1 = all tilt. None = 0.5.
+    #[serde(default, deserialize_with = "de_opt_unit", skip_serializing_if = "Option::is_none")]
+    pub shape_aspect: Option<f64>,
+    /// Turn the whole figure, 0..1 = 0..360 degrees. None = 0.
+    #[serde(default, deserialize_with = "de_opt_unit", skip_serializing_if = "Option::is_none")]
+    pub shape_rotate: Option<f64>,
+    /// Trace it the other way round.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub shape_ccw: bool,
+}
+
+/// The figures a `Shape` effect can trace. Mirrors ShapeKind in
+/// shared/types.ts; a kind this build does not know degrades to the default
+/// rather than dropping the effect, the same way an unknown Distribute does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShapeKind {
+    Circle,
+    Figure8,
+    Square,
+}
+
+fn de_shape<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<ShapeKind>, D::Error> {
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(v.and_then(|x| serde_json::from_value(x).ok()))
 }
 
 fn default_mix() -> f64 {
@@ -818,6 +851,12 @@ fn repair_effect(obj: &serde_json::Map<String, serde_json::Value>) -> Option<Eff
         .get("fold")
         .and_then(|x| serde_json::from_value::<Fold>(x.clone()).ok())
         .unwrap_or_default();
+    let unit = |k: &str| -> Option<f64> {
+        match obj.get(k).and_then(|x| x.as_f64()) {
+            Some(n) if n.is_finite() => Some(clamp01(n)),
+            _ => None,
+        }
+    };
     let count = |k: &str| -> u32 {
         match obj.get(k).and_then(|x| x.as_f64()) {
             Some(n) if n.is_finite() && n >= 1.0 => (n.floor() as u32).min(64),
@@ -847,6 +886,13 @@ fn repair_effect(obj: &serde_json::Map<String, serde_json::Value>) -> Option<Eff
             Some(n) if n.is_finite() => n.floor().clamp(-2147483648.0, 2147483647.0) as i32,
             _ => 0,
         },
+        // Validate-or-DROP, never defaulted in: an effect that is not a shape
+        // must come out of here exactly as it went in, and the renderer reads
+        // its own defaults. Mirrors repairEffect in shared/types.ts.
+        shape: obj.get("shape").and_then(|x| serde_json::from_value::<ShapeKind>(x.clone()).ok()),
+        shape_aspect: unit("shapeAspect"),
+        shape_rotate: unit("shapeRotate"),
+        shape_ccw: obj.get("shapeCcw").and_then(|x| x.as_bool()).unwrap_or(false),
     })
 }
 

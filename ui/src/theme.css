@@ -690,6 +690,9 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
 .fxrow {
   display: flex;
   align-items: center;
+  /* Wraps: a shape effect carries three controls where a wave carries one, and
+     a row that overflows a narrow editor pane hides its own mix fader. */
+  flex-wrap: wrap;
   gap: var(--space-6);
   padding: var(--space-5) var(--space-6);
   background: var(--panel2);

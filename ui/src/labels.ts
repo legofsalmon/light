@@ -1,7 +1,7 @@
 // The words a person reads for values the engine stores as identifiers. The
 // wire keeps `sawUp`; the screen says "ramp up". Retired desk words live in
 // scripts/check-language.mjs, which fails the build if one comes back.
-import type { EffectTarget, SoftField, StagePropKind, Wave } from '../../shared/types.ts';
+import type { EffectTarget, ShapeKind, SoftField, StagePropKind, Wave } from '../../shared/types.ts';
 
 export const WAVE_LABEL: Record<Wave, string> = {
   sine: 'sine',
@@ -71,4 +71,12 @@ export const TARGET_LABEL: Record<EffectTarget, string> = {
   cto: 'warmth',
   goboRotate: 'gobo spin',
   prismRotate: 'prism spin',
+  shape: 'shape',
+};
+
+/** The figures a shape effect traces, by the name a person would say. */
+export const SHAPE_LABEL: Record<ShapeKind, string> = {
+  circle: 'circle',
+  figure8: 'figure of eight',
+  square: 'square',
 };

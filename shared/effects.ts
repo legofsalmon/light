@@ -1,4 +1,4 @@
-import type { Effect, PartParams, SoftField, Wave } from './types.ts';
+import type { Effect, PartParams, SoftField, Wave, ShapeKind } from './types.ts';
 import type { GroupExtents, HeadGeom } from './geometry.ts';
 import { clamp } from './types.ts';
 
@@ -7,6 +7,54 @@ function hash01(a: number, b: number): number {
   let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Where on a figure phase p lands, as offsets in -1..1 on each axis.
+ *
+ *  Pure, and written in the same operations in the same order as shape_at in
+ *  core/src/effects.rs — the two engines have to land on the same f64. That is
+ *  already true of the sine wave above, which has been parity-pinned for
+ *  months on exactly this arrangement; trig is not required by IEEE-754 to be
+ *  correctly rounded, so identical source is the guarantee, not identical
+ *  results in principle.
+ *
+ *  The caller scales, rotates and offsets. This is only the figure. */
+export function shapeAt(kind: ShapeKind, phase: number, ccw: boolean): { x: number; y: number } {
+  const w = ((phase % 1) + 1) % 1;
+  const p = ccw ? 1 - w : w;
+  const t = p * Math.PI * 2;
+  switch (kind) {
+    case 'figure8':
+      // Gerono's lemniscate on its side: crosses itself at the centre, which
+      // is what makes it read as a figure-8 rather than as a wobble.
+      return { x: Math.sin(t), y: Math.sin(t * 2) };
+    case 'square': {
+      // Perimeter walk, a quarter of the phase per side. Corners are the
+      // point: a head visibly stops turning one way and starts the other.
+      const q = p * 4;
+      const side = Math.min(3, Math.floor(q));
+      const f = q - side;
+      if (side === 0) return { x: -1 + 2 * f, y: -1 };
+      if (side === 1) return { x: 1, y: -1 + 2 * f };
+      if (side === 2) return { x: 1 - 2 * f, y: 1 };
+      return { x: -1, y: 1 - 2 * f };
+    }
+    default:
+      return { x: Math.cos(t), y: Math.sin(t) };
+  }
+}
+
+/** Pan and tilt amplitudes for a shape, from its size and aspect.
+ *
+ *  Aspect 0.5 gives both the full size; 0 is all pan and 1 is all tilt, so the
+ *  same knob covers a circle, an ellipse, a flat sweep and a vertical bounce.
+ *  Half-amplitude each way, matching the plain pan and tilt targets: a
+ *  full-size figure spans the whole of the head's travel and no more. */
+export function shapeAmps(size: number, aspect: number): { pan: number; tilt: number } {
+  return {
+    pan: size * Math.min(1, 2 * (1 - aspect)) * 0.5,
+    tilt: size * Math.min(1, 2 * aspect) * 0.5,
+  };
 }
 
 /** Waveform value 0..1 at phase (wraps), for one head. */
@@ -279,6 +327,26 @@ export function applyEffects(
       case 'tilt': {
         const dry = out.tilt ?? 0.5;
         out.tilt = applyMix(dry, clamp(dry + (v - 0.5) * e.size), mix);
+        break;
+      }
+      // The one target that writes two parameters. `wave` and `width` say
+      // nothing here — the figure IS the waveform — so the phase goes to the
+      // shape directly rather than through waveValue.
+      case 'shape': {
+        const f = shapeAt(e.shape ?? 'circle', phase, e.shapeCcw === true);
+        const rot = (e.shapeRotate ?? 0) * Math.PI * 2;
+        const ca = Math.cos(rot);
+        const sa = Math.sin(rot);
+        const rx = f.x * ca - f.y * sa;
+        const ry = f.x * sa + f.y * ca;
+        const amp = shapeAmps(e.size, e.shapeAspect ?? 0.5);
+        // the same value-sign mirror the plain pan target uses, so a folded
+        // spread opens and closes instead of shearing
+        const dir = mirrored ? -1 : 1;
+        const dryPan = out.pan ?? 0.5;
+        const dryTilt = out.tilt ?? 0.5;
+        out.pan = applyMix(dryPan, clamp(dryPan + rx * amp.pan * dir), mix);
+        out.tilt = applyMix(dryTilt, clamp(dryTilt + ry * amp.tilt), mix);
         break;
       }
       // Beam parameters swing about their set value, like pan and tilt. Adding

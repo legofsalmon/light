@@ -1,4 +1,4 @@
-use crate::types::{clamp01, Effect, EffectTarget, PartParams, Wave};
+use crate::types::{clamp01, Effect, EffectTarget, PartParams, ShapeKind, Wave};
 
 /// Deterministic 0..1 hash — ports the JS Math.imul construction bit-exactly.
 fn hash01(a: i32, b: i32) -> f64 {
@@ -7,6 +7,54 @@ fn hash01(a: i32, b: i32) -> f64 {
         .wrapping_add(b.wrapping_mul(668265263));
     h = (h ^ (((h as u32) >> 13) as i32)).wrapping_mul(1274126177);
     ((h ^ (((h as u32) >> 16) as i32)) as u32) as f64 / 4294967296.0
+}
+
+/// Where on a figure phase p lands, as offsets in -1..1 on each axis.
+///
+/// Pure, and written in the same operations in the same order as shapeAt in
+/// shared/effects.ts — the two engines have to land on the same f64. That is
+/// already true of the sine wave below, which has been parity-pinned for
+/// months on exactly this arrangement; trig is not required by IEEE-754 to be
+/// correctly rounded, so identical source is the guarantee, not identical
+/// results in principle.
+///
+/// The caller scales, rotates and offsets. This is only the figure.
+pub fn shape_at(kind: ShapeKind, phase: f64, ccw: bool) -> (f64, f64) {
+    let w = ((phase % 1.0) + 1.0) % 1.0;
+    let p = if ccw { 1.0 - w } else { w };
+    let t = p * std::f64::consts::PI * 2.0;
+    match kind {
+        // Gerono's lemniscate on its side: crosses itself at the centre, which
+        // is what makes it read as a figure-8 rather than as a wobble.
+        ShapeKind::Figure8 => (t.sin(), (t * 2.0).sin()),
+        // Perimeter walk, a quarter of the phase per side. Corners are the
+        // point: a head visibly stops turning one way and starts the other.
+        ShapeKind::Square => {
+            let q = p * 4.0;
+            let side = (q.floor() as i32).min(3);
+            let f = q - side as f64;
+            match side {
+                0 => (-1.0 + 2.0 * f, -1.0),
+                1 => (1.0, -1.0 + 2.0 * f),
+                2 => (1.0 - 2.0 * f, 1.0),
+                _ => (-1.0, 1.0 - 2.0 * f),
+            }
+        }
+        ShapeKind::Circle => (t.cos(), t.sin()),
+    }
+}
+
+/// Pan and tilt amplitudes for a shape, from its size and aspect.
+///
+/// Aspect 0.5 gives both the full size; 0 is all pan and 1 is all tilt, so the
+/// same knob covers a circle, an ellipse, a flat sweep and a vertical bounce.
+/// Half-amplitude each way, matching the plain pan and tilt targets: a
+/// full-size figure spans the whole of the head's travel and no more.
+pub fn shape_amps(size: f64, aspect: f64) -> (f64, f64) {
+    (
+        size * (2.0 * (1.0 - aspect)).min(1.0) * 0.5,
+        size * (2.0 * aspect).min(1.0) * 0.5,
+    )
 }
 
 pub fn wave_value(e: &Effect, phase: f64, head_idx: usize) -> f64 {
@@ -277,6 +325,24 @@ pub fn apply_effects(
                 let dry = out.tilt.unwrap_or(0.5);
                 out.tilt = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
             }
+            // The one target that writes two parameters. `wave` and `width`
+            // say nothing here — the figure IS the waveform — so the phase
+            // goes to the shape directly rather than through wave_value.
+            EffectTarget::Shape => {
+                let (fx, fy) = shape_at(e.shape.unwrap_or(ShapeKind::Circle), phase, e.shape_ccw);
+                let rot = e.shape_rotate.unwrap_or(0.0) * std::f64::consts::PI * 2.0;
+                let (ca, sa) = (rot.cos(), rot.sin());
+                let rx = fx * ca - fy * sa;
+                let ry = fx * sa + fy * ca;
+                let (amp_pan, amp_tilt) = shape_amps(e.size, e.shape_aspect.unwrap_or(0.5));
+                // the same value-sign mirror the plain pan target uses, so a
+                // folded spread opens and closes instead of shearing
+                let dir = if mirrored { -1.0 } else { 1.0 };
+                let dry_pan = out.pan.unwrap_or(0.5);
+                let dry_tilt = out.tilt.unwrap_or(0.5);
+                out.pan = Some(apply_mix(dry_pan, clamp01(dry_pan + rx * amp_pan * dir), mix));
+                out.tilt = Some(apply_mix(dry_tilt, clamp01(dry_tilt + ry * amp_tilt), mix));
+            }
             // Beam parameters swing about their set value, like pan and tilt.
             // Adding the effect at all is the operator saying they want this
             // parameter driven, so an unset one starts from the middle of its
@@ -329,6 +395,104 @@ fn apply_mix(dry: f64, wet: f64, mix: f64) -> f64 {
 }
 
 #[cfg(test)]
+mod shape_tests {
+    use super::*;
+    use crate::types::ShapeKind;
+
+    fn near(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-9
+    }
+
+    #[test]
+    fn a_circle_is_a_circle() {
+        for i in 0..64 {
+            let p = i as f64 / 64.0;
+            let (x, y) = shape_at(ShapeKind::Circle, p, false);
+            assert!(near(x * x + y * y, 1.0), "phase {p}: ({x}, {y}) is off the unit circle");
+        }
+        let (x, y) = shape_at(ShapeKind::Circle, 0.0, false);
+        assert!(near(x, 1.0) && near(y, 0.0), "starts at the right of the figure");
+        assert!(shape_at(ShapeKind::Circle, 0.1, false).1 > 0.0, "and rises first");
+    }
+
+    #[test]
+    fn a_figure_of_eight_crosses_itself_at_the_centre() {
+        // twice a lap, which is what tells it from an oval
+        let crossings = (0..1000)
+            .map(|i| shape_at(ShapeKind::Figure8, i as f64 / 1000.0, false))
+            .filter(|(x, y)| x.abs() < 0.02 && y.abs() < 0.02)
+            .count();
+        assert!(crossings > 0, "never passes through the middle");
+        assert!(near(shape_at(ShapeKind::Figure8, 0.0, false).0, 0.0));
+        assert!(near(shape_at(ShapeKind::Figure8, 0.5, false).0, 0.0), "and again half way round");
+    }
+
+    #[test]
+    fn a_square_walks_its_perimeter_and_stays_on_it() {
+        for i in 0..400 {
+            let p = i as f64 / 400.0;
+            let (x, y) = shape_at(ShapeKind::Square, p, false);
+            assert!(near(x.abs(), 1.0) || near(y.abs(), 1.0), "phase {p}: ({x}, {y}) is off the edge");
+            assert!(x.abs() <= 1.0 + 1e-9 && y.abs() <= 1.0 + 1e-9);
+        }
+        assert_eq!(shape_at(ShapeKind::Square, 0.0, false), (-1.0, -1.0));
+        assert_eq!(shape_at(ShapeKind::Square, 0.25, false), (1.0, -1.0));
+        assert_eq!(shape_at(ShapeKind::Square, 0.5, false), (1.0, 1.0));
+        assert_eq!(shape_at(ShapeKind::Square, 0.75, false), (-1.0, 1.0));
+    }
+
+    #[test]
+    fn every_figure_is_bounded_and_wraps() {
+        for kind in [ShapeKind::Circle, ShapeKind::Figure8, ShapeKind::Square] {
+            for i in -50..150 {
+                let p = i as f64 / 50.0;
+                let (x, y) = shape_at(kind, p, false);
+                assert!(x.abs() <= 1.0 + 1e-9 && y.abs() <= 1.0 + 1e-9, "{kind:?} at {p}");
+            }
+            // The effect clock runs in beats and never stops climbing, so a
+            // phase outside 0..1 has to land on the same point as its wrap.
+            // NEAR, not equal: 3.3 % 1.0 is not bit-identical to 0.3, so the
+            // trig downstream differs in the last place. Both engines do the
+            // same arithmetic in the same order, so they agree with each
+            // other — which is the property that matters — and the DMX byte
+            // this becomes is the same either way. Every existing wave has
+            // wrapped like this since the beginning.
+            for (a, b) in [(0.3, 3.3), (0.3, -0.7)] {
+                let (x1, y1) = shape_at(kind, a, false);
+                let (x2, y2) = shape_at(kind, b, false);
+                assert!(near(x1, x2) && near(y1, y2), "{kind:?}: {a} and {b} differ");
+            }
+        }
+    }
+
+    #[test]
+    fn anticlockwise_is_the_same_figure_the_other_way() {
+        for kind in [ShapeKind::Circle, ShapeKind::Figure8, ShapeKind::Square] {
+            for i in 1..20 {
+                let p = i as f64 / 20.0;
+                let cw = shape_at(kind, p, false);
+                let ccw = shape_at(kind, 1.0 - p, true);
+                assert!(near(cw.0, ccw.0) && near(cw.1, ccw.1), "{kind:?} at {p}");
+            }
+        }
+    }
+
+    #[test]
+    fn aspect_trades_one_axis_for_the_other() {
+        // even: both get the full size, half-amplitude each way, so a
+        // full-size figure spans the travel and no more
+        assert_eq!(shape_amps(1.0, 0.5), (0.5, 0.5));
+        assert_eq!(shape_amps(1.0, 0.0), (0.5, 0.0), "all pan");
+        assert_eq!(shape_amps(1.0, 1.0), (0.0, 0.5), "all tilt");
+        assert_eq!(shape_amps(0.5, 0.5), (0.25, 0.25), "size scales both");
+        for i in 0..=20 {
+            let (p, t) = shape_amps(1.0, i as f64 / 20.0);
+            assert!(p <= 0.5 + 1e-9 && t <= 0.5 + 1e-9, "never past half the travel");
+        }
+    }
+}
+
+#[cfg(test)]
 mod fan_tests {
     use super::*;
     use crate::geometry::{GroupExtents, HeadGeom};
@@ -367,6 +531,10 @@ mod fan_tests {
             parts: 1,
             buddy: 1,
             seed: 0,
+            shape: None,
+            shape_aspect: None,
+            shape_rotate: None,
+            shape_ccw: false,
         }
     }
 

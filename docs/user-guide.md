@@ -90,7 +90,7 @@ Enable a parameter with the checkbox to its left; a look only writes the paramet
 
 ### Effects
 
-Each part can stack effects. **browse…** opens a catalogue of 46 ready-made ones — grouped, searchable, and applied as you click so you can audition down the list — or build your own: an effect modulates one target (dimmer, hue, white, strobe, pan, tilt, the beam parameters, gobo spin, prism spin) with a wave:
+Each part can stack effects. **browse…** opens a catalogue of ready-made ones — grouped, searchable, and applied as you click so you can audition down the list — or build your own: an effect modulates one target (dimmer, hue, white, strobe, pan, tilt, the beam parameters, gobo spin, prism spin) with a wave. The exception is **shape**, which drives pan and tilt together to trace a circle, a figure of eight or a square:
 
 | Wave | Feels like |
 |---|---|

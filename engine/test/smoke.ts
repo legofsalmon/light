@@ -25,6 +25,8 @@ import { readFileSync } from 'node:fs';
 import { MAX_THROW, buildOccluders, hitsPropFootprint, standingHeightAt, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
 import { FreezeHold, GO_DARK_FRAMES, OutputGate } from '../output.ts';
 import { aimIsIdentity, applyAim } from '../../shared/aim.ts';
+import { shapeAmps, shapeAt } from '../../shared/effects.ts';
+import { SHAPE_KINDS } from '../../shared/types.ts';
 import { FX_CATEGORIES, FX_LIBRARY, fxSearch } from '../../ui/src/fxLibrary.ts';
 import { SHORTCUTS, SHORTCUT_GROUPS, runShortcut } from '../../ui/src/shortcuts.ts';
 import { repairEffect } from '../../shared/types.ts';
@@ -1213,6 +1215,99 @@ await new Promise<void>((resolve) => {
   is('an unbound key does nothing', { key: 'q' }, []);
 
   check('shortcuts: the modified ones shadow a system chord', SHORTCUTS.some((s) => s.modified));
+}
+
+// --- movement shapes (backlog #9) -------------------------------------------
+// Mirrors the unit tests in core/src/effects.rs. One effect drives pan AND
+// tilt from a figure, so the figure has to be the same figure in both engines.
+{
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+
+  {
+    let round = true;
+    for (let i = 0; i < 64; i++) {
+      const { x, y } = shapeAt('circle', i / 64, false);
+      if (!near(x * x + y * y, 1)) round = false;
+    }
+    check('shape: a circle is a circle', round);
+    const start = shapeAt('circle', 0, false);
+    check('shape: it starts at the right of the figure', near(start.x, 1) && near(start.y, 0));
+    check('shape: and rises first', shapeAt('circle', 0.1, false).y > 0);
+  }
+
+  {
+    const crossings = Array.from({ length: 1000 }, (_, i) => shapeAt('figure8', i / 1000, false))
+      .filter(({ x, y }) => Math.abs(x) < 0.02 && Math.abs(y) < 0.02).length;
+    check('shape: a figure of eight passes through the middle', crossings > 0);
+    check(
+      'shape: twice a lap, which is what tells it from an oval',
+      near(shapeAt('figure8', 0, false).x, 0) && near(shapeAt('figure8', 0.5, false).x, 0),
+    );
+  }
+
+  {
+    let onEdge = true;
+    for (let i = 0; i < 400; i++) {
+      const { x, y } = shapeAt('square', i / 400, false);
+      if (!(near(Math.abs(x), 1) || near(Math.abs(y), 1))) onEdge = false;
+    }
+    check('shape: a square stays on its perimeter', onEdge);
+    const corners = [0, 0.25, 0.5, 0.75].map((p) => shapeAt('square', p, false));
+    check(
+      'shape: and hits each corner once a lap',
+      JSON.stringify(corners) === JSON.stringify([
+        { x: -1, y: -1 }, { x: 1, y: -1 }, { x: 1, y: 1 }, { x: -1, y: 1 },
+      ]),
+      JSON.stringify(corners),
+    );
+  }
+
+  {
+    let bounded = true;
+    let wraps = true;
+    for (const k of SHAPE_KINDS) {
+      for (let i = -50; i < 150; i++) {
+        const { x, y } = shapeAt(k, i / 50, false);
+        if (Math.abs(x) > 1 + 1e-9 || Math.abs(y) > 1 + 1e-9) bounded = false;
+      }
+      // near, not equal: 3.3 % 1 is not bit-identical to 0.3, and both engines
+      // do the same arithmetic in the same order — which is the property that
+      // matters. Every existing wave has wrapped like this since the start.
+      for (const b of [3.3, -0.7]) {
+        const a1 = shapeAt(k, 0.3, false);
+        const a2 = shapeAt(k, b, false);
+        if (!near(a1.x, a2.x) || !near(a1.y, a2.y)) wraps = false;
+      }
+    }
+    check('shape: every figure stays inside its box', bounded);
+    check('shape: and a phase outside 0..1 lands on its wrap', wraps);
+  }
+
+  {
+    let mirrored = true;
+    for (const k of SHAPE_KINDS) {
+      for (let i = 1; i < 20; i++) {
+        const cw = shapeAt(k, i / 20, false);
+        const ccw = shapeAt(k, 1 - i / 20, true);
+        if (!near(cw.x, ccw.x) || !near(cw.y, ccw.y)) mirrored = false;
+      }
+    }
+    check('shape: anticlockwise is the same figure the other way', mirrored);
+  }
+
+  {
+    const eq = (got: { pan: number; tilt: number }, p: number, t: number) => near(got.pan, p) && near(got.tilt, t);
+    check('shape: an even aspect gives both axes half the travel', eq(shapeAmps(1, 0.5), 0.5, 0.5));
+    check('shape: all the way one way is all pan', eq(shapeAmps(1, 0), 0.5, 0));
+    check('shape: and the other is all tilt', eq(shapeAmps(1, 1), 0, 0.5));
+    check('shape: size scales both', eq(shapeAmps(0.5, 0.5), 0.25, 0.25));
+    let capped = true;
+    for (let i = 0; i <= 20; i++) {
+      const a = shapeAmps(1, i / 20);
+      if (a.pan > 0.5 + 1e-9 || a.tilt > 0.5 + 1e-9) capped = false;
+    }
+    check('shape: never past half the travel, whatever the aspect', capped);
+  }
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

@@ -17,8 +17,38 @@ apply in the order they are listed.
 | **random** | sample-and-hold flicker, reproducible from its seed |
 
 **Targets:** dimmer, hue, white, strobe, pan, tilt, zoom, focus, beam size, soften,
-warmth, gobo spin, prism spin. A target the group cannot take is flagged rather
-than silently ignored.
+warmth, gobo spin, prism spin, and **shape**. A target the group cannot take is
+flagged rather than silently ignored.
+
+## Shapes
+
+`shape` is the one target that drives two parameters. Pan and tilt have always
+been separate targets with a free phase, so a circle *could* be hand-built from
+two effects a quarter-cycle apart — and then it was two rows that had to be
+edited in step, could not be saved to the pool as one thing, and fell apart the
+moment somebody changed the rate of one of them.
+
+Pick a figure instead:
+
+| Figure | What it looks like |
+|---|---|
+| **circle** | smooth, one lap a cycle |
+| **figure of eight** | crosses itself in the middle, twice a lap |
+| **square** | corners you can see the heads hit — mechanical on purpose |
+
+There is no wave to pick, because the figure *is* the waveform. Three knobs
+replace it:
+
+- **aspect** — round in the middle. All the way one way is a flat pan sweep,
+  all the way the other a vertical bounce, and everything between is an ellipse.
+- **turn** — rotates the whole figure. A sideways figure of eight becomes an
+  upright one at 25%.
+- **↻ / ↺** — which way round it is traced.
+
+Everything else works as it does for any effect. `size` is how much of the
+head's travel the figure spans, `rate` is how long a lap takes, and the spread
+puts each head at a different point on the figure so the beams chase each other
+round it. The catalogue ships six of these under **Movement**.
 
 ## The knobs
 

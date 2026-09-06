@@ -318,17 +318,40 @@ have a play. Deliberately not a tour.
 
 **Not done:** videos, which the entry itself calls content rather than code.
 
-### 9 · Named movement shapes (circle, figure-8, paths) — ◧ partial — S / M / L slices
+### 9 · Named movement shapes (circle, figure-8, paths) — ◧ M slice shipped 2026-09-06; paths (L) still open
 **Touches:** shared/types.ts, core, engine, parity, ui, docs
-**Today:** pan and tilt are independent effect targets with a free phase, so a
-circle *can* be hand-built from two effects; `fold: mirror` gives symmetric
-wings and is parity-pinned. No shape type, no XY pad, no path editor; the FX
-pool holds one effect so a circle cannot be saved.
-**Slices:** S — "add circle / figure-8" quick-add that inserts two pre-phased
-effects, zero engine change. M — a coupled `shape` effect (serde-defaulted
-fields: shape, aspect, rotation, direction) writing both targets from a
-parametric formula, parity-asserted. L — editable paths with a polar/XY editor,
-project `paths[]`, sampling in both engines, per-head offset, previz overlay.
+**Shipped: the M slice, and the S one is moot.** The quick-add would have
+inserted two pre-phased effects, which is the arrangement this replaces — two
+rows to edit in step, unsaveable to the pool as one thing, and broken the
+moment somebody changed the rate of one of them. A coupled target is the
+honest version of the same idea and it is not much more work.
+
+`EffectTarget` gains `shape`, the only target that writes TWO parameters, plus
+four fields that are absent-by-default and validate-or-drop, so an effect that
+is not a shape comes out of `repairEffect` exactly as it went in (the factory
+catalogue is pinned on that): `shape` (circle / figure8 / square),
+`shapeAspect`, `shapeRotate`, `shapeCcw`. An unknown figure from a newer build
+degrades to the default rather than dropping the effect, like an unknown
+`distribute`.
+
+`shapeAt` / `shape_at` and `shapeAmps` / `shape_amps` are written in the same
+operations in the same order in both engines — trig is not required by
+IEEE-754 to be correctly rounded, so identical source is the guarantee. The
+existing sine wave has been parity-pinned on that arrangement for months, and
+the new parity block checks three figures at five phases each plus every knob,
+because a disagreement would show at some phases and not others.
+
+`wave` and `width` say nothing for a shape — the figure IS the waveform — so
+the editor swaps the wave picker for a figure picker and the width fader for
+aspect, turn and direction. `.fxrow` wraps now: three controls where there was
+one overflowed a narrow editor pane and hid its own mix fader. Six presets
+under Movement in the catalogue.
+
+**Still open: the L slice** — editable paths with a polar/XY editor, project
+`paths[]`, sampling in both engines, per-head offset, previz overlay. Nothing
+here forecloses it: a path would be another `ShapeKind` reading a stored point
+list, and the apply site already takes a figure and scales, rotates and offsets
+it.
 
 ### 10 · MIDI Beat Clock as a tempo source — ⬜ absent — M (follower alone S)
 **Touches:** shared/types.ts, core, engine, parity, ui, docs

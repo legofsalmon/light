@@ -1431,6 +1431,74 @@ async function main(): Promise<void> {
     await settle(node, rust);
   }
 
+  // --- movement shapes (backlog #9). One effect writing pan AND tilt from a
+  // --- parametric figure, so the two engines have to agree on trig they each
+  // --- get from their own platform. Pinned at several points of the lap,
+  // --- because a disagreement would show at some phases and not others.
+  {
+    await armWash('wash-rainbow', 0);
+    const partId = (await currentProject(node)).looks['wash-rainbow'].parts[0].id;
+    const setShape = async (over: Record<string, unknown>): Promise<void> => {
+      const p = structuredClone(await currentProject(node));
+      const part = p.looks['wash-rainbow'].parts.find((x) => x.id === partId)!;
+      part.params.pan = 0.5;
+      part.params.tilt = 0.5;
+      part.effects = [{
+        id: 'fx-shape', target: 'shape', wave: 'sine', rate: 4, size: 0.8, spread: 0,
+        width: 0.5, phase: 0, bypass: false, mix: 1, distribute: 'index', fold: 'none',
+        reverse: false, parts: 1, buddy: 1, seed: 0, ...over,
+      }] as Project['looks'][string]['parts'][number]['effects'];
+      both({ type: 'updateProject', project: p });
+      await sleep(400);
+    };
+
+    for (const shape of ['circle', 'figure8', 'square'] as const) {
+      await setShape({ shape });
+      for (const beat of [0, 0.37, 1.0, 2.6, 3.9]) {
+        both({ type: '_pinClock', effBeat: beat });
+        await settle(node, rust);
+        compareDmx(`shape: ${shape} at beat ${beat}`, node, rust);
+      }
+    }
+
+    // the knobs, each at a phase where it changes the answer
+    await setShape({ shape: 'circle', shapeAspect: 0.15 });
+    both({ type: '_pinClock', effBeat: 1.1 });
+    await settle(node, rust);
+    compareDmx('shape: a squashed circle', node, rust);
+
+    await setShape({ shape: 'figure8', shapeRotate: 0.25 });
+    both({ type: '_pinClock', effBeat: 1.1 });
+    await settle(node, rust);
+    compareDmx('shape: a turned figure', node, rust);
+
+    await setShape({ shape: 'circle', shapeCcw: true });
+    both({ type: '_pinClock', effBeat: 1.1 });
+    await settle(node, rust);
+    compareDmx('shape: traced the other way', node, rust);
+
+    await setShape({ shape: 'circle', spread: 1, distribute: 'x', fold: 'mirror' });
+    both({ type: '_pinClock', effBeat: 1.1 });
+    await settle(node, rust);
+    compareDmx('shape: spread and folded across the group', node, rust);
+
+    // and the point of the whole thing: ONE effect moved BOTH axes
+    await setShape({ shape: 'circle' });
+    both({ type: '_pinClock', effBeat: 1.1 });
+    await settle(node, rust);
+    const heads = () => (node.snap?.heads ?? []).filter((h) => h.pan !== undefined);
+    const movedPan = heads().some((h) => Math.abs(h.pan - 0.5) > 0.02);
+    const movedTilt = heads().some((h) => Math.abs(h.tilt - 0.5) > 0.02);
+    check('shape: one effect moved pan', movedPan, `pans ${heads().map((h) => h.pan).join(',')}`);
+    check('shape: and the same effect moved tilt', movedTilt, `tilts ${heads().map((h) => h.tilt).join(',')}`);
+
+    // an unknown figure from a newer build degrades rather than dropping the
+    // effect, the same way an unknown distribute does
+    await setShape({ shape: 'dodecahedron' });
+    await settle(node, rust);
+    compareDmx('shape: an unknown figure degrades to the default on both', node, rust);
+  }
+
   // --- freeze: the rig holds while the show carries on underneath (backlog
   // --- #7). The point of the feature is that the wire stops moving and
   // --- nothing else does, so the DMX has to be provably unchanged across an
