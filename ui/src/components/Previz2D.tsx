@@ -7,6 +7,7 @@ import { buildGeometry, localXDir, type HeadGeom } from '../../../shared/geometr
 import { hitsPropFootprint, standingHeightAt } from '../../../shared/beamThrow.ts';
 import { askConfirm } from '../dialog.tsx';
 import { LONG_PRESS_MS } from '../touch.ts';
+import { PROP_LABEL } from '../labels.ts';
 
 /** Head world positions from the shared geometry module — the same builder the
  *  engines use, so the plan view can never disagree with the 3D previz (it
@@ -501,7 +502,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
     const removeProp = (id: string) => {
       const pr = useStore.getState().project?.props?.find((x) => x.id === id);
       if (!pr) return;
-      void askConfirm(`Remove this ${pr.kind}?`, { confirmLabel: 'Remove', danger: true }).then((ok) => {
+      void askConfirm(`Remove this ${PROP_LABEL[pr.kind] ?? pr.kind}?`, { confirmLabel: 'Remove', danger: true }).then((ok) => {
         if (!ok) return;
         useStore.getState().mutate((p) => {
           p.props = (p.props ?? []).filter((x) => x.id !== id);

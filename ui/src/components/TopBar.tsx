@@ -173,6 +173,8 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
   const savedFlash = useStore((s) => s.savedFlash);
   const undoDepth = useStore((s) => s.undoDepth);
   const redoDepth = useStore((s) => s.redoDepth);
+  const undoLabel = useStore((s) => s.undoLabel);
+  const redoLabel = useStore((s) => s.redoLabel);
 
   const bpm = snap?.bpm ?? 120;
   const beat = snap?.beat ?? 0;
@@ -219,7 +221,15 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
       <button
         className="btn small ghost"
         disabled={undoDepth === 0}
-        title="undo (⌘Z)"
+        // Says WHAT it will revert (review M16): the scope of undo is this
+        // screen's own edits, and the name is the only way to know which one
+        // is next — what the engine does on its own is not in the stack.
+        title={
+          undoDepth === 0
+            ? 'nothing to undo. Edits made on this screen can be undone; what the engine does on its own — imports, song switches, nudges, masters — cannot'
+            : `undo ${undoLabel ?? 'the last edit'} (⌘Z)`
+        }
+        aria-label={undoDepth === 0 ? 'nothing to undo' : `undo ${undoLabel ?? 'the last edit'}`}
         onClick={() => useStore.getState().undo()}
       >
         ↺
@@ -227,7 +237,8 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
       <button
         className="btn small ghost"
         disabled={redoDepth === 0}
-        title="redo (⇧⌘Z)"
+        title={redoDepth === 0 ? 'nothing to redo' : `redo ${redoLabel ?? 'the last undone edit'} (⇧⌘Z)`}
+        aria-label={redoDepth === 0 ? 'nothing to redo' : `redo ${redoLabel ?? 'the last undone edit'}`}
         onClick={() => useStore.getState().redo()}
       >
         ↻
@@ -360,7 +371,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
             onClick={() => {
               // capture undo locally FIRST: the commit arrives as an engine
               // echo, which undo deliberately does not infer from
-              useStore.getState().captureUndo();
+              useStore.getState().captureUndo('keep the nudged values');
               send({ type: 'softCommit' });
             }}
           >

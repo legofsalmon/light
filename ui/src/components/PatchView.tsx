@@ -789,7 +789,7 @@ export function PatchView() {
           <label
             className="btn small"
             style={{ cursor: 'pointer' }}
-            title="import a GDTF fixture definition, or an MVR scene (fixtures, addresses, positions and the definitions inside it). Re-importing a file replaces the stored profile."
+            title="import a GDTF fixture definition, or an MVR scene (fixtures, addresses, positions and the definitions inside it). Re-importing a file replaces the stored profile, and that cannot be undone."
           >
             ⇩ import .gdtf / .mvr
             <input
