@@ -31,7 +31,7 @@ on menus and modals, which float.
 | Foundations / Type | one specimen per text style, set in the style itself |
 | Foundations / Space, size & elevation | spacing bars, radius cards, the size ledger, the four effect styles, motion |
 | 19 component pages | one family each, `_Doc` frame on the left, component set(s) to the right, State on the columns |
-| Template / Pads · Build · Rig · Stage | the four views at 1440×900, assembled from instances |
+| Template / Pads · Build · Rig · Stage | the four views at 1440×900 assembled from instances (72 · 72 · 27 · 30); Stage has an *offline* twin showing the Offline bar + Splash |
 
 Fonts: **SF Pro** (what the Mac renders for `-apple-system`); **Geist Mono**
 stands in for SF Mono, which Figma cannot load.
@@ -62,7 +62,7 @@ rather than an override.
 
 ## Components
 
-38 component sets across 19 pages, 165 variants, every fill and stroke bound to
+39 component sets across 19 pages, 166 variants, every fill and stroke bound to
 a variable, every text node on a style, every interactive set carrying a
 `State=Focus` variant (stroke `border/focus`) even where the CSS has none.
 Variant names are `Property=Value` in Title Case with State on the columns.
@@ -78,7 +78,7 @@ Variant names are `Property=Value` in Title Case with State on the columns.
 | Chip | Chip (5) · Chip / Selectable (8) | `.chip` `.headchip` `.deckchip` `.mutedchip` `.identifychip` `.warnchip` + the RIDING chip |
 | Status | Status dot (4) · Beat LED (2) · BPM · Offline bar · Toast (2) | `.statusdot` `.beatled` `.bpm` `.offlinebar` and today's top-bar toast |
 | Pad | Pad (9 states) | `.cell` — the two targets: colour block fires, name strip selects |
-| Grid heads | Column head (8) · Layer head (3) · Control cell (5) | `.colhead` `.layerhead` `.ctlcell` |
+| Grid heads | Column head (8) · Layer head (3) · Control cell (5) · Control head | `.colhead` `.layerhead` `.ctlcell` `.controlhead` |
 | Deck bar | Deck bar | `.deckbar` |
 | Library row | Library row (4) · Library hint | `.librow` `.libhint` |
 | Tabs | Tab (4) · Tab bar | `.tab` `.tabs` |
@@ -104,7 +104,7 @@ under the same conventions and are in `tokens.json`:
 - Color: `status/bad-fill`, `status/warn-fill`, `status/warn-border`, `status/stub-fill`, `status/dark-fill`, `border/swatch`
 - Space: `space/7`, `space/9` · Type: `size/8_5`
 - Size: `num-w`, `swatch-mini-w/h`, `deckchip-max-w`, `bpm-w`, `nowplaying`, `tab-indicator`, `param-label-w`, `menu-w`, `progress-h`
-- Text styles: `text/hint` `text/segment` `text/chip-muted` `text/chip-warn` `text/chip-head` `text/chip-deck` `text/chip-riding` `text/offline` `text/colhead` `text/control-name` `text/control-midi` `text/library-hint` `text/table-head` `text/project-name` `text/cog` `text/control-sm` `text/strip-vertical` `text/crashed`
+- Text styles: `text/hint` `text/segment` `text/chip-muted` `text/chip-warn` `text/chip-head` `text/chip-deck` `text/chip-riding` `text/offline` `text/colhead` `text/control-name` `text/control-midi` `text/library-hint` `text/table-head` `text/project-name` `text/cog` `text/control-sm` `text/strip-vertical` `text/crashed` `text/control-head`
 
 ## What the system resolves
 
