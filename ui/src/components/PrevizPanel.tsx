@@ -27,6 +27,9 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
   const setShowMeasure = useStore((s) => s.setShowMeasure);
   const snapToTruss = useStore((s) => s.snapToTruss);
   const setSnapToTruss = useStore((s) => s.setSnapToTruss);
+  const touch = useStore((s) => s.touch);
+  const planTool = useStore((s) => s.previz2dTool);
+  const setPlanTool = useStore((s) => s.setPreviz2dTool);
   const fxSel = useStore((s) => s.fxSel);
   const sel = useStore((s) => s.sel);
   const selName = useStore((s) => {
@@ -225,14 +228,48 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
                 had just pressed them. Reserving the max needs no measured
                 constant, so editing either string cannot quietly bring the jump
                 back. */}
-            <span className="label hint2d">
-              <span className={view2d === 'plan' ? undefined : 'ghost'}>
-                drag to place · ⌥-drag rotate · ⇧-click / drag-box select
+            {touch ? (
+              // ⌥ and ⇧ do not exist on glass (review M15): on the tablet a
+              // tool picker says what a drag does instead.
+              <div className="seg" role="group" aria-label="plan tool">
+                <button
+                  className={planTool === 'move' || (planTool === 'rotate' && view2d !== 'plan') ? 'on' : ''}
+                  title={
+                    view2d === 'plan'
+                      ? 'drag moves a fixture or a prop; a drag on empty space boxes a selection'
+                      : 'drag sets a fixture’s hang height; a drag on empty space boxes a selection'
+                  }
+                  onClick={() => setPlanTool('move')}
+                >
+                  Move
+                </button>
+                {view2d === 'plan' && (
+                  <button
+                    className={planTool === 'rotate' ? 'on' : ''}
+                    title="drag turns a fixture or a bar (snaps to 5°)"
+                    onClick={() => setPlanTool('rotate')}
+                  >
+                    Turn
+                  </button>
+                )}
+                <button
+                  className={planTool === 'select' ? 'on' : ''}
+                  title="tap adds a fixture to the selection or takes it out; a drag on empty space adds everything in the box"
+                  onClick={() => setPlanTool('select')}
+                >
+                  Select
+                </button>
+              </div>
+            ) : (
+              <span className="label hint2d">
+                <span className={view2d === 'plan' ? undefined : 'ghost'}>
+                  drag to place · ⌥-drag rotate · ⇧-click / drag-box select
+                </span>
+                <span className={view2d === 'front' ? undefined : 'ghost'}>
+                  drag to set height · ⇧-click / drag-box select
+                </span>
               </span>
-              <span className={view2d === 'front' ? undefined : 'ghost'}>
-                drag to set height · ⇧-click / drag-box select
-              </span>
-            </span>
+            )}
           </>
         )}
       </div>

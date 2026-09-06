@@ -166,6 +166,9 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
   const midiInputs = useStore((s) => s.midiInputs);
   const oscLog = useStore((s) => s.oscLog);
   const learnMode = useStore((s) => s.learnMode);
+  const touch = useStore((s) => s.touch);
+  const helpMode = useStore((s) => s.helpMode);
+  const setHelpMode = useStore((s) => s.setHelpMode);
   const send = useStore((s) => s.send);
   const savedFlash = useStore((s) => s.savedFlash);
   const undoDepth = useStore((s) => s.undoDepth);
@@ -480,6 +483,21 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
           }
         />
       </div>
+
+      {/* Touch mode only: the tooltips are hovers, and glass has no hover
+          (review M15). Armed, the next tap on anything shows its help text
+          instead of operating it — HelpMode.tsx swallows the tap. */}
+      {touch && (
+        <button
+          className={`btn ghost help ${helpMode ? 'on' : ''}`}
+          title="help — tap this, then tap any control to read what it does"
+          aria-label={helpMode ? 'help is on — tap any control to read it' : 'help'}
+          aria-pressed={helpMode}
+          onClick={() => setHelpMode(!helpMode)}
+        >
+          ?
+        </button>
+      )}
 
       {/* Pinned, not just last. .topbar is a hidden-scrollbar scroll container,
           so anything appended at the right end is the first thing to slide out

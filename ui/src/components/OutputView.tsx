@@ -51,6 +51,7 @@ function DmxMeters({
   const data = useStore((s) => s.dmx[universeId]);
   const project = useStore((s) => s.project)!;
   const [hover, setHover] = useState<number | null>(null);
+  const touch = useStore((s) => s.touch);
   const spans = useMemo(() => spansFor(project, universeId), [project, universeId]);
 
   useEffect(() => {
@@ -119,7 +120,7 @@ function DmxMeters({
   };
 
   const readout = (() => {
-    if (hover === null) return 'hover a channel to read it · click to load it into the override';
+    if (hover === null) return touch ? 'tap a channel to read it and load it into the override' : 'hover a channel to read it · click to load it into the override';
     const v = data?.[hover - 1] ?? 0;
     const who = describeChannel(spans, hover) ?? 'unpatched';
     const ov = overrides[hover];
@@ -132,8 +133,11 @@ function DmxMeters({
         <canvas
           ref={canvasRef}
           style={{ display: 'block', height: METER_H, cursor: 'crosshair' }}
-          onMouseMove={(e) => setHover(chAt(e))}
-          onMouseLeave={() => setHover(null)}
+          // pointer, not mouse: a finger reads the meter too, and a lifted
+          // finger keeps its reading — on glass there is nothing to hover
+          onPointerMove={(e) => setHover(chAt(e))}
+          onPointerDown={(e) => setHover(chAt(e))}
+          onPointerLeave={(e) => { if (e.pointerType === 'mouse') setHover(null); }}
           onClick={(e) => {
             const ch = chAt(e);
             if (ch !== null) onPick(ch);

@@ -240,3 +240,14 @@ itself.
 `http://<your-mac>:9900` on a phone or tablet on the same network to drive the
 show from the floor. On a phone the look library folds itself away so the pads
 keep the width.
+
+**On a tablet.** The console notices a fingertip and switches to touch sizing:
+every control is at least 24px, the pad's name strip is big enough to select a
+look without firing it, and the song chips show their × and ‹ › all the time.
+What a mouse reaches by right-click or hover, a finger reaches by **holding**:
+hold a column head to rename, insert or delete it; hold a song to rename, move
+or delete it; hold a musician or a piece of stage in the 2D plan to remove it.
+In the plan a Move · Turn · Select picker stands in for ⌥ and ⇧. The **?** in
+the top bar is help: tap it, then tap any control to read what it does (tap ?
+again, or Escape, to stop). Settings ▸ Display forces touch sizing on or off —
+for a laptop with a touchscreen, or a tablet with a trackpad.

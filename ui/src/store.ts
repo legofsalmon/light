@@ -3,6 +3,7 @@ import type {
   Command, HeadSnap, MidiAction, OscLogEntry, Project, ServerEvent, Snapshot,
 } from '../../shared/types.ts';
 import { WS_PORT } from '../../shared/types.ts';
+import { coarsePointer } from './touch.ts';
 
 export type Tab = 'look' | 'patch' | 'controls' | 'output' | 'sync';
 
@@ -18,6 +19,13 @@ export type ViewMode = 'pads' | 'previz' | 'patch' | 'split';
  *  full-height must not also hide the plan you patch against. */
 export type BandView = 'pads' | 'patch' | 'split';
 export type Sel = { layerId: string; col: number } | null;
+/** Touch mode (review M14/M15). 'auto' follows the pointer the browser
+ *  reports — a fingertip is coarse, a mouse or trackpad fine — and can be
+ *  forced either way, because a touchscreen laptop or a tablet with a trackpad
+ *  reports whichever it feels like. */
+export type TouchPref = 'auto' | 'on' | 'off';
+/** What a drag does in the 2D plan on a tablet, where ⌥ and ⇧ do not exist. */
+export type PlanTool = 'move' | 'rotate' | 'select';
 
 type Store = {
   connected: boolean;
@@ -56,6 +64,14 @@ type Store = {
    *  still reads brighter — off gives a fixed exposure for judging absolute
    *  levels. */
   previzAutoExposure: boolean;
+  touchPref: TouchPref;
+  /** Touch mode is on: 24px targets, hold-to-edit, the ? help button. Derived
+   *  from touchPref and the pointer the browser reports. */
+  touch: boolean;
+  /** The on-screen ?: the next tap on any control shows its help instead of
+   *  operating it. */
+  helpMode: boolean;
+  previz2dTool: PlanTool;
   previzMode: '3d' | '2d';
   /** What the previz was showing before the patch view borrowed it for the
    *  plan, so leaving patch gives back the view the operator was steering by.
@@ -132,6 +148,9 @@ type Store = {
   setEditorHidden: (v: boolean) => void;
   togglePreviewPane: () => void;
   togglePrevizAutoExposure: () => void;
+  setTouchPref: (p: TouchPref) => void;
+  setHelpMode: (v: boolean) => void;
+  setPreviz2dTool: (t: PlanTool) => void;
   setPrevizMode: (m: '3d' | '2d') => void;
   setPreviz2dView: (v: 'plan' | 'front') => void;
   setFxSel: (ids: string[]) => void;
@@ -176,6 +195,14 @@ const loadFlag = (key: string, def = false) => {
 const saveFlag = (key: string, v: boolean) => {
   try { localStorage.setItem(key, v ? '1' : '0'); } catch { /* non-essential */ }
 };
+
+const loadTouchPref = (): TouchPref => {
+  try {
+    const v = localStorage.getItem('touchPref');
+    return v === 'on' || v === 'off' ? v : 'auto';
+  } catch { return 'auto'; }
+};
+const touchFor = (pref: TouchPref): boolean => (pref === 'auto' ? coarsePointer() : pref === 'on');
 
 export type Toast = { id: number; ok: boolean; text: string; at: number; sticky: boolean };
 
@@ -354,6 +381,10 @@ export const useStore = create<Store>()((set, get) => ({
   editorHidden: loadFlag('editorHidden'),
   previewPane: loadFlag('previewPane', true),
   previzAutoExposure: loadFlag('previzAutoExposure', true),
+  touchPref: loadTouchPref(),
+  touch: touchFor(loadTouchPref()),
+  helpMode: false,
+  previz2dTool: 'move',
   // Launching straight back into the patch view must give the plan the view
   // exists for, the same way arriving there from anywhere else does — and must
   // record the loan, or the borrowed 2D leaks into every other view on exit.
@@ -537,6 +568,15 @@ export const useStore = create<Store>()((set, get) => ({
       saveFlag('previzAutoExposure', previzAutoExposure);
       return { previzAutoExposure };
     }),
+  setTouchPref: (touchPref) =>
+    set(() => {
+      try { localStorage.setItem('touchPref', touchPref); } catch { /* non-essential */ }
+      const touch = touchFor(touchPref);
+      // the ? lives in touch mode; leaving it must not strand a help session
+      return { touchPref, touch, ...(touch ? {} : { helpMode: false }) };
+    }),
+  setHelpMode: (helpMode) => set({ helpMode }),
+  setPreviz2dTool: (previz2dTool) => set({ previz2dTool }),
   // An explicit pick outranks the pending patch restore — otherwise leaving the
   // view would overwrite the screen they just chose.
   setPrevizMode: (previzMode) => set({ previzMode, prePatch: null }),
@@ -774,4 +814,15 @@ export function lookOf(project: Project | null, layerId: string, col: number) {
 // dev-only handle for debugging/automation (vite strips this in production builds)
 if (import.meta.env.DEV) {
   (window as unknown as { __lightStore?: typeof useStore }).__lightStore = useStore;
+}
+
+// A tablet that gains a trackpad, or a laptop that gains a touchscreen, changes
+// what the browser reports — follow it while the preference is auto.
+if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+  try {
+    const mq = window.matchMedia('(pointer: coarse)');
+    mq.addEventListener('change', () => {
+      if (useStore.getState().touchPref === 'auto') useStore.setState({ touch: mq.matches, ...(mq.matches ? {} : { helpMode: false }) });
+    });
+  } catch { /* an old WebView without the listener form */ }
 }

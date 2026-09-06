@@ -12,6 +12,7 @@ import { LicenceGate } from './components/LicenceGate.tsx';
 import { licenceAvailable, licenceStatus, type LicenceStatus } from './licence.ts';
 import { AdminModal } from './components/AdminModal.tsx';
 import { Toasts } from './components/Toasts.tsx';
+import { HelpOverlay } from './components/HelpMode.tsx';
 import { updateAvailable, updateStatus } from './update.ts';
 
 /** Keeps one crashing region from blanking the whole console mid-show: the
@@ -57,6 +58,8 @@ export function App() {
   const previzHidden = useStore((s) => s.previzHidden);
   const togglePreviz = useStore((s) => s.togglePreviz);
   const libraryHiddenPref = useStore((s) => s.libraryHidden);
+  const touch = useStore((s) => s.touch);
+  const helpMode = useStore((s) => s.helpMode);
   const setLibraryHidden = useStore((s) => s.setLibraryHidden);
   const editorHiddenPref = useStore((s) => s.editorHidden);
   const setEditorHidden = useStore((s) => s.setEditorHidden);
@@ -254,16 +257,17 @@ export function App() {
 
   return (
     <div
-      className={`app view-${view} ${bandHidden ? 'previz-off' : ''}`}
+      className={`app view-${view} ${bandHidden ? 'previz-off' : ''} ${touch ? 'touch' : ''} ${helpMode ? 'helpmode' : ''}`}
       style={{
         ['--previz-h' as string]: `${layout.previzH}px`,
         ['--bottom-h' as string]: `${layout.bottomH}px`,
-        // A collapsed side panel is an 18px strip in the same grid column, and
-        // its splitter track goes to zero — one pads template covers every
-        // combination instead of a class per permutation.
-        ['--library-w' as string]: libraryHidden ? '18px' : `${layout.libraryW}px`,
+        // A collapsed side panel is a reveal strip (--strip: 18px, 24px in touch
+        // mode) in the same grid column, and its splitter track goes to zero —
+        // one pads template covers every combination instead of a class per
+        // permutation.
+        ['--library-w' as string]: libraryHidden ? 'var(--strip)' : `${layout.libraryW}px`,
         ['--lsplit-w' as string]: libraryHidden ? '0px' : '6px',
-        ['--editor-w' as string]: editorHidden ? '18px' : `${layout.editorW}px`,
+        ['--editor-w' as string]: editorHidden ? 'var(--strip)' : `${layout.editorW}px`,
         ['--esplit-w' as string]: editorHidden ? '0px' : '6px',
       }}
     >
@@ -367,6 +371,7 @@ export function App() {
         </div>
       )}
       <Toasts />
+      <HelpOverlay />
       {admin && <AdminModal onClose={() => setAdmin(false)} />}
       <DialogHost />
     </div>
@@ -387,7 +392,9 @@ const MIN_GRID_W = 306;
 const MIN_LIBRARY = 200;
 const MIN_EDITOR = 300;
 const SPLIT_CHROME = 46 + 6 + 6 + 6;
-const SPLIT_CHROME_BANDLESS = 46 + 18 + 6 + 5;
+/** the collapsed band's reveal strip — --strip in theme.css, wider in touch mode */
+const stripH = () => (useStore.getState().touch ? 24 : 18);
+const SPLIT_CHROME_BANDLESS = () => 46 + stripH() + 6 + 5;
 /** Window widths below which a pads-view side panel cannot be shown at all —
  *  its own floor plus a usable grid does not fit. */
 const LIBRARY_MIN_WINDOW = MIN_GRID_W + MIN_LIBRARY + 8;
@@ -421,7 +428,7 @@ const absorb = (
  *  track on its own lets their SUM eat the grid between them and push the last
  *  panel off a viewport with no scrollbar to get it back. `keep` names the
  *  track being dragged — the one that wins. `panels` lists the pads-view side
- *  panels currently on screen; a collapsed one costs 18px, not its width. */
+ *  panels currently on screen; a collapsed one costs its strip, not its width. */
 const clampLayout = (
   l: Layout,
   opts: {
@@ -440,11 +447,11 @@ const clampLayout = (
   };
 
   if (opts.view === 'split' && opts.bandHidden) {
-    // A collapsed band costs an 18px strip, not its remembered height. Reserving
+    // A collapsed band costs its reveal strip, not its remembered height. Reserving
     // that height anyway would dead-end the editor drag well short of the room
     // on screen — and worse, draining previzH to pay for it would destroy the
     // band size the operator set, which they only see when it comes back.
-    const room = window.innerHeight - SPLIT_CHROME_BANDLESS - MIN_GRID;
+    const room = window.innerHeight - SPLIT_CHROME_BANDLESS() - MIN_GRID;
     out.bottomH = Math.min(out.bottomH, Math.max(MIN_PANEL, room));
   } else if (opts.view === 'split') {
     const room = window.innerHeight - SPLIT_CHROME - MIN_GRID;

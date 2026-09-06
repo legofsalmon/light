@@ -3,6 +3,7 @@ import type { ControlLink, Layer, LayerBlend, LayerSnap, Project } from '../../.
 import { uid } from '../../../shared/types.ts';
 import { notify, useStore } from '../store.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
+import { contextPress } from '../touch.ts';
 import { Fader } from './Fader.tsx';
 import { lookSwatch } from '../lookColors.ts';
 import { APC_COLS, APC_KNOB_BANKS, APC_LAYER_ROWS } from '../apcFeedback.ts';
@@ -304,6 +305,7 @@ function DeckBar() {
   const send = useStore((s) => s.send);
   const mutate = useStore((s) => s.mutate);
   const flushProjectWrite = useStore((s) => s.flushProjectWrite);
+  const touch = useStore((s) => s.touch);
   const decks = project.decks ?? [];
   const activeChipRef = useRef<HTMLDivElement>(null);
   // A chip carries both gestures: click switches the live song, double-click
@@ -318,6 +320,59 @@ function DeckBar() {
   useEffect(() => {
     activeChipRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
   }, [project.activeDeckId]);
+  type Song = (typeof decks)[number];
+  const renameSong = (d: Song) => {
+    void (async () => {
+      const name = await askPrompt('Rename song', d.name);
+      if (!name) return;
+      mutate((p) => {
+        const dk = p.decks?.find((x) => x.id === d.id);
+        if (dk) dk.name = name;
+      });
+    })();
+  };
+  const moveSong = (d: Song, by: -1 | 1) => {
+    mutate((p) => {
+      const arr = p.decks ?? [];
+      const i = arr.findIndex((x) => x.id === d.id);
+      const j = i + by;
+      if (i >= 0 && j >= 0 && j < arr.length) [arr[i], arr[j]] = [arr[j], arr[i]];
+    });
+  };
+  const deleteSong = (d: Song) => {
+    void (async () => {
+      const ok = await askConfirm(`Delete song "${d.name}"?`, {
+        body: 'Its pad layout is lost. The looks themselves are kept in the pool.',
+        confirmLabel: 'Delete song',
+        danger: true,
+      });
+      if (!ok) return;
+      mutate((p) => {
+        p.decks = (p.decks ?? []).filter((x) => x.id !== d.id);
+      });
+    })();
+  };
+  // Everything the chip's hover and double-click offer, as a menu: the touch
+  // route (a long-press) and the right-click reach it too (review M15).
+  const songMenu = (d: Song) => {
+    const i = decks.findIndex((x) => x.id === d.id);
+    const active = d.id === project.activeDeckId;
+    void askChoice(
+      `Song · ${d.name}`,
+      [
+        { value: 'rename', label: 'Rename…', primary: true },
+        ...(i > 0 ? [{ value: 'earlier', label: 'Move earlier' }] : []),
+        ...(i < decks.length - 1 ? [{ value: 'later', label: 'Move later' }] : []),
+        ...(decks.length > 1 && !active ? [{ value: 'delete', label: 'Delete song', danger: true }] : []),
+      ],
+      active && decks.length > 1 ? { body: 'The song that is playing cannot be deleted — switch to another one first.' } : {},
+    ).then((choice) => {
+      if (choice === 'rename') renameSong(d);
+      else if (choice === 'earlier') moveSong(d, -1);
+      else if (choice === 'later') moveSong(d, 1);
+      else if (choice === 'delete') deleteSong(d);
+    });
+  };
   if (decks.length === 0) return null;
 
   return (
@@ -361,7 +416,8 @@ function DeckBar() {
           onKeyDown={(e) => {
             if ((e.key === 'Enter' || e.key === ' ') && d.id !== project.activeDeckId) { e.preventDefault(); send({ type: 'switchDeck', deckId: d.id }); }
           }}
-          title="click to switch · double-click to rename"
+          title={`click to switch · double-click to rename · ${touch ? 'hold' : 'right-click'} for more`}
+          {...contextPress(() => songMenu(d))}
           onClick={() => {
             // already on this deck: a switch is a no-op, so don't delay the
             // rename that a double-click here is about to ask for
@@ -377,14 +433,7 @@ function DeckBar() {
               clearTimeout(switchTimer.current);
               switchTimer.current = null; // the pending switch was the first click of this double
             }
-            void (async () => {
-              const name = await askPrompt('Rename song', d.name);
-              if (!name) return;
-              mutate((p) => {
-                const dk = p.decks?.find((x) => x.id === d.id);
-                if (dk) dk.name = name;
-              });
-            })();
+            renameSong(d);
           }}
         >
           {d.name}
@@ -395,11 +444,7 @@ function DeckBar() {
                 title="move this song earlier"
                 onClick={(e) => {
                   e.stopPropagation();
-                  mutate((p) => {
-                    const arr = p.decks ?? [];
-                    const i = arr.findIndex((x) => x.id === d.id);
-                    if (i > 0) [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
-                  });
+                  moveSong(d, -1);
                 }}
               >
                 ‹
@@ -409,11 +454,7 @@ function DeckBar() {
                 title="move this song later"
                 onClick={(e) => {
                   e.stopPropagation();
-                  mutate((p) => {
-                    const arr = p.decks ?? [];
-                    const i = arr.findIndex((x) => x.id === d.id);
-                    if (i >= 0 && i < arr.length - 1) [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
-                  });
+                  moveSong(d, 1);
                 }}
               >
                 ›
@@ -426,17 +467,7 @@ function DeckBar() {
               title="delete song"
               onClick={(e) => {
                 e.stopPropagation();
-                void (async () => {
-                  const ok = await askConfirm(`Delete song "${d.name}"?`, {
-                    body: 'Its pad layout is lost. The looks themselves are kept in the pool.',
-                    confirmLabel: 'Delete song',
-                    danger: true,
-                  });
-                  if (!ok) return;
-                  mutate((p) => {
-                    p.decks = (p.decks ?? []).filter((x) => x.id !== d.id);
-                  });
-                })();
+                deleteSong(d);
               }}
             >
               ×
@@ -707,6 +738,7 @@ export function LookGrid() {
   const project = useStore((s) => s.project)!;
   const liveLayers = useStore((s) => s.snap?.layers);
   const learnMode = useStore((s) => s.learnMode);
+  const touch = useStore((s) => s.touch);
   const learnTarget = useStore((s) => s.learnTarget);
   const send = useStore((s) => s.send);
   const mutate = useStore((s) => s.mutate);
@@ -780,6 +812,20 @@ export function LookGrid() {
     });
   };
 
+  const columnMenu = (col: number, name: string) => {
+    void askChoice(`Column ${col + 1}${name ? ` · ${name}` : ''}`, [
+      { value: 'rename', label: 'Rename…', primary: true },
+      { value: 'insert', label: 'Insert column after' },
+      ...(cols.length > 1
+        ? [{ value: 'delete', label: 'Delete column', danger: true }]
+        : []),
+    ]).then((choice) => {
+      if (choice === 'rename') renameColumn(col);
+      else if (choice === 'insert') insertColumn(col);
+      else if (choice === 'delete') deleteColumn(col);
+    });
+  };
+
   return (
     <>
     <RigHint />
@@ -801,26 +847,14 @@ export function LookGrid() {
           role="button"
           tabIndex={0}
           onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); e.currentTarget.click(); } }}
-          title={`trigger column ${col + 1}${col < 9 ? ` (key ${col + 1})` : ''} · right-click to rename, insert or delete`}
+          title={`trigger column ${col + 1}${col < 9 ? ` (key ${col + 1})` : ''} · ${touch ? 'hold' : 'right-click'} to rename, insert or delete`}
           onClick={() => {
             if (!useStore.getState().armLearn({ kind: 'column', col })) send({ type: 'column', col });
           }}
-          // right-click, never left: a left click fires the column, so editing
-          // must not be reachable by the gesture that triggers cues
-          onContextMenu={(e) => {
-            e.preventDefault();
-            void askChoice(`Column ${col + 1}${name ? ` · ${name}` : ''}`, [
-              { value: 'rename', label: 'Rename…', primary: true },
-              { value: 'insert', label: 'Insert column after' },
-              ...(cols.length > 1
-                ? [{ value: 'delete', label: 'Delete column', danger: true }]
-                : []),
-            ]).then((choice) => {
-              if (choice === 'rename') renameColumn(col);
-              else if (choice === 'insert') insertColumn(col);
-              else if (choice === 'delete') deleteColumn(col);
-            });
-          }}
+          // Right-click or a long-press, never a left click: a left click fires
+          // the column, so editing must not be reachable by the gesture that
+          // triggers cues. The hold is the tablet's right-click (review M15).
+          {...contextPress(() => columnMenu(col, name))}
         >
           {col + 1} · {name}
         </div>

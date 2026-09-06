@@ -184,13 +184,65 @@ the app actually does at a laptop and a tablet, not a redesign:
 
 - Pads at 1024×768: library 280 + editor 380 are fixed, so the pad grid gets
   348px — a column and a half. That is the review's tablet finding (M14/M15) in
-  one picture; the fix is a tablet density mode, not a smaller pad.
+  one picture; the density side of it is now touch mode (below), and the pad
+  did not get smaller.
 - Build at 1024×768: previz 270 + bottom panel 292 are fixed, so the grid gets
   143px — one layer row. The bottom panel needs to scale, or collapse to its tabs.
 - The top bar's content is ~1780px at every width; below that it scrolls
   (`overflow-x: auto`, hidden scrollbar) with the cog pinned — the review's M4.
 - The audition pane is 432px fixed in Figma where the CSS says 30% (min 230,
   max 44%) — Figma has no percentage widths; the doc frame says so.
+
+## Touch mode
+
+The LAN tablet gets the same UI at `http://<mac>:9900`, and the review found
+its targets far under the 24px `size/touch-target` floor and several edits
+reachable only by right-click, hover or a modifier key (M14/M15). The answer is
+a **density mode, not a redesign**: `.app.touch` on the root, automatic when
+the browser reports a coarse pointer (`matchMedia('(pointer: coarse)')`),
+forced on or off in Settings ▸ Display (`touchPref` in localStorage), and
+followed live if the pointer changes. The laptop keeps its density — nothing
+below applies without the class.
+
+**Sizes.** The Size collection has a second mode, **Touch** (the first is Figma's default, named Value); `tokens.json`
+carries both values as `modes` on each token, and `theme.css` applies them
+under `.app.touch`:
+
+| token | Value | Touch | what it is |
+|---|---|---|---|
+| `size/btn` | 26 | 28 | every `.btn` (`min-height`) |
+| `size/btn-sm` | 20 | 24 | `.btn.small` — the layer ✕, song ◀ ▶, toast dismiss |
+| `size/input` | 24 | 26 | `input.text`, `input.num`, `select.sel`; `.chipsel` 24 |
+| `size/fader` | 22 | 28 | every fader, dial and master |
+| `size/colhead` | 26 | 30 | column heads |
+| `size/pad-h` | 58 | 64 | the pad, so the colour block stays the bigger half |
+| `size/pad-name` | 17 | 24 | the select-without-firing strip (`--padname-h`) |
+| `size/enable` | 12 | 18 | the enable box, plus a `::after` hit area of 26 |
+| `size/swatch` | 16 | 24 | colour swatches |
+| `size/strip` | 18 | 24 | the reveal strips (`--strip`, also the grid tracks) |
+
+Not tokens but in the same block: `.seg button` and `.headchip` reach 24,
+`.tab` 32, song chips 28 with their × and ‹ › **always visible** (they were
+hover-only) and stretched to the chip's full height, table rows and library
+rows get taller padding, and the splitters' invisible grab grows from 14 to
+24px. The `?` button (`.btn.help`) appears in the top bar only in touch mode.
+
+**Routes.** `ui/src/touch.ts` `contextPress(open)` returns the handlers that
+open an element's context action from a right-click **or** a long-press
+(500ms, 8px slop, touch and pen only — a mouse never gets it, so a slow click
+stays a click). The click that trails a long-press is swallowed in the capture
+phase, so holding a column head opens its menu without firing the column.
+Used on column heads (rename / insert / delete) and song chips (rename / move
+/ delete — a new menu; the right-click reaches it too). The 2D plan replaces
+⌥ and ⇧ with a Move · Turn · Select picker in touch mode (`previz2dTool`), and
+a held finger on a prop offers to remove it, the way a double-click does. The
+DMX meter reads on a tap and keeps its reading when the finger lifts.
+
+**Help.** `HelpMode.tsx`: `?` arms help mode, the next tap on anything with a
+`title` (or `aria-label`) shows that text in a card beside it — the tap is
+swallowed at the document in the capture phase, so a pad does not fire while
+being read — and Escape or `?` again ends it. The card is `.helpcard`
+(`.pill` for the standing hint); with a mouse the cursor says `help`.
 
 ## Keeping Figma and the code in sync
 

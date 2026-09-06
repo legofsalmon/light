@@ -18,6 +18,42 @@ import { LicencePanel } from './LicencePanel.tsx';
 import { UpdatePanel } from './UpdatePanel.tsx';
 import { licenceAvailable } from '../licence.ts';
 import { updateAvailable } from '../update.ts';
+import { useStore, type TouchPref } from '../store.ts';
+
+/** Touch sizing (review M14/M15). Auto follows what the browser says the
+ *  pointer is; the override exists because a touchscreen laptop or a tablet
+ *  with a trackpad reports whichever it feels like, and because a laptop on a
+ *  flight case may want the bigger targets anyway. */
+function TouchSetting(): React.ReactElement {
+  const pref = useStore((s) => s.touchPref);
+  const touch = useStore((s) => s.touch);
+  const setTouchPref = useStore((s) => s.setTouchPref);
+  const options: { v: TouchPref; label: string; title: string }[] = [
+    { v: 'auto', label: 'auto', title: 'follow the pointer the browser reports: on for a fingertip, off for a mouse or trackpad' },
+    { v: 'on', label: 'on', title: 'bigger targets, hold-to-edit and the ? help button, whatever the pointer' },
+    { v: 'off', label: 'off', title: 'laptop density on this screen, whatever the pointer' },
+  ];
+  return (
+    <div className="col" style={{ gap: 8 }}>
+      <div className="row">
+        <span className="label" style={{ width: 90 }}>touch sizing</span>
+        <div className="seg" role="group" aria-label="touch sizing">
+          {options.map((o) => (
+            <button key={o.v} className={pref === o.v ? 'on' : ''} title={o.title} onClick={() => setTouchPref(o.v)}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <span className="label">{touch ? 'on now' : 'off now'}</span>
+      </div>
+      <div className="prose">
+        Every control grows to at least 24px, a song or column can be edited by holding it, and a ? in the
+        top bar explains any control you tap. Auto follows the pointer: on for a fingertip, off for a mouse or
+        trackpad.
+      </div>
+    </div>
+  );
+}
 
 export function AdminModal({ onClose }: { onClose: () => void }): React.ReactElement {
   useEffect(() => {
@@ -56,8 +92,15 @@ export function AdminModal({ onClose }: { onClose: () => void }): React.ReactEle
           </button>
         </div>
 
+        {/* Shown everywhere, browser and tablet included — the tablet is
+            exactly where this one matters. */}
+        <div style={{ marginTop: 12 }}>
+          <div className="sectionhead">Display</div>
+          <TouchSetting />
+        </div>
+
         {anything ? (
-          <div className="col" style={{ gap: 18, marginTop: 12 }}>
+          <div className="col" style={{ gap: 18, marginTop: 18 }}>
             {updateAvailable() && (
               <div>
                 <div className="sectionhead">Updates</div>

@@ -6,6 +6,7 @@ import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '
 import { buildGeometry, localXDir, type HeadGeom } from '../../../shared/geometry.ts';
 import { hitsPropFootprint, standingHeightAt } from '../../../shared/beamThrow.ts';
 import { askConfirm } from '../dialog.tsx';
+import { LONG_PRESS_MS } from '../touch.ts';
 
 /** Head world positions from the shared geometry module — the same builder the
  *  engines use, so the plan view can never disagree with the 3D previz (it
@@ -497,14 +498,35 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       });
     };
 
+    const removeProp = (id: string) => {
+      const pr = useStore.getState().project?.props?.find((x) => x.id === id);
+      if (!pr) return;
+      void askConfirm(`Remove this ${pr.kind}?`, { confirmLabel: 'Remove', danger: true }).then((ok) => {
+        if (!ok) return;
+        useStore.getState().mutate((p) => {
+          p.props = (p.props ?? []).filter((x) => x.id !== id);
+          if (p.props.length === 0) delete p.props;
+        });
+      });
+    };
+    // A held finger is the tablet's double-click (review M15): hold a prop
+    // still for half a second and it offers to remove it. Mouse pointers keep
+    // the double-click and never get this.
+    let hold: { x: number; y: number; timer: ReturnType<typeof setTimeout> } | null = null;
+    const endHold = () => {
+      if (hold) clearTimeout(hold.timer);
+      hold = null;
+    };
+
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
-      const { project, previz2dView: view, fxSel, setFxSel } = useStore.getState();
+      const { project, previz2dView: view, fxSel, setFxSel, previz2dTool: tool } = useStore.getState();
       if (!project) return;
       const rect = canvas.getBoundingClientRect();
       const m = mapping(view);
       const pos = m.fromPx(e.clientX - rect.left, e.clientY - rect.top);
-      const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+      // the tablet's tool picker stands in for the modifier keys (review M15)
+      const additive = e.shiftKey || e.metaKey || e.ctrlKey || tool === 'select';
       // stage props hit-test first (plan view only) — they render on top
       if (view === 'plan' && !additive) {
         // A person always wins over the scenery they are standing on. Comparing
@@ -555,16 +577,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
           const hit = bestProp;
           if (e.detail >= 2) {
             // double-click removes the musician
-            const pr = project.props?.find((x) => x.id === hit.id);
-            if (pr) {
-              void askConfirm(`Remove this ${pr.kind}?`, { confirmLabel: 'Remove', danger: true }).then((ok) => {
-                if (!ok) return;
-                useStore.getState().mutate((p) => {
-                  p.props = (p.props ?? []).filter((x) => x.id !== hit.id);
-                  if (p.props.length === 0) delete p.props;
-                });
-              });
-            }
+            removeProp(hit.id);
             return;
           }
           const hitProp = project.props?.find((x) => x.id === hit.id);
@@ -585,6 +598,20 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
           }
           dragRef.current = { id: hit.id, kind: 'prop', lastSend: 0, x: pos.x, v: pos.v, rot: 0, others: [] };
           try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointers */ }
+          if (e.pointerType !== 'mouse') {
+            endHold();
+            const pointerId = e.pointerId;
+            hold = {
+              x: e.clientX,
+              y: e.clientY,
+              timer: setTimeout(() => {
+                hold = null;
+                if (dragRef.current?.id === hit.id) dragRef.current = null; // a hold is not a drag
+                try { canvas.releasePointerCapture(pointerId); } catch { /* already released */ }
+                removeProp(hit.id);
+              }, LONG_PRESS_MS),
+            };
+          }
           return;
         }
       }
@@ -602,7 +629,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       }
       if (best) {
         // ⌥-drag rotates (plan view only — yaw isn't meaningful in elevation)
-        const kind = e.altKey && view === 'plan' ? 'rotate' : 'move';
+        const kind = (e.altKey || tool === 'rotate') && view === 'plan' ? 'rotate' : 'move';
         // clicking an unselected fixture makes it the sole selection;
         // dragging a selected one moves the whole selection together
         const sel = fxSel.includes(best.id) ? fxSel : [best.id];
@@ -632,6 +659,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointers */ }
     };
     const onPointerMove = (e: PointerEvent) => {
+      if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 8) endHold(); // it moved: a drag, not a hold
       const mq = marqueeRef.current;
       if (mq && e.buttons & 1) {
         const view = useStore.getState().previz2dView;
@@ -671,6 +699,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       else applyDrag(drag.id, drag.x, drag.v, drag.others);
     };
     const onPointerUp = () => {
+      endHold();
       const mq = marqueeRef.current;
       if (mq) {
         marqueeRef.current = null;
@@ -709,6 +738,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', endHold);
 
     return () => {
       cancelAnimationFrame(raf);
@@ -717,6 +747,8 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointercancel', endHold);
+      endHold();
     };
   }, []);
 
