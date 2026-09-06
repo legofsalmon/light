@@ -24,6 +24,12 @@ export function initMidi(): void {
             if (useStore.getState().engineMidi) return;
             const d = e.data;
             if (!d || d.length === 0) return;
+            // System realtime — clock, start, continue, stop. A source sending
+            // beat clock sends 48 of these a second at 120 BPM, and none of
+            // them is a mapping: dropping them here saves the store a lookup
+            // per message. Following the clock is the native engine's job; a
+            // browser cannot see a timestamp worth averaging.
+            if (d[0] >= 0xf8) return;
             useStore.getState().handleMidi(d[0], d[1] ?? 0, d[2] ?? 0);
           };
         });

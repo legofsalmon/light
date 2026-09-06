@@ -1907,6 +1907,63 @@ async function main(): Promise<void> {
     await sleep(300);
   }
 
+  // --- Beat clock (backlog #10): the FOLLOWER is native-only, like Link — a
+  // --- browser cannot see a timestamp worth averaging. What both engines must
+  // --- agree on is the flag and the rule that only one thing drives the
+  // --- tempo, because a client has to get the same project back whichever
+  // --- engine it is talking to.
+  {
+    const sync = async (c: Client) => (await currentProject(c)).sync;
+    const pair = (a: { linkEnabled?: boolean; midiClockEnabled?: boolean }) =>
+      `link=${a.linkEnabled === true} clock=${a.midiClockEnabled === true}`;
+    both({ type: 'setLink', on: true });
+    await sleep(400);
+    check(
+      'beat clock: both engines start from Link leading',
+      pair(await sync(nodeObs)) === 'link=true clock=false' && pair(await sync(rustObs)) === 'link=true clock=false',
+      `node=${pair(await sync(nodeObs))} rust=${pair(await sync(rustObs))}`,
+    );
+    both({ type: 'setMidiClock', on: true });
+    await sleep(400);
+    check(
+      'beat clock: switching it on takes the tempo from Link in both engines',
+      pair(await sync(nodeObs)) === 'link=false clock=true' && pair(await sync(rustObs)) === 'link=false clock=true',
+      `node=${pair(await sync(nodeObs))} rust=${pair(await sync(rustObs))}`,
+    );
+    both({ type: 'setLink', on: true });
+    await sleep(400);
+    check(
+      'beat clock: and Link takes it back the same way',
+      pair(await sync(nodeObs)) === 'link=true clock=false' && pair(await sync(rustObs)) === 'link=true clock=false',
+      `node=${pair(await sync(nodeObs))} rust=${pair(await sync(rustObs))}`,
+    );
+    // switching one OFF is not a claim on the tempo, so it leaves the other
+    both({ type: 'setMidiClock', on: true });
+    await sleep(300);
+    both({ type: 'setMidiClock', on: false });
+    await sleep(400);
+    check(
+      'beat clock: switching it off claims nothing',
+      pair(await sync(nodeObs)) === 'link=false clock=false' && pair(await sync(rustObs)) === 'link=false clock=false',
+      `node=${pair(await sync(nodeObs))} rust=${pair(await sync(rustObs))}`,
+    );
+    both({ type: 'setLink', on: false });
+    await sleep(300);
+    // With nothing sending clock, an armed follower must leave the tempo alone
+    // rather than free-run it somewhere — a stall is not a tempo change.
+    both({ type: 'setBpm', bpm: 132 });
+    both({ type: 'setMidiClock', on: true });
+    await sleep(700);
+    check(
+      'beat clock: armed with nothing sending, the tempo stays where it was',
+      Math.abs((node.snap?.bpm ?? 0) - 132) < 0.01 && Math.abs((rust.snap?.bpm ?? 0) - 132) < 0.01,
+      `node=${node.snap?.bpm} rust=${rust.snap?.bpm}`,
+    );
+    compareDmx('beat clock: an armed follower with no source changes no byte', node, rust);
+    both({ type: 'setMidiClock', on: false });
+    await sleep(300);
+  }
+
   // --- MVR import parity: both engines apply the same scene identically.
   const mvr = fs.readFileSync(path.join(ROOT, 'core', 'tests', 'data', 'synthetic.mvr'));
   node.project = null;

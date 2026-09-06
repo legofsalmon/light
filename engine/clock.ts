@@ -19,6 +19,19 @@ export class BeatClock {
     this.bpm = clamp(bpm, 20, 500);
   }
 
+  /** Set tempo AND phase together.
+   *
+   *  A follower knows both at once, and doing it as two calls leaves one tick
+   *  where the beat is computed from the NEW tempo against the OLD anchor — a
+   *  phase step every time the tempo moves, which on a MIDI clock is several
+   *  times a second. Mirrors set_tempo_and_beat in core/src/clock.rs. */
+  setTempoAndBeat(bpm: number, beat: number, t = performance.now()): void {
+    if (!Number.isFinite(bpm) || !Number.isFinite(beat)) return;
+    this.bpm = clamp(bpm, 20, 500);
+    this.anchorBeat = beat;
+    this.anchorT = t;
+  }
+
   /** Snap the beat phase to a downbeat now (Resolume resync). */
   resync(t = performance.now()): void {
     this.anchorBeat = Math.ceil(this.beatAt(t));

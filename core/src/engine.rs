@@ -26,6 +26,10 @@ pub enum EngineMsg {
     Cmd(Command, Option<ClientId>),
     Osc(OscMessage),
     Midi(u8, u8, u8),
+    /// A system-realtime byte with midir's timestamp and the port it came from
+    /// — clock, start, continue, stop. Kept apart from `Midi` because it is a
+    /// different question (what time is it) asked 48 times a second.
+    MidiClock(u8, u64, std::sync::Arc<str>),
     MidiPorts(Vec<String>),
     ClientConnected(ClientId),
     ClientDisconnected(ClientId),
@@ -250,8 +254,7 @@ impl std::fmt::Display for ExitReason {
 }
 
 pub fn run(mut cfg: EngineConfig) -> ExitReason {
-    let epoch = Instant::now();
-    let _ = EPOCH.set(epoch);
+    let epoch = *EPOCH.get_or_init(Instant::now);
     let now_ms = move || epoch.elapsed().as_secs_f64() * 1000.0;
 
     let dir = persist::project_dir();
@@ -297,6 +300,7 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
     // Whether any of it reaches the wire. Off until an operator says otherwise,
     // every boot — crate::output.
     let mut gate = crate::output::OutputGate::new();
+    let mut midi_clock = crate::midi_clock::MidiClock::new();
     // ...and which frame, when the operator is editing a look with the rig up.
     let mut freeze = crate::output::FreezeHold::new();
     let mut osc = OscIn::new();
@@ -394,7 +398,7 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
                     let bpm_before = state.clock.bpm;
                     let align = handle_msg(
                         msg, &mut state, &bc, &mut osc, &tx, &dir, &mut dirty_at, &mut midi_names,
-                        &mut osc_log, now_ms(), &mut project_echo, &mut subs,
+                        &mut osc_log, now_ms(), &mut project_echo, &mut subs, &mut midi_clock,
                     );
                     if align {
                         renderer.align_phase();
@@ -464,6 +468,21 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
         if let Some(bpm) = link.poll_tempo(state.clock.bpm) {
             state.clock.set_bpm(bpm, t);
         }
+        // ...or a MIDI clock, but never both. LIGHT pushes a locally-set tempo
+        // INTO a Link session, so following a jittery clock while leading a
+        // session would launder that jitter out to every machine in the room.
+        // Link wins if somehow both are set; the UI keeps them exclusive.
+        if state.project.sync.midi_clock_enabled && !state.project.sync.link_enabled {
+            if let Some(f) = midi_clock.follow(micros_now()) {
+                match f.beat {
+                    // a transport start knows the phase as well as the tempo,
+                    // and setting them together avoids a tick where the beat is
+                    // computed from the new tempo against the old anchor
+                    Some(beat) => state.clock.set_tempo_and_beat(f.bpm, beat, t),
+                    None => state.clock.set_bpm(f.bpm, t),
+                }
+            }
+        }
         let mut res = renderer.tick(&mut state, t);
         // Substituted before ANYTHING reads the buffers, so the wire and the
         // DMX monitor agree: the monitor reports what is leaving the app, and
@@ -532,7 +551,8 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
         if snap_flip && bc.count() > 0 {
             // The snapshot is identical for every client, so it is serialised
             // once and broadcast as one string.
-            let snap = build_snapshot(&state, &res, t, &stats, &link, &artnet, osc.status());
+            let snap =
+                build_snapshot(&state, &res, t, &stats, &link, &midi_clock, &artnet, osc.status());
             if let Ok(s) = serde_json::to_string(&snap) {
                 bc.broadcast(&s);
             }
@@ -664,6 +684,14 @@ pub fn client_count() -> usize {
 /// monotonic scale the tick writes on. `now_ms` inside `run` is a closure over
 /// an Instant and a free function cannot reach it.
 static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// Monotonic microseconds on the tick's own scale. The MIDI beat clock
+/// needs finer resolution than `now_ms` gives without losing the whole-number
+/// arithmetic, and the driver's timestamps are anchored onto this in
+/// `midi.rs` so both sides of a staleness test mean the same thing.
+pub fn micros_now() -> u64 {
+    EPOCH.get_or_init(std::time::Instant::now).elapsed().as_micros() as u64
+}
 
 /// True when anything was lit within `grace_ms`.
 pub fn rig_lit_within(grace_ms: u64) -> bool {
@@ -848,6 +876,7 @@ fn handle_msg(
     t: f64,
     project_echo: &mut EchoTo,
     subs: &mut Subs,
+    midi_clock: &mut crate::midi_clock::MidiClock,
 ) -> bool {
     match msg {
         // handled by the drain loop before it reaches here
@@ -1058,6 +1087,11 @@ fn handle_msg(
             // No owner: a controller change belongs to everyone.
             apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_echo, None);
         }
+        // Realtime bytes go to the follower and no further. Whether the
+        // follower is allowed to DRIVE the clock is decided on the tick, not
+        // here: it keeps reading the room either way, so switching it on is
+        // instant rather than a beat and a half of silence.
+        EngineMsg::MidiClock(status, stamp, port) => midi_clock.on_message(status, stamp, &port),
         EngineMsg::MidiPorts(names) => {
             *midi_names = names;
             bc.broadcast(&json!({ "type": "midiInputs", "names": midi_names }).to_string());
@@ -1219,6 +1253,7 @@ fn build_snapshot(
     t: f64,
     stats: &EngineStats,
     link: &crate::link::LinkSync,
+    midi_clock: &crate::midi_clock::MidiClock,
     artnet: &crate::artnet::ArtnetOut,
     osc_status: Option<&'static str>,
 ) -> Snapshot {
@@ -1230,6 +1265,17 @@ fn build_snapshot(
         speed: state.speed,
         master: state.master,
         link: Some(crate::types::LinkSnap { on: link.enabled(), peers: link.peers() }),
+        // The source is only meaningful while the follower is being polled —
+        // switched off it stops being asked whether the port went quiet, and a
+        // remembered name would go on claiming a clock that stopped hours ago.
+        midi_clock: Some(crate::types::MidiClockSnap {
+            on: state.project.sync.midi_clock_enabled,
+            source: if state.project.sync.midi_clock_enabled {
+                midi_clock.source().map(str::to_string)
+            } else {
+                None
+            },
+        }),
         artnet_nodes: if artnet.poll_status() != "off"
             || state.project.universes.iter().any(|u| u.artnet)
         {

@@ -299,6 +299,7 @@ export class EngineState {
     p.settings.haze = this.project.settings.haze;
     p.settings.hazeFan = this.project.settings.hazeFan;
     p.sync.linkEnabled = this.project.sync.linkEnabled;
+    p.sync.midiClockEnabled = this.project.sync.midiClockEnabled;
     // the page may not exist in the snapshot (undoing "new song" while on it)
     if (!(p.decks ?? []).some((d) => d.id === p.activeDeckId)) p.activeDeckId = p.decks?.[0]?.id;
     this.project = sanitizeProject(p) ?? p;

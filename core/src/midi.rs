@@ -90,17 +90,41 @@ fn scan(
         };
         input.ignore(Ignore::None);
         let tx2 = tx.clone();
+        // Cloned once per connection, then refcount-bumped per message: the
+        // follower needs to know WHICH port a tick came from, and a rig with a
+        // clock source sends 48 of them a second at 120 BPM.
+        let port_name: std::sync::Arc<str> = std::sync::Arc::from(name.as_str());
+        // midir stamps a message in the driver's own microseconds — uptime, on
+        // CoreMIDI — and the engine measures everything from the moment it
+        // started. Both count real microseconds, so one offset taken at the
+        // first message carries the driver's precision onto the engine's scale
+        // and keeps it there. Taking a fresh reading per message instead would
+        // throw that precision away, which is the whole reason for keeping the
+        // stamp.
+        let mut stamp_offset: Option<i64> = None;
         match input.connect(
             port,
             "light-in",
-            move |_, message, _| {
-                if !message.is_empty() {
-                    let _ = tx2.send(EngineMsg::Midi(
-                        message[0],
-                        message.get(1).copied().unwrap_or(0),
-                        message.get(2).copied().unwrap_or(0),
-                    ));
+            move |stamp, message, _| {
+                let Some(&status) = message.first() else { return };
+                // System realtime — clock, start, continue, stop — is split off
+                // here rather than sent down the command channel as a note.
+                // At 120 BPM that channel was carrying 48 messages a second
+                // that every handler downstream had to look at and discard,
+                // and midir's timestamp (the only one worth averaging) was
+                // being thrown away at the same time.
+                if status >= 0xF8 {
+                    let off = *stamp_offset
+                        .get_or_insert(crate::engine::micros_now() as i64 - stamp as i64);
+                    let at = (stamp as i64).saturating_add(off).max(0) as u64;
+                    let _ = tx2.send(EngineMsg::MidiClock(status, at, port_name.clone()));
+                    return;
                 }
+                let _ = tx2.send(EngineMsg::Midi(
+                    status,
+                    message.get(1).copied().unwrap_or(0),
+                    message.get(2).copied().unwrap_or(0),
+                ));
             },
             (),
         ) {

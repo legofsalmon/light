@@ -574,6 +574,16 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       // Ableton Link runs in the native (Rust) engine only — the reference
       // engine records the preference so the project stays in sync
       state.project.sync.linkEnabled = cmd.on;
+      // One tempo source at a time, in both engines, so the project a client
+      // gets back says the same thing whichever engine it is talking to.
+      if (cmd.on) state.project.sync.midiClockEnabled = false;
+      state.updateProject(state.project);
+      break;
+    case 'setMidiClock':
+      // Likewise native-only: no MIDI input exists here, so the reference
+      // engine records the preference and nothing else.
+      state.project.sync.midiClockEnabled = cmd.on;
+      if (cmd.on) state.project.sync.linkEnabled = false;
       state.updateProject(state.project);
       break;
     case 'updateProject': {

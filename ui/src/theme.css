@@ -316,6 +316,10 @@ select.sel { cursor: pointer; }
   text-align: right;
   cursor: ns-resize;
 }
+/* A tempo arriving from a MIDI beat clock is not one this readout can set:
+   the follower rewrites it every frame. Colour it like the control that owns
+   it and stop offering the drag cursor. */
+.bpm.followed { color: var(--accent); cursor: default; }
 
 /* Touch drag ownership. Every continuous control here drags a pointer, and the
    UI is served to a FOH tablet (docs/user-guide.md). Without touch-action the

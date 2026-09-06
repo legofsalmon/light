@@ -167,7 +167,11 @@ export function SyncView() {
   const lastMidi = useStore((s) => s.lastMidi);
   const learnMode = useStore((s) => s.learnMode);
   const mutate = useStore((s) => s.mutate);
+  const send = useStore((s) => s.send);
+  const snap = useStore((s) => s.snap);
   const sync = project.sync;
+  const clock = snap?.midiClock;
+  const clockSource = clock?.on ? clock.source : undefined;
 
   const editSync = (fn: (s: typeof sync) => void) => mutate((p) => fn(p.sync));
 
@@ -230,6 +234,42 @@ export function SyncView() {
           )}
           <div className="grow" />
           <span className="label" style={{ fontFamily: 'var(--mono)' }}>{lastMidi ?? ''}</span>
+        </div>
+
+        <div className="sectionhead" style={{ marginTop: 10 }}>Beat clock</div>
+        <div className="row">
+          <button
+            className={`btn small ${sync.midiClockEnabled ? (clockSource ? 'on' : 'warn on') : ''}`}
+            disabled={!clock}
+            title={
+              clock
+                ? 'take the tempo from a MIDI beat clock — the first input to send one owns it until it goes quiet'
+                : 'the beat clock runs in the native engine (packaged app / rust core)'
+            }
+            onClick={() => send({ type: 'setMidiClock', on: !sync.midiClockEnabled })}
+          >
+            {sync.midiClockEnabled ? 'following' : 'off'}
+          </button>
+          {sync.midiClockEnabled && (
+            <span className="label">
+              {clockSource ? (
+                <>
+                  tempo from <b>{clockSource}</b>
+                </>
+              ) : (
+                'waiting — no input is sending one'
+              )}
+            </span>
+          )}
+        </div>
+        <div className="prose">
+          Twenty-four ticks to the beat, and nothing else in the message — so the tempo is the
+          interval between them, averaged over a whole beat to keep the rig from shivering. A start
+          message also lands the downbeat; a stop leaves the tempo where it was, because a stall is
+          not a tempo change. Nothing to set up: switch it on and the first input sending clock owns
+          the tempo until it goes quiet.
+          {sync.linkEnabled && ' Ableton Link is on, and only one of the two can drive the tempo — switching this on turns Link off.'}
+          {sync.bpmFromOsc && ' Arena is also set to drive the tempo, and while the beat clock is following it wins.'}
         </div>
         <div className="prose">
           {learnMode

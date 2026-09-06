@@ -1072,6 +1072,10 @@ pub struct SyncCfg {
     /// follow an Ableton Link session (native engine only)
     #[serde(default)]
     pub link_enabled: bool,
+    /// follow MIDI beat clock from whichever input is sending it (native
+    /// engine only). Mutually exclusive with Link — see `midi_clock.rs`.
+    #[serde(default)]
+    pub midi_clock_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1185,6 +1189,17 @@ pub struct LinkSnap {
     pub peers: u64,
 }
 
+/// What the top bar needs to tell the truth about the beat clock: whether it
+/// is switched on, and whether anything is actually sending. `source` is None
+/// while nothing is arriving, which is what makes "waiting" different from
+/// "following the Deck".
+#[derive(Debug, Clone, Serialize)]
+pub struct MidiClockSnap {
+    pub on: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtnetNodeSnap {
@@ -1239,6 +1254,8 @@ pub struct Snapshot {
     pub haze: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<LinkSnap>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub midi_clock: Option<MidiClockSnap>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artnet_nodes: Option<Vec<ArtnetNodeSnap>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1305,6 +1322,7 @@ impl Default for SyncCfg {
         SyncCfg {
             osc_enabled: true,
             link_enabled: false,
+            midi_clock_enabled: false,
             osc_port: 7700,
             follow_columns: true,
             bpm_from_osc: true,
@@ -1330,6 +1348,7 @@ pub enum Command {
     Column { col: usize },
     SetBpm { bpm: f64 },
     SetLink { on: bool },
+    SetMidiClock { on: bool },
     #[serde(rename_all = "camelCase")]
     SetFixtureMute { fixture_id: String, on: bool },
     #[serde(rename_all = "camelCase")]

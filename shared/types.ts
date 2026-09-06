@@ -488,6 +488,11 @@ export type SyncCfg = {
   oscEnabled: boolean;
   /** follow an Ableton Link session (native engine only) */
   linkEnabled?: boolean;
+  /** follow MIDI beat clock from whichever input is sending it (native engine
+   *  only). Mutually exclusive with Link — LIGHT pushes a locally-set tempo
+   *  INTO a Link session, so following a jittery clock while leading a session
+   *  would launder that jitter out to every machine in the room. */
+  midiClockEnabled?: boolean;
   oscPort: number;
   /** Resolume column connect → trigger the same column here */
   followColumns: boolean;
@@ -732,6 +737,10 @@ export type Snapshot = {
   haze: number;
   /** Ableton Link session state — native (Rust) engine only */
   link?: { on: boolean; peers: number };
+  /** MIDI beat clock — native (Rust) engine only. `source` is the port whose
+   *  ticks are being followed, absent while nothing is arriving, which is what
+   *  makes "waiting" different from "following the Deck". */
+  midiClock?: { on: boolean; source?: string };
   /** live soft overrides (P1) — present only while something is ridden, so
    *  the UI can draw dual-state faders and offer Store/Discard */
   soft?: { lookId: string; partId: string; effectId?: string; field: SoftField; value: number }[];
@@ -790,6 +799,7 @@ export type Command =
   | { type: 'release'; layerId: string; col: number }
   | { type: 'clearLayer'; layerId: string }
   | { type: 'setLink'; on: boolean }
+  | { type: 'setMidiClock'; on: boolean }
   /** silence one fixture without touching the patch (stuck/dead unit) */
   | { type: 'setFixtureMute'; fixtureId: string; on: boolean }
   /** drive one fixture to full white to find it on the truss */
@@ -993,6 +1003,7 @@ export function sanitizeProject(p: Project): Project | null {
   p.sync = {
     oscEnabled: sync.oscEnabled ?? true,
     linkEnabled: sync.linkEnabled ?? false,
+    midiClockEnabled: sync.midiClockEnabled ?? false,
     oscPort: Number.isFinite(sync.oscPort) ? (sync.oscPort as number) : 7700,
     followColumns: sync.followColumns ?? true,
     bpmFromOsc: sync.bpmFromOsc ?? true,

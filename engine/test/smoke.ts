@@ -178,6 +178,39 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
   c.tap(10500);
   c.tap(11000);
   check('tap tempo → 120', Math.abs(c.bpm - 120) < 0.5, `got ${c.bpm}`);
+
+  // setTempoAndBeat is the beat clock's entry point, and the twin of
+  // core/src/clock.rs. Pinned here so the two cannot drift apart: the tests
+  // are deliberately the same three the Rust module asserts.
+  const f = new BeatClock();
+  f.setBpm(120, 0);
+  const held = f.beatAt(1234);
+  f.setBpm(174, 1234);
+  check('a tempo change on its own does not move the beat', Math.abs(f.beatAt(1234) - held) < 1e-9, `got ${f.beatAt(1234)}`);
+  f.setTempoAndBeat(128, 4, 5000);
+  check('a start lands tempo and downbeat together', f.bpm === 128 && Math.abs(f.beatAt(5000) - 4) < 1e-9, `${f.bpm} @ ${f.beatAt(5000)}`);
+  check('and runs on from there at the new tempo', Math.abs(f.beatAt(5000 + 60000 / 128) - 5) < 1e-9, `got ${f.beatAt(5000 + 60000 / 128)}`);
+  f.setTempoAndBeat(Infinity, 0, 6000);
+  f.setTempoAndBeat(NaN, 0, 6000);
+  f.setTempoAndBeat(120, NaN, 6000);
+  check('a tempo that is not a tempo is refused rather than stored', f.bpm === 128 && Number.isFinite(f.beatAt(6000)), `got ${f.bpm}`);
+  f.setTempoAndBeat(9999, 0, 6000);
+  check('and the clock floor and ceiling still apply (high)', f.bpm === 500, `got ${f.bpm}`);
+  f.setTempoAndBeat(1, 0, 6000);
+  check('and the clock floor and ceiling still apply (low)', f.bpm === 20, `got ${f.bpm}`);
+}
+
+// ---------- beat clock: the project flag, which is all this engine carries ----------
+{
+  // The follower itself is native-only (a browser cannot see a timestamp worth
+  // averaging), exactly like Link. What BOTH engines must agree on is the
+  // project shape and the rule that only one thing drives the tempo — a client
+  // has to get the same project back whichever engine it is talking to.
+  const p = sanitizeProject(demoProject())!;
+  check('beat clock: off in a repaired project', p.sync.midiClockEnabled === false, String(p.sync.midiClockEnabled));
+  const stripped = demoProject() as unknown as { sync: Record<string, unknown> };
+  delete stripped.sync.midiClockEnabled;
+  check('beat clock: an older project gets the field back', sanitizeProject(stripped as unknown as Project)!.sync.midiClockEnabled === false);
 }
 
 // ---------- Art-Net over loopback ----------

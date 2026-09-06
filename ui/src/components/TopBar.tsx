@@ -169,6 +169,11 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
   const redoLabel = useStore((s) => s.redoLabel);
 
   const bpm = snap?.bpm ?? 120;
+  // Switched on is not the same as working: the follower reports a source only
+  // while ticks are actually arriving, so an armed clock with a cable out reads
+  // as waiting rather than following.
+  const clockSource = snap?.midiClock?.on ? snap.midiClock.source : undefined;
+  const followingClock = clockSource !== undefined;
   const beat = snap?.beat ?? 0;
   const beatOn = ((beat % 1) + 1) % 1 < 0.22;
   const barOn = ((beat % 4) + 4) % 4 < 1;
@@ -245,9 +250,14 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
         <div className={`beatled ${beatOn && barOn ? 'on' : ''}`} style={{ width: 10, height: 10 }} />
         <div className={`beatled ${beatOn ? 'on' : ''}`} />
         <div
-          className="bpm"
-          title="drag to adjust BPM"
+          className={`bpm ${followingClock ? 'followed' : ''}`}
+          title={
+            followingClock
+              ? `tempo is coming from ${clockSource} — switch the beat clock off to set it here`
+              : 'drag to adjust BPM'
+          }
           onPointerDown={(e) => {
+            if (followingClock) return;
             dragRef.current = { y: e.clientY, bpm };
             e.currentTarget.setPointerCapture(e.pointerId);
           }}
@@ -264,7 +274,12 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
         <span className="label">bpm</span>
         <button
           className="btn small"
-          title="tap the beat — four taps sets the tempo, and every tap also lands the downbeat (keyboard: T)"
+          disabled={followingClock}
+          title={
+            followingClock
+              ? `${clockSource} is setting the tempo — a tap here would be overwritten on the next frame`
+              : 'tap the beat — four taps sets the tempo, and every tap also lands the downbeat (keyboard: T)'
+          }
           onClick={() => {
             if (!useStore.getState().armLearn({ kind: 'tap' })) send({ type: 'tap' });
           }}
@@ -284,6 +299,21 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
           onClick={() => send({ type: 'setLink', on: !project.sync.linkEnabled })}
         >
           link{project.sync.linkEnabled && snap?.link ? ` ${snap.link.peers}` : ''}
+        </button>
+        <button
+          className={`btn small ${project.sync.midiClockEnabled ? (followingClock ? 'on' : 'warn on') : ''}`}
+          title={
+            !snap?.midiClock
+              ? 'MIDI beat clock runs in the native engine (packaged app / rust core)'
+              : followingClock
+                ? `following the beat clock from ${clockSource}`
+                : project.sync.midiClockEnabled
+                  ? 'waiting for a beat clock — no input is sending one'
+                  : 'take the tempo from a MIDI beat clock, whichever input is sending one'
+          }
+          onClick={() => send({ type: 'setMidiClock', on: !project.sync.midiClockEnabled })}
+        >
+          clock
         </button>
         <Fader
           label="speed"

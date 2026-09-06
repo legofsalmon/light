@@ -106,10 +106,12 @@ Roughly in order of expected value:
 
 > The competitive backlog — every Lightkey gap with a verified status, effort
 > and the subsystems it touches — is [docs/feature-backlog.md](docs/feature-backlog.md).
-> Several lines below are superseded by it (Link and APC feedback have shipped).
+> Several lines below are superseded by it (Link, MIDI beat clock and APC
+> feedback have shipped).
 
-- **Ableton Link** tempo sync (Arena supports Link natively; removes the OSC
-  tempo dependency).
+- ~~**Ableton Link** tempo sync~~ — shipped, along with a MIDI beat clock
+  follower; either can drive the tempo instead of Arena's OSC, and they are one
+  choice rather than two (backlog #10).
 - **Cue-lists / chasers per cell** — a cell that steps through looks on beats
   or go-presses; the bridge from "looks" toward console cue stacks.
 - **MIDI feedback** — controller LEDs mirror active cells (APC/Launchpad).

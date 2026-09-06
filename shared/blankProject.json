@@ -111,7 +111,8 @@
     "oscPort": 7700,
     "followColumns": true,
     "bpmFromOsc": true,
-    "linkEnabled": false
+    "linkEnabled": false,
+    "midiClockEnabled": false
   },
   "settings": {
     "haze": 0.0,

@@ -219,6 +219,25 @@ but nothing is answering. The Output tab lists the nodes it found.
 **Ableton Link.** `link` in the top bar joins a Link session (native engine
 only) and shows the peer count. Tapping tempo in LIGHT leads the session.
 
+**MIDI beat clock.** `clock` in the top bar takes the tempo from whatever is
+sending beat clock — a CDJ, a DAW, a drum machine. There is nothing to set up:
+switch it on and the first input sending clock owns the tempo until it goes
+quiet. The button is amber while it is waiting for one and blue while it is
+following; the tooltip names the port, and so does the Sync ▸ MIDI tab. While it
+is following, the tempo readout turns blue and `tap` greys out — the clock would
+overwrite a tap on the next frame, so the button says so rather than doing
+nothing. A transport start also lands the downbeat. A stop leaves the tempo
+where it was: a source going quiet is a stall, not a tempo change, and a rig
+that slowed to nothing because a cable moved would be worse than one holding its
+last known tempo.
+
+Link and beat clock are one choice, not two — switching either on turns the
+other off. LIGHT pushes a locally-set tempo *into* a Link session, so following
+a clock while leading a session would pass that clock's jitter on to every other
+machine in the room. Native engine only: a browser cannot see a timestamp worth
+averaging. If Arena is also set to drive the tempo, the beat clock wins while it
+is following.
+
 **The band.** The `+ musician…` picker in the 2D bar drops dummy performers
 on the plan — drag to place, double-click to remove. They appear in both 3D
 views (`band` toggles them in-app, `M` in the pop-out window), so you can judge

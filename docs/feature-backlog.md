@@ -373,20 +373,67 @@ here forecloses it: a path would be another `ShapeKind` reading a stored point
 list, and the apply site already takes a figure and scales, rotates and offsets
 it.
 
-### 10 · MIDI Beat Clock as a tempo source — ⬜ absent — M (follower alone S)
+### 10 · MIDI Beat Clock as a tempo source — ✅ shipped 2026-09-06
 **Touches:** shared/types.ts, core, engine, parity, ui, docs
-**Today:** tap, drag, OSC tempo from Arena, Ableton Link (native engine).
-0xF8 clock bytes already reach the native engine and are discarded — at 120 BPM
-that is 48 messages/s through the engine channel for nothing; the browser
-forwards them over WebSocket too.
-**Build:** a native-only follower like Link (24 PPQN with midir timestamps,
-start/continue/stop, jitter rejection, a combined tempo+phase setter on
-`BeatClock` mirrored in both engines), a `midiClockEnabled` + port field in
-`SyncCfg`, precedence against Link (a jittery follower must not make LIGHT a
-jittery Link leader), status in the snapshot and top bar, tests.
-**Two cheap wins regardless:** pre-filter status ≥ 0xF8 in `core/src/midi.rs`
-and `ui/src/midi.ts`; keep midir's timestamp instead of discarding it.
-Note `ROADMAP.md:107` still lists Link as future — it shipped.
+**Was:** tap, drag, OSC tempo from Arena, Ableton Link (native engine). 0xF8
+clock bytes reached the native engine and were discarded — 48 messages/s at 120
+BPM through the engine channel for nothing, and the browser forwarded them over
+WebSocket too.
+
+`core/src/midi_clock.rs` is the follower, native-only like Link: a browser
+cannot see a timestamp worth averaging. `core/src/midi.rs` splits system
+realtime off in the callback and **keeps midir's timestamp** — the driver stamps
+a message far more accurately than a scheduled thread can — anchoring it onto
+the engine's own monotonic scale (`engine::micros_now`) with one offset taken at
+the first message. Both clocks count real microseconds, so a constant offset
+carries the driver's precision across and the liveness test compares two numbers
+that mean the same thing. `ui/src/midi.ts` drops status ≥ 0xF8 as well.
+
+**Two things the obvious implementation gets wrong, both found by measuring
+against a real CoreMIDI port rather than by reasoning:**
+
+- *First edge to last* uses two of the twenty-five timestamps and throws the
+  rest away, so whichever two land on the ends carry the whole answer. Against a
+  source jittering ±6.9 ms the tempo read 126.2–130.5 for a true 128. A
+  least-squares fit through every edge in the same window costs nothing in
+  latency and reads **128.04 ± 0.21**. Same data, same responsiveness, a quarter
+  of the noise.
+- *An absolute 20–500 BPM interval band does not catch a dropped tick.* One
+  missing tick at 128 BPM is a 39 ms interval, which is a perfectly legal 32 BPM
+  — so it passed the band and then sat in the window dragging the tempo down for
+  a whole beat. Intervals are judged against the tempo already being followed
+  instead (0.6×–1.6×): nothing a hand on a pitch fader can do moves one interval
+  by half, and a source that really did jump rebuilds the window in half a beat.
+
+`SyncCfg.midiClockEnabled` in both engines, `setMidiClock` in both, and Link
+mutual exclusion enforced in both — LIGHT pushes a locally-set tempo INTO a Link
+session, so following a jittery clock while leading one would launder that
+jitter out to every machine in the room. **No port field:** the first source to
+send clock owns the tempo until it goes quiet, so there is nothing to configure
+and two clock sources plugged in cannot fight. `BeatClock::set_tempo_and_beat` /
+`setTempoAndBeat` sets tempo and phase together — as two calls there is one tick
+where the beat is computed from the new tempo against the old anchor, which on a
+clock re-set 40 times a second is a permanent stutter.
+
+Snapshot carries `midiClock {on, source}`, and `source` is reported only while
+the follower is being polled: switched off it stops being asked whether the port
+went quiet, and a remembered name would go on claiming a clock that stopped
+hours ago. Top bar `clock` button is amber while waiting and accent while
+following; the tempo readout turns accent and `tap` is disabled with a tooltip
+saying why, because a tap would be overwritten on the next frame. Sync ▸ MIDI
+has the full section, and names the conflict if Arena is also set to drive
+tempo (the beat clock wins while following).
+
+Tests: 11 in `midi_clock.rs` including the follower driven through a real
+`BeatClock` over four bars, 3 in `clock.rs` mirrored in `engine/test/smoke.ts`,
+Link exclusion + undo in `state.rs`, and 6 parity checkpoints. Verified live
+against a virtual CoreMIDI port — `cargo run -p light-core --example clocksrc --
+<bpm> <secs>` creates one and reports its own send jitter — with output off
+throughout.
+
+**Still open:** the phase only anchors on a transport *start*, so a free-running
+clock (most CDJs) gives tempo but never a downbeat; `sync` still has to place it
+by hand. Song position pointer (0xF2) would fix that and is not read.
 
 ### 11 · MIDI feedback breadth (APC mini LEDs, Launchpad, X-Touch) — ◧ partial — M → XL
 **Touches:** core, ui, docs (+ shared/engine/parity only if surface choice enters the schema)

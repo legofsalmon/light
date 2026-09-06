@@ -553,6 +553,7 @@ impl EngineState {
         p.settings.haze = self.project.settings.haze;
         p.settings.haze_fan = self.project.settings.haze_fan;
         p.sync.link_enabled = self.project.sync.link_enabled;
+        p.sync.midi_clock_enabled = self.project.sync.midi_clock_enabled;
         self.project = p;
         self.ensure_decks();
         self.load_page();
@@ -1440,6 +1441,21 @@ impl EngineState {
             Command::SetLink { on } => {
                 // the engine loop watches this flag and drives the Link session
                 self.project.sync.link_enabled = on;
+                // One tempo source at a time. LIGHT pushes a locally-set tempo
+                // INTO a Link session, so following a beat clock while leading
+                // a session would launder that clock's jitter out to every
+                // other machine in the room.
+                if on {
+                    self.project.sync.midi_clock_enabled = false;
+                }
+                out.project_changed = true;
+                out.save_requested = true;
+            }
+            Command::SetMidiClock { on } => {
+                self.project.sync.midi_clock_enabled = on;
+                if on {
+                    self.project.sync.link_enabled = false;
+                }
                 out.project_changed = true;
                 out.save_requested = true;
             }
@@ -1599,6 +1615,38 @@ mod history_tests {
         assert!(st.undo());
         assert_eq!(st.project.layers[0].master, 0.25);
         assert_eq!(st.project.settings.haze, 0.6);
+    }
+
+    #[test]
+    fn only_one_thing_drives_the_tempo() {
+        // LIGHT pushes a locally-set tempo INTO a Link session, so following a
+        // beat clock while leading a session would launder that clock's jitter
+        // out to every other machine in the room. Switching one on has to turn
+        // the other off, in both directions.
+        let mut st = EngineState::new(default_project(), 0.0);
+        st.handle_command(Command::SetLink { on: true }, 0.0, None);
+        assert!(st.project.sync.link_enabled);
+        st.handle_command(Command::SetMidiClock { on: true }, 0.0, None);
+        assert!(st.project.sync.midi_clock_enabled);
+        assert!(!st.project.sync.link_enabled, "the beat clock took the tempo from Link");
+        st.handle_command(Command::SetLink { on: true }, 0.0, None);
+        assert!(st.project.sync.link_enabled);
+        assert!(!st.project.sync.midi_clock_enabled, "and Link took it back");
+        // switching one OFF is not a claim on the tempo, so it leaves the other
+        st.handle_command(Command::SetLink { on: false }, 0.0, None);
+        assert!(!st.project.sync.midi_clock_enabled);
+    }
+
+    #[test]
+    fn undo_keeps_the_beat_clock_where_the_operator_left_it() {
+        // Same rule as Link and the masters: what is live now survives a step
+        // back through the show's edits.
+        let mut st = EngineState::new(default_project(), 0.0);
+        let p = edited(&st, |p| p.name = "x".into());
+        write(&mut st, p, "rename the show", 1, false);
+        st.handle_command(Command::SetMidiClock { on: true }, 0.0, None);
+        assert!(st.undo());
+        assert!(st.project.sync.midi_clock_enabled, "undo did not unfollow the clock");
     }
 
     #[test]
