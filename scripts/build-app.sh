@@ -49,6 +49,23 @@ echo "==> re-signing (adding a binary invalidates the bundle seal)"
 # entitlements Tauri applied, and the app ships hardened but stripped. Verified
 # the hard way — the first signed build came out with an empty entitlement set.
 ENTS="src-tauri/light.entitlements"
+# A Developer ID provisioning profile, when there is one, is what lets the
+# bundle carry the keychain access group (src-tauri/src/keychain.rs): the
+# entitlement is restricted on macOS and a bundle holding it without a
+# profile is killed at launch. So the profile and the entitlement travel
+# together — embed one, sign with the other — and with neither the app runs
+# exactly as before, on the login keychain. docs/distribution.md says how to
+# make the profile.
+if [ -n "${LIGHT_PROVISIONING_PROFILE:-}" ]; then
+  [ -f "$LIGHT_PROVISIONING_PROFILE" ] || { echo "LIGHT_PROVISIONING_PROFILE is set but $LIGHT_PROVISIONING_PROFILE does not exist" >&2; exit 1; }
+  if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
+    echo "a provisioning profile needs a Developer ID signature — not embedding it in an ad-hoc build" >&2
+  else
+    echo "==> embedding the provisioning profile (keychain access group enabled)"
+    cp "$LIGHT_PROVISIONING_PROFILE" "$BUNDLE/Contents/embedded.provisionprofile"
+    ENTS="src-tauri/light.keychain.entitlements"
+  fi
+fi
 if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
   # In CI the identity lives in a keychain the workflow set up; Tauri's own
   # temporary keychain is not on the search list, so this call failed with

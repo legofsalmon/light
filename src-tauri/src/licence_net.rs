@@ -104,21 +104,21 @@ fn hex(bytes: &[u8]) -> String {
 
 // ---------------------------------------------------------------- Keychain
 
+// Through crate::keychain: the data protection keychain under the app's access
+// group, with the login keychain as the fallback and the source of a one-time
+// migration. That is what stops the "LIGHT wants to use your confidential
+// information" prompt returning with every update.
+
 fn store(account: &str, value: &str) -> Result<(), String> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, account)
-        .and_then(|e| e.set_password(value))
-        .map_err(|e| e.to_string())
+    crate::keychain::store(KEYCHAIN_SERVICE, account, value)
 }
 
 fn load(account: &str) -> Option<String> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, account).ok()?.get_password().ok()
+    crate::keychain::load(KEYCHAIN_SERVICE, account)
 }
 
 fn forget(account: &str) -> Result<(), String> {
-    match keyring::Entry::new(KEYCHAIN_SERVICE, account).and_then(|e| e.delete_credential()) {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
+    crate::keychain::forget(KEYCHAIN_SERVICE, account)
 }
 
 // ------------------------------------------------------------------ State

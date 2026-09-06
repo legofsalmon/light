@@ -156,21 +156,20 @@ fn share_error(body: &str) -> Option<String> {
 // broadcasts the whole Project to every connected client, so a password stored
 // there would be handed to a tablet on the venue WiFi.
 
+// Through crate::keychain — see there for why it is the data protection
+// keychain and not the login one.
+
 pub fn remember_password(user: &str, password: &str) -> Result<(), String> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, user)
-        .and_then(|e| e.set_password(password))
+    crate::keychain::store(KEYCHAIN_SERVICE, user, password)
         .map_err(|e| format!("cannot save to the Keychain: {e}"))
 }
 
 pub fn recall(user: &str) -> Option<String> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, user).ok()?.get_password().ok()
+    crate::keychain::load(KEYCHAIN_SERVICE, user)
 }
 
 pub fn forget(user: &str) -> Result<(), String> {
-    match keyring::Entry::new(KEYCHAIN_SERVICE, user).and_then(|e| e.delete_credential()) {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(format!("cannot clear the Keychain: {e}")),
-    }
+    crate::keychain::forget(KEYCHAIN_SERVICE, user).map_err(|e| format!("cannot clear the Keychain: {e}"))
 }
 
 // ---------------------------------------------------------------------------

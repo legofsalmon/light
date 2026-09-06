@@ -86,6 +86,33 @@ visible in the log rather than discovered by a user.
 
 Two things that cost a night each, worth not rediscovering:
 
+- **The app's own keychain items, and the provisioning profile.**
+  `src-tauri/src/keychain.rs` stores the licence token and key and the GDTF
+  Share password. The login keychain scopes an item to the exact binary that
+  wrote it, and the updater replaces the binary, so every update brought the
+  "LIGHT wants to use your confidential information" prompt back. The data
+  protection keychain scopes items to a keychain access group instead
+  (`PKN49VCQZQ.com.colmhewson.light`), which any build signed by the team can
+  read. That group is a *restricted* entitlement on macOS: it must be granted
+  by a Developer ID provisioning profile, and a bundle that carries it with no
+  profile is killed at launch — Developer ID or not (every third-party app on
+  a Mac that has it embeds a profile; an ad-hoc probe here was SIGKILLed).
+  So the entitlement lives in `light.keychain.entitlements` and `build-app.sh`
+  uses it only when `LIGHT_PROVISIONING_PROFILE` names a profile to embed;
+  otherwise the base `light.entitlements` applies and the app probes, finds no
+  group, and uses the login keychain exactly as before.
+
+  To make the profile, once: developer.apple.com → Certificates, Identifiers &
+  Profiles → Identifiers → an explicit App ID for `com.colmhewson.light`
+  (no capability needs enabling — every profile grants the team's keychain
+  groups) → Profiles → Developer ID Application, for that App ID and the
+  Developer ID certificate → download `.provisionprofile`. Then
+  `LIGHT_PROVISIONING_PROFILE=path ./scripts/setup-signing-secrets.sh cert.p12`
+  uploads it as `APPLE_PROVISIONING_PROFILE`, the release workflow embeds it,
+  and the "Report how the bundle was signed" step says whether the group was
+  granted. On the first launch of such a build a value left in the login
+  keychain by an earlier build is read once (the last prompt), copied into the
+  group, and the old copy removed.
 - **The keychain has to outlive the preflight.** Tauri imports the certificate
   into a keychain of its own and signs from there, but `build-app.sh` re-signs
   afterwards and that call needs the identity on the *search list*. The workflow

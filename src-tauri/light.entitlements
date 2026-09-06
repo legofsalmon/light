@@ -12,5 +12,13 @@
        hardened runtime without this kills the JIT the UI depends on. -->
   <key>com.apple.security.cs.allow-jit</key>
   <true/>
+
+
+  <!-- NOT here: keychain-access-groups. It is a restricted entitlement on
+       macOS — a bundle carrying it without a provisioning profile is killed
+       at launch (AMFI), signed with a Developer ID or not. It lives in
+       light.keychain.entitlements, which build-app.sh uses only when it is
+       embedding a profile. src/keychain.rs falls back to the login keychain
+       when the entitlement is absent, so a build from this file still runs. -->
 </dict>
 </plist>

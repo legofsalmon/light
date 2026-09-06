@@ -2,6 +2,7 @@
 
 use tauri::Manager;
 
+mod keychain;
 mod licence;
 mod licence_net;
 mod share;

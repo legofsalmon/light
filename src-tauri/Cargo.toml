@@ -22,8 +22,12 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls", "c
 # the Share session is a PHPSESSID cookie with a 2-hour idle timeout
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# "remember me" goes to the macOS Keychain. Never to the project file: the whole
-# project is broadcast to every connected client, including a LAN tablet.
+# Secrets go to the macOS Keychain (src/keychain.rs). Never to the project
+# file: the whole project is broadcast to every connected client, including a
+# LAN tablet. `keyring` is the legacy login-keychain path — what shipped before
+# and what a dev build still uses; `security-framework` (already in the tree
+# under keyring and reqwest) is the data protection keychain the signed app
+# uses. OSX_10_15 unlocks that keychain's flag; nothing is downloaded.
 keyring = { version = "3", features = ["apple-native"] }
 
 # Licence verification. All three are already in Cargo.lock and the local
@@ -35,6 +39,9 @@ tokio = { version = "1", features = ["time"] }
 ring = "0.17"
 base64 = "0.21"
 sha2 = "0.10"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = { version = "3", features = ["OSX_10_15"] }
 
 [[bin]]
 name = "light-app"

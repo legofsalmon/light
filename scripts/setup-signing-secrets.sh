@@ -128,6 +128,17 @@ fi
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 echo
 echo "setting six secrets on $REPO ..."
+# Optional: a Developer ID provisioning profile for com.colmhewson.light, which
+# is what lets the bundle carry the keychain access group (see
+# docs/distribution.md). Pass it as LIGHT_PROVISIONING_PROFILE=path when
+# running this script; without it every other secret is set as before.
+if [ -n "${LIGHT_PROVISIONING_PROFILE:-}" ]; then
+  [ -f "$LIGHT_PROVISIONING_PROFILE" ] || { echo "no such profile: $LIGHT_PROVISIONING_PROFILE" >&2; exit 1; }
+  if ! security cms -D -i "$LIGHT_PROVISIONING_PROFILE" 2>/dev/null | grep -q "com.colmhewson.light"; then
+    echo "that profile is not for com.colmhewson.light" >&2; exit 1
+  fi
+  base64 -i "$LIGHT_PROVISIONING_PROFILE" | gh secret set APPLE_PROVISIONING_PROFILE
+fi
 base64 -i "$P12"               | gh secret set APPLE_CERTIFICATE
 printf '%s' "$P12_PASS"        | gh secret set APPLE_CERTIFICATE_PASSWORD
 printf '%s' "$IDENT"           | gh secret set APPLE_SIGNING_IDENTITY

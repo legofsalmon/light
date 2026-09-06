@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- light.entitlements plus the keychain access group. Used by build-app.sh
+       ONLY when a Developer ID provisioning profile is being embedded
+       (LIGHT_PROVISIONING_PROFILE): both entitlements below are restricted on
+       macOS, granted by the profile, and a bundle that carries them without
+       one is killed at launch by AMFI — Developer ID or not.
+
+       The group is what stops the "LIGHT wants to use your confidential
+       information" prompt returning after every update (src/keychain.rs):
+       the login keychain scoped an item to the exact binary that wrote it,
+       and the updater replaces the binary; the data protection keychain
+       scopes it to the signing team's group. The identifier and the group
+       must match ACCESS_GROUP in src/keychain.rs, and the profile must be
+       for this App ID. -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.application-identifier</key>
+  <string>PKN49VCQZQ.com.colmhewson.light</string>
+  <key>keychain-access-groups</key>
+  <array>
+    <string>PKN49VCQZQ.com.colmhewson.light</string>
+  </array>
+</dict>
+</plist>

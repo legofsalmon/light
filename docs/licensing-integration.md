@@ -106,7 +106,9 @@ Two non-negotiables for this app:
 - UI: a licence panel (Output tab or an About surface) showing status, machine,
   seats and the two dates, plus activation and deactivation. The operator types
   their own licence key — the app never invents or stores one anywhere but the
-  Keychain.
+  Keychain: the data protection keychain under the app's access group
+  (`src-tauri/src/keychain.rs`), so a new build reads the token the previous
+  one stored without a prompt.
 
 Tests should not need the network: `ring` can generate a keypair and sign, so a
 test can mint a token, assert it verifies, then assert that a flipped byte in

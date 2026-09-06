@@ -152,13 +152,28 @@ jobs:
             printf '%s' "${{ secrets.APPLE_API_KEY }}" | base64 --decode > "$RUNNER_TEMP/notary/key.p8"
             export APPLE_API_KEY_PATH="$RUNNER_TEMP/notary/key.p8"
           fi
+          # A Developer ID provisioning profile (base64) lets the bundle carry
+          # the keychain access group, which is what keeps the keychain prompt
+          # from returning after every update. Optional: without it the build
+          # is the same as before, on the login keychain. See
+          # docs/distribution.md, "The app's own keychain items".
+          if [ -n "${{ secrets.APPLE_PROVISIONING_PROFILE }}" ]; then
+            printf '%s' "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 --decode > "$RUNNER_TEMP/light.provisionprofile"
+            export LIGHT_PROVISIONING_PROFILE="$RUNNER_TEMP/light.provisionprofile"
+          fi
           npm run app:build
-          rm -rf "$RUNNER_TEMP/notary"
+          rm -rf "$RUNNER_TEMP/notary" "$RUNNER_TEMP/light.provisionprofile"
 
       - name: Report how the bundle was signed
         run: |
           codesign -dv --verbose=2 "target/$LIGHT_TARGET/release/bundle/macos/LIGHT.app" 2>&1 | \
             grep -E 'Authority|TeamIdentifier|Signature|flags' || true
+          echo "--- keychain access group (needs the provisioning profile secret) ---"
+          if codesign -d --entitlements - --xml "target/$LIGHT_TARGET/release/bundle/macos/LIGHT.app" 2>/dev/null | grep -q keychain-access-groups; then
+            echo "granted — the data protection keychain is in use"
+          else
+            echo "absent — the login keychain is in use (the keychain prompt can return after an update)"
+          fi
           echo "--- notarisation ticket (absent on ad-hoc builds) ---"
           if xcrun stapler validate "target/$LIGHT_TARGET/release/bundle/macos/LIGHT.app"; then
             echo "stapled"
