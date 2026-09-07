@@ -70,13 +70,30 @@ fn now() -> i64 {
         .unwrap_or(0)
 }
 
-/// This machine, as the service names it: sha256 of the platform id, first 32
-/// hex characters. Deliberately not a MAC address — those change with docks,
-/// VPNs and USB adapters, and a fingerprint that moves burns a seat every time
-/// someone plugs into a different desk.
+/// The raw platform id this machine is known by — what goes ON THE WIRE.
+///
+/// The service hashes what it is sent. Sending `machine_hash()` therefore made
+/// it mint tokens for `sha256(machine_hash(id))`, which `check` compared
+/// against `machine_hash(id)` and correctly rejected as another machine's — a
+/// dead end no amount of releasing the seat could clear, because every fresh
+/// activation minted the same unusable token. Confirmed by arithmetic:
+/// sha256("7d5e…333") is exactly the "another machine" the panel was reporting.
+pub fn fingerprint() -> Option<String> {
+    platform_id().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
+/// This machine, as the service NAMES it once it has hashed the fingerprint:
+/// sha256 of the platform id, first 32 hex characters. This is the local half
+/// — what `check` compares a token's claim against, and what the panel shows.
+/// It must stay the hash of exactly what `fingerprint` sends, or the two ends
+/// disagree again.
+///
+/// Deliberately not a MAC address — those change with docks, VPNs and USB
+/// adapters, and a fingerprint that moves burns a seat every time someone
+/// plugs into a different desk.
 pub fn machine_hash() -> String {
-    let raw = platform_id().unwrap_or_default();
-    let digest = Sha256::digest(raw.trim().as_bytes());
+    let raw = fingerprint().unwrap_or_default();
+    let digest = Sha256::digest(raw.as_bytes());
     hex(&digest)[..32].to_string()
 }
 
@@ -125,6 +142,9 @@ fn forget(account: &str) -> Result<(), String> {
 
 pub struct Licence {
     client: Option<reqwest::Client>,
+    /// What goes on the wire. The service hashes it into `machine`.
+    fingerprint: Option<String>,
+    /// What a token's claim is checked against, and what the panel shows.
     machine: String,
     last: Mutex<Verdict>,
 }
@@ -138,9 +158,20 @@ impl Licence {
                 .timeout(std::time::Duration::from_secs(15))
                 .build()
                 .ok(),
+            fingerprint: fingerprint(),
             machine,
             last,
         }
+    }
+
+    /// What the service is told this machine is. An absent platform id is a
+    /// hard error rather than an empty string: activating with one would take
+    /// a seat under the hash of nothing, which every other Mac in that state
+    /// would also claim.
+    fn wire_id(&self) -> Result<&str, String> {
+        self.fingerprint
+            .as_deref()
+            .ok_or_else(|| "cannot read this Mac's hardware id, so it cannot be licensed".to_string())
     }
 
     pub fn verdict(&self) -> Verdict {
@@ -214,6 +245,22 @@ async fn post(
 /// echo of the reply.
 fn persist(licence: &Licence, reply: TokenReply) -> Result<Verdict, String> {
     let token = reply.token.ok_or("the licence service returned no token")?;
+    // Never store a token this machine can never verify.
+    //
+    // This is the check that was missing while the two ends disagreed about
+    // what "machine" meant. Activation SUCCEEDED, the token was written, and
+    // the panel went on saying "licensed to another machine" — so releasing
+    // the seat and activating again looked like the fix and silently was not,
+    // because every attempt stored the same unusable token. Saying so at the
+    // moment it arrives turns a dead end into one sentence.
+    let claimed = check(&token, &licence.machine, BUILD_DATE, now(), PUBLIC_KEY, PRODUCT);
+    if claimed.status == Status::WrongMachine {
+        let theirs = claimed.claims.map(|c| c.machine).unwrap_or_default();
+        return Err(format!(
+            "the licence service issued a token for machine {theirs}, but this Mac is {}.              Nothing was stored — activating again will not help until that is fixed.",
+            licence.machine
+        ));
+    }
     store(TOKEN_ACCOUNT, &token)?;
     if let Some(key) = reply.key {
         store(KEY_ACCOUNT, &key)?;
@@ -275,7 +322,7 @@ pub async fn licence_start_trial(
         serde_json::json!({
             "product": PRODUCT,
             "email": email.trim(),
-            "machine": licence.machine,
+            "machine": licence.wire_id()?,
             "name": name.trim(),
         }),
     )
@@ -293,7 +340,7 @@ pub async fn licence_activate(
     let reply = post(
         &licence,
         "/api/licence/activate",
-        serde_json::json!({ "key": key.trim(), "machine": licence.machine, "label": label }),
+        serde_json::json!({ "key": key.trim(), "machine": licence.wire_id()?, "label": label }),
     )
     .await?;
     // the key the operator typed is what a later heartbeat needs
@@ -307,7 +354,7 @@ pub async fn heartbeat_now(licence: &Licence) -> Result<Verdict, String> {
     let reply = post(
         licence,
         "/api/licence/heartbeat",
-        serde_json::json!({ "key": key, "machine": licence.machine }),
+        serde_json::json!({ "key": key, "machine": licence.wire_id()? }),
     )
     .await?;
     persist(licence, reply)
@@ -352,12 +399,16 @@ pub async fn licence_deactivate(licence: State<'_, Licence>) -> Result<LicenceSt
     if let Some(key) = load(KEY_ACCOUNT) {
         // Best effort: freeing the seat is courtesy, and a machine with no
         // network must still be able to forget its licence.
-        let _ = post(
-            &licence,
-            "/api/licence/deactivate",
-            serde_json::json!({ "key": key, "machine": licence.machine }),
-        )
-        .await;
+        // Best effort, so no `?`: a Mac that cannot read its own hardware id
+        // must still be able to forget its licence locally.
+        if let Ok(id) = licence.wire_id() {
+            let _ = post(
+                &licence,
+                "/api/licence/deactivate",
+                serde_json::json!({ "key": key, "machine": id }),
+            )
+            .await;
+        }
     }
     forget(TOKEN_ACCOUNT)?;
     forget(KEY_ACCOUNT)?;
@@ -368,6 +419,34 @@ pub async fn licence_deactivate(licence: State<'_, Licence>) -> Result<LicenceSt
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The bug this pair exists to prevent, as arithmetic.
+    ///
+    /// The service hashes whatever it is sent. While the client sent
+    /// `machine_hash(id)`, the service minted tokens for
+    /// `sha256(machine_hash(id))` — and `check` compared those against
+    /// `machine_hash(id)` and rejected them as another machine's. Real values
+    /// from the Mac it was found on: the panel said "another machine" and the
+    /// machine it meant was exactly sha256 of the one it was showing.
+    #[test]
+    fn the_wire_id_is_what_the_service_hashes_into_the_local_one() {
+        let id = "9E5B4C1A-0000-4000-8000-ABCDEF012345";
+        let ours = {
+            let d = Sha256::digest(id.as_bytes());
+            hex(&d)[..32].to_string()
+        };
+        // what the service does with what we send it
+        let service_would_mint = |sent: &str| {
+            let d = Sha256::digest(sent.as_bytes());
+            hex(&d)[..32].to_string()
+        };
+        assert_eq!(service_would_mint(id), ours, "sending the raw id lands on our own name for it");
+        assert_ne!(
+            service_would_mint(&ours),
+            ours,
+            "sending our hash instead mints a token for a machine that does not exist"
+        );
+    }
 
     /// The fingerprint has to be stable across calls or every launch burns a
     /// seat, and it has to be the shape the service documents: 32 hex chars.
