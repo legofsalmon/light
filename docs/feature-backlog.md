@@ -775,6 +775,40 @@ tests; a multi-head mover in the pinned parity project with byte assertions;
 per-head yokes in `previz/src/scene.rs`/`update.rs` and `Previz3D.tsx`; docs.
 Per-head base aim or per-head look params is a schema change → XL; optional.
 
+**Shipped 2026-09-11, the other half of "multi-head mover": the pixel array
+on ONE yoke.** Colm's Robin Spiiders came in as five or six heads on a line
+and a footprint of 79 for a mode that occupies 123. Three defects, all in
+`core/src/gdtf.rs`, each measured against the real file rather than reasoned
+about:
+- **GeometryReference instances were never expanded.** The pixel channels sit
+  on a template lens and each pixel is a reference with a DMX offset per
+  break; only the first instance of each lens got channels, so 16 of 19 pixels
+  had nothing on the wire and the footprint was computed from what was
+  compiled. Expanded now, with the spec rule for which Break entry applies
+  (numbered break → matching entry; `Overwrite` → the last) taken from the
+  file's own numbers: its four-channel modes declare pixels on break 1 and its
+  three-channel modes as Overwrite, and every reference lists both offsets.
+- **The spec's matrix form was read as the other one.** Robe writes the 4×4
+  with the translation in the last column and `{0,0,0,1}` last; the importer
+  took the first three values of the fourth group (the axis-vectors form), so
+  every pixel sat at the origin and the layout rightly fell back to a line.
+  Both forms are read, told apart by that final row, with the rotation applied
+  the right way round for each (a test turns a parent a quarter turn).
+- **The face plane was assumed.** X across and Z up is a bar or panel facing
+  the room; a moving head's face is X and Y with Z down the beam. The axis
+  most pixels spread along is up now — a median, because the Spiider's flower
+  is recessed 100 mm behind a face whose rings reach 100 mm and the largest
+  single excursion would have picked depth.
+`COMPILER_VERSION` is 2; every profile stamped 1 is offered "rebuild from
+library". Five tests on a synthetic ring-head fixture plus the spec-matrix
+rotation; the real Spiider verified live at 21 heads, rings of 54 and 104 mm,
+footprints 90/91/110/104/123 across its pixel modes, with both previews
+steering the whole face from the pan head as they already did. **Still open
+from the original claim:** per-head yokes for a bar that pans per cell, and a
+`Mover` head kind. **Note for the skatepark patch:** the four Spiiders there
+were compiled at 79 channels; rebuilt, Mode 10 is 123, so what follows each
+one on the universe has to move.
+
 ### 23 · Theatre-style cue stack (GO, follow, manual crossfade) — ⬜ absent — XL
 **Touches:** everything
 **Deliberately not built.** LIGHT's "cue list" is a beat-stepped chaser

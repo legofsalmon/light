@@ -935,3 +935,224 @@ fn a_fixture_that_says_nothing_about_kelvin_offers_none() {
     let p = parse_gdtf(&zipped(&xml)).expect("parses").remove(0);
     assert_eq!(p.cto_k, None);
 }
+
+/// A pixel array written the way manufacturers actually write one: the colour
+/// channels declared ONCE on a template lens, each physical pixel a
+/// GeometryReference to it with its own Position and a DMX offset per break.
+/// The references carry TWO Break entries — the four-channel offset first and
+/// the three-channel one last — and the modes pick between them by declaring
+/// their pixel channels on break 1 or as an Overwrite. That is, line for line,
+/// how a Robin Spiider is written. A seventh pixel (the "flower") is a
+/// template with a single instance at offset 1, which must compile exactly as
+/// a plain geometry did before.
+fn ring_head_xml() -> String {
+    let ring = [(0, 60), (52, 30), (52, -30), (0, -60), (-52, -30), (-52, 30)];
+    let mut refs = String::new();
+    for (i, (x, y)) in ring.iter().enumerate() {
+        refs.push_str(&format!(
+            r#"<GeometryReference Name="P{n}" Geometry="Lens" Position="{I3}{{{x},{y},0,1}}">
+                 <Break DMXBreak="1" DMXOffset="{four}"/>
+                 <Break DMXBreak="1" DMXOffset="{three}"/>
+               </GeometryReference>"#,
+            n = i + 1,
+            four = i * 4 + 1,
+            three = i * 3 + 1,
+        ));
+    }
+    let chan = |brk: &str, geom: &str, attr: &str, off: usize| {
+        format!(
+            r#"<DMXChannel DMXBreak="{brk}" Offset="{off}" Geometry="{geom}">
+                 <LogicalChannel Attribute="{attr}">
+                   <ChannelFunction Attribute="{attr}" DMXFrom="0/1" Default="0/1"/>
+                 </LogicalChannel>
+               </DMXChannel>"#
+        )
+    };
+    let common = format!(
+        "{}{}{}",
+        chan("1", "Yoke", "Pan", 1).replace(r#"Offset="1""#, r#"Offset="1,2""#),
+        chan("1", "Head", "Tilt", 3).replace(r#"Offset="3""#, r#"Offset="3,4""#),
+        chan("1", "Head", "Dimmer", 5),
+    );
+    let rgb = format!(
+        "{common}{}{}{}{}{}{}",
+        chan("Overwrite", "Lens", "ColorAdd_R", 6),
+        chan("Overwrite", "Lens", "ColorAdd_G", 7),
+        chan("Overwrite", "Lens", "ColorAdd_B", 8),
+        chan("1", "Flower", "ColorAdd_R", 24),
+        chan("1", "Flower", "ColorAdd_G", 25),
+        chan("1", "Flower", "ColorAdd_B", 26),
+    );
+    let rgbw = format!(
+        "{common}{}{}{}{}{}{}{}{}",
+        chan("1", "Lens", "ColorAdd_R", 6),
+        chan("1", "Lens", "ColorAdd_G", 7),
+        chan("1", "Lens", "ColorAdd_B", 8),
+        chan("1", "Lens", "ColorAdd_W", 9),
+        chan("1", "Flower", "ColorAdd_R", 30),
+        chan("1", "Flower", "ColorAdd_G", 31),
+        chan("1", "Flower", "ColorAdd_B", 32),
+        chan("1", "Flower", "ColorAdd_W", 33),
+    );
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<GDTF DataVersion="1.2">
+  <FixtureType Name="RingHead" Manufacturer="TEST">
+    <Geometries>
+      <Geometry Name="Base" Position="{I3}{{0,0,0,1}}">
+        <Axis Name="Yoke" Position="{I3}{{0,0,0,1}}">
+          <Axis Name="Head" Position="{I3}{{0,0,200,1}}">
+            <Geometry Name="Face">{refs}</Geometry>
+            <GeometryReference Name="Centre" Geometry="Flower" Position="{I3}{{0,0,-100,1}}">
+              <Break DMXBreak="1" DMXOffset="1"/>
+            </GeometryReference>
+          </Axis>
+        </Axis>
+      </Geometry>
+      <Beam Name="Lens" BeamAngle="25" FieldAngle="25" LuminousFlux="500"/>
+      <Beam Name="Flower" BeamAngle="25" FieldAngle="25" LuminousFlux="500"/>
+    </Geometries>
+    <DMXModes>
+      <DMXMode Name="RGB" Geometry="Base"><DMXChannels>{rgb}</DMXChannels></DMXMode>
+      <DMXMode Name="RGBW" Geometry="Base"><DMXChannels>{rgbw}</DMXChannels></DMXMode>
+    </DMXModes>
+  </FixtureType>
+</GDTF>"#
+    )
+}
+
+#[test]
+fn referenced_pixels_each_get_their_own_channels() {
+    // Six ring pixels plus the flower: seven heads, not two templates.
+    let profiles = parse_gdtf(&zip_xml(&ring_head_xml())).expect("parses");
+    let rgb = profiles.iter().find(|p| p.mode == "RGB").expect("RGB mode");
+    assert_eq!(rgb.heads.len(), 7, "one head per instance, plus the single-instance flower");
+    assert_eq!(
+        rgb.heads.iter().map(|h| h.label.as_str()).collect::<Vec<_>>(),
+        ["P1", "P2", "P3", "P4", "P5", "P6", "Centre"],
+        "heads in document order, named for the INSTANCE"
+    );
+    // Three-channel mode: the pixel channels are declared as an Overwrite, so
+    // each instance takes the LAST break entry — a stride of three.
+    assert_eq!(rgb.footprint, 26, "P6's blue is channel 23 and the flower runs 24..26");
+    let head_of = |one_based: usize| {
+        rgb.channels.iter().find(|c| c.offsets == vec![one_based - 1]).map(|c| c.head)
+    };
+    assert_eq!(head_of(6), Some(0), "P1 red where the template declared it");
+    assert_eq!(head_of(12), Some(2), "P3 red three channels later per pixel");
+    assert_eq!(head_of(23), Some(5), "P6 blue");
+    assert_eq!(head_of(24), Some(6), "the flower's own channels are untouched");
+    assert_eq!(head_of(9), Some(1));
+    // pan and tilt stay on head 0, which is what both previews steer by
+    let pan = rgb.channels.iter().find(|c| c.name == "Pan").expect("pan");
+    assert_eq!(pan.head, 0);
+    assert_eq!(rgb.form(), light_core::cprofile::FixtureForm::Mover, "it aims, so it is a mover");
+}
+
+#[test]
+fn a_four_channel_mode_takes_the_first_break_entry() {
+    let profiles = parse_gdtf(&zip_xml(&ring_head_xml())).expect("parses");
+    let rgbw = profiles.iter().find(|p| p.mode == "RGBW").expect("RGBW mode");
+    assert_eq!(rgbw.heads.len(), 7);
+    assert_eq!(rgbw.footprint, 33, "stride of four: P6 ends at 29, the flower runs 30..33");
+    let head_of = |one_based: usize| {
+        rgbw.channels.iter().find(|c| c.offsets == vec![one_based - 1]).map(|c| c.head)
+    };
+    assert_eq!(head_of(6), Some(0));
+    assert_eq!(head_of(14), Some(2), "P3 red, four channels per pixel this time");
+    assert_eq!(head_of(29), Some(5), "P6 white");
+    assert_eq!(head_of(30), Some(6), "the flower");
+}
+
+#[test]
+fn a_ring_face_keeps_its_shape_instead_of_becoming_a_line() {
+    // The pixels vary in GDTF X and Y with Z pointing down the beam — the
+    // moving-head way round. Read as a bar (drop Y) they collapsed to a line.
+    // The recessed flower is the outlier that must not tip the plane choice.
+    let profiles = parse_gdtf(&zip_xml(&ring_head_xml())).expect("parses");
+    let p = profiles.iter().find(|p| p.mode == "RGB").unwrap();
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+    let by = |label: &str| p.heads.iter().find(|h| h.label == label).unwrap();
+    assert!(near(by("P1").offset, 0.0) && near(by("P1").offset_y, 0.06), "top of the ring, 60 mm up: {:?}", (by("P1").offset, by("P1").offset_y));
+    assert!(near(by("P4").offset_y, -0.06), "bottom of the ring");
+    assert!(near(by("P2").offset, 0.052) && near(by("P2").offset_y, 0.03));
+    assert!(near(by("P5").offset, -0.052) && near(by("P5").offset_y, -0.03));
+    assert!(near(by("Centre").offset, 0.0) && near(by("Centre").offset_y, 0.0), "the flower's recess is depth, dropped");
+    assert!(p.heads.iter().any(|h| !near(h.offset_y, 0.0)), "not a line");
+}
+
+#[test]
+fn an_instance_with_no_matching_break_is_skipped_not_misaddressed() {
+    // Template on break 2; one reference offers break 2, the other only
+    // break 1. The second cannot be placed and must vanish rather than land on
+    // a guessed offset — a wrong address on a real rig lights the wrong lamp.
+    let xml = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<GDTF DataVersion="1.2"><FixtureType Name="Odd" Manufacturer="TEST">
+  <Geometries>
+    <Geometry Name="Base">
+      <GeometryReference Name="A" Geometry="L" Position="{I3}{{-100,0,0,1}}"><Break DMXBreak="2" DMXOffset="1"/></GeometryReference>
+      <GeometryReference Name="B" Geometry="L" Position="{I3}{{100,0,0,1}}"><Break DMXBreak="1" DMXOffset="4"/></GeometryReference>
+    </Geometry>
+    <Geometry Name="L"/>
+  </Geometries>
+  <DMXModes><DMXMode Name="M" Geometry="Base"><DMXChannels>
+    <DMXChannel DMXBreak="2" Offset="1" Geometry="L"><LogicalChannel Attribute="ColorAdd_R"><ChannelFunction Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1"/></LogicalChannel></DMXChannel>
+    <DMXChannel DMXBreak="2" Offset="2" Geometry="L"><LogicalChannel Attribute="ColorAdd_G"><ChannelFunction Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1"/></LogicalChannel></DMXChannel>
+    <DMXChannel DMXBreak="2" Offset="3" Geometry="L"><LogicalChannel Attribute="ColorAdd_B"><ChannelFunction Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1"/></LogicalChannel></DMXChannel>
+  </DMXChannels></DMXMode></DMXModes>
+</FixtureType></GDTF>"#
+    );
+    let p = &parse_gdtf(&zip_xml(&xml)).expect("parses")[0];
+    assert_eq!(p.channels.len(), 3, "only A's copy exists");
+    assert_eq!(p.footprint, 3);
+    assert!(p.channels.iter().all(|c| c.offsets[0] < 3), "A sits where the template declared");
+}
+
+#[test]
+fn the_spec_matrix_form_is_read_with_its_translation_in_the_last_column() {
+    // The GDTF spec writes a 4x4 row by row with the translation in the last
+    // column and {0,0,0,1} as the final row — how Robe writes a Spiider. The
+    // parent is turned a quarter turn about Z, so the child at local +x must
+    // come out at world +y: that is R·p, and reading it as p·R would put it
+    // at -y. Metres here, so the unit heuristic stays out of it.
+    let xml = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<GDTF DataVersion="1.2"><FixtureType Name="Spec" Manufacturer="TEST">
+  <Geometries>
+    <Geometry Name="Base" Position="{{1,0,0,0}}{{0,1,0,0}}{{0,0,1,0}}{{0,0,0,1}}">
+      <Geometry Name="Turned" Position="{{0,-1,0,0}}{{1,0,0,0}}{{0,0,1,-0.3}}{{0,0,0,1}}">
+        <Geometry Name="PxA" Position="{{1,0,0,0.1}}{{0,1,0,0}}{{0,0,1,0}}{{0,0,0,1}}"/>
+        <Geometry Name="PxB" Position="{{1,0,0,-0.1}}{{0,1,0,0}}{{0,0,1,0}}{{0,0,0,1}}"/>
+        <Geometry Name="PxC" Position="{{1,0,0,0}}{{0,1,0,0.2}}{{0,0,1,0}}{{0,0,0,1}}"/>
+      </Geometry>
+    </Geometry>
+  </Geometries>
+  <DMXModes><DMXMode Name="M" Geometry="Base"><DMXChannels>{}</DMXChannels></DMXMode></DMXModes>
+</FixtureType></GDTF>"#,
+        ["PxA", "PxB", "PxC"]
+            .iter()
+            .enumerate()
+            .map(|(i, g)| {
+                ["ColorAdd_R", "ColorAdd_G", "ColorAdd_B"]
+                    .iter()
+                    .enumerate()
+                    .map(|(k, a)| format!(
+                        r#"<DMXChannel DMXBreak="1" Offset="{}" Geometry="{g}"><LogicalChannel Attribute="{a}"><ChannelFunction Attribute="{a}" DMXFrom="0/1" Default="0/1"/></LogicalChannel></DMXChannel>"#,
+                        i * 3 + k + 1
+                    ))
+                    .collect::<String>()
+            })
+            .collect::<String>()
+    );
+    let p = &parse_gdtf(&zip_xml(&xml)).expect("parses")[0];
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+    let by = |l: &str| p.heads.iter().find(|h| h.label == l).unwrap();
+    // The face here varies in X and Y, so Y is up: PxA's local +x became
+    // world +y (up), PxB world -y, PxC's local +y became world -x. Then the
+    // layout is centred, which moves every x by +0.2/3.
+    let cx = 0.2 / 3.0;
+    assert!(near(by("PxA").offset, cx) && near(by("PxA").offset_y, 0.1), "PxA {:?}", (by("PxA").offset, by("PxA").offset_y));
+    assert!(near(by("PxB").offset, cx) && near(by("PxB").offset_y, -0.1), "PxB {:?}", (by("PxB").offset, by("PxB").offset_y));
+    assert!(near(by("PxC").offset, -0.2 + cx) && near(by("PxC").offset_y, 0.0), "PxC {:?}", (by("PxC").offset, by("PxC").offset_y));
+}

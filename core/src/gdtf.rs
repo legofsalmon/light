@@ -193,6 +193,41 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
     // the Geometries tree — pixel fixtures carry per-pixel Position matrices
     let geometries = ft.descendants().find(|n| n.has_tag_name("Geometries"));
 
+    // GeometryReference instances, keyed by the template geometry they point
+    // at. A pixel array is written ONCE: the colour channels sit on a template
+    // lens, and each physical pixel is a GeometryReference to it carrying its
+    // own Position and, per DMX break, the offset its copy of the template's
+    // channels lives at. A Robin Spiider declares three lenses and nineteen
+    // pixels this way. Reading the template alone compiled one pixel per
+    // lens, left the other sixteen with no channel at all, and reported a
+    // footprint 44 channels short of what the fixture occupies.
+    //
+    // Per instance: (name, [(DMXBreak, DMXOffset)…] in document order). Which
+    // entry a channel uses is decided per channel below.
+    let references: std::collections::HashMap<String, Vec<(String, Vec<(String, usize)>)>> =
+        geometries
+            .map(|g| {
+                let mut m: std::collections::HashMap<String, Vec<(String, Vec<(String, usize)>)>> =
+                    std::collections::HashMap::new();
+                for n in g.descendants().filter(|n| n.has_tag_name("GeometryReference")) {
+                    let (Some(name), Some(target)) = (n.attribute("Name"), n.attribute("Geometry"))
+                    else {
+                        continue;
+                    };
+                    let breaks: Vec<(String, usize)> = n
+                        .children()
+                        .filter(|b| b.has_tag_name("Break"))
+                        .filter_map(|b| {
+                            let off = b.attribute("DMXOffset")?.trim().parse::<usize>().ok()?;
+                            Some((b.attribute("DMXBreak").unwrap_or("1").trim().to_string(), off))
+                        })
+                        .collect();
+                    m.entry(target.to_string()).or_default().push((name.to_string(), breaks));
+                }
+                m
+            })
+            .unwrap_or_default();
+
     // Beam physicals. Both angles, not whichever turns up first: BeamAngle is
     // the 50 % core and FieldAngle the 10 % edge, and their RATIO is what tells
     // a hard-edged beam from a soft wash. Keeping only one threw that away.
@@ -279,7 +314,41 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
             }
             let width = offsets.len();
             let max_dmx: u16 = if width == 2 { 65535 } else { 255 };
-            footprint = footprint.max(offsets.iter().max().unwrap() + 1);
+
+            // Every copy of this channel: itself, or one per GeometryReference
+            // instance when its geometry is a template. DMXOffset is 1-based,
+            // so an instance at offset 1 sits exactly where the template
+            // declared the channel.
+            let geometry = ch.attribute("Geometry").unwrap_or("").to_string();
+            let dmx_break = ch.attribute("DMXBreak").unwrap_or("1").trim();
+            let instances: Vec<(String, usize)> = match references.get(&geometry) {
+                Some(refs) if !refs.is_empty() => refs
+                    .iter()
+                    .filter_map(|(name, breaks)| {
+                        // "Overwrite" is the spec's word for "the last Break
+                        // the reference lists"; a numbered break takes the
+                        // first entry with that number. A Spiider's
+                        // four-channel modes put their pixel channels on
+                        // break 1 and its three-channel modes on Overwrite,
+                        // and every reference lists one offset for each —
+                        // take the wrong one and every pixel lands a channel
+                        // short of where the fixture listens.
+                        let off = if dmx_break.eq_ignore_ascii_case("Overwrite") {
+                            breaks.last().map(|b| b.1)
+                        } else {
+                            breaks.iter().find(|b| b.0 == dmx_break).map(|b| b.1)
+                        }?;
+                        Some((name.clone(), off.saturating_sub(1)))
+                    })
+                    .collect(),
+                _ => vec![(geometry.clone(), 0)],
+            };
+            if instances.is_empty() {
+                continue; // referenced, but no instance can be addressed in this break
+            }
+            for (_, shift) in &instances {
+                footprint = footprint.max(offsets.iter().max().unwrap() + shift + 1);
+            }
 
             // functions of the first logical channel
             let logical = ch.children().find(|n| n.has_tag_name("LogicalChannel"));
@@ -501,15 +570,28 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
                 _ => {} // unmapped: hold default
             }
 
-            chan_geom.push(ch.attribute("Geometry").unwrap_or("").to_string());
-            chan_color.push(match attr_name.as_str() {
+            let color = match attr_name.as_str() {
                 "ColorAdd_R" | "ColorRGB_Red" => Some('r'),
                 "ColorAdd_G" | "ColorRGB_Green" => Some('g'),
                 "ColorAdd_B" | "ColorRGB_Blue" => Some('b'),
                 "ColorAdd_W" | "ColorAdd_WW" | "ColorAdd_CW" => Some('w'),
                 _ => None,
-            });
-            channels.push(CChannel { offsets, head: 0, cases, default, name });
+            };
+            // The geometry recorded per channel is the INSTANCE, so head
+            // synthesis groups one head per pixel and the layout finds each
+            // pixel's own Position rather than the template's, which sits at
+            // the origin for all of them.
+            for (inst_name, shift) in instances {
+                chan_geom.push(inst_name);
+                chan_color.push(color);
+                channels.push(CChannel {
+                    offsets: offsets.iter().map(|o| o + shift).collect(),
+                    head: 0,
+                    cases: cases.clone(),
+                    default,
+                    name: name.clone(),
+                });
+            }
         }
 
         // Multi-pixel fixtures (strips, bars): synthesize one head per pixel
@@ -925,13 +1007,23 @@ fn synthesize_heads(
     ((head + 1).max(1) as usize, Vec::new())
 }
 
-/// A GDTF Matrix attribute: 3×3 rotation rows plus a translation, row-vector
-/// convention (world = local·R + t). The wire format is four brace groups;
-/// the translation is the first three values of the FOURTH group under both
-/// 4×4-row-major and u/v/w/o spellings seen in the wild.
+/// A GDTF Matrix attribute: 3×3 rotation plus a translation, in one of the
+/// two spellings seen in the wild.
+///
+/// The spec's own form is a 4×4 written row by row,
+/// `{r r r tx}{r r r ty}{r r r tz}{0 0 0 1}`: translation in the LAST COLUMN,
+/// applied as world = R·local + t. That is how Robe writes a Spiider. The
+/// other, u/v/w/o, puts the three axis vectors and then the origin in four
+/// groups, so the translation is the first three values of the FOURTH group
+/// and it applies as world = local·R + t. The two are told apart by the
+/// fourth group: `{0,0,0,1}` can only be the spec form. Read the spec form as
+/// the other and every pixel of a Spiider landed at the origin, which the
+/// layout rightly called degenerate and threw away.
 struct GMat {
     r: [[f64; 3]; 3],
     t: [f64; 3],
+    /// spec 4×4 form: rotate as R·p rather than p·R
+    column: bool,
 }
 
 /// `Dimmer3` -> `Dimmer`. Strips a trailing run of ASCII digits so an indexed
@@ -963,11 +1055,29 @@ fn parse_matrix(s: &str) -> Option<GMat> {
             *v = groups[i][j];
         }
     }
-    Some(GMat { r, t: [groups[3][0], groups[3][1], groups[3][2]] })
+    let column = groups.iter().all(|g| g.len() == 4)
+        && groups[3][0] == 0.0
+        && groups[3][1] == 0.0
+        && groups[3][2] == 0.0
+        && groups[3][3] == 1.0;
+    let t = if column {
+        [groups[0][3], groups[1][3], groups[2][3]]
+    } else {
+        [groups[3][0], groups[3][1], groups[3][2]]
+    };
+    Some(GMat { r, t, column })
 }
 
 fn gmat_apply(m: &GMat, p: [f64; 3]) -> [f64; 3] {
-    // row-vector: p' = p·R + t
+    if m.column {
+        // spec 4×4: p' = R·p + t
+        return [
+            m.r[0][0] * p[0] + m.r[0][1] * p[1] + m.r[0][2] * p[2] + m.t[0],
+            m.r[1][0] * p[0] + m.r[1][1] * p[1] + m.r[1][2] * p[2] + m.t[1],
+            m.r[2][0] * p[0] + m.r[2][1] * p[1] + m.r[2][2] * p[2] + m.t[2],
+        ];
+    }
+    // u/v/w/o, row-vector: p' = p·R + t
     [
         p[0] * m.r[0][0] + p[1] * m.r[1][0] + p[2] * m.r[2][0] + m.t[0],
         p[0] * m.r[0][1] + p[1] * m.r[1][1] + p[2] * m.r[2][1] + m.t[1],
@@ -1014,7 +1124,7 @@ fn parse_pixel_layout(
     if head_geoms.len() != head_count || head_count < 2 {
         return None;
     }
-    let mut px: Vec<(f64, f64)> = Vec::with_capacity(head_count);
+    let mut p3: Vec<[f64; 3]> = Vec::with_capacity(head_count);
     for name in head_geoms {
         if name.is_empty() {
             return None;
@@ -1023,21 +1133,38 @@ fn parse_pixel_layout(
         if !p.iter().all(|v| v.is_finite()) {
             return None;
         }
-        // GDTF is Z-up: X stays the fixture's local X, Z becomes local Y (up);
-        // depth (GDTF Y) is dropped - a pixel face is planar
-        px.push((p[0], p[2]));
+        p3.push(p);
     }
     // Centre the layout FIRST: LIGHT treats fixture.pos as the visual centre,
     // and centring first makes the unit heuristic below depend on the
     // fixture's physical extent rather than where the author happened to put
     // the geometry origin.
-    let n = px.len() as f64;
-    let cx = px.iter().map(|p| p.0).sum::<f64>() / n;
-    let cy = px.iter().map(|p| p.1).sum::<f64>() / n;
-    for p in &mut px {
-        p.0 -= cx;
-        p.1 -= cy;
+    let n = p3.len() as f64;
+    for axis in 0..3 {
+        let c = p3.iter().map(|p| p[axis]).sum::<f64>() / n;
+        for p in &mut p3 {
+            p[axis] -= c;
+        }
     }
+    // A pixel face is planar, but which plane depends on what the thing is.
+    // GDTF is Z-up: a bar or panel facing the room varies in X and Z, and Y
+    // is its depth — the only case read before. A moving head's face is the
+    // other way round: its pixels vary in X and Y and Z points down the beam,
+    // so dropping Y collapsed a Spiider's two rings onto a line. X is always
+    // across; of the other two, the one MOST pixels spread along is "up".
+    //
+    // Median, not maximum: a Spiider's flower effect is recessed 100 mm behind
+    // a face whose rings reach 100 mm, so the largest single excursion would
+    // call the depth axis the face and collapse the rings anyway. One outlier
+    // cannot move a median. A tie keeps Z up, which is the bar-and-panel case.
+    let median_abs = |axis: usize| {
+        let mut v: Vec<f64> = p3.iter().map(|p| p[axis].abs()).collect();
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let n = v.len();
+        if n % 2 == 1 { v[n / 2] } else { (v[n / 2 - 1] + v[n / 2]) / 2.0 }
+    };
+    let up = if median_abs(1) > median_abs(2) { 1 } else { 2 };
+    let mut px: Vec<(f64, f64)> = p3.iter().map(|p| (p[0], p[up])).collect();
     // Degenerate (all pixels at one point): the flat-export signature.
     let span_raw = px.iter().fold(0.0f64, |m, &(x, y)| m.max(x.abs()).max(y.abs()));
     if span_raw < 1e-4 {

@@ -246,7 +246,11 @@ impl FixtureForm {
 /// 1 — gobo and prism slots and rotation, shutter pulse/random bands, and
 ///     the resting value taken from the channel's InitialFunction rather
 ///     than whichever function is listed first.
-pub const COMPILER_VERSION: u32 = 1;
+// 2: GeometryReference instances are expanded (a Spiider went from 5 heads
+//    and a footprint of 79 to 21 heads and 123), and a pixel face is read in
+//    whichever plane it actually lies in. Every profile stamped 1 is offered
+//    a rebuild, because its head count and footprint may both be wrong.
+pub const COMPILER_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

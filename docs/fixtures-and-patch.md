@@ -104,3 +104,25 @@ table after a first import.
 ## Importing fixtures (GDTF)
 
 For anything beyond the built-ins, click **⇩ import .gdtf** in the Fixtures tab and pick a fixture file (e.g. from [gdtf-share.com](https://gdtf-share.com)). Every DMX mode in the file becomes a selectable profile (marked ⇩ in the dropdown), stored inside the project so it travels with your show. Supported in v1: dimmer, RGB(W) colour, 16-bit pan/tilt, shutter/strobe, and colour wheels (with automatic nearest-colour quantisation, like the derby); unmapped channels hold the fixture's own defaults. Both engines interpret imported profiles through one shared implementation, and the parity suite covers it.
+
+**Pixel arrays.** A fixture with many emitters is usually written the way the
+GDTF spec intends: the colour channels are declared once on a template lens,
+and each physical pixel is a *GeometryReference* to that lens carrying its own
+position and a DMX offset per break. The importer expands those references,
+so a Robin Spiider comes in as its nineteen pixels in two rings plus the
+flower, on every mode, with the footprint the fixture actually occupies —
+a Pixel RGB mode is 91 channels, a Pattern full RGBW mode is 123. A reference
+lists one offset per break; a channel declared on a numbered break takes the
+matching entry, and one declared as an *Overwrite* takes the last, which is
+how one file serves both its three- and four-channel modes. Both spellings
+of the position matrix are read: the spec's 4×4 with the translation in the
+last column, and the axis-vectors-plus-origin form some consoles export. The
+face is laid out in whichever plane the pixels actually lie in, so a bar or
+panel reads across and up as before and a moving head's face reads as a
+face, not a line.
+
+A profile compiled by an older build carries its compiler version, and the
+Rig view flags it with **rebuild from library** when the importer has learned
+something since. Take the offer: a pixel array compiled before this could have
+been short of both heads and channels, and the address after it may need to
+move.

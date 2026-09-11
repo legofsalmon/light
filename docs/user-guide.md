@@ -372,7 +372,10 @@ from, in one searchable list: the built-ins, the generic layouts LIGHT ships
 RGB and RGBW bars, a pixel strip — for any fixture whose channels are simply in
 order; pick the mode that matches the manual), and every `.gdtf` you have
 imported or fetched from GDTF Share on this Mac, which is why the next show
-starts with them. `+ rig` patches one at the next free address; `✕` removes a
+starts with them. When an update teaches the importer something new, the Rig
+view flags profiles compiled by the older build with **rebuild from library**;
+take the offer, and check the addresses after it, because a pixel array can
+come back with more channels than it was first compiled with. `+ rig` patches one at the next free address; `✕` removes a
 file from the library (fixtures already patched keep their profile — the
 project carries it). The library lives with the LIGHT app; a browser or the
 tablet sees the built-ins.
