@@ -61,7 +61,7 @@ function compiledChannelNames(c: NonNullable<Project['profiles']>[string]): stri
 /** The optional, continuous beam parameters — every one a 0..1 fader with an
  *  enable, in the order they are offered in the editor. The two rotations
  *  belong to the optics block and sit beside their wheel's slot picker. */
-export const BEAM_PARAMS = ['zoom', 'focus', 'iris', 'frost', 'cto', 'goboRotate', 'prismRotate'] as const;
+export const BEAM_PARAMS = ['zoom', 'focus', 'iris', 'frost', 'cto', 'goboRotate', 'prismRotate', 'flower'] as const;
 export type BeamParam = (typeof BEAM_PARAMS)[number];
 export type BeamCaps = Record<BeamParam, boolean>;
 /** The ones that are beam shaping proper, offered as a run of faders. */
@@ -75,6 +75,7 @@ export const BEAM_LABELS: Record<BeamParam, string> = {
   cto: 'warmth',
   goboRotate: 'gobo spin',
   prismRotate: 'prism spin',
+  flower: 'flower spin',
 };
 
 export const noBeamCaps = (): BeamCaps =>

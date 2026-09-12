@@ -14,7 +14,7 @@ import { TextField } from './inputs.tsx';
 
 const PART_FIELDS: SoftField[] = [
   'dimmer', 'hue', 'sat', 'white', 'strobe', 'pan', 'tilt', 'ringFx', 'motorValue',
-  'haze', 'fan', 'zoom', 'focus', 'iris', 'frost', 'cto', 'goboRotate', 'prismRotate',
+  'haze', 'fan', 'zoom', 'focus', 'iris', 'frost', 'cto', 'goboRotate', 'prismRotate', 'flower',
 ];
 const EFFECT_FIELDS: SoftField[] = ['rate', 'size', 'spread', 'width', 'phase', 'mix'];
 

@@ -35,7 +35,7 @@ export function applySoftParam(params: Project['looks'][string]['parts'][number]
     case 'dimmer': case 'white': case 'ringFx': case 'strobe': case 'motorValue':
     case 'pan': case 'tilt': case 'haze': case 'fan':
     case 'zoom': case 'focus': case 'iris': case 'frost': case 'cto':
-    case 'goboRotate': case 'prismRotate':
+    case 'goboRotate': case 'prismRotate': case 'flower':
       params[field] = v;
       break;
     default:

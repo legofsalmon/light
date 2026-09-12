@@ -95,6 +95,18 @@
               <ChannelFunction Name="CW" Attribute="Prism1PosRotate" DMXFrom="136/1" Default="255/1" Wheel="PrismWheel1"/>
             </LogicalChannel>
           </DMXChannel>
+          <!-- A Spiider-style flower effect: 0 is off, 1..127 fast to slow one way,
+               128 still, 129..255 slow to fast the other. Rests off. -->
+          <DMXChannel DMXBreak="1" Offset="9" Geometry="Base" InitialFunction="Base_FlowerEffect.FlowerEffect.FlowerEffect">
+            <LogicalChannel Attribute="FlowerEffect">
+              <ChannelFunction Name="FlowerEffect" Attribute="FlowerEffect" DMXFrom="0/1" Default="0/1" PhysicalFrom="-1276.6" PhysicalTo="1276.6">
+                <ChannelSet Name="Open position/Flower Effect Off" DMXFrom="0/1" PhysicalFrom="0" PhysicalTo="0"/>
+                <ChannelSet Name="Fast to slow" DMXFrom="1/1" PhysicalFrom="-1272.085" PhysicalTo="-1.303"/>
+                <ChannelSet Name="No rotation middle" DMXFrom="128/1" PhysicalFrom="0" PhysicalTo="0"/>
+                <ChannelSet Name="Slow to fast" DMXFrom="129/1" PhysicalFrom="1.303" PhysicalTo="1272.085"/>
+              </ChannelFunction>
+            </LogicalChannel>
+          </DMXChannel>
         </DMXChannels>
       </DMXMode>
     </DMXModes>

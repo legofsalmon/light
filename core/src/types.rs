@@ -401,6 +401,11 @@ pub struct PartParams {
     pub prism: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prism_rotate: Option<f64>,
+    /// Flower spin, 0..1 across the fixture's rotate band: the middle is still
+    /// and either end is full speed one way. A Robin Spiider's centre flower
+    /// effect; absent leaves it where the profile parks it, which is off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flower: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -421,6 +426,7 @@ pub enum EffectTarget {
     Cto,
     GoboRotate,
     PrismRotate,
+    Flower,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -486,6 +492,7 @@ pub enum SoftField {
     Cto,
     GoboRotate,
     PrismRotate,
+    Flower,
     Hue,
     Sat,
     Rate,

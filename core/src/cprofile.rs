@@ -43,6 +43,9 @@ pub enum Source {
     GoboRotate,
     Prism,
     PrismRotate,
+    /// Flower spin — a Robin Spiider's centre effect. Rides the same 0..1 band
+    /// convention as the wheel rotations: middle still, ends full speed.
+    Flower,
 }
 
 /// Case guard — the first matching case in a channel wins.
@@ -250,7 +253,9 @@ impl FixtureForm {
 //    and a footprint of 79 to 21 heads and 123), and a pixel face is read in
 //    whichever plane it actually lies in. Every profile stamped 1 is offered
 //    a rebuild, because its head count and footprint may both be wrong.
-pub const COMPILER_VERSION: u32 = 2;
+// 3: FlowerEffect is a source. A profile stamped 2 leaves a Spiider's flower
+//    parked; rebuilt, it gains the fader.
+pub const COMPILER_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -484,6 +489,7 @@ fn source_value(p: &ResolvedParams, s: Source, virtual_dimmer: bool) -> f64 {
         Source::GoboRotate => p.beam.gobo_rotate.unwrap_or(0.0),
         Source::Prism => p.prism.unwrap_or(0.0),
         Source::PrismRotate => p.beam.prism_rotate.unwrap_or(0.0),
+        Source::Flower => p.beam.flower.unwrap_or(0.0),
     }
 }
 
@@ -499,6 +505,7 @@ fn source_is_set(p: &ResolvedParams, s: Source) -> bool {
         Source::GoboRotate => p.beam.gobo_rotate.is_some(),
         Source::Prism => p.prism.is_some(),
         Source::PrismRotate => p.beam.prism_rotate.is_some(),
+        Source::Flower => p.beam.flower.is_some(),
         _ => true,
     }
 }

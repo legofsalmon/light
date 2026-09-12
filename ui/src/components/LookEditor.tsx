@@ -891,6 +891,10 @@ function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ri
           />
         )}
         {beamCaps.prismRotate && beamRow('prismRotate')}
+        {/* A Spiider's centre flower: the same fader shape as a wheel spin,
+            middle still, either end full speed one way. Only where the
+            fixture actually has the channel. */}
+        {beamCaps.flower && beamRow('flower')}
 
         {kinds.has('hazer') && (
           <div className="paramrow">

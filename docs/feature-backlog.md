@@ -156,6 +156,20 @@ fractional slot / released). **Not done:** drawing gobos and prisms in the
 previz (a larger item of its own); a second gobo wheel; gobo shake and wheel
 spin; indexed (angle) rotation on a `…Pos` channel with no rotate function.
 
+**Addendum 2026-09-11 — flower spin.** `PartParams.flower` (0..1), `Source::
+Flower` / `EffectTarget::Flower` / `SoftField::Flower`, WASM layout 25 → 26
+(slot 25, NaN = unset), `COMPILER_VERSION` 3. The importer maps `FlowerEffect`
+linearly across DMX 1..max so the fader's middle lands EXACTLY on the still
+point (a Spiider's 128) and neither end can reach the "off" value at 0; unset
+parks at the file's default, which is off. The same shape as the wheel spins,
+and the same wiring: a beam cap in `profileInfo.ts`, so the fader appears only
+where the profile drives it, an effect target via `capableTargets`, nudge-able
+and dial-linkable. The synthetic optics fixture grew a ninth channel for it
+(the archive is now blessed from its `.xml` by a test, like the MVR), the golden
+sweep carries the field, and parity pins parked / still / full on both engines.
+Verified live on the real Spiider Mode 10 profile: 0.5 → 128, 1 → 255, unset → 0.
+Pattern-select and zone-mode channels remain unmapped (raw override only).
+
 ### 4 · A ready-made effects library — ◼ shipped 2026-09-06 (single-effect; composites still open)
 **Touches:** ui, docs (no engine change, as predicted)
 **Shipped:** `ui/src/fxLibrary.ts` — 46 named, categorised, described factory

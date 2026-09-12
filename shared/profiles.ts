@@ -53,6 +53,8 @@ export type ResolvedParams = {
    *  between looks, unlike the slots they spin. */
   goboRotate: number | null;
   prismRotate: number | null;
+  /** A Spiider-style flower effect's spin: same shape as the wheel rotations. */
+  flower: number | null;
 };
 
 export function defaultResolved(): ResolvedParams {
@@ -61,7 +63,7 @@ export function defaultResolved(): ResolvedParams {
     motorMode: 'off', motorValue: 0, macro: null, pan: 0.5, tilt: 0.5,
     haze: 0, fan: 0, strobeMode: 'strobe', gobo: null, prism: null,
     zoom: null, focus: null, iris: null, frost: null, cto: null,
-    goboRotate: null, prismRotate: null,
+    goboRotate: null, prismRotate: null, flower: null,
   };
 }
 

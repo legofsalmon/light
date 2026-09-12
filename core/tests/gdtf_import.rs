@@ -621,10 +621,15 @@ fn optics_params() -> ResolvedParams {
     ResolvedParams { dimmer: 1.0, pan: 0.5, tilt: 0.5, ..Default::default() }
 }
 
+/// The first eight bytes of the optics fixture. It has grown a ninth channel
+/// (the flower spin) since these assertions were written; rendering into nine
+/// and returning eight keeps every one of them meaning what it did.
 fn render8(p: &light_core::cprofile::CompiledProfile, prm: &ResolvedParams) -> [u8; 8] {
-    let mut buf = [0u8; 8];
+    let mut buf = [0u8; 9];
     render_compiled(p, &[prm], &mut buf, 0);
-    buf
+    let mut first = [0u8; 8];
+    first.copy_from_slice(&buf[..8]);
+    first
 }
 
 fn channel<'a>(p: &'a light_core::cprofile::CompiledProfile, name: &str) -> &'a light_core::cprofile::CChannel {
@@ -634,7 +639,7 @@ fn channel<'a>(p: &'a light_core::cprofile::CompiledProfile, name: &str) -> &'a 
 #[test]
 fn optics_park_until_a_look_asks() {
     let p = optics_profile();
-    assert_eq!(p.footprint, 8);
+    assert_eq!(p.footprint, 9, "eight optics channels and the flower spin");
     assert_eq!(p.heads[0].kind, HeadKind::Mover);
     assert_eq!(p.compiler, light_core::cprofile::COMPILER_VERSION, "the importer stamps its version");
     // shutter rests OPEN (12, from InitialFunction) and the prism rotation at
@@ -1155,4 +1160,48 @@ fn the_spec_matrix_form_is_read_with_its_translation_in_the_last_column() {
     assert!(near(by("PxA").offset, cx) && near(by("PxA").offset_y, 0.1), "PxA {:?}", (by("PxA").offset, by("PxA").offset_y));
     assert!(near(by("PxB").offset, cx) && near(by("PxB").offset_y, -0.1), "PxB {:?}", (by("PxB").offset, by("PxB").offset_y));
     assert!(near(by("PxC").offset, -0.2 + cx) && near(by("PxC").offset_y, 0.0), "PxC {:?}", (by("PxC").offset, by("PxC").offset_y));
+}
+
+
+/// A Spiider's flower effect: DMX 0 is "off", 1..255 runs fast one way
+/// through still at 128 to fast the other. The importer maps the fader across
+/// 1..255 so its middle lands EXACTLY on the still point, and leaves the
+/// channel at the file's default — off — until a look sets it.
+#[test]
+fn flower_spin_sweeps_the_rotate_band_and_rests_off() {
+    let p = &parse_gdtf(&zipped(OPTICS)).expect("parses")[0];
+    assert_eq!(p.footprint, 9, "the flower channel is the ninth");
+    let flower = p.channels.iter().find(|c| c.name == "FlowerEffect").expect("a FlowerEffect channel");
+    assert_eq!(flower.offsets, vec![8]);
+    let byte = |v: Option<f64>| {
+        let mut prm = ResolvedParams { dimmer: 1.0, ..Default::default() };
+        prm.beam.flower = v;
+        let mut buf = [0u8; 9];
+        render_compiled(p, &[&prm], &mut buf, 0);
+        buf[8]
+    };
+    assert_eq!(byte(None), 0, "nothing asked: the effect is off, as the file parks it");
+    assert_eq!(byte(Some(0.5)), 128, "the fader's middle is the still point, not 127");
+    assert_eq!(byte(Some(0.0)), 1, "one end is full speed one way — never the off value");
+    assert_eq!(byte(Some(1.0)), 255, "the other end is full speed the other way");
+    // the whole profile still says it drives it, which is what shows the fader
+    assert!(p.drives(light_core::cprofile::Source::Flower));
+}
+
+/// The committed archive must BE the XML beside it. The parity harness imports
+/// `data/synthetic-optics.gdtf` while these tests build one from the `.xml`,
+/// and nothing held the two together — a channel added to the XML would not
+/// reach the harness until somebody remembered to re-zip. Regenerate with
+/// `LIGHT_BLESS_GOLDEN=1 cargo test -p light-core --test gdtf_import`.
+#[test]
+fn the_committed_optics_archive_is_the_one_the_tests_assert_against() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/synthetic-optics.gdtf");
+    let built = zipped(OPTICS);
+    assert_eq!(built, zipped(OPTICS), "the archive builder is not reproducible");
+    if std::env::var("LIGHT_BLESS_GOLDEN").is_ok() {
+        std::fs::write(path, &built).expect("write archive");
+        return;
+    }
+    let have = std::fs::read(path).expect("archive missing");
+    assert_eq!(have, built, "data/synthetic-optics.gdtf drifted from its .xml");
 }

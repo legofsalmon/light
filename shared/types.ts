@@ -209,13 +209,17 @@ export type PartParams = {
   goboRotate?: number;
   /** prism slot, 0 = no prism */
   prism?: number;
+  /** flower spin, 0..1 across the fixture's rotate band — the middle is still
+   *  and either end is full speed one way. A Robin Spiider's centre effect;
+   *  absent leaves it where the profile parks it, which is off. */
+  flower?: number;
   /** prism rotation, 0..1 across the fixture's rotate band */
   prismRotate?: number;
 };
 
 export type EffectTarget =
   | 'dimmer' | 'hue' | 'white' | 'strobe' | 'pan' | 'tilt'
-  | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'goboRotate' | 'prismRotate'
+  | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'goboRotate' | 'prismRotate' | 'flower'
   // The one target that drives TWO parameters. Pan and tilt have always been
   // separate targets with a free phase, so a circle could be hand-built from
   // two effects a quarter-cycle apart — and then it was two rows that had to
@@ -243,7 +247,7 @@ export type Fold = 'none' | 'mirror' | 'centre';
  *  validator draw from. */
 export const EFFECT_TARGETS: ReadonlySet<EffectTarget> = new Set<EffectTarget>([
   'dimmer', 'hue', 'white', 'strobe', 'pan', 'tilt', 'zoom', 'focus', 'iris', 'frost', 'cto',
-  'goboRotate', 'prismRotate', 'shape',
+  'goboRotate', 'prismRotate', 'flower', 'shape',
 ]);
 export const WAVES: ReadonlySet<Wave> = new Set<Wave>([
   'sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random',
@@ -259,6 +263,7 @@ export const FOLDS: ReadonlySet<Fold> = new Set<Fold>(['none', 'mirror', 'centre
 export type SoftField =
   | 'dimmer' | 'white' | 'ringFx' | 'strobe' | 'motorValue' | 'pan' | 'tilt'
   | 'haze' | 'fan' | 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'goboRotate' | 'prismRotate'
+  | 'flower'
   | 'hue' | 'sat' | 'rate' | 'size' | 'spread' | 'width' | 'phase' | 'mix';
 
 /** Runtime membership set — the Node engine must reject an unknown field the
@@ -266,6 +271,7 @@ export type SoftField =
 export const SOFT_FIELDS: ReadonlySet<SoftField> = new Set<SoftField>([
   'dimmer', 'white', 'ringFx', 'strobe', 'motorValue', 'pan', 'tilt',
   'haze', 'fan', 'zoom', 'focus', 'iris', 'frost', 'cto', 'goboRotate', 'prismRotate',
+  'flower',
   'hue', 'sat', 'rate', 'size', 'spread', 'width', 'phase', 'mix',
 ]);
 
@@ -535,7 +541,7 @@ export const BUILTIN_PROFILE_IDS: readonly string[] = [
 /** The importer's current version — mirrors COMPILER_VERSION in
  *  core/src/cprofile.rs, where the history of what changed at each step lives.
  *  A profile stamped lower than this was compiled by an older build. */
-export const COMPILER_VERSION = 2;
+export const COMPILER_VERSION = 3;
 
 /** Beats to a bar. Four, everywhere: the top bar's bar LED counts the same
  *  four, and SYNC lands the beat and every effect cycle on a multiple of it.

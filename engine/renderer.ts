@@ -25,8 +25,8 @@ const NUM_FIELDS: NumField[] = ['dimmer', 'white', 'ringFx', 'strobe', 'pan', 't
 // existing merge untouched, so a saved show still renders byte for byte.
 // Mirrors BeamField/ALL_BEAM in core/src/renderer.rs — order is not load
 // bearing here, but keeping the two lists identical is how they stay in step.
-type BeamField = 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'goboRotate' | 'prismRotate';
-const BEAM_FIELDS: BeamField[] = ['zoom', 'focus', 'iris', 'frost', 'cto', 'goboRotate', 'prismRotate'];
+type BeamField = 'zoom' | 'focus' | 'iris' | 'frost' | 'cto' | 'goboRotate' | 'prismRotate' | 'flower';
+const BEAM_FIELDS: BeamField[] = ['zoom', 'focus', 'iris', 'frost', 'cto', 'goboRotate', 'prismRotate', 'flower'];
 
 type Acc = {
   num: Partial<Record<NumField, { v: number; w: number }>>;

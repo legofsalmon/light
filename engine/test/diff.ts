@@ -724,6 +724,17 @@ async function main(): Promise<void> {
       JSON.stringify(bytes()) === JSON.stringify([128, 128, 255, 164, 24, 192, 95, 64]),
       `got ${JSON.stringify(bytes())}`,
     );
+    // The flower channel is the ninth: parked off until asked, then the fader
+    // sweeps 1..255 with its middle on the still point. Both engines render it
+    // through the same compiled profile, and this is the checkpoint that says so.
+    const flowerByte = () => node.dmx['u1']?.[407]; // address 400 + channel 9, zero-based
+    check('optics: flower rests off until a look asks', flowerByte() === 0, `got ${flowerByte()}`);
+    await setOptics({ flower: 0.5 });
+    compareDmx('optics: flower still-point parity', node, rust);
+    check('optics: flower at the middle is exactly the still point', flowerByte() === 128, `got ${flowerByte()}`);
+    await setOptics({ flower: 1 });
+    compareDmx('optics: flower full-speed parity', node, rust);
+    check('optics: flower at the end is full speed', flowerByte() === 255, `got ${flowerByte()}`);
     await setOptics({ strobe: 0.5, strobeMode: 'random', gobo: 9 });
     compareDmx('optics: random pattern + clamped slot parity', node, rust);
     check(

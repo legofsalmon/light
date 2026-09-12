@@ -46,6 +46,7 @@ export const FIELD_LABEL: Record<SoftField, string> = {
   cto: 'warmth',
   goboRotate: 'gobo spin',
   prismRotate: 'prism spin',
+  flower: 'flower spin',
   hue: 'hue',
   sat: 'saturation',
   rate: 'rate',
@@ -71,6 +72,7 @@ export const TARGET_LABEL: Record<EffectTarget, string> = {
   cto: 'warmth',
   goboRotate: 'gobo spin',
   prismRotate: 'prism spin',
+  flower: 'flower spin',
   shape: 'shape',
 };
 

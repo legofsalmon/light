@@ -138,6 +138,8 @@ export function softBase(params: PartParams, field: SoftField): number {
       return params.goboRotate ?? 0.5;
     case 'prismRotate':
       return params.prismRotate ?? 0.5;
+    case 'flower':
+      return params.flower ?? 0.5;
     case 'white':
       return params.white ?? 0;
     case 'ringFx':
@@ -359,7 +361,8 @@ export function applyEffects(
       case 'frost':
       case 'cto':
       case 'goboRotate':
-      case 'prismRotate': {
+      case 'prismRotate':
+      case 'flower': {
         const dry = out[e.target] ?? 0.5;
         out[e.target] = applyMix(dry, clamp(dry + (v - 0.5) * e.size), mix);
         break;

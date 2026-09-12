@@ -536,6 +536,24 @@ fn parse_description(xml: &str) -> Result<Vec<CompiledProfile>, String> {
                 // that has them, which is what makes them safe to expose as a
                 // plain 0..1 fader and to ramp from an effect.
                 "Zoom" => cases.extend(optional(Source::Zoom)),
+                // A Spiider's flower effect: DMX 0 is "off", 1..255 is fast one
+                // way through still (128) to fast the other. Unset parks it at
+                // the file's default, which is off; set, 0..1 sweeps 1..255 so
+                // the fader's middle lands exactly on the still point.
+                "FlowerEffect" => cases.extend(vec![
+                    FuncCase {
+                        cond: Cond::SourceUnset { source: Source::Flower },
+                        dmx_from: default,
+                        dmx_to: default,
+                        func: Func::Fixed { value: default },
+                    },
+                    FuncCase {
+                        cond: Cond::Always,
+                        dmx_from: 1,
+                        dmx_to: max_dmx,
+                        func: Func::Linear { source: Source::Flower },
+                    },
+                ]),
                 "Focus1" | "Focus" => cases.extend(optional(Source::Focus)),
                 "Iris" => cases.extend(optional(Source::Iris)),
                 "Frost1" | "Frost2" | "Frost" => cases.extend(optional(Source::Frost)),

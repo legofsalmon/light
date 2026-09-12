@@ -64,6 +64,8 @@ pub struct BeamParams {
     /// crossfade between looks, unlike the slots they spin.
     pub gobo_rotate: Option<f64>,
     pub prism_rotate: Option<f64>,
+    /// A Spiider-style flower effect's spin: same shape as the wheel rotations.
+    pub flower: Option<f64>,
 }
 
 impl Default for ResolvedParams {

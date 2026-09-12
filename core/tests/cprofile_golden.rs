@@ -65,6 +65,7 @@ fn gen_params(seed: &mut u64, case: usize) -> ResolvedParams {
             cto: maybe(seed, case, 16),
             gobo_rotate: maybe(seed, case, 17),
             prism_rotate: maybe(seed, case, 18),
+            flower: maybe(seed, case, 19),
         },
         // The optics slots and shutter pattern likewise: no built-in has a
         // gobo, a prism or a pulse band, and none of them may notice a look

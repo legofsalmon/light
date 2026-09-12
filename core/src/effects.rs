@@ -126,6 +126,7 @@ pub fn soft_base(params: &PartParams, field: crate::types::SoftField) -> f64 {
         F::Cto => params.cto.unwrap_or(0.5),
         F::GoboRotate => params.gobo_rotate.unwrap_or(0.5),
         F::PrismRotate => params.prism_rotate.unwrap_or(0.5),
+        F::Flower => params.flower.unwrap_or(0.5),
         F::White => params.white.unwrap_or(0.0),
         F::RingFx => params.ring_fx.unwrap_or(0.0),
         F::Strobe => params.strobe.unwrap_or(0.0),
@@ -376,6 +377,10 @@ pub fn apply_effects(
             EffectTarget::PrismRotate => {
                 let dry = out.prism_rotate.unwrap_or(0.5);
                 out.prism_rotate = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
+            }
+            EffectTarget::Flower => {
+                let dry = out.flower.unwrap_or(0.5);
+                out.flower = Some(apply_mix(dry, clamp01(dry + (v - 0.5) * e.size), mix));
             }
         }
     }

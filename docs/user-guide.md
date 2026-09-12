@@ -100,7 +100,7 @@ Select a pad → the Look tab shows its editor. A look is a list of **parts**; e
 - **Dimmer** — intensity 0–100%.
 - **Colour** — hue + saturation faders plus swatches. Derbies can't mix colour: they quantise to the nearest of their 14 fixed colour slots ("auto"), or pick a slot from the dropdown.
 - **Derby extras** — *ring blinder* toggle (the white LED ring is on/off hardware — there is no ring dimmer), *ring FX* (the ring's built-in strobe patterns), *motor* (off / static aim / rotate + speed).
-- **Optics** (imported moving heads) — *gobo* and *prism* slot pickers built from the fixture's own wheel, a *spin* fader for each wheel that rotates, and the strobe's *pattern* (plain / pulse / random) where the shutter has the bands. Not set leaves a wheel where the fixture parks it.
+- **Optics** (imported moving heads) — *gobo* and *prism* slot pickers built from the fixture's own wheel, a *spin* fader for each wheel that rotates, and the strobe's *pattern* (plain / pulse / random) where the shutter has the bands. Not set leaves a wheel where the fixture parks it. A fixture with a centre *flower* effect (a Robin Spiider) gets a **flower spin** fader of the same shape: the middle is still, either end is full speed one way, and not set leaves the effect off. It is nudge-able and an effect target like the wheel spins.
 - **White** — the dedicated white emitter on an RGBW head, offered whenever
   something in the group actually drives one. Distinct from a derby's *ring
   blinder*, which is on/off hardware.
@@ -112,7 +112,7 @@ Enable a parameter with the checkbox to its left; a look only writes the paramet
 
 ### Effects
 
-Each part can stack effects. **browse…** opens a catalogue of ready-made ones — grouped, searchable, and applied as you click so you can audition down the list — or build your own: an effect modulates one target (dimmer, hue, white, strobe, pan, tilt, the beam parameters, gobo spin, prism spin) with a wave. The exception is **shape**, which drives pan and tilt together to trace a circle, a figure of eight or a square:
+Each part can stack effects. **browse…** opens a catalogue of ready-made ones — grouped, searchable, and applied as you click so you can audition down the list — or build your own: an effect modulates one target (dimmer, hue, white, strobe, pan, tilt, the beam parameters, gobo spin, prism spin, flower spin) with a wave. The exception is **shape**, which drives pan and tilt together to trace a circle, a figure of eight or a square:
 
 | Wave | Feels like |
 |---|---|

@@ -735,6 +735,14 @@ await new Promise<void>((resolve) => {
   check('sanitize: a negative slot is dropped', prm.prism === undefined, `prism=${prm.prism}`);
   check('sanitize: an unknown shutter pattern is dropped', prm.strobeMode === undefined, `strobeMode=${prm.strobeMode}`);
   check('sanitize: a rotation passes through', prm.goboRotate === 0.3);
+  // the flower spin is a rotation like the wheel spins: numeric, untouched
+  const raw2 = demoProject();
+  const look2 = Object.values(raw2.looks)[0]!;
+  look2.parts[0].params = { flower: 0.75 } as unknown as Project['looks'][string]['parts'][number]['params'];
+  look2.parts[0].effects = [{ ...look2.parts[0].effects[0] ?? {}, id: 'fx-flower', target: 'flower', wave: 'sine', rate: 4, size: 1, spread: 0, width: 0.5, phase: 0, bypass: false, mix: 1, distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0 } as never];
+  const fixed = sanitizeProject(raw2)!.looks[look2.id].parts[0];
+  check('sanitize: flower spin passes through', fixed.params.flower === 0.75, `flower=${fixed.params.flower}`);
+  check('sanitize: flower is an effect target repairEffect keeps', fixed.effects.length === 1 && fixed.effects[0].target === 'flower', JSON.stringify(fixed.effects.map((e) => e.target)));
   check('stale: a profile with no channels is not stale', !hasUndrivenBeamChannels({}));
 }
 

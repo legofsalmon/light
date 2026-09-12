@@ -5,7 +5,7 @@
 //! [dimmer, r, g, b, white, ringFx, strobe, motorMode(0=off/1=aim/2=rotate),
 //!  motorValue, hasMacro(0/1), macroValue, pan, tilt, haze, fan,
 //!  zoom, focus, iris, frost, cto, gobo, goboRotate, prism, prismRotate,
-//!  strobeMode(0=strobe/1=pulse/2=random)]
+//!  strobeMode(0=strobe/1=pulse/2=random), flower]
 //! The optional ones (zoom onwards, bar strobeMode) carry NaN for "unset".
 //! Mirrors the flatten in engine/wasmProfiles.ts — change both or nothing.
 
@@ -18,7 +18,7 @@ use light_core::cprofile::{render_compiled, CompiledProfile};
 use light_core::profiles::{BeamParams, ResolvedParams};
 use light_core::types::{MotorMode, StrobeMode};
 
-pub const PARAMS_PER_HEAD: usize = 25;
+pub const PARAMS_PER_HEAD: usize = 26;
 
 thread_local! {
     static REGISTRY: RefCell<HashMap<u32, CompiledProfile>> = RefCell::new(HashMap::new());
@@ -98,6 +98,7 @@ fn unflatten(flat: &[f64]) -> Vec<ResolvedParams> {
                 cto: opt(c[19]),
                 gobo_rotate: opt(c[21]),
                 prism_rotate: opt(c[23]),
+                flower: opt(c[25]),
             },
             gobo: opt(c[20]),
             prism: opt(c[22]),

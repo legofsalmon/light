@@ -70,7 +70,7 @@ const ALL_FIELDS: [Field; N_FIELDS] = [
 /// are *optional*: a look that never mentions zoom must leave zoom alone, so
 /// there is no neutral f64 to merge from. Keeping them separate also means the
 /// existing merge is untouched and a saved show still renders byte for byte.
-const N_BEAM: usize = 7;
+const N_BEAM: usize = 8;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BeamField {
     Zoom = 0,
@@ -80,10 +80,11 @@ enum BeamField {
     Cto,
     GoboRotate,
     PrismRotate,
+    Flower,
 }
 const ALL_BEAM: [BeamField; N_BEAM] = [
     BeamField::Zoom, BeamField::Focus, BeamField::Iris, BeamField::Frost, BeamField::Cto,
-    BeamField::GoboRotate, BeamField::PrismRotate,
+    BeamField::GoboRotate, BeamField::PrismRotate, BeamField::Flower,
 ];
 
 fn get_beam(p: &ResolvedParams, f: BeamField) -> Option<f64> {
@@ -95,6 +96,7 @@ fn get_beam(p: &ResolvedParams, f: BeamField) -> Option<f64> {
         BeamField::Cto => p.beam.cto,
         BeamField::GoboRotate => p.beam.gobo_rotate,
         BeamField::PrismRotate => p.beam.prism_rotate,
+        BeamField::Flower => p.beam.flower,
     }
 }
 fn set_beam(p: &mut ResolvedParams, f: BeamField, v: f64) {
@@ -106,6 +108,7 @@ fn set_beam(p: &mut ResolvedParams, f: BeamField, v: f64) {
         BeamField::Cto => p.beam.cto = Some(v),
         BeamField::GoboRotate => p.beam.gobo_rotate = Some(v),
         BeamField::PrismRotate => p.beam.prism_rotate = Some(v),
+        BeamField::Flower => p.beam.flower = Some(v),
     }
 }
 
@@ -595,6 +598,7 @@ impl Renderer {
                         add_beam(BeamField::Cto, prm.cto);
                         add_beam(BeamField::GoboRotate, prm.gobo_rotate);
                         add_beam(BeamField::PrismRotate, prm.prism_rotate);
+                        add_beam(BeamField::Flower, prm.flower);
                         if let Some(c) = prm.color {
                             let (r, g, b) = hsv_to_rgb(c.h, c.s, 1.0);
                             let col = a.col.get_or_insert((0.0, 0.0, 0.0, 0.0));
