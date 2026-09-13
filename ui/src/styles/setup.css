@@ -1,0 +1,170 @@
+/* The setup surface, the lock and the docked setup strip (design 2.10, 2.11,
+   change list #20, #35, #40). Tokens only, like theme.css — check-tokens.mjs
+   scans every stylesheet under ui/src the same way. */
+
+/* ---------- one sheet, a rail of sections down its left ----------
+   Seven sections in one 680px sheet only works if one is open at a time: the
+   Output panel alone is a screen. The rail is the sheet's table of contents,
+   and `openSetup('lock')` is how every other entry point lands on its own. */
+.setupsheet {
+  display: grid;
+  grid-template-columns: var(--size-rail-w) 1fr;
+  gap: var(--space-16);
+  margin-top: var(--space-12);
+  align-items: start;
+}
+.setupnav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-right: 1px solid var(--line);
+  padding-right: var(--space-8);
+}
+.setupnav .btn {
+  justify-content: flex-start;
+  width: 100%;
+  border-color: transparent;
+  background: transparent;
+}
+.setupnav .btn:hover { background: var(--color-bg-wash-hover); }
+/* The open section is where you are, not something playing: a quiet raise and
+   the bright text, no lamp and no cursor colour. */
+.setupnav .btn.here {
+  background: var(--color-bg-wash-selected);
+  color: var(--text);
+}
+.setupbody { min-width: 0; }
+/* A count or a state beside a section name — "3 mapped", "locked". */
+.setupnav .tag {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--text-micro-size);
+  letter-spacing: var(--text-micro-tracking);
+}
+
+/* Below the sheet's own width there is no room for a rail beside a table:
+   the sections become a row that wraps, and the body takes the full width. */
+@media (max-width: 720px) {
+  .setupsheet { grid-template-columns: 1fr; }
+  .setupnav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 0 0 var(--space-8);
+  }
+  .setupnav .btn { width: auto; }
+  .setupnav .tag { display: none; }
+}
+
+/* ---------- the address a phone can reach, and the same address as a code ---------- */
+.addressblock { display: flex; align-items: center; gap: var(--space-16); flex-wrap: wrap; }
+.addressblock .address {
+  font-family: var(--text-readout-family);
+  font-size: var(--text-readout-size);
+  font-weight: var(--text-readout-weight);
+  letter-spacing: var(--text-readout-tracking);
+  color: var(--text);
+  user-select: all; /* it is meant to be copied */
+}
+/* White modules on a white ground, because that is what a scanner expects —
+   this one square of the desk is deliberately not dark. */
+/* Sized off the rail token until a --size-qr exists: 120 px over a 33-module
+   version-2 code is 3.6 px a module, which a phone reads from arm's length. */
+.qrcode {
+  width: var(--size-rail-w);
+  height: var(--size-rail-w);
+  flex: 0 0 auto;
+  background: var(--color-text-on-accent);
+  border-radius: var(--radius-sm);
+  padding: 0;
+  display: block;
+}
+.qrcode path { fill: var(--color-text-inverse); }
+
+/* ---------- the lock line (design 2.11) ----------
+   `[lock] locked · hold to unlock`. The key is the unlock control: a hold for
+   --motion-hold with the ring drawing round it, then the passcode if one is
+   set. A tap does nothing at all — an accidental brush must not unlock a
+   tablet, and nothing here may reach the rig. */
+.lockbar { display: flex; align-items: center; gap: var(--space-8); }
+.lockkey {
+  position: relative;
+  flex: 0 0 auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.lockkey .holdring {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transform: rotate(-90deg);
+}
+.lockkey.holding .holdring { opacity: 1; }
+.lockkey .holdring circle {
+  fill: none;
+  stroke: var(--color-live);
+  stroke-width: 2;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+}
+.lockkey.holding .holdring circle { animation: holdring var(--motion-hold) linear forwards; }
+@keyframes holdring {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+/* The ring is the whole feedback for a hold; without it there is nothing to
+   show but the key sitting there, so reduced motion keeps it. */
+
+/* ---------- the setup guide, docked (design #40) ----------
+   A card beside the work became a strip above it: one line, always the same
+   height, with the steps as jumps into the Rig page rather than a floating
+   panel that covers the table it is pointing at. */
+.guidestrip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: var(--size-guide-strip);
+  padding: 0 var(--space-8);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  flex: 0 0 auto;
+}
+.guidestrip::-webkit-scrollbar { display: none; }
+.guidestrip .guidesteps { display: flex; align-items: center; gap: var(--space-4); }
+.guidestrip .btn {
+  height: var(--size-btn-sm);
+  min-height: var(--size-btn-sm);
+  padding: 0 var(--space-7);
+  flex: 0 0 auto;
+}
+.guidestrip .prose { white-space: nowrap; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.guidestrip .grow { min-width: var(--space-8); }
+/* A step read off the project, so a tick is a statement of fact. */
+.guidestrip .btn.done { color: var(--color-status-ok); }
+.guidestrip .btn.next { border-color: var(--line2); color: var(--text); }
+
+/* ---------- an undo chip that outlives the thing that opened it ----------
+   Loading a controller layout replaces every mapping. The old flow asked first
+   and then did it; this one does it and leaves the way back, which is the only
+   honest shape for something the DIALS head can fire in one gesture. */
+.undochip {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-24);
+  transform: translateX(-50%);
+  z-index: 210;
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  padding: var(--space-6) var(--space-12);
+  background: var(--panel2);
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--elevation-menu);
+}
