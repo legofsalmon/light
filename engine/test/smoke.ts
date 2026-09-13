@@ -14,7 +14,7 @@ import { stageExtent } from '../../shared/stageExtent.ts';
 import type { ShareList } from '../../shared/gdtfShare.ts';
 import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, isStaleProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
 import { COMPILER_VERSION } from '../../shared/types.ts';
-import type { MidiMapping, Snapshot } from '../../shared/types.ts';
+import type { EffectTarget, MidiMapping, Snapshot } from '../../shared/types.ts';
 import { APC40_MK2, APC_COLS, APC_LAYER_ROWS, APC_MINI_MK2, SURFACES, computeLeds, nearest } from '../../ui/src/surfaces.ts';
 import { apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
 
@@ -31,7 +31,7 @@ import { aimIsIdentity, applyAim } from '../../shared/aim.ts';
 import { shapeAmps, shapeAt } from '../../shared/effects.ts';
 import { BUILTIN_PROFILE_IDS, SHAPE_KINDS } from '../../shared/types.ts';
 import { PROFILES } from '../../shared/profiles.ts';
-import { FX_CATEGORIES, FX_LIBRARY, fxSearch } from '../../ui/src/fxLibrary.ts';
+import { FX_CATEGORIES, FX_LIBRARY, fxSearch, unusable } from '../../ui/src/fxLibrary.ts';
 import { SHORTCUTS, SHORTCUT_GROUPS, runShortcut } from '../../ui/src/shortcuts.ts';
 import { repairEffect } from '../../shared/types.ts';
 import { parseOsc } from '../osc.ts';
@@ -1259,9 +1259,38 @@ await new Promise<void>((resolve) => {
   const inert = FX_LIBRARY.filter((p) => p.effect.rate <= 0 || p.effect.size <= 0 || p.effect.mix <= 0 || p.effect.bypass);
   check('fx library: no preset is inert as shipped', inert.length === 0, inert.map((p) => p.id).join(','));
 
+  // The four families the editor's feature row names (design 2.6). A fifth
+  // section, or "Movement" coming back, is a catalogue that no longer agrees
+  // with the editor beside it.
+  check(
+    'fx library: the sections are the editor\u2019s own families',
+    FX_CATEGORIES.map((c) => c.label).join(' \u00b7 ') === 'Intensity \u00b7 Colour \u00b7 Position \u00b7 Beam',
+    FX_CATEGORIES.map((c) => c.label).join(' \u00b7 '),
+  );
+  // "Strobe and white" split by what the preset does to the light, not by the
+  // channel it moves: a strobe is intensity, a white is colour.
+  const strobeElsewhere = FX_LIBRARY.filter((p) => p.effect.target === 'strobe' && p.category !== 'intensity');
+  check('fx library: a strobe preset is filed under Intensity', strobeElsewhere.length === 0, strobeElsewhere.map((p) => p.id).join(','));
+  const whiteElsewhere = FX_LIBRARY.filter((p) => p.effect.target === 'white' && p.category !== 'colour');
+  check('fx library: a white preset is filed under Colour', whiteElsewhere.length === 0, whiteElsewhere.map((p) => p.id).join(','));
+  const aimElsewhere = FX_LIBRARY.filter(
+    (p) => (p.effect.target === 'pan' || p.effect.target === 'tilt' || p.effect.target === 'shape') && p.category !== 'position',
+  );
+  check('fx library: an aiming preset is filed under Position', aimElsewhere.length === 0, aimElsewhere.map((p) => p.id).join(','));
+
+  // The cannot-take flag is read off the TARGET, so re-filing a preset never
+  // moves it: a strobe stab under Intensity still greys for a group whose
+  // fixtures have no strobe channel.
+  const noStrobe: ReadonlySet<EffectTarget> = new Set<EffectTarget>(['dimmer', 'hue', 'pan', 'tilt', 'shape']);
+  const stab = FX_LIBRARY.find((p) => p.id === 'strobe-stab');
+  check('fx library: a strobe preset still cannot be taken by a group with no strobe', !!stab && unusable(stab, noStrobe));
+  const pulse = FX_LIBRARY.find((p) => p.id === 'pulse-bar');
+  check('fx library: and a dimmer preset in the same section can', !!pulse && !unusable(pulse, noStrobe));
+
   check('fx library: search matches a name', fxSearch(FX_LIBRARY, 'rainbow').length > 0);
   check('fx library: search matches words only in a description', fxSearch(FX_LIBRARY, 'downbeat').length > 0);
-  check('fx library: search matches a category label', fxSearch(FX_LIBRARY, 'movement').length > 0);
+  check('fx library: search matches a section name', fxSearch(FX_LIBRARY, 'position').length > 0);
+  check('fx library: and the retired section name finds nothing', fxSearch(FX_LIBRARY, 'movement').length === 0);
   check('fx library: an unmatched search returns nothing rather than everything', fxSearch(FX_LIBRARY, 'zzzznope').length === 0);
   check('fx library: an empty search returns the lot', fxSearch(FX_LIBRARY, '  ').length === FX_LIBRARY.length);
 }
