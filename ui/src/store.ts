@@ -389,10 +389,11 @@ export const useStore = create<Store>()((set, get) => ({
   setupGuide: false,
   setupDismissed: false,
   previz2dTool: 'move',
-  // Launching straight back into the patch view must give the plan the view
-  // exists for, the same way arriving there from anywhere else does — and must
-  // record the loan, or the borrowed 2D leaks into every other view on exit.
-  previzMode: loadView() === 'patch' ? '2d' : '3d',
+  // The band opens on the 3D rig whatever view is restored. It used to open on
+  // the 2D plan when the last view was the Rig page, because that page borrowed
+  // the band for its plan; the plan is a column of its own now, so the band's
+  // job is the same everywhere — the rig as it will look.
+  previzMode: '3d',
   previz2dView: 'plan',
   fxSel: [],
   propSel: [],
