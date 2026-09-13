@@ -1,0 +1,246 @@
+/* The look library: tiles, chips, banks and the sheet (design 2.7, #29).
+   Same rules as theme.css — tokens only; check-tokens.mjs reads every
+   stylesheet under ui/src, so a per-component sheet is not a place literals
+   can live. */
+
+/* ---------- the bar, the chips ---------- */
+
+.libbar .libsearch { flex: 1 1 auto; min-width: 0; }
+
+.libchips {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-8);
+  border-bottom: 1px solid var(--line);
+}
+/* a chip you can press: the shape of `.chip`, the behaviour of a key */
+.libchip {
+  appearance: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: inherit;
+  line-height: var(--leading-control);
+}
+.libchip:hover:not(:disabled) { color: var(--text); border-color: var(--text-dim); }
+/* the chip that is on is a lit key, not a cursor: it says what the list IS */
+.libchip.on { color: var(--color-live); border-color: var(--color-live); }
+.libchip:disabled { color: var(--text-faint); border-color: var(--line); cursor: default; }
+select.libchip { padding-right: var(--space-14); }
+
+/* ---------- the tiles ---------- */
+
+.libtiles {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--size-library-tile), 1fr));
+  align-content: start;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.libtile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  overflow: hidden;
+  transition: border-color var(--motion-fast), background-color var(--motion-fast);
+}
+.libtile:hover { background: var(--raise); border-color: var(--line2); }
+.libtile:active { cursor: grabbing; }
+/* armed: the cursor is on this look and the next pad name takes it */
+.libtile.armed { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+/* the one the library was asked to show */
+.libtile.selected { border-color: var(--accent); }
+/* playing somewhere right now */
+.libtile.live { border-color: var(--color-live); }
+/* none of its groups are in this rig: it would light nothing */
+.libtile.orphan { opacity: var(--opacity-face-rest); }
+.libtile:focus-visible { outline: 1px solid var(--color-border-focus); outline-offset: 1px; }
+
+/* the rig miniature: one mark per group, left to right in stage order */
+.face {
+  position: relative;
+  flex: 0 0 var(--padname-h);
+  height: var(--padname-h);
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--color-bg-wash-empty);
+}
+.face.empty { background: var(--color-bg-wash-empty); }
+.face > i {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: var(--radius-xs);
+  background: var(--mark, transparent);
+}
+/* hollow: the part aims a head or runs an effect and says nothing about
+   brightness or colour — an outline is the honest drawing of that */
+.face > i.hollow { background: transparent; box-shadow: inset 0 0 0 1px var(--mark, transparent); }
+/* a steps look: a dot per step along the bottom of the face */
+.face .dots {
+  position: absolute;
+  left: var(--space-2);
+  bottom: var(--space-2);
+  display: flex;
+  gap: var(--space-1);
+}
+.face .dots > i {
+  width: 0.25em; /* not a token: a dot is a fraction of the text it sits under, not a fixed size */
+  height: 0.25em; /* not a token: as above */
+  border-radius: var(--radius-pill);
+  background: var(--text-dim);
+}
+
+/* the corner marks: a bolt for flash, a chain for steps */
+.libtile .corner {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text);
+  font-size: var(--text-micro-size);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
+}
+.libtile .corner.chain { right: var(--space-3); }
+.libtile .corner.bolt + .chain { right: var(--space-14); }
+.libtile .corner b { font-weight: var(--text-micro-weight); }
+svg.mark {
+  width: var(--size-cornermark);
+  height: var(--size-cornermark);
+  display: block;
+  overflow: visible;
+}
+
+.libtile .tilename {
+  flex: 0 0 var(--padname-h);
+  height: var(--padname-h);
+  padding: 0 var(--space-4);
+  font-size: var(--text-pad-name-size);
+  font-weight: var(--text-pad-name-weight);
+  letter-spacing: var(--text-pad-name-tracking);
+  line-height: var(--text-pad-name-leading);
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-box-pack: center;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* the first part's group, printed only where two looks share a name */
+.libtile .tilename .of { color: var(--text-faint); }
+
+.libtile .tilefoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4) var(--space-2);
+  font-size: var(--text-micro-size);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
+  line-height: var(--leading-solid);
+  color: var(--text-faint);
+}
+.libtile .tilefoot .grow { flex: 1 1 auto; }
+.libtile .tilefoot .kinds { color: var(--text-dim); }
+.libtile.live .tilefoot .count { color: var(--color-live); }
+
+/* ---------- the bank arrows ---------- */
+
+.libbank {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-8);
+  border-top: 1px solid var(--line);
+}
+.libbank .val {
+  font-family: var(--text-value-family);
+  font-size: var(--text-value-size);
+  font-weight: var(--text-value-weight);
+  letter-spacing: var(--text-value-tracking);
+  color: var(--text);
+}
+
+/* ---------- the armed line, and the empty states ---------- */
+
+.libhint.libarm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--text);
+}
+.libhint.libarm .grow { flex: 1 1 auto; }
+.libhint.libarm .armed {
+  width: var(--size-lamp);
+  height: var(--size-lamp);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  flex: 0 0 auto;
+}
+
+.libempty {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-8);
+  color: var(--text-dim);
+  text-transform: none;
+  font-size: var(--text-ui-size);
+  letter-spacing: var(--text-ui-tracking);
+}
+
+/* ---------- the sheet, and the picker ---------- */
+
+/* Over the grid from the right, for windows too narrow for a column beside
+   eight pads, and for touch. No veil: the pads behind it are playing. */
+.librarysheet {
+  position: fixed;
+  top: var(--size-topbar);
+  right: 0;
+  bottom: 0;
+  width: var(--size-library-w);
+  max-width: 100%;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+  box-shadow: var(--elevation-menu);
+}
+
+.popover.lookpicker {
+  width: var(--size-picker-w);
+  max-height: var(--size-bottom-h);
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.popover.lookpicker .libtiles { padding: var(--space-6); }
+
+/* the tile menu is the popover, left-aligned like every other menu */
+.popover.libmenu { max-width: var(--size-notice-max-w); }
+
+/* ---------- touch ---------- */
+
+.app.touch .libtile { min-height: var(--size-touch-target); }
+.app.touch .libchip { min-height: var(--size-touch-target); }

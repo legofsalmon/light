@@ -82,3 +82,16 @@ export const SHAPE_LABEL: Record<ShapeKind, string> = {
   figure8: 'figure of eight',
   square: 'square',
 };
+
+/** The four families a look can drive, in the letters every desk prints them
+ *  as — the library tile shows one per family the look actually enables, so
+ *  "this one only moves heads" is readable without opening it. Computed from
+ *  the look's own parts; nothing is tagged by hand. */
+export type LookKind = 'I' | 'C' | 'P' | 'B';
+export const LOOK_KINDS: readonly LookKind[] = ['I', 'C', 'P', 'B'];
+export const KIND_LABEL: Record<LookKind, string> = {
+  I: 'brightness',
+  C: 'colour',
+  P: 'position',
+  B: 'beam',
+};
