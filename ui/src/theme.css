@@ -241,7 +241,8 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 .chipsel:hover { color: var(--text); border-color: var(--text-dim); }
 /* in the 120px head the blend is a read-only tag (design 2.4); until the markup
    follows, the select gives way to the name rather than the other way round */
-.layerhead .chipsel { min-width: 0; flex: 0 1 auto; }
+.layerhead .chipsel { min-width: 0; max-width: 40%; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.layerhead .name { flex: 1 1 auto; min-width: 45%; }
 .chipsel:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 
 .chip {
