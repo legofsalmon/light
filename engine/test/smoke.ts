@@ -33,6 +33,7 @@ import { BUILTIN_PROFILE_IDS, SHAPE_KINDS } from '../../shared/types.ts';
 import { PROFILES } from '../../shared/profiles.ts';
 import { FX_CATEGORIES, FX_LIBRARY, fxSearch } from '../../ui/src/fxLibrary.ts';
 import { SHORTCUTS, SHORTCUT_GROUPS, runShortcut } from '../../ui/src/shortcuts.ts';
+import { GESTURES, GESTURE_GROUPS } from '../../ui/src/gestures.ts';
 import { repairEffect } from '../../shared/types.ts';
 import { parseOsc } from '../osc.ts';
 import { ArtnetOut } from '../artnet.ts';
@@ -1402,16 +1403,26 @@ await new Promise<void>((resolve) => {
   }
 }
 
-// --- the keyboard, written down once (backlog #8) ---------------------------
+// --- the keyboard and the pointer, written down once (backlog #8, design #37) -
 // The handler and the published table were kept by hand and drifted: the guide
 // said keys 1-8 fire columns long after the handler had grown to 1-9, and it
 // never mentioned [ and ] at all. Nobody notices, because the only person who
 // reads a keyboard reference is someone who has already failed to guess. So
-// the code is the source and this reads the documentation back.
+// the code is the source and this reads the documentation back — for the keys,
+// and now for the holds, drags and right-clicks beside them, which were never
+// written down anywhere at all.
 {
   const ref = fs.readFileSync(path.join(process.cwd(), 'docs/website/10-reference.md'), 'utf8');
-  // the first markdown table under "## Keyboard"
-  const section = ref.slice(ref.indexOf('## Keyboard'));
+  /** One `##` section of the reference, heading included, and nothing of the
+   *  next. Unbounded, a table added under a later heading could satisfy the
+   *  section above it — which is the drift this whole block exists to stop. */
+  const sectionOf = (heading: string): string => {
+    const from = ref.indexOf(heading);
+    if (from < 0) return '';
+    const to = ref.indexOf('\n## ', from + 1);
+    return to < 0 ? ref.slice(from) : ref.slice(from, to);
+  };
+  const section = sectionOf('## Keyboard');
   const rows = section
     .split('\n')
     .filter((l) => l.startsWith('| `'))
@@ -1433,6 +1444,46 @@ await new Promise<void>((resolve) => {
     'shortcuts: no group is empty',
     SHORTCUT_GROUPS.every((g) => SHORTCUTS.some((s) => s.group === g)),
     SHORTCUT_GROUPS.filter((g) => !SHORTCUTS.some((s) => s.group === g)).join(','),
+  );
+
+  // The same contract for the pointer half. The gesture table is three columns
+  // — what a mouse does, what a fingertip does instead, what it does — because
+  // the app words the same gesture two ways depending on what is in the hand,
+  // and a reference that published only one of them would be wrong for half
+  // the clients on the network.
+  const gsec = sectionOf('## Gestures').split('\n').filter((l) => l.startsWith('|'));
+  const ghead = gsec[0] ?? '';
+  const grows = gsec
+    .slice(2) // the header row and the |---| rule under it
+    .map((l) => l.split('|').map((c) => c.trim()).filter(Boolean))
+    .map(([pointer, glass, does]) => ({ pointer, glass, does }));
+  const gcode = GESTURES.map((g) => ({ pointer: g.pointer, glass: g.touch, does: g.label }));
+
+  check('gestures: the published table was found', grows.length > 0, `${grows.length} rows`);
+  check(
+    'gestures: it is the three-column table the sheet reads',
+    ghead === '| With a mouse | On glass | Does |',
+    ghead,
+  );
+  check(
+    'gestures: the guide lists exactly what the sheet renders',
+    JSON.stringify(grows) === JSON.stringify(gcode),
+    `\n  guide: ${JSON.stringify(grows)}\n  code:  ${JSON.stringify(gcode)}`,
+  );
+  check(
+    'gestures: every one is in a group the sheet renders',
+    GESTURES.every((g) => GESTURE_GROUPS.includes(g.group)),
+    GESTURES.filter((g) => !GESTURE_GROUPS.includes(g.group)).map((g) => g.pointer).join(','),
+  );
+  check(
+    'gestures: no group is empty',
+    GESTURE_GROUPS.every((g) => GESTURES.some((x) => x.group === g)),
+    GESTURE_GROUPS.filter((g) => !GESTURES.some((x) => x.group === g)).join(','),
+  );
+  check(
+    'gestures: each says what it is on glass as well as under a mouse',
+    GESTURES.every((g) => g.pointer.length > 0 && g.touch.length > 0 && g.label.length > 0),
+    GESTURES.filter((g) => !g.pointer || !g.touch || !g.label).map((g) => g.label).join(','),
   );
 
   // What actually happens, not what the predicates claim. ⌥1 matches the

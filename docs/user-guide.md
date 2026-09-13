@@ -192,14 +192,24 @@ session drives them itself over Web MIDI, and only one of the two ever writes.
 
 Everything autosaves ~1 second after any edit, with five rotating backups (`.bak1`–`.bak5`) next to the project file. `⌘S` (or the save button) forces a save. Live-performance state (which looks are active, grand master, blackout) is deliberately *not* saved — a restart always comes up dark and safe.
 
-## Keyboard reference
+## Keys and gestures
 
-Press `?` at any time for the full list — it is rendered from the same table the
-handler runs, so it cannot be out of date.
+Press `?` at any time for the full sheet — two tables, the keys and the
+gestures, both rendered from the same lists the app runs, so neither can be out
+of date.
 
-`1`–`9` fire columns · `T` tap tempo · `B` blackout · `[` `]` previous / next song ·
+**Keys.** `1`–`9` fire columns · `T` tap tempo · `B` blackout · `[` `]` previous / next song ·
 `Esc` deselect · `⌘S` save · `⌘Z` / `⇧⌘Z` undo / redo · `⌥1`–`⌥4` Pads / Stage / Rig / Build.
 Shortcuts are ignored while you're typing in a field.
+
+**Gestures.** Right-click a pad's name for its menu, a column head to rename,
+insert or delete it; drag a pad's name to move the look to another pad (the two
+swap). The layer's ✕ stops that layer. Click a library tile and then a pad's
+name to place the look; type a name on the plan to select the lights whose names start with it;
+hold the lock to unlock the screen. On glass there is no right-click, so every
+one of those is a hold instead — and the sheet says so, because it words each
+gesture for whatever pointer you are actually using. The full table, both
+wordings, is in [the reference](website/10-reference.md#gestures).
 
 ---
 

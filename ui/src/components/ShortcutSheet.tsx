@@ -1,15 +1,25 @@
-// The keyboard, on screen (backlog #8).
+// The keyboard and the pointer, on screen (backlog #8, design #37).
 //
-// Rendered from the same list the handler runs (ui/src/shortcuts.ts), so a
-// shortcut cannot exist without appearing here — the drift this replaces was a
-// guide claiming keys 1–8 fire columns long after the handler had grown to 9.
+// One sheet, two tables, each rendered from the same list the app runs:
+// ui/src/shortcuts.ts for the keys, ui/src/gestures.ts for the holds, drags and
+// right-clicks. A binding cannot exist without appearing here — the drift this
+// replaces was a guide claiming keys 1–8 fire columns long after the handler
+// had grown to 9, and a pointer half that was never written down at all.
+//
+// The gesture column says what the pointer in this operator's hand does: a
+// right-click on a mouse, a hold on glass, chosen by the same touch flag the
+// rest of the app words its tooltips with.
 
 import React, { useEffect } from 'react';
 import { SHORTCUTS, SHORTCUT_GROUPS, plainKeys } from '../shortcuts.ts';
+import { GESTURES, GESTURE_GROUPS, gestureWords } from '../gestures.ts';
+import { useStore } from '../store.ts';
 import { openExternal } from '../shell.ts';
 import { GUIDE_URL } from '../links.ts';
+import '../styles/band.css';
 
 export function ShortcutSheet({ onClose }: { onClose: () => void }): React.ReactElement {
+  const touch = useStore((s) => s.touch);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       // Escape and ? both close it — ? because the key that opened it is the
@@ -41,15 +51,16 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }): React.React
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="modal panel" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+      <div className="modal panel sheet" role="dialog" aria-modal="true" aria-label="Keys and gestures">
         <div className="row" style={{ alignItems: 'baseline', gap: 8 }}>
-          <div className="modaltitle" style={{ flex: 1 }}>Keyboard</div>
+          <div className="modaltitle" style={{ flex: 1 }}>Keys and gestures</div>
           <button className="btn ghost small" onClick={onClose}>close</button>
         </div>
         <div className="modalbody" style={{ marginTop: 10 }}>
+          <div className="sectionhead">Keys</div>
           {SHORTCUT_GROUPS.map((g) => (
             <div key={g} style={{ marginBottom: 12 }}>
-              <div className="sectionhead">{g}</div>
+              <div className="label">{g}</div>
               <table className="tbl">
                 <tbody>
                   {SHORTCUTS.filter((s) => s.group === g).map((s) => (
@@ -58,6 +69,24 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }): React.React
                         <span className="label" style={{ fontFamily: 'var(--mono)' }}>{plainKeys(s)}</span>
                       </td>
                       <td><span className="prose">{s.label}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+          <div className="sectionhead">Gestures</div>
+          {GESTURE_GROUPS.map((g) => (
+            <div key={g} style={{ marginBottom: 12 }}>
+              <div className="label">{g}</div>
+              <table className="tbl">
+                <tbody>
+                  {GESTURES.filter((x) => x.group === g).map((x) => (
+                    <tr key={x.pointer}>
+                      <td style={{ width: 220 }}>
+                        <span className="prose">{gestureWords(x, touch)}</span>
+                      </td>
+                      <td><span className="prose">{x.label}</span></td>
                     </tr>
                   ))}
                 </tbody>

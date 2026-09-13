@@ -1,32 +1,193 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { uid } from '../../../shared/types.ts';
 import type { StagePropKind } from '../../../shared/types.ts';
 import { STRUCTURE_DEFAULTS } from '../../../shared/types.ts';
 import { createGroupFromSelection } from '../selection.ts';
 import { useStore } from '../store.ts';
+import { size, space } from '../tokens.ts';
 import { Fader } from './Fader.tsx';
 import { Previz2D } from './Previz2D.tsx';
 import { Previz3D } from './Previz3D.tsx';
+import '../styles/band.css';
 
-export function PrevizPanel({ preview = true }: { preview?: boolean }) {
-  const view = useStore((s) => s.view);
-  const togglePreviz = useStore((s) => s.togglePreviz);
+/** The one thing the stage says about itself.
+ *
+ *  Every reading on this canvas is a claim about a rig somewhere else, and
+ *  four states break that claim: the gate is shut, the frame is held, a light
+ *  is burning at full white to be found, or the show is dark. A fifth says the
+ *  pads being edited are not the pads that are playing. On the second screen
+ *  there is no top bar beside the canvas to read any of it off — so it is
+ *  drawn ON the canvas, top-left, one tag, and the most dangerous truth wins
+ *  (design 2.8, #16). A frozen rig can never animate here unlabelled. */
+export function StageTag(): React.ReactElement | null {
+  const snap = useStore((s) => s.snap);
+  const findName = useStore((s) => {
+    const id = s.snap?.identify;
+    if (!id || !s.project) return null;
+    return s.project.fixtures.find((f) => f.id === id)?.name ?? null;
+  });
+  /** The song being edited while another one plays. The store grows the field
+   *  in a later pass of this design (#26); reading it defensively lets the tag
+   *  ship now and start telling the truth the moment the field lands. */
+  const editingName = useStore((s) => {
+    const id = (s as { editingDeckId?: string | null }).editingDeckId ?? null;
+    if (!id || !s.project || id === s.project.activeDeckId) return null;
+    return (s.project.decks ?? []).find((d) => d.id === id)?.name ?? null;
+  });
+
+  // Worst first: nothing is on the wire at all, then the wire is not following
+  // the screen, then a light is lit that blackout cannot put out, then the
+  // show is dark — and last, that this page is not the one playing.
+  const tag: { tone: string; text: string; help: string } | null =
+    !snap?.transmit
+      ? { tone: 'warn', text: 'OFFLINE', help: 'nothing is reaching the rig — the gate is shut. The show still runs on screen, and this is what LIGHT boots as.' }
+      : snap.frozen
+        ? { tone: 'warn', text: 'HELD', help: 'the rig is holding the frame it was showing — the screen follows the show, the wire does not. Blackout and ALL STOP release it.' }
+        : snap.identify
+          ? { tone: 'find', text: `FINDING ${findName ?? 'a light'}`, help: 'a light is held at full white so you can find it — it ignores blackout, and only releasing it or ALL STOP puts it out.' }
+          : snap.blackout
+            ? { tone: 'hot', text: 'BLACKOUT', help: 'the show is dark — every layer is still running underneath, and clearing blackout brings it straight back.' }
+            : editingName
+              ? { tone: 'editing', text: `EDITING ${editingName}`, help: 'the pads on screen belong to a song that is not playing — firing one selects it instead of sending it.' }
+              : null;
+  if (!tag) return null;
+  return (
+    <div className={`label stagetag ${tag.tone}`} role="status" title={tag.help}>
+      {tag.text}
+    </div>
+  );
+}
+
+/** How this canvas draws, off the bar.
+ *
+ *  Four of these were lit cyan by default on a bar that is meant to be chrome
+ *  that never glows, and one of them — snap — does nothing whatever in 3D. A
+ *  setting you touch while building belongs in a menu; the bar keeps what a
+ *  hand reaches for mid-show (design #16, 2.8). */
+function ViewMenu({ mode, preview }: { mode: '3d' | '2d'; preview: boolean }): React.ReactElement {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const boxRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const previewPane = useStore((s) => s.previewPane);
   const togglePreviewPane = useStore((s) => s.togglePreviewPane);
   const autoExposure = useStore((s) => s.previzAutoExposure);
   const toggleAutoExposure = useStore((s) => s.togglePrevizAutoExposure);
-  const mode = useStore((s) => s.previzMode);
-  const setMode = useStore((s) => s.setPrevizMode);
-  const view2d = useStore((s) => s.previz2dView);
-  const setView2d = useStore((s) => s.setPreviz2dView);
-  const hazeViz = useStore((s) => s.hazeViz);
-  const setHazeViz = useStore((s) => s.setHazeViz);
   const showBand = useStore((s) => s.showBand);
   const setShowBand = useStore((s) => s.setShowBand);
   const showMeasure = useStore((s) => s.showMeasure);
   const setShowMeasure = useStore((s) => s.setShowMeasure);
   const snapToTruss = useStore((s) => s.snapToTruss);
   const setSnapToTruss = useStore((s) => s.setSnapToTruss);
+  const hazeViz = useStore((s) => s.hazeViz);
+  const setHazeViz = useStore((s) => s.setHazeViz);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [open]);
+
+  return (
+    <div ref={boxRef} style={{ position: 'relative' }}>
+      <button
+        ref={btnRef}
+        className={`btn small ghost ${open ? 'on' : ''}`}
+        title="how this canvas draws — the audition, the figures, eye adaptation and the drafting aids. None of it reaches the rig."
+        onClick={() => {
+          // The bar is an overflow scroll container, which would clip a menu to
+          // its own height — so the popover is positioned against the viewport
+          // from the key's own rectangle, the way the project menu is. This key
+          // sits at the RIGHT edge of the bar, where a menu hung from its left
+          // corner runs off the window, so it hangs from whichever corner keeps
+          // it on screen.
+          const r = btnRef.current?.getBoundingClientRect();
+          if (r) {
+            setPos({
+              top: r.bottom + 2,
+              left: Math.max(space[4], Math.min(r.left, window.innerWidth - size['menu-w'] - space[4])),
+            });
+          }
+          setOpen((o) => !o);
+        }}
+      >
+        view ▾
+      </button>
+      {open && (
+        <div className="popover viewmenu" style={{ top: pos.top, left: pos.left }}>
+          {preview && (
+            <button
+              className={`btn small ghost ${previewPane ? 'on' : ''}`}
+              title="audition — shows the selected look beside the live stage without sending it to the rig. It appears only while the selected pad holds a look its layer is not already playing."
+              onClick={togglePreviewPane}
+            >
+              audition
+            </button>
+          )}
+          {mode === '3d' && (
+            <>
+              <button
+                className={`btn small ghost ${showBand ? 'on' : ''}`}
+                title="dummy figures on stage for scale — nobody is really standing there (stage window: press M)"
+                onClick={() => setShowBand(!showBand)}
+              >
+                band figures
+              </button>
+              <button
+                className={`btn small ghost ${autoExposure ? 'on' : ''}`}
+                title="eye adaptation — the exposure follows how much light is on stage, the way your eyes do walking into a bright room. Partial, so a brighter look still reads brighter. Off holds a fixed exposure, for judging absolute levels."
+                onClick={toggleAutoExposure}
+              >
+                eye adaptation
+              </button>
+              <div className="popover-rule" />
+              <Fader
+                label="beam viz"
+                help="how much haze the beams are drawn through — the picture only, never the hazer itself"
+                value={hazeViz}
+                onChange={setHazeViz}
+                def={0.7}
+                variant="dim"
+              />
+            </>
+          )}
+          {/* Snap and measure are drafting aids: snap does nothing whatever in
+              3D, and it was lit there anyway. Offered where they act. */}
+          {mode === '2d' && (
+            <>
+              <button
+                className={`btn small ghost ${snapToTruss ? 'on' : ''}`}
+                title="snap to truss — drag a fixture near a truss bar and it clamps on and rigs there. Off places it freely."
+                onClick={() => setSnapToTruss(!snapToTruss)}
+              >
+                snap to truss
+              </button>
+              <button
+                className={`btn small ghost ${showMeasure ? 'on' : ''}`}
+                title="metre grid and dimensions — for placing structure and judging scale"
+                onClick={() => setShowMeasure(!showMeasure)}
+              >
+                measure grid
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function PrevizPanel({ preview = true }: { preview?: boolean }) {
+  const view = useStore((s) => s.view);
+  const togglePreviz = useStore((s) => s.togglePreviz);
+  const previewPane = useStore((s) => s.previewPane);
+  const mode = useStore((s) => s.previzMode);
+  const setMode = useStore((s) => s.setPrevizMode);
+  const view2d = useStore((s) => s.previz2dView);
+  const setView2d = useStore((s) => s.setPreviz2dView);
   const touch = useStore((s) => s.touch);
   const planTool = useStore((s) => s.previz2dTool);
   const setPlanTool = useStore((s) => s.setPreviz2dTool);
@@ -38,7 +199,30 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
     const id = layer?.cells[s.sel!.col];
     return id && Object.hasOwn(s.project.looks, id) ? s.project.looks[id].name : null;
   });
+  /** Whether the audition would be telling the operator anything.
+   *
+   *  It exists to show a look that is NOT on the rig — and firing a pad
+   *  selects it, so "whenever a pad is selected" meant that mid-song the band
+   *  showed the live stage beside a second render of the very look that had
+   *  just gone live: two identical pictures, and a renderer's worth of GPU for
+   *  the privilege. It appears now only when the selected pad holds a look its
+   *  own layer is not already playing. The toggle stays the operator's enable;
+   *  this is the condition underneath it (design #15). */
+  const auditionDiffers = useStore((s) => {
+    if (!s.sel || !s.project) return false;
+    const layer = s.project.layers.find((l) => l.id === s.sel!.layerId);
+    const selLook = layer?.cells[s.sel!.col] ?? null;
+    if (!selLook) return false; // an empty pad has nothing to audition
+    const live = s.snap?.layers.find((l) => l.id === s.sel!.layerId);
+    return (live?.lookId ?? null) !== selLook;
+  });
   const mutate = useStore((s) => s.mutate);
+
+  /** The full-screen stage: a display, not a drafting surface. It is what goes
+   *  on the second screen at front of house, so it carries the two view keys,
+   *  the way out to the native window and the tag — and none of the drafting
+   *  tools or the standing cheat-sheet that were pinned across it (2.8). */
+  const stage = view === 'previz';
 
   /** Place a structural piece at its default size, centred just upstage of the
    *  band so it lands somewhere visible rather than inside a performer. */
@@ -79,9 +263,9 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
         {/* Leftmost, and pinned out of the scrolling region: this bar scrolls
             horizontally with its scrollbar hidden, and in 2D on a narrow window
             its contents overflow — an escape hatch you cannot reach is not an
-            escape hatch. Absent in the full-screen previz view, where hiding it
+            escape hatch. Absent in the full-screen stage view, where hiding it
             would leave nothing. */}
-        {view !== 'previz' && (
+        {!stage && (
           <button
             className="btn small ghost pin"
             title="hide the stage (this view only — the strip left behind brings it back)"
@@ -90,7 +274,6 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
             ▴
           </button>
         )}
-        <span className="label">stage</span>
         <div className="seg">
           <button
             className={mode === '3d' ? 'on' : ''}
@@ -104,68 +287,14 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
             title="2D plan — the drafting view: drag fixtures into place, snap them to truss, draw structure"
             onClick={() => setMode('2d')}
           >
-            2D plan
+            2D
           </button>
         </div>
         <div className="grow" />
-        {/* Snap acts on 2D PLAN drags and measure drives the 2D grid, but both
-            lived in the 3D-only branch — the snap button's own tooltip
-            described an action impossible in the mode the button appeared in,
-            and in 2D, where they apply, there was no control and no hint one
-            existed. Shown in both modes now. */}
-        <button
-          className={`btn small ${snapToTruss ? 'on' : 'ghost'}`}
-          title="2D plan: drag a fixture near a truss bar and it clamps on and rigs there — turn off to place freely"
-          onClick={() => setSnapToTruss(!snapToTruss)}
-        >
-          snap
-        </button>
-        <button
-          className={`btn small ${showMeasure ? 'on' : 'ghost'}`}
-          title="metre grid and dimensions — for placing structure and judging scale"
-          onClick={() => setShowMeasure(!showMeasure)}
-        >
-          measure
-        </button>
-        <button
-          className="btn small ghost"
-          title="open the stage in its own window — the native renderer, for a second screen"
-          onClick={() => useStore.getState().send({ type: 'launchPreviz' })}
-        >
-          stage window
-        </button>
-        {/* The audition is a second renderer, and it appears whenever a pad is
-            selected — which firing one does. Worth it while building; worth
-            switching off for a show run from the pads. */}
-        {preview && (
-          <button
-            className={`btn small ${previewPane ? 'on' : 'ghost'}`}
-            title="audition pane — shows the selected look without sending it to the rig; off gives the live view the whole band"
-            onClick={togglePreviewPane}
-          >
-            preview
-          </button>
-        )}
-        {mode === '3d' && (
-          <>
-            <button
-              className={`btn small ${showBand ? 'on' : 'ghost'}`}
-              title="dummy band figures for scale (stage window: press M)"
-              onClick={() => setShowBand(!showBand)}
-            >
-              band
-            </button>
-            <button
-              className={`btn small ${autoExposure ? 'on' : 'ghost'}`}
-              title="eye adaptation — the exposure follows how much light is on stage, the way your eyes do walking into a bright room. Partial, so a brighter look still reads brighter. Off holds a fixed exposure, for judging absolute levels."
-              onClick={toggleAutoExposure}
-            >
-              auto exp
-            </button>
-            <Fader label="beam viz" width={110} value={hazeViz} onChange={setHazeViz} def={0.7} variant="dim" />
-          </>
-        )}
-        {mode === '2d' && (
+        {/* The drafting tools. Not on the full-screen stage: that screen is a
+            readout at front of house, and a musician picker across the top of
+            it is furniture nobody at the desk can reach. */}
+        {!stage && mode === '2d' && (
           <>
             {fxSel.length > 0 && (
               <button className="btn" onClick={createGroupFromSelection} title="Create a group from the selected fixtures (appears in the Fixtures tab)">
@@ -272,17 +401,29 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
             )}
           </>
         )}
+        <button
+          className="btn small ghost"
+          title="open the stage in its own window — the native renderer, for a second screen"
+          onClick={() => useStore.getState().send({ type: 'launchPreviz' })}
+        >
+          stage window
+        </button>
+        {!stage && <ViewMenu mode={mode} preview={preview} />}
       </div>
       <div className="previzsplit">
-        <div className="previzview">{mode === '3d' ? <Previz3D /> : <Previz2D />}</div>
-        {/* The audition, on the band's right edge. Only present when something
-            is selected, so the live view keeps the full width the rest of the
-            time — and the second render costs nothing when nobody is looking
-            at a look. */}
-        {preview && previewPane && sel && (
+        <div className="previzview">
+          {mode === '3d' ? <Previz3D /> : <Previz2D />}
+          <StageTag />
+        </div>
+        {/* The audition, on the band's right edge. Present only while the
+            selected pad holds a look its layer is not already playing, so the
+            live view keeps the full width the rest of the time — and the
+            second render costs nothing when it would only be showing the
+            operator what the stage beside it already shows. */}
+        {preview && previewPane && auditionDiffers && sel && (
           <div className="previewpane">
             <div className="previzbar previewbar">
-              <span className="label">preview</span>
+              <span className="label">audition</span>
               <span className="previewname">{selName ?? 'empty pad'}</span>
               <span className="label dim">not on the rig</span>
             </div>
