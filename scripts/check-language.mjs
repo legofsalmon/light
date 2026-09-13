@@ -63,7 +63,7 @@ const TOOLTIP_ONLY = [
 
 const TOOLTIP_ATTRS = new Set(['title', 'help', 'hint', 'aria-label']);
 const LABEL_ATTRS = new Set(['placeholder', 'label', 'alt', 'caption']); // not `value`: an <option value> is wire, not copy
-const COPY_CALLS = new Set(['askConfirm', 'askPrompt', 'askChoice', 'askDanger', 'confirmDialog', 'toast', 'setToast', 'pushToast', 'describeAction', 'msg', 'say', 'push']);
+const COPY_CALLS = new Set(['askConfirm', 'askPrompt', 'askChoice', 'askDanger', 'confirmDialog', 'toast', 'setToast', 'pushToast', 'describeAction', 'msg', 'say', 'push', 'helpAttrs', 'hoverTitle']);
 const COPY_PROPS = new Set(['title', 'label', 'help', 'hint', 'desc', 'description', 'detail', 'text', 'message', 'body', 'caption', 'name', 'note', 'ok', 'cancel', 'yes', 'no', 'danger']);
 // Functions whose return value is copy — describeAction, describe(status)…
 const COPY_FUNCTIONS = /^describe/;

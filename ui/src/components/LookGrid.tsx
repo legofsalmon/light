@@ -10,7 +10,9 @@ import { size } from '../tokens.ts';
  *  Not a token yet: the design names the number and no size/* for it. */
 const NARROW_HEAD_BELOW = 1200;
 import { Fader, fmtPct } from './Fader.tsx';
-import { lookSwatch } from '../lookColors.ts';
+import { lookFace, lookSwatch } from '../lookColors.ts';
+import { Face } from './library/face.tsx';
+import { placeArmed, useEditingDeckId, useLibraryStore } from '../libraryStore.ts';
 import { APC_COLS, APC_KNOB_BANKS, APC_LAYER_ROWS } from '../apcFeedback.ts';
 
 /** Drop from the look library: point this cell at an existing pool look.
@@ -279,6 +281,9 @@ const Cell = React.memo(function Cell({
   // and the layer head's mini swatch both read lookSwatch[0], the rule the APC
   // LED mirror shares, so the screen and the hardware agree (design 2.3).
   const swatch = look ? lookSwatch(look, project.looks) : null;
+  const face = look ? lookFace(look, project) : null;
+  const editingDeckId = useEditingDeckId();
+  const armedLook = useLibraryStore((s) => (s.armed ? project.looks[s.armed]?.name ?? null : null));
 
   // One press, two inputs. An empty pad is also where you START a look — the
   // editor invites "click an empty pad to create one" — so a stray press while
@@ -411,13 +416,13 @@ const Cell = React.memo(function Cell({
         if (e.key === 'Enter' || e.key === ' ') release();
       }}
     >
-      {look && swatch && (
+      {look && swatch && face && (
         <>
-          <div className="swatch">
-            {swatch.map((c, i) => (
-              <i key={i} style={{ background: c }} />
-            ))}
-          </div>
+          {/* The face is a miniature of the rig, not a stripe of the look's
+              colours: which groups it touches, in stage order, in their own
+              colours. `lookSwatch[0]` still feeds --pad-glow and the head's
+              mini swatch, because that is the rule the APC's LEDs read. */}
+          <Face face={face} />
           {look.flash && (
             <div className="flashmark" title="momentary — this look holds only while the pad is held, and the layer goes back to what it was on release">
               FLASH
@@ -450,6 +455,10 @@ const Cell = React.memo(function Cell({
             }}
             onPointerDown={(e) => {
               e.stopPropagation(); // the cell body below must not fire it
+              // A tile armed in the library places here (design 2.7): tap the
+              // tile once, then a pad's name for each pad it should go on. The
+              // arm stays, so six pads are six taps and one arm.
+              if (placeArmed(project, layer.id, col, editingDeckId)) return;
               setSel({ layerId: layer.id, col });
               padMenu.onPointerDown?.(e);
             }}
@@ -462,6 +471,23 @@ const Cell = React.memo(function Cell({
           </div>
           {fading && <div className="fadebar" style={{ width: `${fadeT * 100}%` }} />}
         </>
+      )}
+      {/* An empty pad has no name strip to tap, so while a look is armed it
+          grows one. Nothing else changes: the body still fires the empty cue
+          it always fired, and the strip appears only in the one state where it
+          means something — which is also how the grid shows that a placement
+          is waiting. */}
+      {!look && armedLook && (
+        <div
+          className="cellname placehere"
+          title={`put ${armedLook} on this pad`}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            placeArmed(project, layer.id, col, editingDeckId);
+          }}
+        >
+          place here
+        </div>
       )}
     </div>
   );

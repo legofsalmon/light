@@ -14,6 +14,24 @@
 
 import type { Command } from '../../shared/types.ts';
 
+/** Actions the UI owns and this table only names.
+ *
+ *  This file is read by the Node suite, which holds the published key table
+ *  against what the handler binds — and that program has no DOM. Importing a
+ *  browser module here drags `window` into it and the typecheck fails, so the
+ *  UI registers these at startup instead and the table stays a list of names. */
+export type ShortcutActions = {
+  openLibrary: () => void;
+  openFind: () => void;
+  /** true when something was disarmed, so Esc stops there rather than going on
+   *  to clear a selection the operator still wanted */
+  disarmLibrary: () => boolean;
+};
+let actions: ShortcutActions = { openLibrary: () => {}, openFind: () => {}, disarmLibrary: () => false };
+export function registerShortcutActions(a: Partial<ShortcutActions>): void {
+  actions = { ...actions, ...a };
+}
+
 /** Just the fields a binding reads.
  *
  *  Not the DOM's KeyboardEvent. A real one satisfies this structurally, and so
@@ -108,10 +126,32 @@ export const SHORTCUTS: Shortcut[] = [
   },
   {
     keys: '`Esc`',
-    label: 'deselect',
+    // It escalates rather than doing one thing: the most recent state you
+    // opened is the one it should close. A tile armed in the library is the
+    // narrowest of those, so it goes first — pressing Esc twice to get back to
+    // an empty selection is understood; losing a selection you still wanted
+    // because a tile was quietly armed is not.
+    label: 'disarm a library tile, else deselect',
     group: 'Getting around',
     match: (e) => e.key === 'Escape',
-    run: (st) => st.setSel(null),
+    run: (st) => {
+      if (actions.disarmLibrary()) return;
+      st.setSel(null);
+    },
+  },
+  {
+    keys: '`L`',
+    label: 'open the look library',
+    group: 'Getting around',
+    match: (e) => e.key.toLowerCase() === 'l',
+    run: () => actions.openLibrary(),
+  },
+  {
+    keys: '`/` / `⌘F`',
+    label: 'find a look, song, column, group or fixture',
+    group: 'Getting around',
+    match: (e) => e.key === '/' || (!!(e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f'),
+    run: () => actions.openFind(),
   },
   {
     keys: '`⌘S`',

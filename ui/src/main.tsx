@@ -2,10 +2,26 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import { initMidi } from './midi.ts';
+import { registerShortcutActions } from './shortcuts.ts';
+import { openLibrarySheet, useLibraryStore } from './libraryStore.ts';
+import { openFind } from './components/Find.tsx';
 import './tokens.css';
 import './theme.css';
 
 initMidi();
+
+// The keyboard table names these; the browser owns them. Registered here so
+// shortcuts.ts stays importable by the Node suite that holds the published key
+// table against what the handler binds.
+registerShortcutActions({
+  openLibrary: () => openLibrarySheet(),
+  openFind: () => openFind(),
+  disarmLibrary: () => {
+    if (!useLibraryStore.getState().armed) return false;
+    useLibraryStore.getState().disarm();
+    return true;
+  },
+});
 
 // Turning Tauri's own drag handler off (src-tauri/tauri.conf.json
 // `dragDropEnabled: false`) is what lets HTML5 drag-and-drop reach the page at

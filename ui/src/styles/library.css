@@ -331,3 +331,11 @@ svg.mark {
   font-size: var(--text-prose-size);
   line-height: var(--text-prose-leading);
 }
+
+/* An empty pad's stand-in name strip, shown only while a look is armed: the
+   one place a placement can land on a pad that has no name of its own. */
+.cellname.placehere {
+  color: var(--text-faint);
+  font-style: italic;
+  justify-content: center;
+}

@@ -7,7 +7,8 @@ import { TopBar } from './components/TopBar.tsx';
 import { LookGrid } from './components/LookGrid.tsx';
 import { BottomPanel } from './components/BottomPanel.tsx';
 import { PrevizPanel } from './components/PrevizPanel.tsx';
-import { LookLibrary } from './components/LookLibrary.tsx';
+import { LibrarySheet, LookLibrary } from './components/LookLibrary.tsx';
+import { Find } from './components/Find.tsx';
 import { EditorPane } from './components/EditorPane.tsx';
 import { LicenceGate } from './components/LicenceGate.tsx';
 import { licenceAvailable, licenceStatus, type LicenceStatus } from './licence.ts';
@@ -210,6 +211,12 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+      // A fader keeps focus after a click so its arrows work (design 2.6), and
+      // it stops the keys it owns from getting this far by itself. Stepping
+      // aside for every `[role=slider]` instead would take BLACKOUT, TAP, the
+      // song keys and Esc away for as long as a master held focus — the panic
+      // keys must never depend on what was clicked last.
+      if (t?.isContentEditable) return;
       // ? opens the sheet that lists everything below it. Shift-slash on most
       // layouts, and no binding wants a bare "?" — so it is checked here
       // rather than earning a row in a table it exists to display.
@@ -375,6 +382,11 @@ export function App() {
       {welcome && <WelcomeCard onClose={() => setWelcome(false)} />}
       <HelpOverlay />
       {admin && <AdminModal onClose={() => setAdmin(false)} onOpenShortcuts={() => setShortcuts(true)} />}
+      {/* The library laid over the grid, for every window too narrow to hold a
+          column beside eight pads, and for glass. The Find field is the one
+          way to ask the show a question — and only a song hit moves a light. */}
+      <LibrarySheet />
+      <Find />
       <DialogHost />
     </div>
   );

@@ -8,7 +8,9 @@
 | `T` | tap tempo |
 | `B` | blackout on/off |
 | `[` `]` | previous / next song |
-| `Esc` | deselect |
+| `Esc` | disarm a library tile, else deselect |
+| `L` | open the look library |
+| `/` / `⌘F` | find a look, song, column, group or fixture |
 | `⌘S` | save now |
 | `⌘Z` / `⇧⌘Z` | undo / redo |
 | `⌥1`–`⌥4` | Pads / Stage / Rig / Build |
