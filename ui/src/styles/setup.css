@@ -173,6 +173,9 @@
   padding: 0 var(--space-7);
   flex: 0 0 auto;
 }
+/* The blurb is the one thing allowed to give way: everything else in the strip
+   is a control or a count, and a count that shrank would read as a wrong one. */
+.guidestrip .label, .guidestrip .guidesteps { flex: 0 0 auto; }
 .guidestrip .prose { white-space: nowrap; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
 .guidestrip .grow { min-width: var(--space-8); }
 /* A step read off the project, so a tick is a statement of fact. */
