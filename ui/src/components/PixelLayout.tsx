@@ -55,7 +55,7 @@ export function PixelLayout(): React.ReactElement | null {
   return (
     <div style={{ marginTop: 14 }}>
       <div className="sectionhead">Pixel layout — imported multi-head profiles</div>
-      <div className="label" style={{ marginBottom: 6 }}>
+      <div className="prose" style={{ marginBottom: 6 }}>
         Lay out one profile’s pixels and every fixture of that type follows. Files that carry real
         geometry are laid out automatically on import; this is for the ones that don’t.
       </div>

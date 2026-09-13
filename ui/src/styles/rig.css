@@ -1,0 +1,304 @@
+/* The Rig page (design 2.9): a section rail, a lean table with an inspector
+   docked under it, and the plan as a column beside them — not a letterbox
+   borrowed from under a live stage.
+
+   Every value here is a token. The three column widths are the design's own:
+   the rail at --size-rail-w, the plan at --ratio-plan-w of the page, and the
+   table takes what is left. */
+
+.rigpage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--size-rail-w) minmax(0, 1fr) minmax(0, calc(var(--ratio-plan-w) * 100%));
+  background: var(--panel);
+}
+
+/* ---------- the rail ---------- */
+
+.rigrail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-8) var(--space-6);
+  border-right: 1px solid var(--line);
+  overflow: auto;
+  min-height: 0;
+}
+.railentry {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-8);
+  background: transparent;
+  border: 0;
+  border-left: var(--size-rule) solid transparent;
+  color: var(--text-dim);
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+  letter-spacing: var(--text-label-tracking);
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+.railentry:hover { color: var(--text); }
+.railentry.on { color: var(--text); border-left-color: var(--text); background: var(--panel2); }
+.railentry .count {
+  font-family: var(--text-value-family);
+  font-size: var(--text-value-size);
+  letter-spacing: var(--text-value-tracking);
+  color: var(--text-faint);
+}
+
+/* ---------- the table column ---------- */
+
+.rigmain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+}
+.rigbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  padding: var(--space-8) var(--space-10);
+  border-bottom: 1px solid var(--line);
+}
+.rigbar .grow { flex: 1; }
+.rigsections {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-10);
+}
+.rigsec + .rigsec { margin-top: var(--space-24); }
+.rigsec .sectionhead { scroll-margin-top: var(--space-10); }
+
+/* The lean table (R3): six columns, the 1024 widths in FixtureTable's own
+   COLS, and a name column that stays put when the rest has to scroll. */
+.rigtbl { border-collapse: collapse; table-layout: fixed; width: 100%; }
+.rigtbl th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  text-align: left;
+  padding: var(--space-4) var(--space-6);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: var(--text-micro-size);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.rigtbl td {
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rigtbl th.sortable { cursor: pointer; }
+.rigtbl th:first-child, .rigtbl td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--panel);
+}
+.rigtbl th:first-child { z-index: 3; }
+.rigtbl tr.rowsel td { background: var(--accent-soft); }
+.rigtbl tr.rowsel td:first-child { box-shadow: inset var(--size-rule) 0 0 var(--accent); }
+.rigtbl tr.rowdark td { background: var(--color-status-dark-fill); }
+.rigtbl tr.rowstub td, .rigtbl tr.rowbeamless td { background: var(--color-status-stub-fill); }
+.rigtbl .mono {
+  font-family: var(--text-value-family);
+  font-size: var(--text-value-size);
+  font-weight: var(--text-value-weight);
+  letter-spacing: var(--text-value-tracking);
+}
+.rigtbl .addr { cursor: text; }
+.rigpage .conflict { color: var(--hot); }
+.rigpage input.conflict { border-color: var(--hot); }
+/* the app's one mono readout, outside a table cell */
+.rigpage .mono {
+  font-family: var(--text-value-family);
+  font-size: var(--text-value-size);
+  letter-spacing: var(--text-value-tracking);
+}
+.rigtbl .name input, .rigtbl .name .text { width: 100%; }
+.rigtbl .unicell {
+  width: 100%;
+  padding: 0 var(--space-2);
+  text-align: center;
+  font-family: var(--text-value-family);
+  font-size: var(--text-value-size);
+}
+.rowpair { display: flex; align-items: center; gap: var(--space-2); }
+
+/* ---------- the live pair: mute, and find behind a hold ---------- */
+
+.livebtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-btn-sm);
+  height: var(--size-btn-sm);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.livebtn:hover { color: var(--text); background: var(--color-bg-wash-hover); }
+.livebtn.on { color: var(--color-live); border-color: var(--line2); }
+.livebtn.muted { color: var(--hot); border-color: var(--color-danger-border); }
+/* The ring the hold fills. Find overrides blackout, so it is not a click:
+   the ring is the promise that it is coming, and --motion-hold is the same
+   number touch.ts counts (design 2.9, 3.4). */
+.livebtn .ring {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-live);
+  opacity: 0;
+}
+.livebtn.holding .ring {
+  opacity: 1;
+  animation: holdring var(--motion-hold) linear forwards;
+}
+@keyframes holdring {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .livebtn.holding .ring { animation: none; }
+}
+
+/* ---------- the inspector, docked under the table ---------- */
+
+.riginspector {
+  border-top: 1px solid var(--line);
+  background: var(--panel2);
+  padding: var(--space-8) var(--space-10);
+  max-height: 40%;
+  overflow: auto;
+}
+.riginspector .inspecthead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+.riginspector .inspectname {
+  font-size: var(--text-name-size);
+  font-weight: var(--text-name-weight);
+  color: var(--text);
+}
+.inspectgrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-10);
+  align-items: center;
+}
+.inspectfield { display: flex; align-items: center; gap: var(--space-4); }
+
+/* ---------- the plan column ---------- */
+
+.rigplan {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--color-bg-scene);
+}
+.rigplanbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  padding: var(--space-5) var(--space-8);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.rigplanview { position: relative; flex: 1; min-height: 0; }
+.rigplanview:focus-visible { outline: 1px solid var(--color-border-focus); outline-offset: calc(-1 * var(--space-1)); }
+.rigaim {
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  padding: var(--space-6) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.rigaim .aimrow { display: flex; align-items: center; gap: var(--space-6); flex-wrap: wrap; }
+
+/* ---------- empty states (2.7) ---------- */
+
+.rigempty {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-10);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel2);
+  color: var(--text-dim);
+  font-size: var(--text-ui-size);
+}
+
+/* ---------- the rig's chips ---------- */
+
+.rigchip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-6);
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-ui-size);
+  color: var(--text-dim);
+  background: transparent;
+  cursor: pointer;
+}
+.rigchip.bad { color: var(--hot); border-color: var(--color-danger-border); }
+.conflictlist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.conflictlist button {
+  background: transparent;
+  border: 0;
+  color: var(--hot);
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--text-ui-size);
+  padding: var(--space-1) 0;
+}
+
+/* ---------- groups: members only, in chase order ---------- */
+
+.grouprow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--line);
+}
+.groupmembers {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
