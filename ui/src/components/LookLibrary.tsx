@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { notify, useStore } from '../store.ts';
 import { askConfirm, askPrompt } from '../dialog.tsx';
 import { uid } from '../../../shared/types.ts';
+import { size } from '../tokens.ts';
 import { closeLibrarySheet, useEditingDeckId, useLibraryStore } from '../libraryStore.ts';
 import { BANK, FILTERS, FILTER_HELP, FILTER_LABEL, entries, filtered, type LibraryEntry, type LibraryFilter } from './library/model.ts';
 import { LookTile } from './library/LookTile.tsx';
@@ -91,7 +92,7 @@ export function LookPicker({
     <div
       ref={ref}
       className="popover lookpicker"
-      style={{ top: (r?.bottom ?? 0) + 2, left: Math.max(0, Math.min(r?.left ?? 0, window.innerWidth - 300)) }}
+      style={{ top: (r?.bottom ?? 0) + 2, left: Math.max(0, Math.min(r?.left ?? 0, window.innerWidth - size['picker-w'])) }}
     >
       <LibraryBody pick={{ current: current ?? null, onPick: (id) => { onPick(id); onClose(); } }} />
     </div>
