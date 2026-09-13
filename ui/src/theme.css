@@ -696,7 +696,8 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
    top of it. That is the visual difference between the two targets: the block
    of colour fires, the dark strip under it selects — you can tell them apart at
    a glance, and in the dark, without reading anything. */
-.cell .swatch {
+.cell .swatch,
+.cell > .face {
   position: absolute;
   top: 0;
   left: 0;
@@ -705,6 +706,16 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
   display: flex;
 }
 .cell .swatch i { flex: 1; }
+/* On a pad the face IS the trigger area, not a 22px strip the way it is on a
+   library tile: same marks, same order, sized to the block they fire. */
+.cell > .face {
+  flex: none;
+  height: auto;
+  padding: var(--space-3);
+  gap: var(--space-2);
+  background: none;
+}
+.cell > .face.empty { background: none; }
 /* the flash mark: a bolt in --text (the word goes with #31); --flash stays for
    the APC's held-flash LED */
 .cell .flashmark {
