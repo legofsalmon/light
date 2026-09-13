@@ -74,20 +74,48 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
   // first digit, commits on Enter or blur, and Esc puts it back.
   const [typing, setTyping] = useState<string | null>(null);
   const typeRef = useRef<HTMLInputElement>(null);
+  // Opened by a click: the old reading is selected, so typing replaces it.
+  // Opened by a digit: that digit is the first of the new reading, so the
+  // caret goes after it — selecting would eat it on the second keystroke.
+  const replaceAll = useRef(true);
+  const wasTyping = useRef(false);
   const isTyping = typing !== null;
-  useEffect(() => { if (isTyping) typeRef.current?.select(); }, [isTyping]);
-  const openTyping = (seed?: string) => setTyping(seed ?? String(digitsOf(show(value))));
-  const commitTyping = () => {
-    const t = (typing ?? '').trim();
+  useEffect(() => {
+    const el = typeRef.current;
+    if (isTyping && el) {
+      el.focus();
+      if (replaceAll.current) el.select();
+      else el.setSelectionRange(el.value.length, el.value.length);
+    }
+    // and when the field closes the fader takes the keyboard back, so the
+    // arrows are still there straight after a value is typed
+    if (!isTyping && wasTyping.current) ref.current?.focus();
+    wasTyping.current = isTyping;
+  }, [isTyping]);
+  // Enter and Esc both take the field away, and removing it blurs it — so the
+  // blur handler arrives after the decision has already been made, holding the
+  // same text. One latch per opening, so Esc cannot be overruled by the blur
+  // behind it and Enter cannot write the show twice.
+  const settled = useRef(false);
+  const openTyping = (seed?: string) => {
+    replaceAll.current = seed === undefined;
+    settled.current = false;
+    setTyping(seed ?? String(digitsOf(show(value))));
+  };
+  const closeTyping = (commit: boolean) => {
+    if (settled.current) return;
+    settled.current = true;
+    const t = typing;
     setTyping(null);
-    if (t === '') return;
-    const n = Number(t);
+    if (!commit || t === null) return;
+    const s = t.trim();
+    if (s === '') return;
+    const n = Number(s);
     if (!Number.isFinite(n)) return;
     const v = readback(n);
     const lo = Math.min(min, max);
     const hi = Math.max(min, max);
     onChange(Math.min(Math.max(lo, v), hi));
-    ref.current?.focus();
   };
 
   const setFromEvent = useCallback(
@@ -184,12 +212,12 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
             inputMode="decimal"
             aria-label={`${nameOf(label, help)} value`}
             onChange={(e) => setTyping(e.target.value)}
-            onBlur={commitTyping}
+            onBlur={() => closeTyping(true)}
             onPointerDown={(e) => e.stopPropagation()}
             onKeyDown={(e) => {
               e.stopPropagation();
-              if (e.key === 'Enter') commitTyping();
-              else if (e.key === 'Escape') { setTyping(null); ref.current?.focus(); }
+              if (e.key === 'Enter') closeTyping(true);
+              else if (e.key === 'Escape') closeTyping(false);
             }}
           />
         ) : (

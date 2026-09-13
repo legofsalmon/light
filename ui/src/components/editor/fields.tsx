@@ -186,7 +186,9 @@ export function DialMenu({ lookId, partId, effectId, fields }: {
   /** the addresses this row carries, in the order they are drawn */
   fields: readonly SoftField[];
 }) {
-  const controls = useStore((s) => s.project?.controls ?? []);
+  // NOT `?? []` in the selector: a fresh array every read is a fresh snapshot
+  // every check, and the store would re-render this row forever.
+  const controls = useStore((s) => s.project?.controls);
   const mutate = useStore((s) => s.mutate);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
@@ -229,7 +231,7 @@ export function DialMenu({ lookId, partId, effectId, fields }: {
             {fields.map((f) => (
               <React.Fragment key={f}>
                 {fields.length > 1 && <div className="menuhead">{FIELD_LABEL[f]}</div>}
-                {controls.map((c) => (
+                {(controls ?? []).map((c) => (
                   <button
                     key={c.id}
                     className="btn small ghost"
