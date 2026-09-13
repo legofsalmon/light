@@ -32,14 +32,20 @@
 
 import type { Effect, EffectTarget } from '../../shared/types.ts';
 
-export type FxCategory = 'intensity' | 'colour' | 'movement' | 'beam' | 'strobe';
+export type FxCategory = 'intensity' | 'colour' | 'position' | 'beam';
 
+/** The four families the editor's own feature row names (design 2.6), so a
+ *  preset is filed where the operator would go looking for it: what it does
+ *  to the light, not which channel it moves. "Movement" became Position, and
+ *  "Strobe and white" split — a strobe is intensity, a white is colour — and
+ *  each preset keeps its own cannot-take flag, which is read off its TARGET,
+ *  so a derby stab filed under Intensity still greys for a group with no
+ *  strobe channel. */
 export const FX_CATEGORIES: { id: FxCategory; label: string }[] = [
   { id: 'intensity', label: 'Intensity' },
   { id: 'colour', label: 'Colour' },
-  { id: 'movement', label: 'Movement' },
+  { id: 'position', label: 'Position' },
   { id: 'beam', label: 'Beam' },
-  { id: 'strobe', label: 'Strobe and white' },
 ];
 
 export type FxFactoryPreset = {
@@ -276,88 +282,88 @@ export const FX_LIBRARY: FxFactoryPreset[] = [
     effect: fx({ target: 'hue', wave: 'chase', rate: 4, width: 0.25 }),
   },
 
-  // ----------------------------------------------------------------- movement
+  // ----------------------------------------------------------------- position
   {
     id: 'pan-sweep',
     name: 'Pan sweep',
-    category: 'movement',
+    category: 'position',
     description: 'A slow swing left and right around wherever the heads are aimed.',
     effect: fx({ target: 'pan', rate: 8, size: 0.6 }),
   },
   {
     id: 'pan-wings',
     name: 'Pan wings',
-    category: 'movement',
+    category: 'position',
     description: 'The two halves of the rig swing toward each other and apart. The mirrored half counter-rotates, so it opens and closes rather than shearing.',
     effect: fx({ target: 'pan', rate: 8, size: 0.6, spread: 1, distribute: 'x', fold: 'mirror' }),
   },
   {
     id: 'tilt-bounce',
     name: 'Tilt bounce',
-    category: 'movement',
+    category: 'position',
     description: 'Up and down once a bar around the aim. Smaller than it sounds — a little tilt goes a long way.',
     effect: fx({ target: 'tilt', rate: 4, size: 0.4 }),
   },
   {
     id: 'tilt-wave',
     name: 'Tilt wave',
-    category: 'movement',
+    category: 'position',
     description: 'The bounce spread along the rig, so the beams roll rather than move together.',
     effect: fx({ target: 'tilt', rate: 4, size: 0.4, spread: 1, distribute: 'x' }),
   },
   {
     id: 'slow-drift',
     name: 'Slow drift',
-    category: 'movement',
+    category: 'position',
     description: 'Eight bars to cross and come back, barely moving. For heads that should not sit perfectly still.',
     effect: fx({ target: 'pan', rate: 32, size: 0.25 }),
   },
   {
     id: 'circle',
     name: 'Circle',
-    category: 'movement',
+    category: 'position',
     description: 'One effect driving both axes, so the beams go round rather than swinging. Two bars a lap.',
     effect: fx({ target: 'shape', shape: 'circle', rate: 8, size: 0.5 }),
   },
   {
     id: 'circle-spread',
     name: 'Circle, chasing',
-    category: 'movement',
+    category: 'position',
     description: 'The same circle with every head at a different point on it, so the beams chase each other round.',
     effect: fx({ target: 'shape', shape: 'circle', rate: 8, size: 0.5, spread: 1, distribute: 'x' }),
   },
   {
     id: 'figure8',
     name: 'Figure of eight',
-    category: 'movement',
+    category: 'position',
     description: 'Crosses itself in the middle, which is what makes it read as a figure rather than a wobble.',
     effect: fx({ target: 'shape', shape: 'figure8', rate: 8, size: 0.5 }),
   },
   {
     id: 'figure8-upright',
     name: 'Figure of eight, upright',
-    category: 'movement',
+    category: 'position',
     description: 'The same figure turned a quarter turn, standing on end instead of lying on its side.',
     effect: fx({ target: 'shape', shape: 'figure8', rate: 8, size: 0.5, shapeRotate: 0.25 }),
   },
   {
     id: 'box',
     name: 'Box',
-    category: 'movement',
+    category: 'position',
     description: 'A square with corners you can see the heads hit — mechanical on purpose, where a circle is smooth.',
     effect: fx({ target: 'shape', shape: 'square', rate: 8, size: 0.5 }),
   },
   {
     id: 'flat-oval',
     name: 'Flat oval',
-    category: 'movement',
+    category: 'position',
     description: 'A circle squashed almost to a line: mostly a pan sweep, with just enough lift to stop it looking flat.',
     effect: fx({ target: 'shape', shape: 'circle', rate: 8, size: 0.6, shapeAspect: 0.15 }),
   },
   {
     id: 'pan-scatter',
     name: 'Pan scatter',
-    category: 'movement',
+    category: 'position',
     description: 'Every head somewhere different in the same swing, shuffled. Busy without being chaotic.',
     effect: fx({ target: 'pan', rate: 8, size: 0.5, spread: 1, distribute: 'shuffle', seed: 3 }),
   },
@@ -413,39 +419,39 @@ export const FX_LIBRARY: FxFactoryPreset[] = [
     effect: fx({ target: 'prismRotate', rate: 8, size: 0.6 }),
   },
 
-  // ------------------------------------------------------------ strobe, white
+  // ------------------------------- strobe (intensity) · white (colour) ------
   {
     id: 'strobe-stab',
     name: 'Strobe stab',
-    category: 'strobe',
+    category: 'intensity',
     description: 'Fast at the downbeat, slowing away across the bar. Only ever adds, so it cannot silence a look that set its own rate.',
     effect: fx({ target: 'strobe', wave: 'sawDown', rate: 4 }),
   },
   {
     id: 'strobe-random',
     name: 'Random strobe hits',
-    category: 'strobe',
+    category: 'intensity',
     description: 'Bursts landing on unpredictable beats, the same ones every night.',
     effect: fx({ target: 'strobe', wave: 'random', rate: 1, size: 0.8 }),
   },
   {
     id: 'strobe-chase',
     name: 'Strobe chase',
-    category: 'strobe',
+    category: 'intensity',
     description: 'The burst travels head to head rather than hitting the whole group.',
     effect: fx({ target: 'strobe', wave: 'chase', rate: 4, width: 0.2 }),
   },
   {
     id: 'white-flicker',
     name: 'White flicker',
-    category: 'strobe',
+    category: 'colour',
     description: 'Jitter on the white emitter only, leaving the colour alone underneath.',
     effect: fx({ target: 'white', wave: 'random', rate: 0.5, size: 0.6 }),
   },
   {
     id: 'white-accent',
     name: 'White accent',
-    category: 'strobe',
+    category: 'colour',
     description: 'A white hit every half bar that decays away. Lifts a coloured look without washing it out.',
     effect: fx({ target: 'white', wave: 'sawDown', rate: 2 }),
   },

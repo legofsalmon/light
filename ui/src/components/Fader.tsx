@@ -1,13 +1,29 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { MidiAction } from '../../../shared/types.ts';
 import { clamp } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
 import { size } from '../tokens.ts';
+import '../styles/editor.css';
 
 /** The one unit rule (design 3.2): a percentage reads `45 %` with a thin
  *  space before the sign. Masters use no formatter and read bare — `100` is
  *  full. Every fader that shows a percentage formats with this. */
 export const fmtPct = (v: number): string => `${Math.round(v * 100)}\u2009%`;
+
+/** The digits out of a readout — `45 %` is 45, `3200K` is 3200, `1.00×` is 1.
+ *  What the operator types back is what the readout showed them. */
+const digitsOf = (s: string): number => Number(s.replace(/[^0-9.eE+-]/g, ''));
+
+/** The accessible name. The caption when there is one; otherwise the first
+ *  clause of the help string, because `title` is a whole sentence and a screen
+ *  reader wants the control's name rather than its paragraph. */
+const nameOf = (label?: string, help?: string): string => {
+  const l = label?.trim();
+  if (l) return l;
+  const h = help?.trim();
+  if (!h) return 'level';
+  return h.split(/ — |\. /)[0];
+};
 
 type Props = {
   value: number;
@@ -21,7 +37,7 @@ type Props = {
   fmt?: (v: number) => string;
   min?: number;
   max?: number;
-  /** double-click reset */
+  /** double-click and right-click reset */
   def?: number;
   width?: number | string;
   variant?: 'accent' | 'dim' | 'hue';
@@ -35,6 +51,72 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
   const learnMode = useStore((s) => s.learnMode);
   const learnTarget = useStore((s) => s.learnTarget);
   const armed = !!learn && !!learnTarget && JSON.stringify(learnTarget) === JSON.stringify(learn);
+
+  const show = useCallback(
+    (v: number): string => (fmt ? fmt(v) : `${Math.round(clamp((v - min) / (max - min)) * 100)}`),
+    [fmt, min, max],
+  );
+
+  /** The typed number read back into the value. Every formatter in the app is
+   *  affine in the value, so two samples invert it: 45 typed into a percentage
+   *  is 0.45, and 3200 typed into a warmth is the position that lands there. */
+  const readback = useCallback(
+    (typed: number): number => {
+      const lo = digitsOf(show(min));
+      const hi = digitsOf(show(max));
+      if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi === lo) return typed;
+      return min + ((typed - lo) / (hi - lo)) * (max - min);
+    },
+    [show, min, max],
+  );
+
+  // Typing the value. The readout is the field: it opens on a click or on the
+  // first digit, commits on Enter or blur, and Esc puts it back.
+  const [typing, setTyping] = useState<string | null>(null);
+  const typeRef = useRef<HTMLInputElement>(null);
+  // Opened by a click: the old reading is selected, so typing replaces it.
+  // Opened by a digit: that digit is the first of the new reading, so the
+  // caret goes after it — selecting would eat it on the second keystroke.
+  const replaceAll = useRef(true);
+  const wasTyping = useRef(false);
+  const isTyping = typing !== null;
+  useEffect(() => {
+    const el = typeRef.current;
+    if (isTyping && el) {
+      el.focus();
+      if (replaceAll.current) el.select();
+      else el.setSelectionRange(el.value.length, el.value.length);
+    }
+    // and when the field closes the fader takes the keyboard back, so the
+    // arrows are still there straight after a value is typed
+    if (!isTyping && wasTyping.current) ref.current?.focus();
+    wasTyping.current = isTyping;
+  }, [isTyping]);
+  // Enter and Esc both take the field away, and removing it blurs it — so the
+  // blur handler arrives after the decision has already been made, holding the
+  // same text. One latch per opening, so Esc cannot be overruled by the blur
+  // behind it and Enter cannot write the show twice.
+  const settled = useRef(false);
+  const openTyping = (seed?: string) => {
+    replaceAll.current = seed === undefined;
+    settled.current = false;
+    setTyping(seed ?? String(digitsOf(show(value))));
+  };
+  const closeTyping = (commit: boolean) => {
+    if (settled.current) return;
+    settled.current = true;
+    const t = typing;
+    setTyping(null);
+    if (!commit || t === null) return;
+    const s = t.trim();
+    if (s === '') return;
+    const n = Number(s);
+    if (!Number.isFinite(n)) return;
+    const v = readback(n);
+    const lo = Math.min(min, max);
+    const hi = Math.max(min, max);
+    onChange(Math.min(Math.max(lo, v), hi));
+  };
 
   const setFromEvent = useCallback(
     (e: PointerEvent | React.PointerEvent) => {
@@ -57,7 +139,33 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
       return;
     }
     e.currentTarget.setPointerCapture(e.pointerId);
+    // The fader KEEPS focus after pointer-up, so the arrows work after a click
+    // in the booth (design 2.6). The safety is the guard below and the window
+    // handler's own step-aside for [role="slider"], not a dropped focus: the
+    // first keydown of a repeat fires before `e.repeat` can be dropped, so
+    // letting go of focus would not have closed the hazard anyway.
+    ref.current?.focus();
     setFromEvent(e);
+  };
+
+  const step = (max - min) / 100;
+  /** The arrows, the ends and the digits belong to the fader, and stop here —
+   *  a digit that reached the window handler would fire a column (design 2.6).
+   *  Same shape as the colour disc's own guard. */
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const mul = e.shiftKey ? 10 : 1;
+    const lo = Math.min(min, max);
+    const hi = Math.max(min, max);
+    const put = (v: number) => onChange(Math.min(Math.max(lo, v), hi));
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') put(value - step * mul);
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') put(value + step * mul);
+    else if (e.key === 'Home') put(min);
+    else if (e.key === 'End') put(max);
+    else if (e.key === 'Enter' || e.key === ' ') openTyping();
+    else if (/^[0-9.-]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) openTyping(e.key);
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   return (
@@ -65,11 +173,24 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
       ref={ref}
       className={`fader ${variant === 'dim' ? 'dim' : ''} ${variant === 'hue' ? 'hue' : ''} ${learn ? 'learnable' : ''} ${armed ? 'learn-armed' : ''}`}
       style={{ width }}
+      role="slider"
+      tabIndex={0}
+      aria-label={nameOf(label, help)}
+      aria-valuenow={Number(value.toFixed(4))}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuetext={show(value)}
       onPointerDown={onPointerDown}
       onPointerMove={(e) => {
         if (e.buttons & 1 && e.currentTarget.hasPointerCapture(e.pointerId)) setFromEvent(e);
       }}
+      onKeyDown={onKeyDown}
       onDoubleClick={() => def !== undefined && onChange(def)}
+      onContextMenu={(e) => {
+        if (def === undefined) return;
+        e.preventDefault();
+        onChange(def);
+      }}
       title={help ?? label}
     >
       {variant === 'hue' ? (
@@ -82,7 +203,34 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
       )}
       <div className="val">
         <span>{label}</span>
-        <b style={{ flex: '0 0 var(--size-value-w)', textAlign: 'right' }}>{fmt ? fmt(value) : `${Math.round(norm * 100)}`}</b>
+        {typing !== null ? (
+          <input
+            ref={typeRef}
+            className="faderin"
+            style={{ flex: '0 0 var(--size-value-w)' }}
+            value={typing}
+            inputMode="decimal"
+            aria-label={`${nameOf(label, help)} value`}
+            onChange={(e) => setTyping(e.target.value)}
+            onBlur={() => closeTyping(true)}
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') closeTyping(true);
+              else if (e.key === 'Escape') closeTyping(false);
+            }}
+          />
+        ) : (
+          <b
+            className="faderval"
+            style={{ flex: '0 0 var(--size-value-w)', textAlign: 'right' }}
+            title="click to type a value"
+            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+            onClick={() => openTyping()}
+          >
+            {show(value)}
+          </b>
+        )}
       </div>
     </div>
   );

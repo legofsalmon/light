@@ -78,6 +78,26 @@ export const BEAM_LABELS: Record<BeamParam, string> = {
   flower: 'flower spin',
 };
 
+/** The strobe band, in hertz.
+ *
+ *  Nothing LIGHT can read states a fixture's own: the built-ins put 6..255 on
+ *  the shutter channel (shared/profiles.ts) and GDTF's physical units are not
+ *  carried through the compiler, so a percentage was a percentage of a range
+ *  nobody had named. The desk states one instead — the band nearly every LED
+ *  fixture ships, one flash a second at the bottom of the fader to twenty at
+ *  the top — so the number on screen is the thing an operator counts on the
+ *  wall. A fixture whose own band is wider reads a little slow; a percentage
+ *  of an unnamed range read nothing at all.
+ */
+export const STROBE_HZ: readonly [number, number] = [1, 20];
+
+/** The fader position as a rate. */
+export const strobeHz = (v: number): number =>
+  STROBE_HZ[0] + (STROBE_HZ[1] - STROBE_HZ[0]) * Math.min(Math.max(0, v), 1);
+
+/** ...and the rate as the operator reads it (design 3.2: `12 Hz`). */
+export const fmtStrobe = (v: number): string => `${Math.round(strobeHz(v))} Hz`;
+
 export const noBeamCaps = (): BeamCaps =>
   Object.fromEntries(BEAM_PARAMS.map((k) => [k, false])) as BeamCaps;
 /** Built-ins predate these parameters and none of them has one. */

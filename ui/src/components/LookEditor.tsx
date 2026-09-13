@@ -1,1029 +1,54 @@
-import React, { useEffect, useState } from 'react';
-import type { Distribute, Effect, EffectTarget, Look, LookPart, Project, ShapeKind, SoftField, StrobeMode, Wave } from '../../../shared/types.ts';
-import { EFFECT_TARGETS, SHAPE_KINDS, STROBE_MODES, uid } from '../../../shared/types.ts';
-import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../shared/color.ts';
-import { type HeadKind } from '../../../shared/profiles.ts';
+// One editor, two homes (the side column and the bottom panel). Top to bottom
+// it is: a stripe that says whether what you are typing reaches the rig, a
+// header naming the look and holding the keys that act on it, and the part
+// bodies.
+
+import React, { useState } from 'react';
+import type { Look, Project } from '../../../shared/types.ts';
+import { uid } from '../../../shared/types.ts';
 import { TextField } from './inputs.tsx';
-import { BEAM_FADERS, BEAM_LABELS, BEAM_PARAMS, type BeamCaps, type BeamParam, type ProfileMeta, noBeamCaps, profileMeta } from '../profileInfo.ts';
-import { SHAPE_LABEL, TARGET_LABEL } from '../labels.ts';
-import { ColourWheel } from './ColourWheel.tsx';
-import { FxPicker } from './FxPicker.tsx';
-import type { FxFactoryPreset } from '../fxLibrary.ts';
-import { hasUndrivenBeamChannels } from '../../../shared/gdtfShare.ts';
 import { useStore } from '../store.ts';
-import { WAVE_LABEL } from '../labels.ts';
 import { askConfirm } from '../dialog.tsx';
-import { Fader } from './Fader.tsx';
+import { BeatsInput, FadeInput } from './editor/fields.tsx';
+import { PartEditor } from './editor/PartEditor.tsx';
+import '../styles/editor.css';
 
-const pct = (v: number) => `${Math.round(v * 100)}%`;
-
-const RATES: { v: number; label: string }[] = [
-  { v: 32, label: '8 bars' },
-  { v: 16, label: '4 bars' },
-  { v: 8, label: '2 bars' },
-  { v: 4, label: '1 bar' },
-  { v: 2, label: '2 beats' },
-  { v: 1, label: '1 beat' },
-  { v: 0.5, label: '1/2' },
-  { v: 0.25, label: '1/4' },
-];
-
-const WAVES: Wave[] = ['sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random'];
-
-/** Fan bases in display order, with the labels the operators know. */
-const DISTRIBUTE_LABELS: { v: Distribute; label: string; title: string }[] = [
-  { v: 'index', label: 'order', title: 'patch order — the classic spread, one after another' },
-  { v: 'x', label: 'X', title: 'sweep stage left → right (world position)' },
-  { v: 'y', label: 'Y', title: 'sweep bottom → top' },
-  { v: 'z', label: 'Z', title: 'sweep upstage → downstage' },
-  { v: 'radial', label: '◎', title: 'ripple out from the group centre' },
-  { v: 'shuffle', label: '⤨', title: 'seeded scatter — re-roll with ↻, same seed = same look' },
-  { v: 'row', label: 'row', title: 'sweep each fixture’s own pixel rows — every fixture runs the same wave' },
-  { v: 'col', label: 'col', title: 'sweep each fixture’s own pixel columns — every fixture runs the same wave' },
-];
-
-const SWATCHES: { h: number; s: number }[] = [
-  { h: 0, s: 1 }, { h: 30, s: 1 }, { h: 52, s: 1 }, { h: 120, s: 1 },
-  { h: 160, s: 0.95 }, { h: 195, s: 1 }, { h: 228, s: 1 }, { h: 262, s: 1 },
-  { h: 290, s: 1 }, { h: 315, s: 1 }, { h: 345, s: 0.9 }, { h: 0, s: 0 },
-];
-
-function groupKinds(project: Project, groupId: string): Set<HeadKind> {
-  const kinds = new Set<HeadKind>();
-  const group = project.groups.find((g) => g.id === groupId);
-  if (!group) return kinds;
-  for (const ref of group.heads) {
-    const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
-    const head = fixture ? profileMeta(project, fixture.profileId)?.heads[ref.head] : null;
-    if (head) kinds.add(head.kind);
-  }
-  return kinds;
-}
-
-/** Can anything in this group actually move?
+/** How many pads carry this look, and across how many songs.
  *
- *  NOT the same question as "is a head kind 'mover'". A head kind describes what
- *  one emitter is, and a fixture can be a moving head whose emitters are pixels:
- *  a Robin Spiider is exactly that, and its compiled profile is two `rgb` heads
- *  with a Pan channel wired to `source: "pan"`. Gating the pan/tilt controls on
- *  the head kind hid them on a fixture that plainly has them, while the patch
- *  table — which asks this question of the CHANNELS — showed the aim fields
- *  perfectly. This is that same test. */
-function groupCanAim(project: Project, groupId: string): boolean {
-  const group = project.groups.find((g) => g.id === groupId);
-  if (!group) return false;
-  return group.heads.some((ref) => {
-    const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
-    const meta = fixture ? profileMeta(project, fixture.profileId) : null;
-    return !!meta?.hasPan || !!meta?.hasTilt;
-  });
-}
-
-/** Which beam parameters any fixture in this group can actually take.
- *
- *  Same test as groupCanAim and for the same reason: ask the CHANNELS, not the
- *  head kind. A fixture only gets a zoom fader if something in the group has a
- *  zoom channel — an editor full of controls that go nowhere is worse than one
- *  that is honest about the rig. */
-/** Does anything in this group drive a white emitter? A derby's white ring is
- *  a different thing — on/off hardware, already offered as `ring blinder` — so
- *  this asks for a real, faded White channel, which every RGBW wash imported
- *  from GDTF has and which the editor never offered a way to set. The parameter
- *  itself already existed and already reaches the channel in both engines; only
- *  the control was missing, so a white wash could be made by an EFFECT
- *  targeting white but not by the look itself. */
-function groupCanWhite(project: Project, groupId: string): boolean {
-  const group = project.groups.find((g) => g.id === groupId);
-  if (!group) return false;
-  return group.heads.some((ref) => {
-    const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
-    const meta = fixture ? profileMeta(project, fixture.profileId) : null;
-    return !!meta?.hasWhite;
-  });
-}
-
-/** Does anything in this group have beam channels with no function behind
- *  them? Distinguishes "this fixture has no zoom" from "this fixture has a zoom
- *  channel that the stored profile never wired up", which look identical in an
- *  editor that only shows what it can drive. */
-function groupHasDeadBeamChannels(project: Project, groupId: string): boolean {
-  const group = project.groups.find((g) => g.id === groupId);
-  if (!group) return false;
-  return group.heads.some((ref) => {
-    const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
-    const compiled = fixture ? project.profiles?.[fixture.profileId] : undefined;
-    return !!compiled && hasUndrivenBeamChannels(compiled);
-  });
-}
-
-function groupBeamCaps(project: Project, groupId: string): BeamCaps {
-  const out: BeamCaps = noBeamCaps();
-  const group = project.groups.find((g) => g.id === groupId);
-  if (!group) return out;
-  for (const ref of group.heads) {
-    const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
-    const meta = fixture ? profileMeta(project, fixture.profileId) : null;
-    if (!meta) continue;
-    for (const k of BEAM_PARAMS) if (meta.beam[k]) out[k] = true;
+ *  Every song, not just the one on the grid: the look pool is shared, so a
+ *  rename here is a rename in the other seven songs too and the header should
+ *  say so before it is typed rather than after. The CURRENT song's pads live
+ *  in `project.layers` — the stored page only syncs on a song switch — so they
+ *  are counted from there and that page's stale copy is skipped. */
+export function sharedBy(project: Project, lookId: string): { pads: number; songs: number } {
+  const here = project.layers.reduce((n, ly) => n + ly.cells.filter((c) => c === lookId).length, 0);
+  let pads = here;
+  let songs = here > 0 ? 1 : 0;
+  for (const d of project.decks ?? []) {
+    if (d.id === project.activeDeckId) continue;
+    const n = Object.values(d.cells).reduce((m, cells) => m + cells.filter((c) => c === lookId).length, 0);
+    if (n > 0) {
+      pads += n;
+      songs += 1;
+    }
   }
-  return out;
+  return { pads, songs };
 }
 
-type GroupOptics = { gobos: string[]; prisms: string[]; strobeModes: StrobeMode[]; ctoK?: [number, number] };
-
-/** Kelvin at each end of the warmth fader for this group — only when every
- *  fixture in it that HAS a warmth channel states the same range. Two heads
- *  with different ranges would make one number a lie about the other, and a
- *  percentage is at least honestly vague. */
-function groupKelvin(metas: (ProfileMeta | null)[]): [number, number] | undefined {
-  const ranges = metas.map((m) => m?.ctoK).filter((k): k is [number, number] => !!k);
-  if (ranges.length === 0) return undefined;
-  const [a, b] = ranges[0];
-  return ranges.every((r) => r[0] === a && r[1] === b) ? [a, b] : undefined;
-}
-
-/** The wheel slots and shutter patterns something in this group can take.
- *  Slot names come from the first fixture that has the wheel — a slot is an
- *  index, so the same pick lands on every fixture in the group, "the second
- *  gobo" on each — and the patterns are the union. */
-function groupOptics(project: Project, groupId: string): GroupOptics {
-  const out: GroupOptics = { gobos: [], prisms: [], strobeModes: [] };
-  const group = project.groups.find((g) => g.id === groupId);
-  if (!group) return out;
-  for (const ref of group.heads) {
-    const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
-    const meta = fixture ? profileMeta(project, fixture.profileId) : null;
-    if (!meta) continue;
-    if (out.gobos.length === 0) out.gobos = meta.gobos;
-    if (out.prisms.length === 0) out.prisms = meta.prisms;
-    for (const m of meta.strobeModes) if (!out.strobeModes.includes(m)) out.strobeModes.push(m);
-  }
-  out.strobeModes = STROBE_MODES.filter((m) => out.strobeModes.includes(m));
-  out.ctoK = groupKelvin(
-    (group.heads ?? []).map((ref) => {
-      const fixture = project.fixtures.find((f) => f.id === ref.fixtureId);
-      return fixture ? profileMeta(project, fixture.profileId) : null;
-    }),
-  );
-  return out;
-}
-
-/** A wheel slot picker. "Not set" leaves the wheel where the fixture parks
- *  it, the same absent-means-untouched rule as every beam parameter; a slot
- *  past this list still shows, because another fixture in the group may
- *  have it. */
-function SlotRow({ label, title, names, value, onChange }: {
-  label: string;
-  title: string;
-  names: string[];
-  value: number | undefined;
-  onChange: (v: number | undefined) => void;
-}) {
-  const beyond = value !== undefined && value >= names.length ? value : null;
-  return (
-    <div className="paramrow">
-      <span className="label" style={{ marginLeft: 20 }}>{label}</span>
-      <select
-        className="sel"
-        title={title}
-        value={value === undefined ? '' : String(value)}
-        onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-      >
-        <option value="">not set — leave it where the fixture parks it</option>
-        {names.map((n, i) => (
-          <option key={i} value={String(i)}>{i === 0 ? n : `${i} · ${n}`}</option>
-        ))}
-        {beyond !== null && <option value={String(beyond)}>slot {beyond}</option>}
-      </select>
-    </div>
-  );
-}
-
-/** Which effect targets the rig in this group can actually take. One answer,
- *  shared by the target menu and the catalogue picker — two of them would drift
- *  and the picker would flag things the menu was happy with. */
-function capableTargets(kinds: Set<HeadKind>, canAim: boolean, beamCaps: BeamCaps): EffectTarget[] {
-  const capable: EffectTarget[] = ['dimmer'];
-  if (kinds.has('rgb') || kinds.has('derby') || kinds.has('mover')) capable.push('hue', 'strobe');
-  if (kinds.has('derby')) capable.push('white');
-  // `shape` drives pan AND tilt from one effect, so it needs both.
-  if (canAim) capable.push('pan', 'tilt', 'shape');
-  for (const k of BEAM_PARAMS) if (beamCaps[k]) capable.push(k);
-  return capable;
-}
-
-function Enable({ on, toggle }: { on: boolean; toggle: () => void }) {
-  return (
-    <div
-      className={`enable ${on ? 'on' : ''}`}
-      role="checkbox"
-      aria-checked={on}
-      tabIndex={0}
-      title={on ? 'this look sets it — click to leave it to the layers below' : 'left to the layers below — click to have this look set it'}
-      onClick={toggle}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
-    />
-  );
-}
-
-/** Seconds, committed on blur/Enter — per keystroke, "1.5" passed through "1"
- *  and wrote it to the show (review M12). Empty means "use the layer's fade". */
-function FadeInput({ value, placeholder, onCommit }: {
-  value: number | undefined;
-  placeholder: number;
-  onCommit: (v: number | undefined) => void;
-}) {
-  const shown = value === undefined ? '' : String(value);
-  const [draft, setDraft] = useState(shown);
-  const ref = React.useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (document.activeElement !== ref.current) setDraft(value === undefined ? '' : String(value));
-  }, [value]);
-  const commit = () => {
-    const t = draft.trim();
-    const v = t === '' ? undefined : Math.max(0, Number(t));
-    if (v !== undefined && !Number.isFinite(v)) { setDraft(shown); return; }
-    if (v !== value) onCommit(v);
+/** A look with every id minted fresh, so nothing it is copied from can reach
+ *  it — not a dial's link, not a nudge that is riding the original. */
+function copyOfLook(look: Look): Look {
+  return {
+    ...look,
+    id: uid('look'),
+    name: `${look.name} copy`,
+    parts: look.parts.map((pt) => ({
+      ...pt,
+      id: uid('part'),
+      params: { ...pt.params },
+      effects: pt.effects.map((fx) => ({ ...fx, id: uid('fx') })),
+    })),
   };
-  return (
-    <input
-      ref={ref}
-      className="num"
-      type="number"
-      step="0.1"
-      min="0"
-      placeholder={String(placeholder)}
-      title="fade in seconds — empty uses the layer's fade. Commits on Enter or when the field loses focus"
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => { if (e.key === 'Enter') { commit(); e.currentTarget.blur(); } }}
-    />
-  );
-}
-
-/** Small integer editor that commits on blur/Enter — the same discipline as
- *  BeatsInput below: clamping per keystroke makes a controlled field
- *  unclearable and floods a project write (plus an undo entry) per keypress. */
-function IntInput({ value, min, max, width = 44, title, onCommit }: {
-  value: number;
-  min: number;
-  max: number;
-  width?: number;
-  title?: string;
-  onCommit: (v: number) => void;
-}) {
-  const [draft, setDraft] = useState(String(value));
-  const ref = React.useRef<HTMLInputElement>(null);
-  // never clobber a draft mid-edit — a project echo must not erase typing
-  useEffect(() => {
-    if (document.activeElement !== ref.current) setDraft(String(value));
-  }, [value]);
-  const commit = () => {
-    const v = Math.floor(Number(draft));
-    const clean = Number.isFinite(v) ? Math.min(Math.max(min, v), max) : value;
-    setDraft(String(clean));
-    if (clean !== value) onCommit(clean);
-  };
-  return (
-    <input
-      ref={ref}
-      className="num"
-      type="number"
-      min={min}
-      max={max}
-      style={{ width }}
-      title={title}
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-      }}
-    />
-  );
-}
-
-function EffectRow({ fx, kinds, canAim, beamCaps, onEdit, onRemove, onSaveToPool, onField, soft }: {
-  fx: Effect;
-  kinds: Set<HeadKind>;
-  canAim: boolean;
-  beamCaps: BeamCaps;
-  onEdit: (fn: (e: Effect) => void) => void;
-  onRemove: () => void;
-  onSaveToPool: () => void;
-  /** P1 router: numeric knobs go through here (ride mode sends soft) */
-  onField: (field: SoftField, v: number, fallback: (e: Effect) => void) => void;
-  /** live soft value for one of this effect's fields, if ridden */
-  soft: (field: SoftField) => number | undefined;
-}) {
-  const capable = capableTargets(kinds, canAim, beamCaps);
-  // inform, don't forbid: every target stays assignable (an effect is
-  // interchangeable across groups), the ones this group can't take are just
-  // grouped apart and the current target is flagged if it lands there.
-  const capableSet = new Set(capable);
-  const others = [...EFFECT_TARGETS].filter((t) => !capableSet.has(t));
-  const targetInactive = !capableSet.has(fx.target);
-
-  return (
-    <>
-    <div className="fxrow" style={fx.bypass ? { opacity: 0.5 } : undefined}>
-      <button
-        className={`btn small ${fx.bypass ? 'on' : 'ghost'}`}
-        style={{ width: 30 }}
-        title={fx.bypass ? 'parked — click to enable' : 'park this effect (keeps it, stops its output)'}
-        onClick={() => onEdit((x) => (x.bypass = !x.bypass))}
-      >
-        {fx.bypass ? '▷' : '❙❙'}
-      </button>
-      <select className="sel" title="which parameter the wave moves. Targets this group cannot take are still assignable, and flagged" value={fx.target} onChange={(e) => onEdit((x) => (x.target = e.target.value as EffectTarget))}>
-        <optgroup label="drives this group">
-          {capable.map((t) => (
-            <option key={t} value={t}>{TARGET_LABEL[t]}</option>
-          ))}
-        </optgroup>
-        {others.length > 0 && (
-          <optgroup label="no fixtures here (still assignable)">
-            {others.map((t) => (
-              <option key={t} value={t}>{TARGET_LABEL[t]}</option>
-            ))}
-          </optgroup>
-        )}
-      </select>
-      {targetInactive && (
-        <span className="label" title="nothing in this group takes this parameter — it does nothing here until the effect is retargeted or dropped on a group that has it" style={{ color: 'var(--color-status-nudge)' }}>
-          ⚠
-        </span>
-      )}
-      {fx.target === 'shape' ? (
-        <select
-          className="sel"
-          title="which figure the heads trace. The figure IS the waveform here, so there is no wave to pick"
-          value={fx.shape ?? 'circle'}
-          onChange={(e) => onEdit((x) => (x.shape = e.target.value as ShapeKind))}
-        >
-          {SHAPE_KINDS.map((k) => (
-            <option key={k} value={k}>{SHAPE_LABEL[k]}</option>
-          ))}
-        </select>
-      ) : (
-        <select className="sel" title="the wave shape — chase runs one head at a time and forces a full spread" value={fx.wave} onChange={(e) => onEdit((x) => (x.wave = e.target.value as Wave))}>
-          {WAVES.map((w) => (
-            <option key={w} value={w}>{WAVE_LABEL[w]}</option>
-          ))}
-        </select>
-      )}
-      <select
-        className="sel"
-        title="beats per cycle — 4 is one cycle per bar in 4/4. Musical, not hertz, so the rig stays in time when the tempo moves"
-        value={String(soft('rate') ?? fx.rate)}
-        onChange={(e) => onField('rate', Number(e.target.value), (x) => (x.rate = Number(e.target.value)))}
-      >
-        {RATES.map((r) => (
-          <option key={r.v} value={String(r.v)}>{r.label}</option>
-        ))}
-      </select>
-      <Fader label="size" width={90} value={soft('size') ?? fx.size} def={1} onChange={(v) => onField('size', v, (x) => (x.size = v))} fmt={pct} variant="dim" />
-      <Fader label="spread" width={90} value={soft('spread') ?? fx.spread} def={0} onChange={(v) => onField('spread', v, (x) => (x.spread = v))} fmt={pct} variant="dim" />
-      {fx.target !== 'shape' && (fx.wave === 'square' || fx.wave === 'chase') && (
-        <Fader label="width" width={90} value={soft('width') ?? fx.width} def={0.5} onChange={(v) => onField('width', v, (x) => (x.width = v))} fmt={pct} variant="dim" />
-      )}
-      {fx.target === 'shape' && (
-        <>
-          <Fader
-            label="aspect"
-            width={90}
-            value={fx.shapeAspect ?? 0.5}
-            def={0.5}
-            help="round in the middle; all the way left is a flat pan sweep and all the way right a vertical bounce"
-            onChange={(v) => onEdit((x) => (x.shapeAspect = v))}
-            fmt={pct}
-            variant="dim"
-          />
-          <Fader
-            label="turn"
-            width={90}
-            value={fx.shapeRotate ?? 0}
-            def={0}
-            help="turn the whole figure — a sideways figure of eight becomes an upright one at 25%"
-            onChange={(v) => onEdit((x) => (x.shapeRotate = v))}
-            fmt={pct}
-            variant="dim"
-          />
-          <button
-            className={`btn small ${fx.shapeCcw ? 'on' : 'ghost'}`}
-            title={fx.shapeCcw ? 'tracing anticlockwise — click for clockwise' : 'tracing clockwise — click for anticlockwise'}
-            onClick={() => onEdit((x) => (x.shapeCcw = !x.shapeCcw))}
-          >
-            {fx.shapeCcw ? '↺' : '↻'}
-          </button>
-        </>
-      )}
-      <Fader label="phase" width={80} value={soft('phase') ?? fx.phase} def={0} onChange={(v) => onField('phase', v, (x) => (x.phase = v))} fmt={pct} variant="dim" />
-      {/* wet/dry: how much of the effect lands. 100% is full effect. */}
-      <Fader label="mix" width={80} value={soft('mix') ?? fx.mix} def={1} onChange={(v) => onField('mix', v, (x) => (x.mix = v))} fmt={pct} variant="dim" />
-      <button className="btn small ghost" title="save this effect to the FX pool as a reusable preset" onClick={onSaveToPool}>☆</button>
-      <button title="remove this effect" className="btn small ghost" onClick={onRemove}>✕</button>
-    </div>
-    <div className="fxrow" style={{ ...(fx.bypass ? { opacity: 0.5 } : {}), paddingLeft: 34 }}>
-      <span className="label">spread</span>
-      <div className="seg">
-        {DISTRIBUTE_LABELS.map((d) => (
-          <button
-            key={d.v}
-            className={fx.distribute === d.v ? 'on' : ''}
-            title={d.title}
-            onClick={() => onEdit((x) => (x.distribute = d.v))}
-          >
-            {d.label}
-          </button>
-        ))}
-      </div>
-      <button
-        className={`btn small ${fx.fold === 'mirror' ? 'on' : 'ghost'}`}
-        title="mirror — ends in phase, sweeping toward the centre; a folded pan sweep counter-rotates"
-        onClick={() => onEdit((x) => (x.fold = x.fold === 'mirror' ? 'none' : 'mirror'))}
-      >
-        ⟷
-      </button>
-      <button
-        className={`btn small ${fx.fold === 'centre' ? 'on' : 'ghost'}`}
-        title="centre — the middle leads, the ends trail"
-        onClick={() => onEdit((x) => (x.fold = x.fold === 'centre' ? 'none' : 'centre'))}
-      >
-        ◇
-      </button>
-      <button
-        className={`btn small ${fx.reverse ? 'on' : 'ghost'}`}
-        title="run the spread backwards"
-        onClick={() => onEdit((x) => (x.reverse = !x.reverse))}
-      >
-        ⇄
-      </button>
-      <span className="label">tile</span>
-      <IntInput
-        value={fx.parts}
-        min={1}
-        max={64}
-        title="tile the spread into k repeats across the group"
-        onCommit={(v) => onEdit((x) => (x.parts = v))}
-      />
-      <span className="label">buddy</span>
-      <IntInput
-        value={fx.buddy}
-        min={1}
-        max={64}
-        title="clump size — adjacent heads share a phase"
-        onCommit={(v) => onEdit((x) => (x.buddy = v))}
-      />
-      {fx.distribute === 'shuffle' && (
-        <button
-          className="btn small ghost"
-          title={`re-roll the scatter (seed ${fx.seed})`}
-          onClick={() => onEdit((x) => (x.seed = Math.floor(Math.random() * 0x7fffffff)))}
-        >
-          ↻
-        </button>
-      )}
-    </div>
-    </>
-  );
-}
-
-function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ride: boolean }) {
-  const project = useStore((s) => s.project)!;
-  const mutate = useStore((s) => s.mutate);
-  const send = useStore((s) => s.send);
-  const softLive = useStore((s) => s.snap?.soft);
-  const kinds = groupKinds(project, part.groupId);
-  const canAim = groupCanAim(project, part.groupId);
-  const beamCaps = groupBeamCaps(project, part.groupId);
-  const optics = groupOptics(project, part.groupId);
-
-  // The factory catalogue's picker. It applies as you browse — the effect it
-  // put there is tracked so the next pick replaces it rather than stacking a
-  // dozen auditions onto the part.
-  const [fxPickerOpen, setFxPickerOpen] = useState(false);
-  const fxPickerBtn = React.useRef<HTMLButtonElement>(null);
-  const previewFx = React.useRef<string | null>(null);
-  const dropPreview = (pt: LookPart) => {
-    if (previewFx.current) pt.effects = pt.effects.filter((x) => x.id !== previewFx.current);
-  };
-  const previewPreset = (p: FxFactoryPreset) => {
-    const id = uid('fx');
-    edit((pt) => {
-      dropPreview(pt);
-      pt.effects.push({ ...p.effect, id });
-    }, `add ${p.name} effect`);
-    previewFx.current = id;
-  };
-  const closePicker = (keep: boolean) => {
-    if (!keep && previewFx.current) edit((pt) => dropPreview(pt), 'remove the previewed effect');
-    previewFx.current = null;
-    setFxPickerOpen(false);
-  };
-  // a derby's ring is on/off hardware and has its own control; this is the
-  // faded white emitter on an RGBW head
-  const canWhite = !kinds.has('derby') && groupCanWhite(project, part.groupId);
-
-  const edit = (fn: (pt: LookPart) => void, label?: string) =>
-    mutate((p) => {
-      const pt = p.looks[lookId]?.parts.find((x) => x.id === part.id);
-      if (pt) fn(pt);
-    }, label);
-
-  /** P1: the live soft value for one address, if the operator is riding it. */
-  const softFor = (field: SoftField, effectId?: string): number | undefined =>
-    softLive?.find(
-      (e) => e.lookId === lookId && e.partId === part.id && e.effectId === effectId && e.field === field,
-    )?.value;
-
-  /** Route a numeric edit. Soft when RIDE is armed — or when a soft value
-   *  ALREADY exists for the address: a ridden control stays live until Store
-   *  or Discard, otherwise the fader would display the soft value while
-   *  silently rewriting the stored show underneath it. A brief window after
-   *  ALL STOP disarms ride drops events entirely, so an in-flight drag can
-   *  neither re-create the rides the panic cleared nor mutate the show. */
-  const rideCutAt = useStore((s) => s.rideCutAt);
-  const setP = (field: SoftField, v: number, fallback: (pt: LookPart) => void): void => {
-    if (Date.now() - rideCutAt < 800) return;
-    if (ride || softFor(field) !== undefined) send({ type: 'soft', lookId, partId: part.id, field, value: v });
-    else edit(fallback);
-  };
-
-  /** Set the part's colour, from wherever the click came from.
-   *
-   *  A swatch, a tint and a drag on the disc are all a hue+sat PAIR, and all
-   *  three have to take the same road: with a nudge armed, or the colour
-   *  already nudged, it goes through the soft layer — otherwise the click
-   *  looks dead, because the nudge wins on the rig, while it quietly
-   *  rewrites the stored show underneath. */
-  const setColour = (h: number, sat: number): void => {
-    if (ride || softFor('hue') !== undefined || softFor('sat') !== undefined) {
-      send({ type: 'soft', lookId, partId: part.id, field: 'hue', value: h });
-      send({ type: 'soft', lookId, partId: part.id, field: 'sat', value: sat });
-    } else edit((pt) => (pt.params.color = { h, s: sat }));
-  };
-
-  const [wheel, setWheel] = useState(false);
-  const colourChip = React.useRef<HTMLButtonElement>(null);
-
-  /** One optional 0..1 parameter: enable, label, fader. Beam shaping and the
-   *  two optics rotations share it. The middle is the default because on a
-   *  rotate band the middle is stopped and on a zoom it is the mid throw. */
-  const beamRow = (k: BeamParam, kelvin?: [number, number]) => (
-    <div className="paramrow" key={k}>
-      <Enable
-        on={prm[k] !== undefined}
-        toggle={() => edit((pt) => (pt.params[k] = pt.params[k] === undefined ? 0.5 : undefined))}
-      />
-      <span className="label">{BEAM_LABELS[k]}</span>
-      <div className={`grow paramrow ${prm[k] === undefined ? 'off' : ''}`}>
-        <Fader
-          help={`${BEAM_LABELS[k]} — greyed out until the ⏻ beside it enables this parameter for the part`}
-          value={softFor(k) ?? prm[k] ?? 0.5}
-          def={0.5}
-          onChange={(v) => setP(k, v, (pt) => (pt.params[k] = v))}
-          fmt={kelvin ? (v) => `${Math.round((kelvin[0] + (kelvin[1] - kelvin[0]) * v) / 50) * 50}K` : pct}
-          width={180}
-          variant="dim"
-        />
-      </div>
-    </div>
-  );
-  const setE = (effectId: string, field: SoftField, v: number, fallback: (e: Effect) => void): void => {
-    if (Date.now() - rideCutAt < 800) return;
-    if (ride || softFor(field, effectId) !== undefined) send({ type: 'soft', lookId, partId: part.id, effectId, field, value: v });
-    else
-      edit((pt) => {
-        const e = pt.effects.find((x) => x.id === effectId);
-        if (e) fallback(e);
-      });
-  };
-
-  const prm = part.params;
-  const hasColorTargets = kinds.has('rgb') || kinds.has('derby') || kinds.has('mover');
-
-  return (
-    <div>
-      <div className="parthead">
-        <span className="label">group</span>
-        <select
-          className="sel"
-          title="the fixtures this part drives. Group ORDER is chase order, so it decides how a chase or an in-order spread runs through them"
-          value={part.groupId}
-          onChange={(e) => edit((pt) => (pt.groupId = e.target.value))}
-        >
-          {project.groups.map((g) => (
-            <option key={g.id} value={g.id}>{g.name}</option>
-          ))}
-        </select>
-        {!project.groups.some((g) => g.id === part.groupId) && (
-          <span className="prose" style={{ color: 'var(--warn)' }}>no group — this part drives nothing until it has one</span>
-        )}
-        <div className="grow" />
-        <button
-          className="btn small ghost"
-          onClick={() => mutate((p) => {
-            const look = p.looks[lookId];
-            if (look) look.parts = look.parts.filter((x) => x.id !== part.id);
-          })}
-        
-            title="remove this part from the look — the fixture group itself is untouched">
-          remove part
-        </button>
-      </div>
-      <div className="partbody">
-        {kinds.size > 0 && !(kinds.size === 1 && kinds.has('hazer')) && (
-          <div className="paramrow">
-            <Enable on={prm.dimmer !== undefined} toggle={() => edit((pt) => (pt.params.dimmer = pt.params.dimmer === undefined ? 1 : undefined))} />
-            <span className="label">dimmer</span>
-            <div className={`grow paramrow ${prm.dimmer === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
-              <Fader help="intensity for this part. Double-click to reset to full" value={softFor('dimmer') ?? prm.dimmer ?? 1} def={1} onChange={(v) => setP('dimmer', v, (pt) => (pt.params.dimmer = v))} fmt={pct} width="100%" />
-            </div>
-          </div>
-        )}
-
-        {canWhite && (
-            <div className="paramrow">
-              <Enable
-                on={prm.white !== undefined}
-                toggle={() => edit((pt) => (pt.params.white = pt.params.white === undefined ? 1 : undefined))}
-              />
-              <span className="label">white</span>
-              <div className={`grow paramrow ${prm.white === undefined ? 'off' : ''}`}>
-                <Fader
-                  label="white"
-                  width={180}
-                  value={softFor('white') ?? prm.white ?? 1}
-                  def={1}
-                  onChange={(v) => setP('white', v, (pt) => (pt.params.white = v))}
-                  fmt={pct}
-                  variant="dim"
-                />
-              </div>
-            </div>
-        )}
-        {hasColorTargets && (
-          <div className="paramrow">
-            <Enable on={!!prm.color} toggle={() => edit((pt) => (pt.params.color = pt.params.color ? undefined : { h: 0, s: 1 }))} />
-            <span className="label">colour</span>
-            <div className={`grow paramrow ${prm.color ? '' : 'off'}`} style={{ gap: 8 }}>
-              <Fader
-                variant="hue"
-                width="38%"
-                min={0}
-                max={360}
-                value={softFor('hue') ?? prm.color?.h ?? 0}
-                onChange={(v) => setP('hue', v, (pt) => (pt.params.color = { h: v, s: pt.params.color?.s ?? 1 }))}
-                fmt={(v) => `${Math.round(v)}°`}
-                label=""
-              />
-              <Fader
-                label="sat"
-                width={90}
-                value={softFor('sat') ?? prm.color?.s ?? 1}
-                def={1}
-                onChange={(v) => setP('sat', v, (pt) => (pt.params.color = { h: pt.params.color?.h ?? 0, s: v }))}
-                fmt={pct}
-                variant="dim"
-              />
-              <div className="swatches">
-                {SWATCHES.map((sw, i) => {
-                  const [r, g, b] = hsvToRgb(sw.h, sw.s, 1);
-                  return (
-                    <i
-                      key={i}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`colour swatch ${i + 1}`}
-                      title="set this colour"
-                      style={{ background: rgbHex(r, g, b) }}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
-                      onClick={() => setColour(sw.h, sw.s)}
-                    />
-                  );
-                })}
-              </div>
-              <button
-                ref={colourChip}
-                className="huecurrent"
-                title="open the colour picker — the disc is hue round and saturation out from the middle"
-                aria-label="open the colour picker"
-                style={{ background: prm.color ? rgbHex(...hsvToRgb(prm.color.h, prm.color.s, 1)) : 'var(--swatch-neutral)' }}
-                onClick={() => setWheel((v) => !v)}
-              />
-              {wheel && (
-                <ColourWheel
-                  h={softFor('hue') ?? prm.color?.h ?? 0}
-                  s={softFor('sat') ?? prm.color?.s ?? 1}
-                  anchor={colourChip}
-                  onPick={setColour}
-                  onClose={() => setWheel(false)}
-                />
-              )}
-            </div>
-          </div>
-        )}
-
-        {kinds.has('derby') && (
-          <>
-            <div className="paramrow">
-              <span className="label" style={{ marginLeft: 20 }}>derby colour</span>
-              <select
-                className="sel"
-                title="derbies mix colour from fixed slots rather than RGB — auto picks the slot nearest the colour above"
-                value={prm.macro === undefined ? 'auto' : String(prm.macro)}
-                onChange={(e) => edit((pt) => (pt.params.macro = e.target.value === 'auto' ? undefined : Number(e.target.value)))}
-              >
-                <option value="auto">auto — nearest to colour</option>
-                {DERBY_MACROS.filter((m) => m.value > 0).map((m) => (
-                  <option key={m.value} value={String(m.value)}>{m.name}</option>
-                ))}
-              </select>
-              <button
-                className={`btn small ${prm.white !== undefined ? 'on' : ''}`}
-                onClick={() => edit((pt) => (pt.params.white = pt.params.white === undefined ? 1 : undefined))}
-                title="white LED ring full-on (blinder)"
-              >
-                ring blinder
-              </button>
-            </div>
-            <div className="paramrow">
-              <Enable on={prm.ringFx !== undefined} toggle={() => edit((pt) => (pt.params.ringFx = pt.params.ringFx === undefined ? 0.5 : undefined))} />
-              <span className="label">ring fx</span>
-              <div className={`grow paramrow ${prm.ringFx === undefined ? 'off' : ''}`}>
-                <Fader help="the fixture's own built-in ring effect, where it has one" value={softFor('ringFx') ?? prm.ringFx ?? 0.5} onChange={(v) => setP('ringFx', v, (pt) => (pt.params.ringFx = v))} fmt={pct} width={180} variant="dim" />
-              </div>
-            </div>
-            <div className="paramrow">
-              <Enable on={prm.motorMode !== undefined} toggle={() => edit((pt) => {
-                if (pt.params.motorMode === undefined) {
-                  pt.params.motorMode = 'rotate';
-                  pt.params.motorValue = 0.3;
-                } else {
-                  pt.params.motorMode = undefined;
-                  pt.params.motorValue = undefined;
-                }
-              })} />
-              <span className="label">motor</span>
-              <div className={`grow paramrow ${prm.motorMode === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
-                <div className="seg">
-                  {(['off', 'aim', 'rotate'] as const).map((m) => (
-                    <button
-                      key={m}
-                      className={prm.motorMode === m ? 'on' : ''}
-                      title={
-                        m === 'off'
-                          ? 'motor parked'
-                          : m === 'aim'
-                            ? 'hold a fixed position — the fader below picks it'
-                            : 'spin continuously — the fader below is speed, not position'
-                      }
-                      onClick={() => edit((pt) => (pt.params.motorMode = m))}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-                <Fader
-                  label={prm.motorMode === 'aim' ? 'position' : 'speed'}
-                  width={160}
-                  value={softFor('motorValue') ?? prm.motorValue ?? 0.3}
-                  onChange={(v) => setP('motorValue', v, (pt) => (pt.params.motorValue = v))}
-                  fmt={pct}
-                  variant="dim"
-                />
-              </div>
-            </div>
-          </>
-        )}
-
-        {hasColorTargets && (
-          <div className="paramrow">
-            <Enable on={prm.strobe !== undefined} toggle={() => edit((pt) => (pt.params.strobe = pt.params.strobe === undefined ? 0.6 : undefined))} />
-            <span className="label">strobe</span>
-            <div className={`grow paramrow ${prm.strobe === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
-              <Fader help="strobe rate — slow at the left, fastest at the right" value={softFor('strobe') ?? prm.strobe ?? 0.6} onChange={(v) => setP('strobe', v, (pt) => (pt.params.strobe = v))} fmt={pct} width={180} variant="dim" />
-              {/* the pattern, where something in the group has one: a band
-                  of its own on the shutter channel. A fixture without the
-                  pattern strobes plain, so this can never silence a head. */}
-              {optics.strobeModes.length > 0 && (
-                <div className="seg">
-                  {(['strobe', ...optics.strobeModes] as StrobeMode[]).map((m) => (
-                    <button
-                      key={m}
-                      className={(prm.strobeMode ?? 'strobe') === m ? 'on' : ''}
-                      title={
-                        m === 'strobe'
-                          ? 'plain strobe — hard cuts at the set rate'
-                          : m === 'pulse'
-                            ? 'each flash ramps open and shut instead of cutting'
-                            : 'irregular flashes around the set rate. A fixture without the pattern strobes plain'
-                      }
-                      onClick={() => edit((pt) => (pt.params.strobeMode = m === 'strobe' ? undefined : m))}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {canAim && (
-          <div className="paramrow">
-            <Enable on={prm.pan !== undefined || prm.tilt !== undefined} toggle={() => edit((pt) => {
-              if (pt.params.pan === undefined) {
-                pt.params.pan = 0.5;
-                pt.params.tilt = 0.5;
-              } else {
-                pt.params.pan = undefined;
-                pt.params.tilt = undefined;
-              }
-            })} />
-            <span className="label">position</span>
-            <div className={`grow paramrow ${prm.pan === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
-              <Fader label="pan" width={140} value={softFor('pan') ?? prm.pan ?? 0.5} def={0.5} onChange={(v) => setP('pan', v, (pt) => (pt.params.pan = v))} fmt={pct} variant="dim" />
-              <Fader label="tilt" width={140} value={softFor('tilt') ?? prm.tilt ?? 0.5} def={0.5} onChange={(v) => setP('tilt', v, (pt) => (pt.params.tilt = v))} fmt={pct} variant="dim" />
-            </div>
-          </div>
-        )}
-
-        {/* Nothing in the group takes a beam parameter, but something in it
-            HAS beam channels that are simply not driven — the profile came from
-            a thin GDTF or an older importer. Without this the editor just looks
-            like it forgot zoom, which is exactly how it was reported. */}
-        {BEAM_PARAMS.every((k) => !beamCaps[k]) && groupHasDeadBeamChannels(project, part.groupId) && (
-          <div className="row">
-            <span className="label" style={{ color: 'var(--warn)' }}>⚠</span>
-            <span className="prose">
-              This group's fixtures list zoom, focus, beam size, soften or warmth channels that their
-              profile does not drive — re-import their GDTF in the Fixtures tab to get
-              the controls
-            </span>
-          </div>
-        )}
-        {BEAM_FADERS.filter((k) => beamCaps[k]).map((k) => beamRow(k, k === 'cto' ? optics.ctoK : undefined))}
-
-        {/* Optics: each wheel's slot picker, then its rotation where the
-            fixture has one. A slot is an index into the fixture's own wheel,
-            so the names are the picker and the same pick lands on every
-            fixture in the group. */}
-        {optics.gobos.length > 0 && (
-          <SlotRow
-            label="gobo"
-            title="which gobo the wheel shows — the fixture's own slots, 0 is open. Not set leaves the wheel where the fixture parks it"
-            names={optics.gobos}
-            value={prm.gobo}
-            onChange={(v) => edit((pt) => (pt.params.gobo = v))}
-          />
-        )}
-        {beamCaps.goboRotate && beamRow('goboRotate')}
-        {optics.prisms.length > 0 && (
-          <SlotRow
-            label="prism"
-            title="which prism is in the beam — the fixture's own slots, 0 is none. Not set leaves it where the fixture parks it"
-            names={optics.prisms}
-            value={prm.prism}
-            onChange={(v) => edit((pt) => (pt.params.prism = v))}
-          />
-        )}
-        {beamCaps.prismRotate && beamRow('prismRotate')}
-        {/* A Spiider's centre flower: the same fader shape as a wheel spin,
-            middle still, either end full speed one way. Only where the
-            fixture actually has the channel. */}
-        {beamCaps.flower && beamRow('flower')}
-
-        {kinds.has('hazer') && (
-          <div className="paramrow">
-            <Enable on={prm.haze !== undefined} toggle={() => edit((pt) => {
-              if (pt.params.haze === undefined) {
-                pt.params.haze = 0.5;
-                pt.params.fan = 0.35;
-              } else {
-                pt.params.haze = undefined;
-                pt.params.fan = undefined;
-              }
-            })} />
-            <span className="label">haze</span>
-            <div className={`grow paramrow ${prm.haze === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
-              <Fader label="output" width={140} value={softFor('haze') ?? prm.haze ?? 0.5} onChange={(v) => setP('haze', v, (pt) => (pt.params.haze = v))} fmt={pct} variant="dim" />
-              <Fader label="haze fan" width={140} value={softFor('fan') ?? prm.fan ?? 0.35} onChange={(v) => setP('fan', v, (pt) => (pt.params.fan = v))} fmt={pct} variant="dim" />
-            </div>
-          </div>
-        )}
-
-        {part.effects.map((fx) => (
-          <EffectRow
-            key={fx.id}
-            fx={fx}
-            kinds={kinds}
-            canAim={canAim}
-            beamCaps={beamCaps}
-            onEdit={(fn) => edit((pt) => {
-              const e = pt.effects.find((x) => x.id === fx.id);
-              if (e) fn(e);
-            })}
-            onRemove={() => edit((pt) => (pt.effects = pt.effects.filter((x) => x.id !== fx.id)))}
-            onField={(field, v, fallback) => setE(fx.id, field, v, fallback)}
-            soft={(field) => softFor(field, fx.id)}
-            onSaveToPool={() => mutate((p) => {
-              // copy-on-apply's mirror: snapshot the effect into the pool, so a
-              // later edit to this look never rewrites the stored preset.
-              const preset = { id: uid('fp'), name: `${fx.target} ${fx.wave}`, effect: { ...fx } };
-              p.fxPool = [...(p.fxPool ?? []), preset];
-            })}
-          />
-        ))}
-        <div className="row">
-          <button
-            className="btn small ghost"
-            onClick={() => edit((pt) => pt.effects.push({ id: uid('fx'), target: 'dimmer', wave: 'sine', rate: 4, size: 1, spread: 0, width: 0.5, phase: 0, bypass: false, mix: 1, distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0 }))}
-          
-            title="add an effect to this part: a wave over one parameter, locked to the beat">
-            + effect
-          </button>
-          {/* The factory catalogue. Named starting points, because "+ effect"
-              above gives a blank sine on dimmer and everything worth having is
-              several knobs away from it. */}
-          <button
-            ref={fxPickerBtn}
-            className="btn small ghost"
-            title="browse ready-made effects — pick one to hear it on this part straight away"
-            onClick={() => setFxPickerOpen(true)}
-          >
-            browse…
-          </button>
-          {fxPickerOpen && (
-            <FxPicker
-              capable={new Set(capableTargets(kinds, canAim, beamCaps))}
-              anchor={fxPickerBtn}
-              onPreview={previewPreset}
-              onKeep={() => closePicker(true)}
-              onCancel={() => closePicker(false)}
-            />
-          )}
-          {(project.fxPool?.length ?? 0) > 0 && (
-            <select
-              className="sel"
-              value=""
-              title="drop a saved preset onto this group (copied in — editing it later never changes the pool)"
-              onChange={(e) => {
-                const id = e.target.value;
-                if (!id) return;
-                const preset = project.fxPool?.find((fp) => fp.id === id);
-                // copy-on-apply: a fresh id so the running look owns its copy
-                if (preset) edit((pt) => pt.effects.push({ ...preset.effect, id: uid('fx') }));
-              }}
-            >
-              <option value="">apply from pool…</option>
-              {(project.fxPool ?? []).map((fp) => (
-                <option key={fp.id} value={fp.id}>{fp.name}</option>
-              ))}
-            </select>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Beats editor that commits on blur/Enter — per-keystroke clamping made
- *  fractional values untypeable ("0.5" clamped at "0") and the field
- *  unclearable. */
-function BeatsInput({ value, onCommit }: { value: number; onCommit: (v: number) => void }) {
-  const [draft, setDraft] = useState(String(value));
-  const ref = React.useRef<HTMLInputElement>(null);
-  // never clobber a draft mid-edit — a project echo must not erase what is
-  // being typed; blur re-syncs (same guard as the other live-routing inputs)
-  useEffect(() => {
-    if (document.activeElement !== ref.current) setDraft(String(value));
-  }, [value]);
-  const commit = () => {
-    const v = Number(draft);
-    const clean = Number.isFinite(v) && v > 0 ? Math.min(v, 512) : 1;
-    setDraft(String(clean));
-    if (clean !== value) onCommit(clean);
-  };
-  return (
-    <input
-      ref={ref}
-      className="num"
-      title="how long this step holds, in beats — fractions allowed, committed on Enter or blur"
-      type="number"
-      min={0.25}
-      step={0.25}
-      style={{ width: 60 }}
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-      }}
-    />
-  );
 }
 
 export function LookEditor() {
@@ -1034,6 +59,12 @@ export function LookEditor() {
   const ride = useStore((s) => s.ride);
   const setRide = useStore((s) => s.setRide);
   const setView = useStore((s) => s.setView);
+  const liveLayers = useStore((s) => s.snap?.layers);
+  const frozen = useStore((s) => !!s.snap?.frozen);
+  const [more, setMore] = useState<{ top: number; left: number } | null>(null);
+  const [shared, setShared] = useState<{ top: number; left: number } | null>(null);
+  const moreBtn = React.useRef<HTMLButtonElement>(null);
+  const sharedBtn = React.useRef<HTMLButtonElement>(null);
 
   if (!sel) return <div className="hint">Select a pad to edit its look — click an empty pad to start a new one (it won't fire the layer).</div>;
 
@@ -1048,8 +79,8 @@ export function LookEditor() {
     lookId && Object.hasOwn(project.looks, lookId) ? project.looks[lookId] : null;
 
   if (!look || !lookId) {
-    // Looks are a shared pool across decks, so filling a cell from the pool is
-    // the primary authoring move — without it a new deck is 32 dead cells.
+    // Looks are a shared pool across songs, so filling a pad from the pool is
+    // the primary authoring move — without it a new song is 32 dead pads.
     const pool = Object.values(project.looks).sort((a, b) => a.name.localeCompare(b.name));
     // A look needs a group to drive. With none, "+ create look here" made a
     // part with an empty group and every row hid — a dead end exactly where a
@@ -1088,7 +119,7 @@ export function LookEditor() {
                 if (ly) ly.cells[sel.col] = id;
               })
             }
-          
+
             title="make a new look on this pad and open it for editing — nothing fires">
             + create look here
           </button>
@@ -1122,16 +153,45 @@ export function LookEditor() {
     );
   }
 
-  const editLook = (fn: (lk: Look) => void) =>
+  const editLook = (fn: (lk: Look) => void, label?: string) =>
     mutate((p) => {
       const lk = p.looks[lookId];
       if (lk) fn(lk);
-    });
+    }, label);
+
+  // The stripe. Playing here means this layer is running THIS look from THIS
+  // column; frozen means the wire is holding whatever it last sent, so an edit
+  // that reaches the show does not reach the rig until the hold is released.
+  const live = liveLayers?.find((l) => l.id === sel.layerId);
+  const playing = live?.lookId === lookId && live?.col === sel.col;
+  const state: 'live' | 'held' | 'off' = frozen ? 'held' : playing ? 'live' : 'off';
+  const stripe = {
+    live: { word: 'LIVE', caption: 'edits reach the rig now' },
+    held: { word: 'HELD', caption: 'the rig is holding the frame it has — edits land when the hold is released' },
+    off: { word: 'NOT ON THE RIG', caption: 'this look is not playing, so an edit waits here until it fires' },
+  }[state];
+  const count = sharedBy(project, lookId);
+
+  const closeMenus = () => { setMore(null); setShared(null); };
+  const openAt = (
+    ref: React.RefObject<HTMLButtonElement | null>,
+    set: (p: { top: number; left: number } | null) => void,
+  ) => {
+    closeMenus();
+    const r = ref.current?.getBoundingClientRect();
+    if (r) set({ top: r.bottom + 2, left: Math.max(8, r.left) });
+  };
 
   return (
-    <div className="lookeditor">
-      <div className="row">
-        <span className="chip">{layer.name} · {sel.col + 1}</span>
+    <div className={`lookeditor ${state === 'off' ? 'blind' : ''}`}>
+      <div className={`stripe ${state === 'live' ? 'live' : state === 'held' ? 'held' : ''}`}>
+        <span className="lampword">{stripe.word}</span>
+        <span className="prose">{stripe.caption}</span>
+        <div className="grow" />
+        <span className="label">{layer.name} · column {sel.col + 1}</span>
+      </div>
+
+      <div className="lookhead">
         <TextField
           className="text"
           style={{ width: 220, fontSize: 13 }}
@@ -1149,118 +209,191 @@ export function LookEditor() {
         <span className="label">fade</span>
         <FadeInput value={look.fade} placeholder={layer.fade} onCommit={(v) => editLook((lk) => (lk.fade = v))} />
         <span className="label">s</span>
-        <button className="btn small ghost" onClick={() => send({ type: 'trigger', layerId: layer.id, col: sel.col })}
-            title="fire this look on its layer now, exactly as clicking the pad would">
+
+        {/* The look pool is shared by every song, so the header says how far an
+            edit here reaches before it is made — and offers the way out. */}
+        <button
+          ref={sharedBtn}
+          className={`chip sharedby ${count.pads > 1 ? 'many' : ''}`}
+          title={`this look sits on ${count.pads} pad${count.pads === 1 ? '' : 's'} across ${count.songs} song${count.songs === 1 ? '' : 's'} — every edit here reaches all of them. Click for a copy of its own`}
+          onClick={() => openAt(sharedBtn, setShared)}
+        >
+          on {count.pads} pad{count.pads === 1 ? '' : 's'} · {count.songs} song{count.songs === 1 ? '' : 's'} ▾
+        </button>
+
+        <button
+          className={`btn small ${playing ? 'on' : ''}`}
+          title="fire this look on its layer now, exactly as clicking the pad would"
+          onClick={() => send({ type: 'trigger', layerId: layer.id, col: sel.col })}
+        >
           ▶ fire
         </button>
         <button
-          className={`btn small ${ride ? 'on' : 'ghost'}`}
+          className={`btn small warn ${ride ? 'on' : ''}`}
           title="NUDGE: fader moves become live nudges — they drive the rig without touching the show (no project write, no undo spam). Keep writes them into the look, Discard drops them. Cleared by ALL STOP and project switch."
           onClick={() => setRide(!ride)}
-          style={ride ? { background: 'var(--color-status-nudge)', color: 'var(--color-text-inverse)' } : undefined}
         >
           nudge
         </button>
-        <select
-          className="sel"
-          value={lookId}
-          title="swap this pad's look for another from the pool"
-          onChange={(e) => {
-            const id = e.target.value;
-            if (!id || id === lookId) return;
-            mutate((p) => {
-              const ly = p.layers.find((l) => l.id === sel.layerId);
-              if (ly) ly.cells[sel.col] = id;
-            });
-          }}
-        >
-          {Object.values(project.looks)
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.steps?.length ? '⛓ ' : ''}{l.name}
-              </option>
-            ))}
-        </select>
+
         <div className="grow" />
         <button
+          ref={moreBtn}
           className="btn small ghost"
-          onClick={() => mutate((p) => {
-            const ly = p.layers.find((l) => l.id === sel.layerId);
-            if (ly) ly.cells[sel.col] = null;
-          })}
-        
-            title="empty this pad. The look stays in the library and on any other pad using it.">
-          clear pad
-        </button>
-        <button
-          className="btn small ghost"
-          onClick={() => {
-            void (async () => {
-              const refs = Object.values(project.looks).filter(
-                (l) => l.steps?.some((st) => st.lookId === lookId),
-              );
-              // the look lives in ONE pool shared by every song — deleting it
-              // blanks its cell in each of them, which was silent before
-              const decksHit = (project.decks ?? []).filter((d) =>
-                Object.values(d.cells).some((cells) => cells.includes(lookId)),
-              );
-              const cellCount = (project.decks ?? []).reduce(
-                (n, d) =>
-                  n + Object.values(d.cells).reduce((m, cells) => m + cells.filter((c) => c === lookId).length, 0),
-                0,
-              );
-              // The CURRENT song's cells live in project.layers, not in the
-              // deck's stored copy — that only syncs on a deck switch. A look
-              // placed in this song since the last switch was invisible to the
-              // scan above, so deleting it emptied cells with no warning at all.
-              const liveCells = project.layers.reduce(
-                (n, ly) => n + ly.cells.filter((c) => c === lookId).length,
-                0,
-              );
-              if (refs.length > 0 || decksHit.length > 0 || liveCells > 0) {
-                const parts: string[] = [];
-                if (liveCells > 0) {
-                  parts.push(
-                    `It is on ${liveCells} pad(s) of the song you are on. Those pads will be emptied.`,
-                  );
-                }
-                if (decksHit.length > 0) {
-                  parts.push(
-                    `It is on ${cellCount} pad(s) across ${decksHit.length} song(s): ${decksHit
-                      .map((d) => d.name)
-                      .join(', ')}. Those pads will be emptied.`,
-                  );
-                }
-                if (refs.length > 0) {
-                  parts.push(
-                    `It is a step in ${refs.length} look(s): ${refs.map((l) => l.name).join(', ')}. Those steps will go dark.`,
-                  );
-                }
-                const ok = await askConfirm(`Delete "${look.name}"?`, {
-                  body: parts.join('\n\n'),
-                  confirmLabel: 'Delete',
-                  danger: true,
-                });
-                if (!ok) return;
-              }
-              mutate((p) => {
-                delete p.looks[lookId];
-                for (const ly of p.layers) ly.cells = ly.cells.map((c) => (c === lookId ? null : c));
-                // stored decks hold their own copies of the cells
-                for (const d of p.decks ?? []) {
-                  for (const [lid, cells] of Object.entries(d.cells)) {
-                    d.cells[lid] = cells.map((c) => (c === lookId ? null : c));
-                  }
-                }
-              });
-            })();
-          }}
-        
-            title="delete the look from the library and from every pad in every song that uses it">
-          delete look
+          title="more for this look — swap the pad's look, empty the pad, or delete the look everywhere"
+          aria-label="more"
+          onClick={() => openAt(moreBtn, setMore)}
+        >
+          ⋯
         </button>
       </div>
+
+      {shared && (
+        <>
+          <div className="modalveil" style={{ background: 'transparent' }} onPointerDown={closeMenus} />
+          <div className="popover" style={{ top: shared.top, left: shared.left }}>
+            <div className="menuhead">shared by {count.pads} pad{count.pads === 1 ? '' : 's'}</div>
+            <span className="prose">
+              One look, one entry in the pool. Renaming it, or moving a fader in it, changes it on every
+              pad in every song at once.
+            </span>
+            <div className="popover-rule" />
+            <button
+              className="btn small ghost"
+              disabled={count.pads < 2}
+              title={count.pads < 2
+                ? 'nothing else uses it — this pad already has it to itself'
+                : 'put a copy on this pad only, so edits here stop reaching the other pads'}
+              onClick={() => {
+                closeMenus();
+                mutate((p) => {
+                  const src = p.looks[lookId];
+                  if (!src) return;
+                  const copy = copyOfLook(src);
+                  p.looks[copy.id] = copy;
+                  const ly = p.layers.find((l) => l.id === sel.layerId);
+                  if (ly) ly.cells[sel.col] = copy.id;
+                }, 'make this pad its own copy');
+              }}
+            >
+              make this pad its own copy
+            </button>
+          </div>
+        </>
+      )}
+
+      {more && (
+        <>
+          <div className="modalveil" style={{ background: 'transparent' }} onPointerDown={closeMenus} />
+          <div className="popover" style={{ top: more.top, left: more.left }}>
+            <div className="menuhead">put another look on this pad</div>
+            <select
+              className="sel"
+              value={lookId}
+              title="swap this pad's look for another from the pool"
+              onChange={(e) => {
+                const id = e.target.value;
+                closeMenus();
+                if (!id || id === lookId) return;
+                mutate((p) => {
+                  const ly = p.layers.find((l) => l.id === sel.layerId);
+                  if (ly) ly.cells[sel.col] = id;
+                });
+              }}
+            >
+              {Object.values(project.looks)
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.steps?.length ? '⛓ ' : ''}{l.name}
+                  </option>
+                ))}
+            </select>
+            <div className="popover-rule" />
+            <button
+              className="btn small ghost"
+              title="empty this pad. The look stays in the library and on any other pad using it."
+              onClick={() => {
+                closeMenus();
+                mutate((p) => {
+                  const ly = p.layers.find((l) => l.id === sel.layerId);
+                  if (ly) ly.cells[sel.col] = null;
+                });
+              }}
+            >
+              clear pad
+            </button>
+            <button
+              className="btn small ghost"
+              title="delete the look from the library and from every pad in every song that uses it"
+              onClick={() => {
+                closeMenus();
+                void (async () => {
+                  const refs = Object.values(project.looks).filter(
+                    (l) => l.steps?.some((st) => st.lookId === lookId),
+                  );
+                  // the look lives in ONE pool shared by every song — deleting it
+                  // blanks its pad in each of them, which was silent before
+                  const decksHit = (project.decks ?? []).filter((d) =>
+                    Object.values(d.cells).some((cells) => cells.includes(lookId)),
+                  );
+                  const cellCount = (project.decks ?? []).reduce(
+                    (n, d) =>
+                      n + Object.values(d.cells).reduce((m, cells) => m + cells.filter((c) => c === lookId).length, 0),
+                    0,
+                  );
+                  // The CURRENT song's pads live in project.layers, not in the
+                  // stored page — that only syncs on a song switch. A look
+                  // placed in this song since the last switch was invisible to the
+                  // scan above, so deleting it emptied pads with no warning at all.
+                  const liveCells = project.layers.reduce(
+                    (n, ly) => n + ly.cells.filter((c) => c === lookId).length,
+                    0,
+                  );
+                  if (refs.length > 0 || decksHit.length > 0 || liveCells > 0) {
+                    const parts: string[] = [];
+                    if (liveCells > 0) {
+                      parts.push(
+                        `It is on ${liveCells} pad(s) of the song you are on. Those pads will be emptied.`,
+                      );
+                    }
+                    if (decksHit.length > 0) {
+                      parts.push(
+                        `It is on ${cellCount} pad(s) across ${decksHit.length} song(s): ${decksHit
+                          .map((d) => d.name)
+                          .join(', ')}. Those pads will be emptied.`,
+                      );
+                    }
+                    if (refs.length > 0) {
+                      parts.push(
+                        `It is a step in ${refs.length} look(s): ${refs.map((l) => l.name).join(', ')}. Those steps will go dark.`,
+                      );
+                    }
+                    const ok = await askConfirm(`Delete "${look.name}"?`, {
+                      body: parts.join('\n\n'),
+                      confirmLabel: 'Delete',
+                      danger: true,
+                    });
+                    if (!ok) return;
+                  }
+                  mutate((p) => {
+                    delete p.looks[lookId];
+                    for (const ly of p.layers) ly.cells = ly.cells.map((c) => (c === lookId ? null : c));
+                    // stored songs hold their own copies of the pads
+                    for (const d of p.decks ?? []) {
+                      for (const [lid, cells] of Object.entries(d.cells)) {
+                        d.cells[lid] = cells.map((c) => (c === lookId ? null : c));
+                      }
+                    }
+                  });
+                })();
+              }}
+            >
+              delete look
+            </button>
+          </div>
+        </>
+      )}
 
       {look.steps?.length ? (
         <div>
@@ -1362,7 +495,7 @@ export function LookEditor() {
             <button
               className="btn small ghost"
               onClick={() => editLook((lk) => lk.parts.push({ id: uid('part'), groupId: project.groups[0]?.id ?? '', params: { dimmer: 1 }, effects: [] }))}
-            
+
             title="add another fixture group to this look, with its own colour, position and effects">
               + part (fixture group)
             </button>

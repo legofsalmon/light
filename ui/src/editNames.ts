@@ -129,6 +129,14 @@ function describeUniverse(a: UniverseCfg, b: UniverseCfg): string {
   return `output settings for ${name}`;
 }
 
+/** What `→ dial` on a row did, for the undo button (design #41). The call
+ *  site knows which dial and which parameter, and the diff between two
+ *  projects would only be able to say "edit dials". */
+export function describeDialLink(dialName?: string, fieldName?: string): string {
+  const what = fieldName ? `${fieldName} ` : '';
+  return dialName ? `point ${q(dialName)} at ${what}this look` : `a new dial on ${what}this look`;
+}
+
 /** One short phrase for what changed between two project states — what the
  *  undo button will revert, or the redo button restore. */
 export function describeEdit(a: Project, b: Project): string {
