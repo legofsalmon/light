@@ -3,7 +3,10 @@ import type { ControlLink, Layer, LayerBlend, LayerSnap, Project } from '../../.
 import { uid } from '../../../shared/types.ts';
 import { notify, useStore } from '../store.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
-import { contextPress } from '../touch.ts';
+import { LONG_PRESS_MS, contextPress } from '../touch.ts';
+
+/** A finger wobbles on a hold; a scroll travels. Same slop touch.ts uses. */
+const HOLD_SLOP = 8;
 import { size } from '../tokens.ts';
 
 /** Below this grid-area width the layer head is its narrow 96px (design 2.2).
@@ -535,6 +538,42 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
   const liveId = live?.lookId ?? null;
   const liveLook = liveId && Object.hasOwn(project.looks, liveId) ? project.looks[liveId] : null;
   const crossfading = !!liveLook && (live?.t ?? 1) < 1;
+  // The hold that clears a layer on glass. Deliberately not contextPress: that
+  // opens a menu on a long press and lets the click through, and this must do
+  // the opposite — the press itself is the whole gesture, and a short one does
+  // nothing at all.
+  const [holding, setHolding] = useState(false);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdFrom = useRef<{ x: number; y: number } | null>(null);
+  const endHold = () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+    holdFrom.current = null;
+    setHolding(false);
+  };
+  const clearHold = {
+    onPointerDown: (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      holdFrom.current = { x: e.clientX, y: e.clientY };
+      setHolding(true);
+      holdTimer.current = setTimeout(() => {
+        endHold();
+        if (!useStore.getState().armLearn({ kind: 'layerClear', layerId: layer.id })) {
+          send({ type: 'clearLayer', layerId: layer.id });
+        }
+      }, LONG_PRESS_MS);
+    },
+    // A finger that travels is a scroll, not a hold: cancel and let the ring
+    // restart on the next press rather than filling on an abandoned one.
+    onPointerMove: (e: React.PointerEvent) => {
+      const from = holdFrom.current;
+      if (!from) return;
+      if (Math.abs(e.clientX - from.x) > HOLD_SLOP || Math.abs(e.clientY - from.y) > HOLD_SLOP) endHold();
+    },
+    onPointerUp: endHold,
+    onPointerCancel: endHold,
+  };
   const blendMenu = contextPress(() => {
     void askChoice(`${layer.name} — blend`, BLENDS.map((b) => ({
       value: b,
@@ -562,9 +601,21 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
           <div className="name grow">{headName(layer.name)}</div>
         </div>
         <button
-          className="btn small ghost clearbtn"
-          title={liveLook ? 'clear layer — stops what it is playing' : 'clear layer — nothing is playing on it'}
-          onClick={() => {
+          className={`btn small ghost clearbtn ${holding ? 'holding' : ''}`}
+          title={
+            touch
+              ? liveLook
+                ? 'hold to clear this layer — it stops what it is playing, and a tap beside it on glass is not deliberate enough for that'
+                : 'hold to clear this layer — nothing is playing on it'
+              : liveLook ? 'clear layer — stops what it is playing' : 'clear layer — nothing is playing on it'
+          }
+          // On glass this is a hold, with a ring that fills over the same
+          // --motion-hold the timer counts: no gesture may darken a layer by
+          // accident, and a thumb resting on a 24px key beside a pad is an
+          // accident waiting for a chance. The laptop's click is unchanged,
+          // and so are the APC's scene buttons.
+          {...(touch ? clearHold : {})}
+          onClick={touch ? undefined : () => {
             if (!useStore.getState().armLearn({ kind: 'layerClear', layerId: layer.id })) {
               send({ type: 'clearLayer', layerId: layer.id });
             }
@@ -575,11 +626,24 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
       </div>
       <div
         className={`nowplaying ${liveLook ? 'on' : ''} ${crossfading ? 'fading' : ''}`}
+        role={liveLook && live?.col != null ? 'button' : undefined}
+        tabIndex={liveLook && live?.col != null ? 0 : undefined}
         title={
           liveLook
-            ? `playing: ${liveLook.name}${live?.col != null ? ` (column ${live.col + 1})` : ''}`
+            ? `playing: ${liveLook.name}${live?.col != null ? ` (column ${live.col + 1}) — click to edit what is on stage, without firing anything` : ''}`
             : 'nothing playing on this layer'
         }
+        // Select what this layer is playing (design A6, Eos's Select Active).
+        // The live pad can be scrolled out of the grid or in another song's
+        // page; the head always knows where it is, and selecting is not firing.
+        onClick={() => {
+          if (liveLook && live?.col != null) useStore.getState().setSel({ layerId: layer.id, col: live.col });
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          if (liveLook && live?.col != null) useStore.getState().setSel({ layerId: layer.id, col: live.col });
+        }}
       >
         {liveLook ? (
           <>

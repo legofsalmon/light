@@ -1822,3 +1822,21 @@ button.warnchip { background: none; cursor: pointer; }
 }
 .layertabs .btn { flex: 0 0 auto; }
 .lookgrid.compact { align-content: start; }
+
+/* The ring that fills while the layer ✕ is held on glass (design #33). It
+   counts out --motion-hold, which is the same token touch.ts reads for
+   LONG_PRESS_MS, so what the eye sees and what the timer counts are one
+   number rather than two that happen to match. */
+.layerhead .btn.clearbtn { position: relative; overflow: hidden; }
+.layerhead .btn.clearbtn.holding::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: var(--size-rule);
+  background: var(--color-danger-text);
+  animation: holdfill var(--motion-hold) linear forwards;
+}
+@keyframes holdfill { from { width: 0; } to { width: 100%; } }
+/* the now-playing line is a control when there is something playing to select */
+.layerhead .nowplaying.on { cursor: pointer; }
