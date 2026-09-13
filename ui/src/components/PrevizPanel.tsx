@@ -38,6 +38,23 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
     const id = layer?.cells[s.sel!.col];
     return id && Object.hasOwn(s.project.looks, id) ? s.project.looks[id].name : null;
   });
+  /** Whether the audition would be telling the operator anything.
+   *
+   *  It exists to show a look that is NOT on the rig — and firing a pad
+   *  selects it, so "whenever a pad is selected" meant that mid-song the band
+   *  showed the live stage beside a second render of the very look that had
+   *  just gone live: two identical pictures, and a renderer's worth of GPU for
+   *  the privilege. It appears now only when the selected pad holds a look its
+   *  own layer is not already playing. The toggle stays the operator's enable;
+   *  this is the condition underneath it (design #15). */
+  const auditionDiffers = useStore((s) => {
+    if (!s.sel || !s.project) return false;
+    const layer = s.project.layers.find((l) => l.id === s.sel!.layerId);
+    const selLook = layer?.cells[s.sel!.col] ?? null;
+    if (!selLook) return false; // an empty pad has nothing to audition
+    const live = s.snap?.layers.find((l) => l.id === s.sel!.layerId);
+    return (live?.lookId ?? null) !== selLook;
+  });
   const mutate = useStore((s) => s.mutate);
 
   /** Place a structural piece at its default size, centred just upstage of the
@@ -134,13 +151,13 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
         >
           stage window
         </button>
-        {/* The audition is a second renderer, and it appears whenever a pad is
-            selected — which firing one does. Worth it while building; worth
-            switching off for a show run from the pads. */}
+        {/* The audition is a second renderer. It comes and goes with the
+            selection now, so this is the operator's own switch for it: off for
+            a show run from the pads, on while building. */}
         {preview && (
           <button
             className={`btn small ${previewPane ? 'on' : 'ghost'}`}
-            title="audition pane — shows the selected look without sending it to the rig; off gives the live view the whole band"
+            title="audition — shows the selected look beside the live stage, without sending it to the rig. It appears only while the selected pad holds a look its layer is not already playing; off gives the live view the whole band."
             onClick={togglePreviewPane}
           >
             preview
@@ -275,11 +292,12 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
       </div>
       <div className="previzsplit">
         <div className="previzview">{mode === '3d' ? <Previz3D /> : <Previz2D />}</div>
-        {/* The audition, on the band's right edge. Only present when something
-            is selected, so the live view keeps the full width the rest of the
-            time — and the second render costs nothing when nobody is looking
-            at a look. */}
-        {preview && previewPane && sel && (
+        {/* The audition, on the band's right edge. Present only while the
+            selected pad holds a look its layer is not already playing, so the
+            live view keeps the full width the rest of the time — and the
+            second render costs nothing when it would only be showing the
+            operator what the stage beside it already shows. */}
+        {preview && previewPane && auditionDiffers && sel && (
           <div className="previewpane">
             <div className="previzbar previewbar">
               <span className="label">preview</span>
