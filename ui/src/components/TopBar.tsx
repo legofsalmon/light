@@ -698,23 +698,32 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
             />
           </div>
 
-          {/* Touch mode only: the tooltips are hovers, and glass has no hover
-              (review M15). Armed, the next tap on anything shows its help text
-              instead of operating it — HelpMode.tsx swallows the tap. */}
-          {touch && (
-            <button
-              className={`btn ghost help ${helpMode ? 'on' : ''}`}
-              title="help — tap this, then tap any control to read what it does"
-              aria-label={helpMode ? 'help is on — tap any control to read it' : 'help'}
-              aria-pressed={helpMode}
-              onClick={() => setHelpMode(!helpMode)}
-            >
-              ?
-            </button>
-          )}
+          {/* On every pointer, not only on glass (design R5). A hover tooltip
+              answers "what is this" for a mouse, but it will not stay still to
+              be read, it never carries the long half of a tiered help string,
+              and the one control that explains the rest of them should not be
+              the one control you cannot find. Armed, the next press on anything
+              shows its help instead of operating it — HelpMode swallows it. */}
+          <button
+            className={`btn ghost help ${helpMode ? 'on' : ''}`}
+            title={
+              touch
+                ? 'help — tap this, then tap any control to read what it does'
+                : 'help — click this, then click any control to read what it does. The keyboard and gesture sheet is ?'
+            }
+            aria-label={helpMode ? 'help is on — press any control to read it' : 'help'}
+            aria-pressed={helpMode}
+            onClick={() => setHelpMode(!helpMode)}
+          >
+            ?
+          </button>
           <button
             className="btn ghost cog"
-            title={updateWaiting ? 'settings — an update is waiting' : 'settings — updates, licence'}
+            title={
+              updateWaiting
+                ? 'settings — an update is waiting. Output, sync, display, the lock, the licence, updates, and the setup steps'
+                : 'settings — output, sync, display, the lock, the licence, updates, and the setup steps'
+            }
             aria-label={updateWaiting ? 'settings, update waiting' : 'settings'}
             onClick={onOpenAdmin}
           >
