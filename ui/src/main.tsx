@@ -5,6 +5,7 @@ import { initMidi } from './midi.ts';
 import { registerShortcutActions } from './shortcuts.ts';
 import { openLibrarySheet, useLibraryStore } from './libraryStore.ts';
 import { openFind } from './components/Find.tsx';
+import { openSetup } from './components/AdminModal.tsx';
 import './tokens.css';
 import './theme.css';
 
@@ -16,6 +17,7 @@ initMidi();
 registerShortcutActions({
   openLibrary: () => openLibrarySheet(),
   openFind: () => openFind(),
+  openSetup: () => openSetup(),
   disarmLibrary: () => {
     if (!useLibraryStore.getState().armed) return false;
     useLibraryStore.getState().disarm();

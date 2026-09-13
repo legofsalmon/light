@@ -23,11 +23,17 @@ import type { Command } from '../../shared/types.ts';
 export type ShortcutActions = {
   openLibrary: () => void;
   openFind: () => void;
+  openSetup: () => void;
   /** true when something was disarmed, so Esc stops there rather than going on
    *  to clear a selection the operator still wanted */
   disarmLibrary: () => boolean;
 };
-let actions: ShortcutActions = { openLibrary: () => {}, openFind: () => {}, disarmLibrary: () => false };
+let actions: ShortcutActions = {
+  openLibrary: () => {},
+  openFind: () => {},
+  openSetup: () => {},
+  disarmLibrary: () => false,
+};
 export function registerShortcutActions(a: Partial<ShortcutActions>): void {
   actions = { ...actions, ...a };
 }
@@ -138,6 +144,14 @@ export const SHORTCUTS: Shortcut[] = [
       if (actions.disarmLibrary()) return;
       st.setSel(null);
     },
+  },
+  {
+    keys: '`⌘,`',
+    label: 'settings',
+    group: 'Getting around',
+    modified: true,
+    match: (e) => !!(e.metaKey || e.ctrlKey) && e.key === ',',
+    run: () => actions.openSetup(),
   },
   {
     keys: '`L`',

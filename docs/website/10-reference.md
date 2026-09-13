@@ -9,6 +9,7 @@
 | `B` | blackout on/off |
 | `[` `]` | previous / next song |
 | `Esc` | disarm a library tile, else deselect |
+| `⌘,` | settings |
 | `L` | open the look library |
 | `/` / `⌘F` | find a look, song, column, group or fixture |
 | `⌘S` | save now |

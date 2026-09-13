@@ -5,6 +5,7 @@ import { Fader } from './Fader.tsx';
 import { HeldChip } from './HeldChip.tsx';
 import { BAR, clamp } from '../../../shared/types.ts';
 import { size } from '../tokens.ts';
+import { openSetup } from './AdminModal.tsx';
 
 function StatusDot({ ok, label, warn, bad, traffic, title }: {
   ok: boolean; label: string; warn?: boolean; bad?: boolean; traffic?: boolean; title?: string;
@@ -450,7 +451,10 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
                   ? 'OFFLINE — nothing is reaching the rig. The universes are set up; click to go live.'
                   : 'OFFLINE — nothing is reaching the rig, and no universe is set up to send anyway. Turn on Art-Net or sACN in the Output tab first.'
             }
-            onClick={() => send({ type: 'setTransmit', v: !live })}
+            // With no universe set up there is nothing to go live TO, so the
+            // button stops being a gate and becomes the way to the thing that
+            // is missing — the design's one place the sentence is said.
+            onClick={() => (configured ? send({ type: 'setTransmit', v: !live }) : openSetup('output'))}
           >
             {live ? 'live' : 'offline'}
           </button>

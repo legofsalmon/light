@@ -5,6 +5,7 @@ import type {
 import { WS_PORT } from '../../shared/types.ts';
 import { coarsePointer } from './touch.ts';
 import { describeEdit } from './editNames.ts';
+import { describeLearned } from './labels.ts';
 import { size, ratio } from './tokens.ts';
 
 export type Tab = 'look' | 'patch' | 'controls' | 'output' | 'sync';
@@ -179,6 +180,14 @@ type Store = {
 
 /** Last chosen layout, or the three-panel split for a first run. */
 function loadView(): ViewMode {
+  // A client that is not the engine's own machine is the tablet at front of
+  // house, and it opens on the pads whatever it last had open — the tablet in
+  // the screenshots came up on Rig because that is what localStorage held.
+  // Same test the lock uses, inlined to keep the store free of a cycle.
+  try {
+    const h = location.hostname;
+    if (!(h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '' || h.endsWith('tauri.localhost'))) return 'pads';
+  } catch { /* no location (a test): fall through */ }
   try {
     const v = localStorage.getItem('view');
     if (v === 'pads' || v === 'previz' || v === 'patch' || v === 'split') return v;
@@ -727,7 +736,14 @@ function connect(): void {
         midiInputs: ev.names.length > 0 ? ev.names : s.webMidiNames,
       }));
     } else if (ev.type === 'learned') {
-      useStore.setState({ learnMode: false, learnTarget: null, lastMidi: 'mapped ✓' });
+      // Say what it bound, in the app's words: `note 53 → Layer 2 · pad 3`.
+      // "mapped ✓" told you it worked and nothing about what it did, so a
+      // mis-aimed learn looked exactly like a good one.
+      useStore.setState((s) => ({
+        learnMode: false,
+        learnTarget: null,
+        lastMidi: s.project ? describeLearned(s.project, ev.mapping) : 'mapped',
+      }));
     } else if (ev.type === 'importResult') {
       useStore.setState({ importMsg: { ok: ev.ok, text: ev.message } });
     } else if (ev.type === 'history') {

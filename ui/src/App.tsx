@@ -12,7 +12,7 @@ import { Find } from './components/Find.tsx';
 import { EditorPane } from './components/EditorPane.tsx';
 import { LicenceGate } from './components/LicenceGate.tsx';
 import { licenceAvailable, licenceStatus, type LicenceStatus } from './licence.ts';
-import { AdminModal } from './components/AdminModal.tsx';
+import { SetupSheet, openSetup } from './components/AdminModal.tsx';
 import { Toasts } from './components/Toasts.tsx';
 import { HelpOverlay } from './components/HelpMode.tsx';
 import { SetupGuide } from './components/SetupGuide.tsx';
@@ -140,7 +140,6 @@ export function App() {
   // Asked once, over the Tauri bridge rather than the socket, so it answers
   // even though no engine is listening. A browser or the LAN tablet has no
   // bridge and never sees a gate — they are not the machine running the show.
-  const [admin, setAdmin] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
   // Read once at mount: the card is a first-launch thing, and re-reading it
   // per render would make dismissing it a re-render race with itself.
@@ -281,7 +280,7 @@ export function App() {
             : 'ENGINE OFFLINE — reconnecting… nothing you press is reaching the rig'}
         </div>
       )}
-      <Region name="top bar"><TopBar onOpenAdmin={() => setAdmin(true)} updateWaiting={updateWaiting} trialDaysLeft={trialDaysLeft} /></Region>
+      <Region name="top bar"><TopBar onOpenAdmin={() => openSetup()} updateWaiting={updateWaiting} trialDaysLeft={trialDaysLeft} /></Region>
       {/* Unmounted, not hidden — for the collapsed band too. A previz left
           mounted behind another panel keeps its requestAnimationFrame loop and
           its WebGL context running for a view nobody is looking at — on a
@@ -381,7 +380,11 @@ export function App() {
       {/* After the licence gate by construction: that returns early above. */}
       {welcome && <WelcomeCard onClose={() => setWelcome(false)} />}
       <HelpOverlay />
-      {admin && <AdminModal onClose={() => setAdmin(false)} onOpenShortcuts={() => setShortcuts(true)} />}
+      {/* One sheet for output, sync, display, lock, licence and updates —
+          always mounted, drawing nothing until something opens it, because the
+          layout menu can load a controller preset without opening it and the
+          undo chip for that has to outlive the sheet. */}
+      <SetupSheet onOpenShortcuts={() => setShortcuts(true)} />
       {/* The library laid over the grid, for every window too narrow to hold a
           column beside eight pads, and for glass. The Find field is the one
           way to ask the show a question — and only a song hit moves a light. */}
