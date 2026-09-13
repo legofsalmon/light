@@ -172,7 +172,11 @@ export function App() {
   // band's floor, the band folds to its strip (the last step of 2.2's order).
   const stripH = touch ? sizeTouch.strip : size.strip;
   const bandView: BandView | null = view === 'previz' ? null : view;
-  const bandPref = bandView !== null && !previzHidden[bandView];
+  // `bandView === null` IS the full-screen Stage, which is nothing but the
+  // band — so it is always shown. Reading that as "no view, so no band" left
+  // the Stage view rendering a reveal strip into a grid area its template does
+  // not define, and the whole screen blank.
+  const bandPref = bandView === null || !previzHidden[bandView];
   const fit = view === 'pads' ? padsFit(win.h, chromeH, stripH, bandPref) : null;
   const bandHidden = !bandPref || (fit?.bandFolds ?? false);
   /** Pads and Build keep separate band heights: Pads opens at a fraction of
@@ -355,7 +359,10 @@ export function App() {
           <span className="label">editor ◂</span>
         </div>
       )}
-      {view === 'split' && <Splitter dir="h" area="hsplit" onDrag={(d) => resize('bottomH', -d)} />}
+      {/* No splitter under Build's context row: the row is a fixed
+          --size-gridstrip (tabs + heads + one pad row) and the editor takes
+          what is left, so there is nothing to trade between them. The band's
+          own splitter above still trades the audition against the editor. */}
       {(view === 'split' || view === 'patch') && (
         <div className="bottom panel">
           <Region name="bottom panel"><BottomPanel /></Region>

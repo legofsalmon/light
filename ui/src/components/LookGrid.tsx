@@ -1141,8 +1141,22 @@ export function LookGrid() {
   // `columns`, silently shifting every pad on it — and the misalignment is
   // copied into the stored deck and autosaved.
   const allLayers = [...project.layers].reverse();
-  const layers = allLayers.slice(0, APC_LAYER_ROWS);
-  const overflowLayers = allLayers.slice(APC_LAYER_ROWS);
+  // In Build the grid is a context row, not the grid: a tab strip to pick the
+  // layer, the column heads, and that one layer's pads. Four layer rows plus
+  // the dial and group rows left the editor 260px at 1440 and no pad row at all
+  // at 1024 — the editor is what Build is for (design #42, B1).
+  const compact = useStore((s) => s.view) === 'split';
+  const sel = useStore((s) => s.sel);
+  const [tabLayerId, setTabLayerId] = useState<string | null>(null);
+  // The selection leads: clicking a pad in Build should keep its own layer on
+  // screen. The tab is the fallback for when nothing is selected.
+  const shownId = (sel && allLayers.some((l) => l.id === sel.layerId) ? sel.layerId : null)
+    ?? (tabLayerId && allLayers.some((l) => l.id === tabLayerId) ? tabLayerId : null)
+    ?? allLayers[0]?.id
+    ?? null;
+  const capped = allLayers.slice(0, APC_LAYER_ROWS);
+  const layers = compact ? allLayers.filter((l) => l.id === shownId) : capped;
+  const overflowLayers = compact ? [] : allLayers.slice(APC_LAYER_ROWS);
 
   /** Column edits touch three places that must stay the same length: the live
    *  columns, every layer's cells, and the active deck's stored copy of both.
@@ -1242,10 +1256,35 @@ export function LookGrid() {
 
   return (
     <>
+    {/* Build shows one layer at a time, so changing which one is a tap rather
+        than a trip back to Pads: editing the top layer's strobe while Layer 1
+        is selected never leaves the view (design 2.6). */}
+    {compact && (
+      <div className="layertabs" role="tablist" aria-label="layer">
+        {allLayers.map((l) => (
+          <button
+            key={l.id}
+            className={`btn small ${l.id === shownId ? 'on' : 'ghost'}`}
+            role="tab"
+            aria-selected={l.id === shownId}
+            title={`${l.name} — show this layer's pads`}
+            onClick={() => {
+              setTabLayerId(l.id);
+              // A tab without a selection on it would snap straight back, since
+              // the selection leads: move the selection with the tab.
+              const first = l.cells.findIndex((c) => c);
+              useStore.getState().setSel({ layerId: l.id, col: first < 0 ? 0 : first });
+            }}
+          >
+            {headName(l.name)}
+          </button>
+        ))}
+      </div>
+    )}
     <DeckBar />
     <div
       ref={gridRef}
-      className={`lookgrid ${narrow ? 'narrow' : ''}`}
+      className={`lookgrid ${narrow ? 'narrow' : ''} ${compact ? 'compact' : ''}`}
       // Head + N pad tracks + the add column, from the tokens: each pad track
       // flexes between its floor and its ceiling so eight columns fill the grid
       // area at every window from the Tauri floor up, and the grid scrolls
@@ -1313,9 +1352,10 @@ export function LookGrid() {
         );
       })}
       {/* The fifth row. Ruled off from the layers because it is not one: these
-          reach into whatever is playing rather than playing anything. */}
-      <ControlRow />
-      <SubmasterRow />
+          reach into whatever is playing rather than playing anything. Both are
+          performance rows, so Build does without them. */}
+      {!compact && <ControlRow />}
+      {!compact && <SubmasterRow />}
       {overflowLayers.map((layer) => {
         const live = liveLayers?.find((l) => l.id === layer.id);
         return (
