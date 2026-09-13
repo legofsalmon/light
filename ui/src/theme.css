@@ -438,7 +438,10 @@ input.num,
    wash the grid in the cursor colour — both are alphas laid over --bg */
 .gridwrap.blind { background-image: linear-gradient(var(--color-bg-blind), var(--color-bg-blind)); }
 .gridwrap.learn { background-image: linear-gradient(var(--color-bg-wash-learn), var(--color-bg-wash-learn)); }
-.lookgrid { display: grid; gap: var(--space-3); width: max-content; min-width: 100%; }
+.lookgrid { display: grid; gap: var(--space-3); width: 100%; }
+/* the head narrows when the grid area is under 1,200px, so a panel opening at
+   1280 narrows the head rather than the pads (attached by LookGrid.tsx) */
+.lookgrid.narrow { --size-layerhead-w: var(--size-layerhead-w-narrow); }
 
 .colhead {
   height: var(--size-colhead);
@@ -487,6 +490,10 @@ input.num,
   justify-content: center;
 }
 .app.view-pads .layerhead, .app.view-pads .cell { height: var(--size-pad-h-pads); }
+/* design 2.2's order of giving way (App.tsx padsFit): the groups row folds,
+   then the pads shorten to 58 — before the band folds to its strip */
+.app.view-pads.groups-folded .controlrow.groupsrow { display: none; }
+.app.view-pads.pads-short .layerhead, .app.view-pads.pads-short .cell { height: var(--size-pad-h); }
 .layerhead .name {
   font-size: var(--text-key-size);
   font-weight: var(--text-key-weight);
@@ -515,7 +522,7 @@ input.num,
      the component; until it is, the glow is nothing. */
   --pad-glow: transparent;
   position: relative;
-  width: var(--size-pad-w);
+  width: auto; /* the pad fills its minmax track; the flex rows set their own */
   height: var(--size-pad-h);
   background: var(--panel2);
   border: 1px solid var(--line);
@@ -671,7 +678,17 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
   border-top: 1px solid var(--line2);
 }
 .controlrow .controlhead { flex: 0 0 var(--size-layerhead-w); }
-.controlrow .ctlcell { flex: 0 0 var(--size-pad-w); }
+/* In Pads the dial row is the APC's fifth row and the groups row one fader
+   line: no rule-off (the grid's own 3px gap separates them) and the groups
+   head keeps to its name line, so the grid holds design 2.2's 497px budget
+   (heads + song row + five 72px rows + groups + gaps + padding). */
+.app.view-pads .controlrow { margin-top: 0; padding-top: 0; border-top: none; }
+.app.view-pads .groupsrow .layerhead { height: auto; min-height: 0; }
+.app.view-pads .groupsrow .prose { display: none; }
+/* the dial cells flex between the pad track's floor and ceiling, and the row
+   ends in the add column's width, so eight dials sit under eight pads exactly */
+.controlrow .ctlcell { flex: 1 1 0; min-width: var(--size-pad-w-min); max-width: var(--size-pad-w-max); }
+.controlrow::after { content: ''; flex: 0 0 var(--size-addcol-w); }
 .controlhead { background: var(--panel2); border-color: var(--line2); }
 .controlhead .name { color: var(--text-dim); font-size: var(--text-label-size); font-weight: var(--text-label-weight); letter-spacing: var(--text-label-tracking); }
 
@@ -1542,20 +1559,17 @@ button.warnchip { background: none; cursor: pointer; }
   flex-direction: column;
   justify-content: center;
   gap: var(--space-5);
-  flex: 0 0 var(--size-pad-w);
+  flex: 1 1 0;
+  min-width: var(--size-pad-w-min);
+  max-width: var(--size-pad-w-max);
   padding: var(--space-6);
   background: var(--panel2);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
-.subcell .label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 /* pulled down: the one state worth spotting from across a room */
 .subcell.down { border-color: var(--color-status-nudge); }
-.subcell.down .label { color: var(--color-status-nudge); }
+.subcell.down .fader .val { color: var(--color-status-nudge); }
 
 /* ---------- the colour picker (backlog #15) ----------
    Angle is hue, distance from the middle is saturation. Two gradients rather

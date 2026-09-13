@@ -5,6 +5,10 @@ import { notify, useStore } from '../store.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 import { contextPress } from '../touch.ts';
 import { size } from '../tokens.ts';
+
+/** Below this grid-area width the layer head is its narrow 96px (design 2.2).
+ *  Not a token yet: the design names the number and no size/* for it. */
+const NARROW_HEAD_BELOW = 1200;
 import { Fader } from './Fader.tsx';
 import { lookSwatch } from '../lookColors.ts';
 import { APC_COLS, APC_KNOB_BANKS, APC_LAYER_ROWS } from '../apcFeedback.ts';
@@ -634,6 +638,7 @@ function DeckBar() {
       })()}
       <button
         className="btn small ghost"
+        style={{ flex: '0 0 auto' }} /* a shrinking key wraps its word and grows the song row */
         title="new empty song"
         onClick={() => {
           const id = uid('deck');
@@ -652,6 +657,7 @@ function DeckBar() {
       </button>
       <button
         className="btn small ghost"
+        style={{ flex: '0 0 auto' }}
         title="copy this song's pads into a new song — the usual way to start the next one"
         onClick={() => {
           const id = uid('deck');
@@ -750,7 +756,7 @@ function SubmasterRow() {
   const anyDown = groups.some((g) => levelOf(g.id) < 1);
 
   return (
-    <div className="controlrow">
+    <div className="controlrow groupsrow">
       <div className="layerhead controlhead">
         <div className="row">
           <div className="name grow">GROUPS</div>
@@ -775,8 +781,10 @@ function SubmasterRow() {
           const v = levelOf(g.id);
           return (
             <div key={g.id} className={`subcell ${v < 1 ? 'down' : ''}`}>
-              <span className="label" title={g.name}>{g.name}</span>
+              {/* the name rides inside the fader, the way a layer master's
+                  does: one line per group, so the row keeps to 2.2's height */}
               <Fader
+                label={g.name}
                 value={v}
                 def={1}
                 help={`${g.name} level — scales intensity for every head in the group. The lowest group level over a head wins, so a head in two groups follows whichever is further down.`}
@@ -969,6 +977,22 @@ export function LookGrid() {
   const mutate = useStore((s) => s.mutate);
 
   const cols = project.columns;
+  // The layer head narrows from 120 to 96 when the grid area is under 1,200px
+  // (design 2.2), so a panel opening at 1280 narrows the head rather than
+  // pushing the pads below their floor. Measured on the wrapper the grid
+  // scrolls in — its content box is the grid area the design budgets.
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const wrap = gridRef.current?.parentElement;
+    if (!wrap || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? wrap.clientWidth;
+      setNarrow(w < NARROW_HEAD_BELOW);
+    });
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, []);
   // Top of stack first. `layers` is only how many rows sit ABOVE the control
   // row — the grid and an APC40 mk2 are then the same shape (4 layer rows + the
   // control row = its 5 x 8 clip grid). Older shows really do carry a fifth
@@ -1056,8 +1080,13 @@ export function LookGrid() {
     <RigHint />
     <DeckBar />
     <div
-      className="lookgrid"
-      style={{ gridTemplateColumns: `${size['layerhead-w']}px repeat(${cols.length}, ${size['pad-w']}px) ${size['addcol-w']}px` }}
+      ref={gridRef}
+      className={`lookgrid ${narrow ? 'narrow' : ''}`}
+      // Head + N pad tracks + the add column, from the tokens: each pad track
+      // flexes between its floor and its ceiling so eight columns fill the grid
+      // area at every window from the Tauri floor up, and the grid scrolls
+      // sideways only once the pads are at their floor (design 2.2).
+      style={{ gridTemplateColumns: `var(--size-layerhead-w) repeat(${cols.length}, minmax(var(--size-pad-w-min), var(--size-pad-w-max))) var(--size-addcol-w)` }}
     >
       <div
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
