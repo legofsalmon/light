@@ -126,3 +126,28 @@ export function apcMiniMk2Mappings(p: Project): MidiMapping[] {
   return maps;
 }
 
+
+/** The layouts the desk can load, as a table rather than two buttons wired by
+ *  hand: the Sync section lists it, the DIALS head's `controller ▾` menu lists
+ *  it, and the smoke suite walks it. `help` is the map itself — hovering a
+ *  preset is how you find out what it will do to your controller before you
+ *  ask for it. */
+export const CONTROLLER_PRESETS = [
+  {
+    name: 'apc40mk2',
+    label: 'APC40 mk2',
+    help: 'top 4 grid rows → layers (the bottom row is the control row, left unmapped) · 8 device knobs → the 8 dials, on every track-selection bank · scene buttons → layer clears · STOP ALL CLIPS → blackout · TAP → tempo · bank ◀ ▶ → prev / next song · track faders 1–4 → layer masters, 6 → haze, 7 → speed · master → grand',
+    build: apc40Mk2Mappings,
+  },
+  {
+    name: 'apcminimk2',
+    label: 'APC mini mk2',
+    help: '4 grid rows → layers · bottom row → column cues · round buttons → layer clears · TAP + blackout keys · faders → 4 layer masters, haze, speed, grand',
+    build: apcMiniMk2Mappings,
+  },
+] as const;
+
+export type ControllerPresetName = (typeof CONTROLLER_PRESETS)[number]['name'];
+
+export const controllerPreset = (name: ControllerPresetName) =>
+  CONTROLLER_PRESETS.find((p) => p.name === name);

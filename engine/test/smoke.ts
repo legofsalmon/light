@@ -16,7 +16,8 @@ import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, isStal
 import { COMPILER_VERSION } from '../../shared/types.ts';
 import type { MidiMapping, Snapshot } from '../../shared/types.ts';
 import { APC40_MK2, APC_COLS, APC_LAYER_ROWS, APC_MINI_MK2, SURFACES, computeLeds, nearest } from '../../ui/src/surfaces.ts';
-import { apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
+import { CONTROLLER_PRESETS, apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
+import { describeLearned } from '../../ui/src/labels.ts';
 
 /** The demo show these tests were written against — five fixtures at known
  *  addresses, looks with known ids. Deliberately NOT the shipped default: that
@@ -379,6 +380,24 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
           [...Array(APC_COLS).keys()].every((n) => noteAction(n) === undefined));
       }
     }
+    // The table the Sync section and the DIALS head's controller menu read has
+    // to be the same list tested above, or a layout added to the table ships
+    // without ever being held against the LED map it will light.
+    const sig = (m: MidiMapping[]) => JSON.stringify(m.map((x) => [x.type, x.channel, x.number, x.action]));
+    check('preset: the controller table is the list tested here',
+      CONTROLLER_PRESETS.map((c) => c.label).join('|') === presets.map(([n]) => n).join('|'),
+      CONTROLLER_PRESETS.map((c) => c.label).join('|'));
+    check('preset: each entry builds the mappings its own function builds',
+      CONTROLLER_PRESETS.every((c, i) => sig(c.build(p)) === sig(presets[i][1])));
+
+    // A learn says what it bound, in the words the rest of the app uses for the
+    // same thing (design 2.10) — not "mapped".
+    const bound = apc40Mk2Mappings(p).find((m) => m.action.kind === 'cell')!;
+    const layer = p.layers.find((l) => l.id === (bound.action as { layerId: string }).layerId)!;
+    const col = (bound.action as { col: number }).col;
+    check('learn: the confirmation names the pair in the app\'s words',
+      describeLearned(p, bound).startsWith(`note ${bound.number} → ${layer.name} · pad ${col + 1}`),
+      describeLearned(p, bound));
   }
 
   // every note the map can produce must be inside the ranges attach blanks
