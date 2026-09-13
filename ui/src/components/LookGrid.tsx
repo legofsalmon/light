@@ -104,6 +104,84 @@ function duplicatePad(layerId: string, col: number, columns: number) {
   st.setSel({ layerId, col: free });
 }
 
+/** Where a copy would land on a layer: this column if it is free, else the
+ *  first free one to its right. null when the layer is full. */
+function hitPad(layer: Layer, col: number, columns: number): number | null {
+  if (!layer.cells[col]) return col;
+  for (let c = col + 1; c < columns; c++) if (!layer.cells[c]) return c;
+  return null;
+}
+
+/** Copy a look onto the top layer as a flash, ready to be turned into a hit.
+ *
+ *  The short path to a strobe hit — tick STROBE, tick FLASH — silently edits
+ *  the wash on every pad in every song that points at it, because a pad points
+ *  at a look in a shared pool. The safe path was eleven steps: duplicate (which
+ *  lands on the SAME layer), rename, set flash, set strobe, set the rate, untick
+ *  colour, untick dimmer, drag it to a layer that blends brightest, set the
+ *  blend, check the audition. This is the first four of those in one verb, and
+ *  it leaves the wash alone.
+ */
+function flashCopy(srcId: string, layerId: string, col: number) {
+  const st = useStore.getState();
+  const id = uid('look');
+  st.mutate((p) => {
+    const src = p.looks[srcId];
+    const ly = p.layers.find((l) => l.id === layerId);
+    if (!src || !ly) return;
+    const copy = structuredClone(src);
+    for (const part of copy.parts) {
+      part.id = uid('part');
+      for (const fx of part.effects) fx.id = uid('fx');
+    }
+    // A flash look is held, not fired, so a column press skips it — which is
+    // what makes it a hit rather than a cue.
+    p.looks[id] = { ...copy, id, name: `${src.name} · hit`, flash: true };
+    while (ly.cells.length <= col) ly.cells.push(null);
+    ly.cells[col] = id;
+    const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
+    if (deck) deck.cells = Object.fromEntries(p.layers.map((x) => [x.id, [...x.cells]]));
+  }, 'duplicate a look as a flash');
+  st.setSel({ layerId, col });
+}
+
+/** Point the same pad position at this look in every song (design A20).
+ *
+ *  A blinder or a blackout cue wants to be under the same thumb all night, and
+ *  the only way to get that was to rebuild it song by song. One look id written
+ *  into one position in every song: they are the same look, so editing any of
+ *  them edits all of them, which is the point. */
+function putInEverySong(layerId: string, col: number) {
+  const st = useStore.getState();
+  const project = st.project;
+  if (!project) return;
+  const layer = project.layers.find((l) => l.id === layerId);
+  const lookId = layer?.cells[col] ?? null;
+  if (!lookId) {
+    notify('that pad is empty');
+    return;
+  }
+  const songs = project.decks ?? [];
+  if (songs.length < 2) {
+    notify('there is only one song');
+    return;
+  }
+  st.mutate((p) => {
+    for (const deck of p.decks ?? []) {
+      const cells = (deck.cells[layerId] ??= []);
+      while (cells.length <= col) cells.push(null);
+      cells[col] = lookId;
+    }
+    // the active song's cells live on the layers, and are the copy that plays
+    const ly = p.layers.find((l) => l.id === layerId);
+    if (ly) {
+      while (ly.cells.length <= col) ly.cells.push(null);
+      ly.cells[col] = lookId;
+    }
+  }, 'put a look on this pad in every song');
+  notify(`on this pad in all ${songs.length} songs — undo puts it back`, true);
+}
+
 /** Move a look from one pad to another, swapping if the destination is taken.
  *
  *  Swap rather than replace: rearranging a set is the reason to drag at all,
@@ -228,13 +306,26 @@ const Cell = React.memo(function Cell({
   // there is how a flash look is held).
   const padMenu = contextPress(() => {
     if (!look) return;
+    // Where a flash copy would land: the top layer, same column if it is free,
+    // otherwise the first free column to its right. Said in the menu row, so
+    // the pad it will use is known before the press rather than after.
+    const top = project.layers[project.layers.length - 1];
+    const hit = top ? hitPad(top, col, project.columns.length) : null;
     void askChoice(`${look.name} — ${layer.name}, column ${col + 1}`, [
       { value: 'duplicate', label: 'Duplicate', primary: true },
+      ...(top && top.id !== layer.id && hit !== null
+        ? [{ value: 'hit', label: `Duplicate as a flash on ${top.name} · column ${hit + 1}` }]
+        : []),
+      { value: 'everysong', label: 'Put on this pad in every song' },
       { value: 'clear', label: 'Clear pad' },
     ], {
-      body: 'Duplicate makes an independent copy on the next free pad in this layer. Two pads pointing at the SAME look change together when you edit either one; a duplicate is how you get one you can change on its own.',
+      body:
+        'Duplicate makes an independent copy on the next free pad in this layer. Two pads pointing at the SAME look change together when you edit either one; a duplicate is how you get one you can change on its own.'
+        + (top && top.id !== layer.id && hit === null ? ` ${top.name} is full, so there is nowhere to put a flash copy.` : ''),
     }).then((choice) => {
       if (choice === 'duplicate') duplicatePad(layer.id, col, project.columns.length);
+      else if (choice === 'hit' && top && hit !== null) flashCopy(look.id, top.id, hit);
+      else if (choice === 'everysong') putInEverySong(layer.id, col);
       else if (choice === 'clear') {
         useStore.getState().mutate((p) => {
           const ly = p.layers.find((l) => l.id === layer.id);
