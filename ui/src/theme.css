@@ -1406,18 +1406,37 @@ table.tbl th { color: var(--text-dim); }
   white-space: normal;
 }
 
-/* ---------- the rig hint above the pads ---------- */
-.gridhint {
+/* ---------- the grid's corner chip, and what a column head says ----------
+   The rig hint was a full-width paragraph above the pads: 50px on screen at
+   every rehearsal, because LIGHT boots offline by design and the sentence
+   therefore always applied. The verb it carried now sits in the grid's own
+   empty top-left cell and costs no row (design #17). */
+.gridlabel {
   display: flex;
   align-items: center;
-  gap: var(--space-12);
-  margin-bottom: var(--space-10);
-  padding: var(--space-6) var(--space-10);
-  background: var(--panel);
-  border: 1px solid var(--line2);
-  border-radius: var(--radius-sm);
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
 }
-.gridhint .prose { flex: 1; min-width: 0; }
+.btn.gridchip { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* A column head says what firing it will do, and whether it is what the room
+   is seeing (design A23). `live` is the hardware's rule — every layer holding
+   a pad there is playing it — and `part` is some but not all. */
+.colhead { position: relative; overflow: hidden; }
+.colmark { color: var(--text-faint); margin-right: var(--space-2); }
+.colhead.live { color: var(--color-live); box-shadow: inset 0 calc(-1 * var(--size-rule)) 0 var(--color-live); }
+.colhead.live .colmark { color: var(--color-live); }
+.colhead.part { box-shadow: inset 0 -1px 0 var(--color-live); }
+/* the crossfade running into this column, drawn on the head that fired it */
+.colfade {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: var(--size-rule);
+  background: var(--color-live);
+  transition: width var(--motion-fast) linear;
+}
 
 /* ---------- notices ---------- */
 .toasts {

@@ -961,7 +961,16 @@ function ControlRow() {
 /** Where the eye is when the rig stays dark: above the pads, not in a tooltip
  *  (review M3). A pad lights the stage; if nothing reaches the rig, say why here
  *  — and say what to do about it. Gone the moment an output is on. */
-function RigHint() {
+/** Why the rig is dark, as the grid's own corner chip (design #17, P6).
+ *
+ *  This was a full-width paragraph above the pads — 50 px, a fifth of the Build
+ *  grid, on screen at every rehearsal because LIGHT boots offline by design and
+ *  the sentence therefore always applied. The sentence itself is said in four
+ *  places already (the gate button, the output dot, the Output tab's banner and
+ *  the setup guide); what only this one had was the verb. So the verb moves to
+ *  the grid's empty top-left label cell, where it costs no row at all, and the
+ *  explaining is left to the gate. */
+function RigChip() {
   const project = useStore((s) => s.project)!;
   const setView = useStore((s) => s.setView);
   const setTab = useStore((s) => s.setTab);
@@ -980,28 +989,26 @@ function RigHint() {
   const frozen = useStore((s) => s.snap?.frozen) === true;
   if (!noFixtures && !noOutput && !offline && !frozen) return null;
   return (
-    <div className="gridhint">
-      <span className="prose">
-        {noFixtures
+    <button
+      className={`btn small gridchip ${!noFixtures && !noOutput ? 'warn on' : 'ghost'}`}
+      title={
+        noFixtures
           ? 'Nothing is patched yet — pads light the stage, but there is no rig for them to reach. Add fixtures in the Rig view.'
           : noOutput
             ? 'Outputs are off — the stage shows what the rig would do, and nothing reaches it. Turn on Art-Net or sACN in the Output tab when you want it live.'
             : offline
               ? 'LIGHT is offline — the stage shows what the rig would do, and nothing reaches it. The universes are set up, so this is the only step left.'
-              : 'The rig is held on one frame. Everything here is still running and the stage view is following it — the room is not.'}
-      </span>
-      <button
-        className={`btn small ${!noFixtures && !noOutput ? 'warn on' : ''}`}
-        onClick={() => {
-          if (noFixtures) setView('patch');
-          else if (noOutput) { setView('split'); setTab('output'); }
-          else if (offline) send({ type: 'setTransmit', v: true });
-          else send({ type: 'setFreeze', v: false });
-        }}
-      >
-        {noFixtures ? 'Rig view' : noOutput ? 'Output tab' : offline ? 'go live' : 'release'}
-      </button>
-    </div>
+              : 'The rig is held on one frame. Everything here is still running and the stage view is following it — the room is not.'
+      }
+      onClick={() => {
+        if (noFixtures) setView('patch');
+        else if (noOutput) { setView('split'); setTab('output'); }
+        else if (offline) send({ type: 'setTransmit', v: true });
+        else send({ type: 'setFreeze', v: false });
+      }}
+    >
+      {noFixtures ? 'no rig yet →' : noOutput ? 'outputs off →' : offline ? 'go live ▸' : 'release hold'}
+    </button>
   );
 }
 
@@ -1113,9 +1120,36 @@ export function LookGrid() {
     });
   };
 
+  // What each column head has to say, from state the grid already holds: which
+  // layers keep a pad there, and which of those are playing it (design A23 —
+  // the playback bar every desk has and this grid did not). `all` is the
+  // hardware's own rule: the APC mini lights a column button only when every
+  // layer holding content there is playing it (surfaces.ts).
+  const colStates = cols.map((name, col) => {
+    const holding = allLayers.filter((l) => l.cells[col]);
+    const playing = holding.filter((l) => {
+      const live = liveLayers?.find((x) => x.id === l.id);
+      return live?.col === col && live.lookId === l.cells[col];
+    });
+    const t = playing.reduce((min, l) => {
+      const live = liveLayers?.find((x) => x.id === l.id);
+      return Math.min(min, live?.t ?? 1);
+    }, 1);
+    const has = holding.length > 0;
+    const all = has && playing.length === holding.length;
+    const some = playing.length > 0;
+    return {
+      has,
+      t,
+      cls: `${all ? 'live' : some ? 'part' : ''}`,
+      what: has
+        ? `${all ? 'playing' : some ? 'partly playing' : 'fire'} column ${col + 1}${name ? ` · ${name}` : ''}${col < 9 ? ` (key ${col + 1})` : ''}`
+        : `column ${col + 1}${name ? ` · ${name}` : ''} is empty — firing it clears every layer${col < 9 ? ` (key ${col + 1})` : ''}`,
+    };
+  });
+
   return (
     <>
-    <RigHint />
     <DeckBar />
     <div
       ref={gridRef}
@@ -1126,20 +1160,20 @@ export function LookGrid() {
       // sideways only once the pads are at their floor (design 2.2).
       style={{ gridTemplateColumns: `var(--size-layerhead-w) repeat(${cols.length}, minmax(var(--size-pad-w-min), var(--size-pad-w-max))) var(--size-addcol-w)` }}
     >
-      <div
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        className="label"
-      >
-        {learnMode ? (learnTarget ? 'move a control…' : 'click a target…') : ''}
+      {/* The grid's one-line chip. Empty unless it has something to say: the
+          learn prompt while learn is armed, otherwise the one verb that would
+          put light on the rig (design #17). */}
+      <div className="gridlabel label">
+        {learnMode ? (learnTarget ? 'move a control…' : 'click a target…') : <RigChip />}
       </div>
       {cols.map((name, col) => (
         <div
           key={col}
-          className={`colhead ${learnTarget?.kind === 'column' && learnTarget.col === col ? 'learn-armed' : ''}`}
+          className={`colhead ${colStates[col].cls} ${learnTarget?.kind === 'column' && learnTarget.col === col ? 'learn-armed' : ''}`}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); e.currentTarget.click(); } }}
-          title={`trigger column ${col + 1}${col < 9 ? ` (key ${col + 1})` : ''} · ${touch ? 'hold' : 'right-click'} to rename, insert or delete`}
+          title={`${colStates[col].what} · ${touch ? 'hold' : 'right-click'} to rename, insert or delete`}
           onClick={() => {
             if (!useStore.getState().armLearn({ kind: 'column', col })) send({ type: 'column', col });
           }}
@@ -1148,7 +1182,16 @@ export function LookGrid() {
           // triggers cues. The hold is the tablet's right-click (review M15).
           {...contextPress(() => columnMenu(col, name))}
         >
+          {/* What firing it will do, before you fire it: ▶ when some layer
+              holds a pad here, ■ when none does — an all-empty column clears
+              every layer, which is a cue in its own right and used to look
+              exactly like a column that would light the room. */}
+          <span className="colmark" aria-hidden="true">{colStates[col].has ? '▶' : '■'}</span>
           {col + 1} · {name}
+          {/* the crossfade running into this column, on the head that fired it */}
+          {colStates[col].t < 1 && (
+            <i className="colfade" style={{ width: `${Math.round(colStates[col].t * 100)}%` }} aria-hidden="true" />
+          )}
         </div>
       ))}
       <div
