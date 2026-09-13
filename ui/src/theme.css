@@ -105,7 +105,6 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 /* the switcher sits next to the project menu; keep it from being squeezed */
 .viewseg { flex: 0 0 auto; margin-left: var(--space-2); }
 
-.topbar { grid-area: top; }
 .gridwrap { grid-area: grid; min-height: 0; }
 .bottom { grid-area: bottom; min-height: 0; }
 .previz { grid-area: previz; min-width: 0; }
@@ -127,8 +126,13 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 .vsplit { cursor: col-resize; border-left: 1px solid var(--line); }
 .hsplit { cursor: row-resize; border-top: 1px solid var(--line); }
 .vsplit:hover, .vsplit.active, .hsplit:hover, .hsplit.active { background: var(--raise2); }
-/* widen the hit area without widening the visual */
-.vsplit::after, .hsplit::after { content: ''; position: absolute; inset: -4px; }
+/* Widen the hit area without widening the visual — along the drag axis only.
+   Growing it on all four sides pushed the full-width horizontal splitter 4px
+   past the right edge, which is the whole document's scrollWidth overflowing
+   by 4px on every window: the page must never scroll sideways. */
+.vsplit::after, .hsplit::after { content: ''; position: absolute; }
+.vsplit::after { inset: 0 -4px; }
+.hsplit::after { inset: -4px 0; }
 
 .panel { background: var(--panel); }
 
@@ -332,21 +336,65 @@ select.sel { cursor: pointer; }
 
 /* ---------- top bar ---------- */
 
-.topbar {
+/* ---- the command strip and the status line (design 2.1) ----
+   Two elements, one grid area. The strip never wraps and never scrolls: it is
+   a flow track that clips, beside a panic track that is always the same width
+   at the same right edge. When the flow runs out of room TopBar hands controls
+   down to the status line in a stated order — measured, not set at
+   breakpoints. The bar used to wrap, which put ALL STOP and BLACKOUT at the
+   far left of a second row at 1440 and on row three of eight on a phone. */
+.commandbar { grid-area: top; display: flex; flex-direction: column; min-width: 0; }
+.commandstrip {
   display: flex;
-  /* Below ~1500px the bar takes a second row instead of scrolling its status
-     dots out of reach with no scrollbar to say so (review M4). The grid row
-     above it is auto, so the rows below simply move down. */
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-10);
+  gap: var(--space-10);
   min-height: var(--size-topbar);
   padding: 0 var(--space-12);
   background: var(--panel);
-  border-bottom: 1px solid var(--line);
+  min-width: 0;
 }
+.stripflow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  flex: 1 1 auto;
+  min-width: 0;
+  /* never a wrap, never a scrollbar: what does not fit is handed down */
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.panic {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex: 0 0 auto;
+  width: var(--size-panic-w);
+  justify-content: flex-end;
+  margin-left: var(--space-10);
+}
+.panic .btn { flex: 1 1 auto; justify-content: center; }
+.statusline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  min-height: var(--size-statusline);
+  padding: 0 var(--space-12);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+  overflow: hidden;
+}
+.statusline .lineflow, .statusline .linequiet, .statusline .linekeep {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  min-width: 0;
+}
+.statusline .linekeep { margin-left: auto; }
+/* In Pads the line keeps only what says something about the rig. */
+.statusline.folded .linequiet { display: none; }
 /* a master fader squashed to its 60px floor is not a master */
-.topbar .fader { flex: 0 0 auto; }
+.commandstrip .fader, .statusline .fader { flex: 0 0 auto; }
 .wordmark {
   font-weight: var(--text-wordmark-weight);
   letter-spacing: var(--text-wordmark-tracking);
@@ -1142,7 +1190,7 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 
 /* Sticky so the cog stays on the visible right edge of a bar that scrolls
    horizontally with no scrollbar to reveal what has slid off it. */
-.topbar .btn.cog {
+.statusline .btn.cog {
   flex: 0 0 auto;
   position: sticky;
   right: 0;
@@ -1151,7 +1199,7 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
   line-height: var(--leading-solid);
   padding: var(--space-3) var(--space-8);
 }
-.topbar .btn.cog:hover { background: var(--raise); }
+.statusline .btn.cog:hover { background: var(--raise); }
 
 .modaltitle { font-size: var(--text-name-size); font-weight: var(--text-name-weight); color: var(--text); margin-bottom: var(--space-6); }
 .modalbody { font-size: var(--text-prose-size); color: var(--text-dim); line-height: var(--text-prose-leading); white-space: pre-line; }
@@ -1190,8 +1238,8 @@ button:disabled:hover {
 }
 
 /* ---------- narrow-window survival: the layout is user-resizable now ------- */
-.topbar { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
-.topbar::-webkit-scrollbar { display: none; }
+/* nothing on the bar scrolls any more: the strip hands controls down instead
+   (design 2.1), so there is no hidden scroll region to lose a control in. */
 .previzbar, .tabbar, .row { min-width: 0; }
 .previzbar { overflow-x: auto; scrollbar-width: none; }
 .previzbar::-webkit-scrollbar { display: none; }
@@ -1462,8 +1510,8 @@ button.warnchip { background: none; cursor: pointer; }
 }
 .app.touch .deckchip .deckx { font-size: var(--font-size-15); margin-right: -8px; }
 .app.touch .vsplit::after, .app.touch .hsplit::after { inset: -9px; } /* the 6px track + 18 = a 24px grab */
-.app.touch .statusdots { gap: var(--space-14); }
-.topbar .btn.help { font-weight: var(--weight-bold); min-width: var(--size-touch-target); }
+.app.touch .statusline .statusdots { gap: var(--space-14); }
+.statusline .btn.help { font-weight: var(--weight-bold); min-width: var(--size-touch-target); }
 
 /* ---------- help mode ---------- */
 /* a mouse in help mode says so; a finger has the pill */
@@ -1668,3 +1716,39 @@ button.warnchip { background: none; cursor: pointer; }
   .identifychip, .btn.blackout.hot, .offlinebar, .splash .dot { animation: none; }
   .cell, .cell .swatch, .cell .face, .btn, .fold { transition: none; }
 }
+
+/* ---------- the held chip: one amber count for everything holding the rig
+   away from the show (design A4, P12) ----------------------------------------
+   It replaces five chips that each had their own treatment — muted, dark,
+   overrides, finding, NUDGED — and the two holds that had no chip at all: a
+   group pulled down showed only in the Pads groups row, a held channel only in
+   the output check. The chip pulses ONLY while something is overriding
+   blackout, so the one state you must never leave on by accident is the one
+   thing on the bar that moves. */
+.chip.heldchip {
+  border-color: var(--color-status-nudge);
+  color: var(--color-status-nudge);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip.heldchip.overriding { animation: pulse var(--motion-pulse-find) infinite; }
+.popover.heldlist { width: var(--size-heldlist-w); }
+.heldrow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-8);
+  border-bottom: 1px solid var(--line);
+}
+.heldrow:last-child { border-bottom: none; }
+.heldrow .btn { flex: 0 0 auto; }
+.heldwhat {
+  font-size: var(--text-name-size);
+  font-weight: var(--text-name-weight);
+  color: var(--text);
+}
+.heldrow .prose { margin: 0; }
+
+/* A status lamp brightens while something is arriving, so a live link and a
+   quiet one differ without inventing a second colour (design P8). */
+.statusdot.traffic { box-shadow: 0 0 var(--space-6) currentColor; }

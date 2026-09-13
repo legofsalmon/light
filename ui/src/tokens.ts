@@ -213,6 +213,7 @@ export const size = {
   scrollbar: 10,
   "modal-w": 460,
   "modal-wide-w": 680,
+  "heldlist-w": 320,
   "min-grid-w": 945,
   "min-grid-w-narrow": 921,
   "min-library": 200,
