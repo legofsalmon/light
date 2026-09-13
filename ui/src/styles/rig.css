@@ -238,6 +238,12 @@
   border-bottom: 1px solid var(--line);
 }
 .rigplanview { position: relative; flex: 1; min-height: 0; }
+/* The canvas is sized in DEVICE pixels by its own observer, so without a CSS
+   size it lays out at that number: on a retina scale the plan column's canvas
+   was 1003px wide inside a 501px column and pushed the whole page 500px
+   sideways. The stage band's canvas has always had this rule; the plan column
+   is a second home for the same component and needs it too. */
+.rigplanview canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .rigplanview:focus-visible { outline: 1px solid var(--color-border-focus); outline-offset: calc(-1 * var(--space-1)); }
 .rigaim {
   border-top: 1px solid var(--line);
