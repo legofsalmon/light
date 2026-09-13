@@ -257,7 +257,10 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
       <div className="grow" />
 
       <div className="bpmblock">
-        <div className={`beatled ${beatOn && barOn ? 'on' : ''}`} style={{ width: 10, height: 10 }} />
+        {/* the bar lamp is the beat lamp one step up — both read --size-lamp,
+            so the pair scales with the rest of the desk's lamps rather than
+            with a number typed here (design R7) */}
+        <div className={`beatled bar ${beatOn && barOn ? 'on' : ''}`} />
         <div className={`beatled ${beatOn ? 'on' : ''}`} />
         {bpmEdit === null ? (
           <div
@@ -492,8 +495,8 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
         className={`btn ${snap?.frozen ? 'warn on' : 'ghost'}`}
         title={
           snap?.frozen
-            ? 'HELD — the rig is repeating the frame it was on. The show, the pads and the stage view are all still running, so you can build a look without the room watching you build it. Click to let it through. Blackout and ALL STOP release it on their own.'
-            : 'hold the rig on the frame it is showing while you edit. The stage view keeps following your edits; the room does not see them until you release it.'
+            ? 'HELD — the rig is repeating the frame it was on. The show, the pads and the stage view are all still running, so you can set up the next column without the room watching you do it. Click to let it through. Blackout and ALL STOP release it on their own.'
+            : 'hold the rig on the frame it is showing, set up the next column, then release. The stage view keeps following your edits; the room does not see them until you let it through.'
         }
         onClick={() => send({ type: 'setFreeze', v: !snap?.frozen })}
       >

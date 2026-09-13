@@ -415,6 +415,20 @@ input.num,
 }
 /* hard on/off: a lamp, no glow */
 .beatled.on { background: var(--color-lamp); }
+/* the bar lamp is the beat lamp one step up — the two read the same token so
+   the pair keeps its proportion wherever the lamp size goes */
+.beatled.bar { width: var(--size-led); height: var(--size-led); }
+
+/* The lamp primitive: one round mark at --size-lamp taking its colour from the
+   text around it, so the beat, the status dots and a node's health are the same
+   object at the same size rather than three glyphs at three weights. */
+.lamp {
+  flex: none;
+  width: var(--size-lamp);
+  height: var(--size-lamp);
+  border-radius: 50%;
+  background: currentColor;
+}
 
 .statusdots { display: flex; gap: var(--space-10); align-items: center; }
 .dotline { display: flex; align-items: center; gap: var(--space-4); }
@@ -502,12 +516,14 @@ input.num,
   text-overflow: ellipsis;
 }
 .layerhead .row { gap: var(--space-4); }
-/* line 1: the name gets first call; the blend is a read-only tag in text/micro
-   that gives way to it, and the ✕ keeps its width. The narrow head carries no
-   tag (design 2.2's touch row: `L4 ▮ ✕`) — the blend stays in the help and
-   behind the hold. */
+/* line 1 is the name and the ✕, nothing else — in 120px a real layer name and
+   the longest blend word cannot share a line without both ellipsing, and the
+   name is what you steer by. */
 .layerhead .headline { cursor: default; }
-.layerhead .name { flex: 1 1 auto; min-width: 45%; }
+.layerhead .name { flex: 1 1 auto; min-width: 0; }
+/* The blend rides the idle now-playing line: a read-only tag in text/micro
+   where there is nothing else to say. It is gone the moment the layer plays
+   something, because then the look's name owns that line. */
 .layerhead .blendtag {
   flex: 0 1 auto;
   min-width: 0;
@@ -518,7 +534,7 @@ input.num,
   font-weight: var(--text-micro-weight);
   letter-spacing: var(--text-micro-tracking);
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--text-faint);
 }
 .lookgrid.narrow .blendtag { display: none; }
 /* the ✕ is a ghost until the layer plays something — the hardware's rule

@@ -123,7 +123,7 @@ function DmxMeters({
         ctx.beginPath();
         ctx.rect(x + 2, 0, w - 4, RIBBON_H);
         ctx.clip();
-        ctx.fillStyle = '#9a9aa6';
+        ctx.fillStyle = color['scene/meter-label'];
         ctx.fillText(s.name, x + 3, RIBBON_H / 2);
         ctx.restore();
       }
@@ -136,13 +136,13 @@ function DmxMeters({
       const v = data?.[i] ?? 0;
       const h = (v / 255) * usable;
       const overridden = overrides[i + 1] !== undefined;
-      ctx.fillStyle = overridden ? color['amber/400'] : v > 0 ? color['cyan/500'] : '#26262a';
+      ctx.fillStyle = overridden ? color['amber/400'] : v > 0 ? color['cyan/500'] : color['scene/meter-idle'];
       ctx.fillRect(i * CH_W, top + usable - h, 1.6, Math.max(1, h));
     }
 
     // --- hover marker
     if (hover !== null) {
-      ctx.fillStyle = 'rgba(255,255,255,0.16)';
+      ctx.fillStyle = color['alpha/white-16'];
       ctx.fillRect((hover - 1) * CH_W, 0, CH_W, METER_H - 9);
     }
 
@@ -351,8 +351,11 @@ function NodeList() {
       {nodes.map((n) => {
         const fresh = n.ageMs < 8000;
         return (
-          <span key={n.ip} className="label" style={{ color: fresh ? 'var(--good)' : 'var(--warn)' }}>
-            ● {n.name} <span style={{ fontFamily: 'var(--mono)' }}>{n.ip}</span>
+          <span key={n.ip} className="label dotline" style={{ color: fresh ? 'var(--color-status-ok)' : 'var(--warn)' }}>
+            {/* the same lamp the beat and the status dots use, so a healthy
+                node reads as brightness rather than as a green bullet */}
+            <i className="lamp" />
+            {n.name} <span style={{ fontFamily: 'var(--mono)' }}>{n.ip}</span>
             {fresh ? '' : ` (silent ${Math.round(n.ageMs / 1000)}s)`}
           </span>
         );

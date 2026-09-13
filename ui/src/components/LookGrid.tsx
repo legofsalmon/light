@@ -393,13 +393,20 @@ const BLEND_WORD: Record<LayerBlend, string> = { normal: 'replaces', multiply: '
 const headName = (name: string): string => name.replace(/^layer\s+(\d+)$/i, 'L$1');
 const BLENDS: LayerBlend[] = ['normal', 'multiply', 'htp'];
 
-/** The layer head (design 2.4): line 1 the name in text/key, the blend as a
- *  read-only tag and a ✕ that is a ghost until something is playing; line 2
- *  the now-playing line — a mini swatch in the look's first colour and its
- *  name in tungsten, an unlit well when idle; line 3 the master. Right-click
- *  or hold the first line to change the blend — a build-time control does not
- *  belong on the performance row, so it lives behind the gesture columns and
- *  songs already use. */
+/** The layer head (design 2.4): line 1 the name in text/key beside a ✕ that is
+ *  a ghost until something is playing; line 2 the now-playing line — a mini
+ *  swatch in the look's first colour and its name in tungsten, an unlit well
+ *  when idle; line 3 the master. Right-click or hold the head to change the
+ *  blend — a build-time control does not belong on the performance row, so it
+ *  lives behind the gesture columns and songs already use.
+ *
+ *  The blend rides the idle now-playing line rather than line 1. In a 120px
+ *  head a real layer name ("Strobe") and the longest blend word ("brightest")
+ *  want ~100px between them and there is ~84px to share, so both ellipsed —
+ *  the design's own wireframe assumed the default `L1`..`L4` names. The name
+ *  is what you steer by, so it keeps line 1 whole; the blend takes the empty
+ *  line below, which is exactly the layer that is not doing anything and so
+ *  the one you are most likely setting up. */
 function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined }) {
   const send = useStore((s) => s.send);
   const mutate = useStore((s) => s.mutate);
@@ -436,7 +443,6 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
           {...blendMenu}
         >
           <div className="name grow">{headName(layer.name)}</div>
-          <span className="blendtag">{BLEND_WORD[layer.blend]}</span>
         </div>
         <button
           className="btn small ghost clearbtn"
@@ -458,7 +464,7 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
             : 'nothing playing on this layer'
         }
       >
-        {liveLook && (
+        {liveLook ? (
           <>
             {/* the first colour only — the rule the APC LED mirror reads */}
             <span className="swatch mini">
@@ -466,6 +472,8 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
             </span>
             <span className="grow ellip">{liveLook.name}</span>
           </>
+        ) : (
+          <span className="blendtag" {...blendMenu}>{BLEND_WORD[layer.blend]}</span>
         )}
       </div>
       <Fader
