@@ -20,7 +20,6 @@ export function PlanColumn(): React.ReactElement {
   const setSnapToTruss = useStore((s) => s.setSnapToTruss);
   const showMeasure = useStore((s) => s.showMeasure);
   const setShowMeasure = useStore((s) => s.setShowMeasure);
-  const fxSel = useStore((s) => s.fxSel);
   const prefix = useRig((s) => s.prefix);
   const setPrefix = useRig((s) => s.setPrefix);
 

@@ -541,7 +541,6 @@ export function FixtureTable({ conflicts }: { conflicts: Set<string> }): React.R
             {shown.map((f) => {
               const prof = profileMeta(project, f.profileId);
               const selected = fxSel.includes(f.id) || marqueeHit.includes(f.id);
-              const uniIndex = project.universes.findIndex((u) => u.id === f.universeId) + 1;
               return (
                 <tr
                   key={f.id}
