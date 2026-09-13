@@ -4,6 +4,7 @@ import type { StagePropKind } from '../../../shared/types.ts';
 import { STRUCTURE_DEFAULTS } from '../../../shared/types.ts';
 import { createGroupFromSelection } from '../selection.ts';
 import { useStore } from '../store.ts';
+import { size, space } from '../tokens.ts';
 import { Fader } from './Fader.tsx';
 import { Previz2D } from './Previz2D.tsx';
 import { Previz3D } from './Previz3D.tsx';
@@ -99,9 +100,17 @@ function ViewMenu({ mode, preview }: { mode: '3d' | '2d'; preview: boolean }): R
         onClick={() => {
           // The bar is an overflow scroll container, which would clip a menu to
           // its own height — so the popover is positioned against the viewport
-          // from the key's own rectangle, the way the project menu is.
+          // from the key's own rectangle, the way the project menu is. This key
+          // sits at the RIGHT edge of the bar, where a menu hung from its left
+          // corner runs off the window, so it hangs from whichever corner keeps
+          // it on screen.
           const r = btnRef.current?.getBoundingClientRect();
-          if (r) setPos({ top: r.bottom + 2, left: r.left });
+          if (r) {
+            setPos({
+              top: r.bottom + 2,
+              left: Math.max(space[4], Math.min(r.left, window.innerWidth - size['menu-w'] - space[4])),
+            });
+          }
           setOpen((o) => !o);
         }}
       >

@@ -45,3 +45,14 @@
    before it has been switched on. The fader inside it takes the menu's width
    rather than the 110 px it was given on the bar. */
 .popover.viewmenu .fader { width: 100%; }
+
+/* ---------- the keys-and-gestures sheet (design #37) ----------
+   Here rather than in theme.css because this wave keeps its new CSS in one
+   file; it belongs beside .modal.wide and can move there later.
+
+   Two tables is twice the sheet it was, and .modal carries neither a
+   max-height nor an overflow — so at the 700 px floor the window can go to,
+   and even at 900, it pushed past the veil's padding and took the close key
+   off the top of the screen with it. The same bargain .modal.wide already
+   makes: as tall as the room allows, and then it scrolls. */
+.modal.sheet { max-height: 80vh; overflow-y: auto; }

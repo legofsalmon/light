@@ -16,6 +16,7 @@ import { GESTURES, GESTURE_GROUPS, gestureWords } from '../gestures.ts';
 import { useStore } from '../store.ts';
 import { openExternal } from '../shell.ts';
 import { GUIDE_URL } from '../links.ts';
+import '../styles/band.css';
 
 export function ShortcutSheet({ onClose }: { onClose: () => void }): React.ReactElement {
   const touch = useStore((s) => s.touch);
@@ -50,7 +51,7 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }): React.React
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="modal panel" role="dialog" aria-modal="true" aria-label="Keys and gestures">
+      <div className="modal panel sheet" role="dialog" aria-modal="true" aria-label="Keys and gestures">
         <div className="row" style={{ alignItems: 'baseline', gap: 8 }}>
           <div className="modaltitle" style={{ flex: 1 }}>Keys and gestures</div>
           <button className="btn ghost small" onClick={onClose}>close</button>
