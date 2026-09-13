@@ -81,12 +81,6 @@ type Store = {
   setupDismissed: boolean;
   previz2dTool: PlanTool;
   previzMode: '3d' | '2d';
-  /** What the previz was showing before the patch view borrowed it for the
-   *  plan, so leaving patch gives back the view the operator was steering by.
-   *  Both fields: '2d' is two different screens, and the front elevation drags
-   *  fixture HEIGHT where the plan drags position. Cleared when they pick a
-   *  mode themselves — an explicit choice outranks a restore. */
-  prePatch: { mode: '3d' | '2d'; view2d: 'plan' | 'front' } | null;
   /** 2D sub-view: top-down plan or front elevation (drag sets height) */
   previz2dView: 'plan' | 'front';
   /** fixtures selected in the 2D previz (shift-click / marquee) for group building */
@@ -399,7 +393,6 @@ export const useStore = create<Store>()((set, get) => ({
   // exists for, the same way arriving there from anywhere else does — and must
   // record the loan, or the borrowed 2D leaks into every other view on exit.
   previzMode: loadView() === 'patch' ? '2d' : '3d',
-  prePatch: loadView() === 'patch' ? { mode: '3d' as const, view2d: 'plan' as const } : null,
   previz2dView: 'plan',
   fxSel: [],
   propSel: [],
@@ -497,38 +490,11 @@ export const useStore = create<Store>()((set, get) => ({
     // Remembered across launches: an operator who works full-screen on the pads
     // should not have to set that up again every time the app opens.
     try { localStorage.setItem('view', view); } catch { /* non-essential */ }
-    const s = get();
-    if (view === 'patch') {
-      // Choosing "patch" means the fixtures table, not whichever editor tab
-      // happened to be open behind it — and the 2D PLAN above it, because the
-      // patch workflow is drag-a-row-into-the-plan. The front elevation is not
-      // that screen: dragging there sets trim height, not position.
-      //
-      // Only on ARRIVAL: re-picking Patch while already there must not undo a
-      // mode chosen inside it. The loan is recorded even when the band is
-      // collapsed — revealing it mid-patch must still show the plan — and is
-      // handed back on the way out, because the 3D rig is what an operator
-      // steers by and checking an address should not cost them that view.
-      const entering = s.view !== 'patch';
-      set({
-        view,
-        tab: 'patch',
-        ...(entering
-          ? {
-              previzMode: '2d' as const,
-              previz2dView: 'plan' as const,
-              prePatch: { mode: s.previzMode, view2d: s.previz2dView },
-            }
-          : {}),
-      });
-      return;
-    }
-    set({
-      view,
-      ...(s.view === 'patch' && s.prePatch
-        ? { previzMode: s.prePatch.mode, previz2dView: s.prePatch.view2d, prePatch: null }
-        : {}),
-    });
+    // The Rig page used to borrow the stage band for its 2D plan and hand the
+    // 3D back on the way out. It has a plan column of its own now (design 2.9),
+    // so the loan would only show the plan twice and take the 3D rig away from
+    // someone who was steering by it.
+    set({ view, ...(view === 'patch' ? { tab: 'patch' as const } : {}) });
   },
   togglePreviz: (v) =>
     set((s) => {
@@ -567,10 +533,8 @@ export const useStore = create<Store>()((set, get) => ({
     }),
   setHelpMode: (helpMode) => set({ helpMode }),
   setPreviz2dTool: (previz2dTool) => set({ previz2dTool }),
-  // An explicit pick outranks the pending patch restore — otherwise leaving the
-  // view would overwrite the screen they just chose.
-  setPrevizMode: (previzMode) => set({ previzMode, prePatch: null }),
-  setPreviz2dView: (previz2dView) => set({ previz2dView, prePatch: null }),
+  setPrevizMode: (previzMode) => set({ previzMode }),
+  setPreviz2dView: (previz2dView) => set({ previz2dView }),
   setFxSel: (fxSel) => set({ fxSel }),
   setPropSel: (propSel) => set({ propSel }),
   setHazeViz: (hazeViz) => set({ hazeViz }),

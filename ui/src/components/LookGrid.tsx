@@ -16,6 +16,7 @@ import { Fader, fmtPct } from './Fader.tsx';
 import { lookFace, lookSwatch } from '../lookColors.ts';
 import { Face } from './library/face.tsx';
 import { placeArmed, useEditingDeckId, useLibraryStore } from '../libraryStore.ts';
+import { openSetup } from './AdminModal.tsx';
 import { APC_COLS, APC_KNOB_BANKS, APC_LAYER_ROWS } from '../apcFeedback.ts';
 
 /** Drop from the look library: point this cell at an existing pool look.
@@ -1155,7 +1156,6 @@ function ControlRow() {
 function RigChip() {
   const project = useStore((s) => s.project)!;
   const setView = useStore((s) => s.setView);
-  const setTab = useStore((s) => s.setTab);
   const send = useStore((s) => s.send);
   const noFixtures = project.fixtures.length === 0;
   const noOutput = !project.universes.some((u) => u.artnet || u.sacn);
@@ -1184,7 +1184,7 @@ function RigChip() {
       }
       onClick={() => {
         if (noFixtures) setView('patch');
-        else if (noOutput) { setView('split'); setTab('output'); }
+        else if (noOutput) openSetup('output');
         else if (offline) send({ type: 'setTransmit', v: true });
         else send({ type: 'setFreeze', v: false });
       }}
