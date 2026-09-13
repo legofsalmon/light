@@ -1,0 +1,146 @@
+/* The look editor and the fader — "The desk stays lit", sections 2.6 and 3.
+   Tokens only, like theme.css: scripts/check-tokens.mjs scans every sheet
+   under ui/src the same way. */
+
+/* ---------- the fader (design #18) ---------- */
+
+/* Focusable, and it keeps focus after pointer-up so the arrows work after a
+   click in the booth. Focus is the cursor, so it is the accent. */
+.fader:focus-visible {
+  outline: var(--size-rule) solid var(--color-border-focus);
+  outline-offset: calc(-1 * var(--size-rule));
+}
+
+/* The readout is the field: `.fader .val` is pointer-transparent so a drag
+   runs under it, but the value itself takes a click and becomes an input. */
+.fader .val b.faderval {
+  pointer-events: auto;
+  cursor: text;
+}
+.fader .val input.faderin {
+  pointer-events: auto;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-bottom: 1px solid var(--line2);
+  background: transparent;
+  color: var(--text);
+  text-align: right;
+  font-family: var(--text-value-family);
+  font-size: var(--text-value-size);
+  font-weight: var(--text-value-weight);
+  letter-spacing: var(--text-value-tracking);
+}
+/* the text cursor: while a value is being typed the field carries it */
+.fader .val input.faderin:focus { outline: none; border-bottom-color: var(--color-border-focus); }
+
+/* No fader grows past the desk's fader width (design 2.6). */
+.lookeditor .fader { max-width: var(--size-fader-max-w); }
+
+/* ---------- the stripe (design 2.6 A2) ---------- */
+
+.stripe {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-4) var(--space-8);
+  border-top: var(--size-rule) solid var(--line2);
+  background: var(--panel2);
+}
+.stripe .lampword {
+  font-size: var(--text-micro-size);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+/* LIVE — edits reach the rig. The stripe is the cursor's own rule (design 3.6,
+   and the selector the token checker lists). */
+.stripe.live { border-top-color: var(--accent); }
+.stripe.live .lampword { color: var(--accent); }
+/* HELD — the rig is showing a frame the show has already moved past. */
+.stripe.held { border-top-color: var(--color-status-nudge); }
+.stripe.held .lampword { color: var(--color-status-nudge); }
+/* NOT ON THE RIG — the pane is grounded in the blind tint. */
+.lookeditor.blind { background: var(--color-bg-blind); }
+
+/* ---------- the header (design 2.6 B2) ---------- */
+
+.lookhead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+/* the shared-by chip: how many pads carry this look, across every song */
+.chip.sharedby { cursor: pointer; }
+
+/* ---------- the feature row (design 2.6 A1) ---------- */
+
+.featurerow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+}
+.featurerow button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  background: transparent;
+  border: none;
+  border-bottom: var(--size-rule) solid transparent;
+  padding: var(--space-4) var(--space-8);
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+  letter-spacing: var(--text-label-tracking);
+  text-transform: uppercase;
+}
+.featurerow button:hover { color: var(--text); }
+.featurerow button.on { color: var(--text); border-bottom-color: var(--text); }
+/* the dot: this family has something enabled. Amber once it is nudged. */
+.featurerow .fdot {
+  width: var(--size-lamp);
+  height: var(--size-lamp);
+  border-radius: var(--radius-pill);
+  background: var(--text-dim);
+}
+.featurerow button.on .fdot { background: var(--text); }
+.featurerow .fdot.nudged,
+.featurerow button.on .fdot.nudged { background: var(--color-status-nudge); }
+
+/* ---------- the effect row's second line (design 2.6) ---------- */
+
+.spreadline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  background: transparent;
+  border: none;
+  padding: var(--space-3) var(--space-6);
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: var(--text-ui-size);
+  font-weight: var(--text-ui-weight);
+  letter-spacing: var(--text-ui-tracking);
+  text-align: left;
+}
+.spreadline:hover { color: var(--text); }
+.spreadline .caret { color: var(--text-faint); }
+
+/* ---------- the ⋯ menu and → dial ▾ (design 2.6, #41) ---------- */
+
+.menuwrap { position: relative; display: inline-flex; }
+.popover .menuhead {
+  padding: var(--space-4) var(--space-6);
+  font-size: var(--text-micro-size);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
