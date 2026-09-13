@@ -155,6 +155,9 @@ export function ColourWheel({ h, s, onPick, onClose, anchor }: {
             else if (e.key === 'ArrowDown') onPick(h, Math.max(0, s - step / 100));
             else return;
             e.preventDefault();
+            // and they stop here: the disc owns its arrows the same way the
+            // fader does, so nothing it handles can also reach the window
+            e.stopPropagation();
           }}
         >
           <i className="huemark" style={pointFor(h, s)} />
