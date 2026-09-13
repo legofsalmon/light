@@ -38,10 +38,25 @@ export const useLibraryStore = create<LibraryStore>()((set) => ({
   disarm: () => set({ armed: null }),
   sheet: false,
   q: '',
-  setQ: (q) => set({ q }),
+  // Typing is the next interaction: the ring the last "show me this one" left
+  // behind is about a search that is over.
+  setQ: (q) => set({ q, reveal: null }),
   reveal: (null as string | null),
   setReveal: (lookId) => set({ reveal: lookId }),
 }));
+
+/** Below this window width the library stops being a column beside the grid
+ *  and becomes a sheet over it (design 2.7). It is the width at which the
+ *  grid's eight columns, the layer head and a 280px panel stop fitting
+ *  together, and the grid is the constant — so the panel is what gives way.
+ *  Not a token yet: the design names the number and there is no `size/*` for
+ *  it, the same standing as NARROW_HEAD_BELOW in LookGrid. */
+export const LIBRARY_SHEET_BELOW = 1165;
+
+/** Where the library lives at this size. The layout owns the decision; this
+ *  owns the rule, so it is written down once. */
+export const libraryIsSheet = (windowWidth: number, touch: boolean): boolean =>
+  touch || windowWidth < LIBRARY_SHEET_BELOW;
 
 /** The song the grid is SHOWING, which is not always the one on stage.
  *
