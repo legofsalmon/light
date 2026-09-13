@@ -11,12 +11,17 @@
 // lost before the finger lifted.
 
 import type React from 'react';
+import { motion } from './tokens.ts';
 
-export const LONG_PRESS_MS = 500;
+/** How long a hold is: the same number as the ring that fills over
+ *  `--motion-hold`, by construction — the token is the only place it lives. */
+export const LONG_PRESS_MS = motion.hold;
 /** a finger wobbles; a swipe does not */
 const SLOP_PX = 8;
-/** how long after opening the menu the click that follows is still its echo */
-const ECHO_MS = 1500;
+/** how long after opening the menu the click that follows is still its echo —
+ *  three holds, so it scales with the hold rather than living as a second
+ *  duration of its own (touch.ts carries no duration literal, design 3.7) */
+const ECHO_MS = 3 * LONG_PRESS_MS;
 
 type Press = { timer: ReturnType<typeof setTimeout> | null; x: number; y: number; openedAt: number };
 const presses = new WeakMap<Element, Press>();

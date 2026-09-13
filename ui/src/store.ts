@@ -5,6 +5,7 @@ import type {
 import { WS_PORT } from '../../shared/types.ts';
 import { coarsePointer } from './touch.ts';
 import { describeEdit } from './editNames.ts';
+import { size, ratio } from './tokens.ts';
 
 export type Tab = 'look' | 'patch' | 'controls' | 'output' | 'sync';
 
@@ -185,14 +186,36 @@ function loadView(): ViewMode {
   return 'split';
 }
 
+/** How the desk opens (design 2.8, #2). Pads is an executor surface: the
+ *  library and the editor start folded and the band is a fraction of the
+ *  window; Build is a programmer, its band the audition alone at its own
+ *  height. The numbers are tokens; the three booleans have no token yet and
+ *  are the one thing typed here. Each preference is saved under a key of its
+ *  own — new keys, because `loadFlag` prefers a saved value and the old keys
+ *  carry what an earlier default taught the owner's install to save. */
+export const PADS_OPENS = {
+  /** the library column folded to its strip */
+  libraryHidden: true,
+  /** the editor column folded to its strip */
+  editorHidden: true,
+  /** the audition pane beside the live stage */
+  audition: true,
+  /** the band as a fraction of the window height */
+  bandRatio: ratio['band-pads'],
+} as const;
+/** Build's band: the audition alone, at this height */
+export const BUILD_OPENS = { bandH: size['band-build'] } as const;
+
 /** Remembered per view, like the view itself — a hidden previz that comes back
- *  on every launch would be re-hidden every launch. */
-function loadPrevizHidden(): Record<BandView, boolean> {
+ *  on every launch would be re-hidden every launch. On glass the band opens
+ *  folded in Pads and Build (design 2.2's touch row): what a finger needs is
+ *  the pads, and the band is a tap away. */
+function loadPrevizHidden(touch: boolean): Record<BandView, boolean> {
   try {
     const s = JSON.parse(localStorage.getItem('previzHidden') ?? 'null');
     if (s && typeof s === 'object') return { pads: !!s.pads, patch: !!s.patch, split: !!s.split };
   } catch { /* fall through */ }
-  return { pads: false, patch: false, split: false };
+  return { pads: touch, patch: false, split: touch };
 }
 
 const loadFlag = (key: string, def = false) => {
@@ -352,10 +375,10 @@ export const useStore = create<Store>()((set, get) => ({
   sel: null,
   tab: 'look',
   view: loadView(),
-  previzHidden: loadPrevizHidden(),
-  libraryHidden: loadFlag('libraryHidden'),
-  editorHidden: loadFlag('editorHidden'),
-  previewPane: loadFlag('previewPane', true),
+  previzHidden: loadPrevizHidden(touchFor(loadTouchPref())),
+  libraryHidden: loadFlag('padsLibraryHidden', PADS_OPENS.libraryHidden),
+  editorHidden: loadFlag('padsEditorHidden', PADS_OPENS.editorHidden),
+  previewPane: loadFlag('padsAudition', PADS_OPENS.audition),
   previzAutoExposure: loadFlag('previzAutoExposure', true),
   touchPref: loadTouchPref(),
   touch: touchFor(loadTouchPref()),
@@ -506,18 +529,18 @@ export const useStore = create<Store>()((set, get) => ({
     }),
   setLibraryHidden: (libraryHidden) =>
     set(() => {
-      saveFlag('libraryHidden', libraryHidden);
+      saveFlag('padsLibraryHidden', libraryHidden);
       return { libraryHidden };
     }),
   setEditorHidden: (editorHidden) =>
     set(() => {
-      saveFlag('editorHidden', editorHidden);
+      saveFlag('padsEditorHidden', editorHidden);
       return { editorHidden };
     }),
   togglePreviewPane: () =>
     set((s) => {
       const previewPane = !s.previewPane;
-      saveFlag('previewPane', previewPane);
+      saveFlag('padsAudition', previewPane);
       return { previewPane };
     }),
   togglePrevizAutoExposure: () =>
