@@ -1,0 +1,47 @@
+/* ---------- the band: the stage tag and the view menu (design 2.8, #16) ----
+   Tokens only, exactly like theme.css — check-tokens.mjs walks every
+   stylesheet under ui/src and this one is not special. */
+
+/* The state tag, on the canvas.
+   Top-left of the live view, over the render and never over the audition: the
+   audition is not the rig and says so in its own bar. It is chrome, so it is
+   opaque panel with a hairline and it does not glow; the word is text/label,
+   the only size that reads from the room. */
+.previzview .stagetag {
+  position: absolute;
+  top: var(--space-8);
+  left: var(--space-8);
+  z-index: 1;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: var(--space-3) var(--space-7);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  pointer-events: auto;
+}
+/* Amber is attention: the gate is shut, or the frame is held. */
+.previzview .stagetag.warn { color: var(--warn); border-color: var(--warn); }
+/* Red is the blackout family, and blackout is the only thing that wears it. */
+.previzview .stagetag.hot { color: var(--hot); border-color: var(--hot); }
+/* A find overrides blackout — it is the one held state that can burn a light
+   into a dark room — so it pulses, the same 1400ms as its chip in the strip. */
+.previzview .stagetag.find {
+  color: var(--warn);
+  border-color: var(--warn);
+  animation: findpulse var(--motion-pulse-find) ease-in-out infinite;
+}
+/* Cyan is the cursor, and "the song you are editing is not the song playing"
+   is where the cursor is — the same claim the editing rule makes on the grid. */
+.previzview .stagetag.editing { color: var(--accent); border-color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .previzview .stagetag.find { animation: none; }
+}
+
+/* The view menu. A popover of neutral toggles: each is a key, and a key that
+   is on is a lamp (.btn.on), so nothing here is lit cyan and nothing is lit
+   before it has been switched on. The fader inside it takes the menu's width
+   rather than the 110 px it was given on the bar. */
+.popover.viewmenu .fader { width: 100%; }
