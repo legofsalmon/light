@@ -140,7 +140,7 @@ export function GroupsSection(): React.ReactElement {
             </span>
           )}
           <div className="groupmembers">
-            {g.heads.length === 0 && <span className="label dim">no heads yet</span>}
+            {g.heads.length === 0 && <span className="prose">no heads yet</span>}
             {g.heads.map((h, i) => (
               <span
                 key={`${h.fixtureId}:${h.head}:${i}`}

@@ -491,7 +491,7 @@ export function FixtureTable({ conflicts }: { conflicts: Set<string> }): React.R
       <div className="rigempty">
         no rig yet
         <AddFixture />
-        <span className="label dim">or ⇩ import a GDTF for one fixture, an MVR for the whole plot</span>
+        <span className="prose">or ⇩ import a GDTF for one fixture, an MVR for the whole plot</span>
       </div>
     );
   }

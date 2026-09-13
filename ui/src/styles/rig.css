@@ -10,7 +10,13 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: var(--size-rail-w) minmax(0, 1fr) minmax(0, calc(var(--ratio-plan-w) * 100%));
+  /* The plan takes its share of what is left once the rail has its width —
+     the design's own arithmetic at 1024: rail 120, plan 38 % of the remaining
+     898, table the rest, which is the 526 the six columns need (2.9). */
+  grid-template-columns:
+    var(--size-rail-w)
+    minmax(0, 1fr)
+    minmax(0, calc((100% - var(--size-rail-w)) * var(--ratio-plan-w)));
   background: var(--panel);
 }
 
@@ -131,10 +137,13 @@
   letter-spacing: var(--text-value-tracking);
 }
 .rigtbl .name input, .rigtbl .name .text { width: 100%; }
+/* The universe is one digit wide (2.9's 28 px): the native caret would leave
+   no room for it, so the cell is the number and the menu opens on a click. */
 .rigtbl .unicell {
   width: 100%;
-  padding: 0 var(--space-2);
+  padding: 0;
   text-align: center;
+  appearance: none;
   font-family: var(--text-value-family);
   font-size: var(--text-value-size);
 }

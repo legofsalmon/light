@@ -64,22 +64,25 @@ export function lookFromSelection(): void {
   }
 
   // Where it lands: the selected pad if it is empty, else the first empty pad
-  // on layer 1 of the song on stage.
-  const layer1 = project.layers[0];
+  // on layer 1 of the song on stage — and if layer 1 is full, the next layer
+  // that has room, because "there is nowhere to put this" is a worse answer
+  // than "it went on layer 2".
   const selLayer = st.sel && project.layers.find((l) => l.id === st.sel!.layerId);
   const columns = project.columns.length;
   let target: { layerId: string; col: number } | null = null;
   if (st.sel && selLayer && !selLayer.cells[st.sel.col]) target = { layerId: selLayer.id, col: st.sel.col };
-  else if (layer1) {
-    for (let c = 0; c < columns; c++) {
-      if (!layer1.cells[c]) {
-        target = { layerId: layer1.id, col: c };
-        break;
+  else {
+    outer: for (const ly of project.layers) {
+      for (let c = 0; c < columns; c++) {
+        if (!ly.cells[c]) {
+          target = { layerId: ly.id, col: c };
+          break outer;
+        }
       }
     }
   }
   if (!target) {
-    notify(`${layer1?.name ?? 'the first layer'} has no free pad in this song — clear one, or select an empty pad first`);
+    notify('every pad in this song is taken — clear one, or select an empty pad first');
     return;
   }
 
