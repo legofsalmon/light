@@ -2,6 +2,12 @@ import React, { useCallback, useRef } from 'react';
 import type { MidiAction } from '../../../shared/types.ts';
 import { clamp } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
+import { size } from '../tokens.ts';
+
+/** The one unit rule (design 3.2): a percentage reads `45 %` with a thin
+ *  space before the sign. Masters use no formatter and read bare — `100` is
+ *  full. Every fader that shows a percentage formats with this. */
+export const fmtPct = (v: number): string => `${Math.round(v * 100)}\u2009%`;
 
 type Props = {
   value: number;
@@ -35,10 +41,13 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
       const el = ref.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      const n = clamp((e.clientX - r.left) / r.width);
+      // the pointer runs the track, not the value column beside it, so the
+      // fill's edge stays under the finger and the right end of the track is full
+      const trackW = variant === 'hue' ? r.width : r.width - size['value-w'];
+      const n = clamp((e.clientX - r.left) / Math.max(1, trackW));
       onChange(min + n * (max - min));
     },
-    [onChange, min, max]
+    [onChange, min, max, variant]
   );
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -66,11 +75,14 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
       {variant === 'hue' ? (
         <div className="marker" style={{ left: `${norm * 100}%` }} />
       ) : (
-        <div className="fill" style={{ width: `${norm * 100}%` }} />
+        // The fill runs over the track only: the value has a mono column of
+        // its own at the right edge (--size-value-w) that the fill never
+        // reaches, so a reading is never struck through by the fill's edge.
+        <div className="fill" style={{ width: `calc((100% - var(--size-value-w)) * ${norm})` }} />
       )}
       <div className="val">
         <span>{label}</span>
-        <b>{fmt ? fmt(value) : `${Math.round(norm * 100)}`}</b>
+        <b style={{ flex: '0 0 var(--size-value-w)', textAlign: 'right' }}>{fmt ? fmt(value) : `${Math.round(norm * 100)}`}</b>
       </div>
     </div>
   );

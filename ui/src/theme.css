@@ -239,10 +239,6 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
   background-repeat: no-repeat;
 }
 .chipsel:hover { color: var(--text); border-color: var(--text-dim); }
-/* in the 120px head the blend is a read-only tag (design 2.4); until the markup
-   follows, the select gives way to the name rather than the other way round */
-.layerhead .chipsel { min-width: 0; max-width: 40%; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
-.layerhead .name { flex: 1 1 auto; min-width: 45%; }
 .chipsel:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 
 .chip {
@@ -506,6 +502,25 @@ input.num,
   text-overflow: ellipsis;
 }
 .layerhead .row { gap: var(--space-4); }
+/* line 1: the name gets first call; the blend is a read-only tag in text/micro
+   that gives way to it, and the ✕ keeps its width. The narrow head carries no
+   tag (design 2.2's touch row: `L4 ▮ ✕`) — the blend stays in the help and
+   behind the hold. */
+.layerhead .headline { cursor: default; }
+.layerhead .name { flex: 1 1 auto; min-width: 45%; }
+.layerhead .blendtag {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-micro-size);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.lookgrid.narrow .blendtag { display: none; }
 /* the ✕ is a ghost until the layer plays something — the hardware's rule
    (surfaces.ts): a hover on an idle layer changes nothing. `.live` is the
    class hook; :has() reads the now-playing line until the markup carries it. */

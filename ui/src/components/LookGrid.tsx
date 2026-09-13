@@ -9,7 +9,7 @@ import { size } from '../tokens.ts';
 /** Below this grid-area width the layer head is its narrow 96px (design 2.2).
  *  Not a token yet: the design names the number and no size/* for it. */
 const NARROW_HEAD_BELOW = 1200;
-import { Fader } from './Fader.tsx';
+import { Fader, fmtPct } from './Fader.tsx';
 import { lookSwatch } from '../lookColors.ts';
 import { APC_COLS, APC_KNOB_BANKS, APC_LAYER_ROWS } from '../apcFeedback.ts';
 
@@ -193,6 +193,14 @@ const Cell = React.memo(function Cell({
     dragDepth.current = 0;
     setDropHover(false);
   };
+  // A flash look under a finger: face 1.0 and the halo, no glow — it is not
+  // playing, it is being held (design 2.3). Set on the press that holds it,
+  // cleared by the same release that lets it go.
+  const [held, setHeld] = useState(false);
+  // The stripes the face draws, and the look's first colour: the glow's colour
+  // and the layer head's mini swatch both read lookSwatch[0], the rule the APC
+  // LED mirror shares, so the screen and the hardware agree (design 2.3).
+  const swatch = look ? lookSwatch(look, project.looks) : null;
 
   // One press, two inputs. An empty pad is also where you START a look — the
   // editor invites "click an empty pad to create one" — so a stray press while
@@ -212,6 +220,7 @@ const Cell = React.memo(function Cell({
     send({ type: 'trigger', layerId: layer.id, col });
   };
   const release = () => {
+    setHeld(false);
     if (!learnMode && look?.flash) send({ type: 'release', layerId: layer.id, col });
   };
 
@@ -240,7 +249,8 @@ const Cell = React.memo(function Cell({
 
   return (
     <div
-      className={`cell ${look ? '' : 'empty'} ${active ? 'active' : ''} ${staleLive ? 'stale' : ''} ${selected ? 'selected' : ''} ${armed ? 'learn-armed' : ''} ${dropHover ? 'droptarget' : ''}`}
+      className={`cell ${look ? '' : 'empty'} ${active ? 'active' : ''} ${held ? 'held' : ''} ${staleLive ? 'stale' : ''} ${selected ? 'selected' : ''} ${armed ? 'learn-armed' : ''} ${dropHover ? 'droptarget' : ''}`}
+      style={swatch ? { ['--pad-glow' as string]: swatch[0] } : undefined}
       onDragEnter={(e) => {
         if (!e.dataTransfer.types.includes(LOOK_DRAG)) return;
         dragDepth.current += 1;
@@ -289,7 +299,10 @@ const Cell = React.memo(function Cell({
         setSel({ layerId: layer.id, col });
         if (e.button !== 0) return; // right/middle-click must never latch a flash look
         fire();
-        if (look?.flash && !learnMode) e.currentTarget.setPointerCapture(e.pointerId);
+        if (look?.flash && !learnMode) {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setHeld(true);
+        }
       }}
       onPointerUp={release}
       onPointerCancel={release}
@@ -301,15 +314,16 @@ const Cell = React.memo(function Cell({
         if (e.repeat) return;
         setSel({ layerId: layer.id, col });
         fire();
+        if (look?.flash && !learnMode) setHeld(true);
       }}
       onKeyUp={(e) => {
         if (e.key === 'Enter' || e.key === ' ') release();
       }}
     >
-      {look && (
+      {look && swatch && (
         <>
           <div className="swatch">
-            {lookSwatch(look, project.looks).map((c, i) => (
+            {swatch.map((c, i) => (
               <i key={i} style={{ background: c }} />
             ))}
           </div>
@@ -370,43 +384,63 @@ const BLEND_HELP: Record<LayerBlend, string> = {
   multiply: 'dims — scales what is under it; can only take light away',
   htp: 'brightest — the brighter of this layer and what is under it wins; can only add light, never remove it',
 };
+/** the blend's one-word tag on the layer head */
+const BLEND_WORD: Record<LayerBlend, string> = { normal: 'replaces', multiply: 'dims', htp: 'brightest' };
+/** The head's first line names the layer the way the desk's keys do — `L1`
+ *  to `L4` in text/key (design 3.2) — when the layer still has its default
+ *  name; a layer the owner has named keeps its word. The full name stays in
+ *  the head's help. */
+const headName = (name: string): string => name.replace(/^layer\s+(\d+)$/i, 'L$1');
+const BLENDS: LayerBlend[] = ['normal', 'multiply', 'htp'];
 
+/** The layer head (design 2.4): line 1 the name in text/key, the blend as a
+ *  read-only tag and a ✕ that is a ghost until something is playing; line 2
+ *  the now-playing line — a mini swatch in the look's first colour and its
+ *  name in tungsten, an unlit well when idle; line 3 the master. Right-click
+ *  or hold the first line to change the blend — a build-time control does not
+ *  belong on the performance row, so it lives behind the gesture columns and
+ *  songs already use. */
 function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined }) {
   const send = useStore((s) => s.send);
   const mutate = useStore((s) => s.mutate);
   const project = useStore((s) => s.project)!;
+  const touch = useStore((s) => s.touch);
   // The grid scrolls and looks fire from MIDI/OSC too, so the active cell can
   // be off-screen. The layer head never scrolls — it is the one place that can
   // always answer "what is this layer doing right now".
   const liveId = live?.lookId ?? null;
   const liveLook = liveId && Object.hasOwn(project.looks, liveId) ? project.looks[liveId] : null;
   const crossfading = !!liveLook && (live?.t ?? 1) < 1;
+  const blendMenu = contextPress(() => {
+    void askChoice(`${layer.name} — blend`, BLENDS.map((b) => ({
+      value: b,
+      label: BLEND_WORD[b],
+      primary: b === layer.blend,
+    })), {
+      body: 'How this layer combines with the layers under it. Blend only affects intensity — colour, position and strobe always take the upper layer’s value.',
+    }).then((choice) => {
+      const blend = BLENDS.find((b) => b === choice);
+      if (!blend || blend === layer.blend) return;
+      mutate((p) => {
+        const l = p.layers.find((x) => x.id === layer.id);
+        if (l) l.blend = blend;
+      }, `set ${layer.name} to ${BLEND_WORD[blend]}`);
+    });
+  });
   return (
-    <div className="layerhead">
+    <div className={`layerhead ${liveLook ? 'live' : ''}`}>
       <div className="row">
-        <div className="name grow">{layer.name}</div>
-        {/* How this layer combines with the layers below. It was a read-only
-            chip, which meant the only way to change a blend was to hand-edit
-            the project file. */}
-        <select
-          className="chip chipsel"
-          value={layer.blend}
-          title={BLEND_HELP[layer.blend]}
-          onChange={(e) => {
-            const blend = e.target.value as LayerBlend;
-            mutate((p) => {
-              const l = p.layers.find((x) => x.id === layer.id);
-              if (l) l.blend = blend;
-            });
-          }}
+        <div
+          className="row grow headline"
+          title={`${layer.name} · ${BLEND_HELP[layer.blend]}. ${touch ? 'Hold' : 'Right-click'} to change the blend`}
+          {...blendMenu}
         >
-          <option value="normal">replaces</option>
-          <option value="multiply">dims</option>
-          <option value="htp">brightest</option>
-        </select>
+          <div className="name grow">{headName(layer.name)}</div>
+          <span className="blendtag">{BLEND_WORD[layer.blend]}</span>
+        </div>
         <button
           className="btn small ghost clearbtn"
-          title="clear layer"
+          title={liveLook ? 'clear layer — stops what it is playing' : 'clear layer — nothing is playing on it'}
           onClick={() => {
             if (!useStore.getState().armLearn({ kind: 'layerClear', layerId: layer.id })) {
               send({ type: 'clearLayer', layerId: layer.id });
@@ -424,17 +458,14 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
             : 'nothing playing on this layer'
         }
       >
-        {liveLook ? (
+        {liveLook && (
           <>
+            {/* the first colour only — the rule the APC LED mirror reads */}
             <span className="swatch mini">
-              {lookSwatch(liveLook, project.looks).map((c, i) => (
-                <i key={i} style={{ background: c }} />
-              ))}
+              <i style={{ background: lookSwatch(liveLook, project.looks)[0] }} />
             </span>
             <span className="grow ellip">{liveLook.name}</span>
           </>
-        ) : (
-          '—'
         )}
       </div>
       <Fader
@@ -789,7 +820,6 @@ function SubmasterRow() {
                 def={1}
                 help={`${g.name} level — scales intensity for every head in the group. The lowest group level over a head wins, so a head in two groups follows whichever is further down.`}
                 onChange={(x) => send({ type: 'setSubmaster', groupId: g.id, v: x })}
-                fmt={(x) => `${Math.round(x * 100)}%`}
                 width="100%"
                 variant="dim"
                 learn={{ kind: 'submaster', groupId: g.id }}
@@ -897,7 +927,7 @@ function ControlRow() {
               value={liveValue ?? c.value}
               def={c.value}
               onChange={(v) => send({ type: 'setControl', controlId: c.id, value: v })}
-              fmt={(v) => `${Math.round(v * 100)}%`}
+              fmt={fmtPct}
               learn={{ kind: 'control', controlId: c.id }}
               variant="dim"
             />

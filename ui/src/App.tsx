@@ -200,7 +200,6 @@ export function App() {
     const revealing = wasHidden.current && !bandHidden;
     wasHidden.current = bandHidden;
     setLayout((l) => clampLayout(l, { ...clampOpts, ...(revealing ? { keep: bandKey } : {}) }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, bandHidden, libraryHidden, editorHidden, win.w, win.h, chromeH, touch]);
 
   useEffect(() => {
