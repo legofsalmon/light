@@ -495,19 +495,28 @@ function DeckBar() {
   const flushProjectWrite = useStore((s) => s.flushProjectWrite);
   const touch = useStore((s) => s.touch);
   const decks = project.decks ?? [];
-  const activeChipRef = useRef<HTMLDivElement>(null);
-  // A chip carries both gestures: click switches the live song, double-click
-  // renames. The browser delivers click, click, dblclick — so a naive handler
-  // switches the whole show (grid, APC LEDs, OSC follow target) to the wrong
-  // song the instant you start a rename. Hold the switch briefly; if a
-  // double-click follows, cancel it. The eyes-off switch paths (APC bank
-  // arrows, [ / ]) are untouched and stay instant.
-  const switchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // a deck change from the APC bank arrows (or [ / ]) must bring the live
-  // song on screen — with 12 songs the active chip is often scrolled away
+  const anyPlaying = useStore((s) => (s.snap?.layers ?? []).some((l) => !!l.lookId));
+  const [picker, setPicker] = useState(false);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [filter, setFilter] = useState('');
+  const pickerBoxRef = useRef<HTMLDivElement>(null);
+  const active = decks.find((d) => d.id === project.activeDeckId);
+  /** the song's place in the set, so the list reads like a set list */
+  const songNo = (d: { id: string } | undefined) => {
+    const i = d ? decks.findIndex((x) => x.id === d.id) : -1;
+    return i < 0 ? '—' : String(i + 1).padStart(2, '0');
+  };
+  const shown = filter.trim()
+    ? decks.filter((d) => d.name.toLowerCase().includes(filter.trim().toLowerCase()))
+    : decks;
   useEffect(() => {
-    activeChipRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
-  }, [project.activeDeckId]);
+    if (!picker) return;
+    const close = (e: PointerEvent) => {
+      if (pickerBoxRef.current && !pickerBoxRef.current.contains(e.target as Node)) setPicker(false);
+    };
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [picker]);
   type Song = (typeof decks)[number];
   const renameSong = (d: Song) => {
     void (async () => {
@@ -561,6 +570,41 @@ function DeckBar() {
       else if (choice === 'delete') deleteSong(d);
     });
   };
+  /** Make a song, and land on it only when the room is not watching.
+   *
+   *  `+ song` used to create the song AND switch to it immediately — mid-set
+   *  that repaints the grid and the APC's whole LED page to an empty song
+   *  while the previous one is still lighting the room. Building the next song
+   *  is not a live action, so it no longer takes one: with something playing
+   *  the song is made and left waiting, and the notice offers the switch. */
+  const addSong = async (kind: 'empty' | 'copy') => {
+    const id = uid('deck');
+    mutate((p) => {
+      p.decks ??= [];
+      if (kind === 'copy') {
+        const src = p.decks.find((d) => d.id === p.activeDeckId);
+        p.decks.push({
+          id,
+          name: `${src?.name ?? 'Song'} copy`,
+          columns: [...p.columns],
+          // the live layer cells ARE the active song — copy those
+          cells: Object.fromEntries(p.layers.map((l) => [l.id, [...l.cells]])),
+        });
+      } else {
+        p.decks.push({ id, name: `Song ${p.decks.length + 1}`, columns: [...p.columns], cells: {} });
+      }
+    });
+    if (anyPlaying) {
+      notify(`${kind === 'copy' ? 'copied' : 'added'} — it is waiting in the set list, and the room is unchanged`, true);
+      return;
+    }
+    // The engine must SEE the new song before we ask it to switch — the project
+    // write is throttled, and a switchDeck racing ahead of it is silently
+    // dropped (unknown song). Flush the write first, then switch.
+    flushProjectWrite();
+    send({ type: 'switchDeck', deckId: id });
+  };
+
   if (decks.length === 0) return null;
 
   return (
@@ -593,76 +637,64 @@ function DeckBar() {
       >
         ▶
       </button>
-      {decks.map((d) => (
-        <div
-          key={d.id}
-          ref={d.id === project.activeDeckId ? activeChipRef : undefined}
-          className={`deckchip ${d.id === project.activeDeckId ? 'on' : ''}`}
-          role="tab"
-          aria-selected={d.id === project.activeDeckId}
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if ((e.key === 'Enter' || e.key === ' ') && d.id !== project.activeDeckId) { e.preventDefault(); send({ type: 'switchDeck', deckId: d.id }); }
-          }}
-          title={`click to switch · double-click to rename · ${touch ? 'hold' : 'right-click'} for more`}
-          {...contextPress(() => songMenu(d))}
+      {/* One chip for the song that is playing, not twenty in a strip that
+          scrolled with its scrollbar hidden. Song 15 from song 1 was fourteen
+          live presses of ▶, each one a real switch of the room; it is now one
+          gesture in a list (design 2.5). */}
+      <div ref={pickerBoxRef} style={{ position: 'relative', flex: '0 0 auto' }}>
+        <button
+          className="deckchip on songnow"
+          aria-haspopup="listbox"
+          aria-expanded={picker}
+          title={`${active?.name ?? 'song'} — click for the whole set list · ${touch ? 'hold' : 'right-click'} to rename, move or delete`}
+          {...contextPress(() => { if (active) songMenu(active); })}
           onClick={() => {
-            // already on this deck: a switch is a no-op, so don't delay the
-            // rename that a double-click here is about to ask for
-            if (d.id === project.activeDeckId) return;
-            if (switchTimer.current) clearTimeout(switchTimer.current);
-            switchTimer.current = setTimeout(() => {
-              switchTimer.current = null;
-              send({ type: 'switchDeck', deckId: d.id });
-            }, 220);
-          }}
-          onDoubleClick={() => {
-            if (switchTimer.current) {
-              clearTimeout(switchTimer.current);
-              switchTimer.current = null; // the pending switch was the first click of this double
-            }
-            renameSong(d);
+            const r = pickerBoxRef.current?.getBoundingClientRect();
+            if (r) setPickerPos({ top: r.bottom + 2, left: r.left });
+            setFilter('');
+            setPicker((o) => !o);
           }}
         >
-          {d.name}
-          {decks.length > 1 && d.id === project.activeDeckId && (
-            <>
-              <span
-                className="deckmove"
-                title="move this song earlier"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  moveSong(d, -1);
-                }}
-              >
-                ‹
-              </span>
-              <span
-                className="deckmove"
-                title="move this song later"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  moveSong(d, 1);
-                }}
-              >
-                ›
-              </span>
-            </>
-          )}
-          {decks.length > 1 && d.id !== project.activeDeckId && (
-            <span
-              className="deckx"
-              title="delete song"
-              onClick={(e) => {
-                e.stopPropagation();
-                deleteSong(d);
+          {songNo(active)} · {active?.name ?? '—'} ▾
+        </button>
+        {picker && (
+          <div className="popover songpicker" style={{ top: pickerPos.top, left: pickerPos.left }} role="listbox">
+            <input
+              className="text"
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- the click that opened it asked for the caret
+              autoFocus
+              placeholder="find a song"
+              aria-label="find a song"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') { setPicker(false); return; }
+                if (e.key !== 'Enter') return;
+                const hit = shown[0];
+                if (hit && hit.id !== project.activeDeckId) send({ type: 'switchDeck', deckId: hit.id });
+                setPicker(false);
               }}
-            >
-              ×
-            </span>
-          )}
-        </div>
-      ))}
+            />
+            {shown.map((d) => (
+              <button
+                key={d.id}
+                className={`btn small ghost ${d.id === project.activeDeckId ? 'on' : ''}`}
+                role="option"
+                aria-selected={d.id === project.activeDeckId}
+                style={{ justifyContent: 'flex-start' }}
+                title={d.id === project.activeDeckId ? 'this song is playing' : `switch the room to ${d.name} — the pads change under your hands`}
+                onClick={() => {
+                  if (d.id !== project.activeDeckId) send({ type: 'switchDeck', deckId: d.id });
+                  setPicker(false);
+                }}
+              >
+                {songNo(d)} · {d.name}
+              </button>
+            ))}
+            {shown.length === 0 && <div className="prose" style={{ padding: 'var(--space-6)' }}>nothing called “{filter}”</div>}
+          </div>
+        )}
+      </div>
       {decks.length > 1 && (() => {
         const i = decks.findIndex((x) => x.id === project.activeDeckId);
         const j = Math.min(decks.length - 1, (i < 0 ? 0 : i) + 1);
@@ -678,45 +710,14 @@ function DeckBar() {
       <button
         className="btn small ghost"
         style={{ flex: '0 0 auto' }} /* a shrinking key wraps its word and grows the song row */
-        title="new empty song"
-        onClick={() => {
-          const id = uid('deck');
-          mutate((p) => {
-            p.decks ??= [];
-            p.decks.push({ id, name: `Song ${p.decks.length + 1}`, columns: [...p.columns], cells: {} });
-          });
-          // The engine must SEE the new deck before we ask it to switch — the
-          // project write is throttled, and a switchDeck racing ahead of it is
-          // silently dropped (unknown deck). Flush the write first, then switch.
-          flushProjectWrite();
-          send({ type: 'switchDeck', deckId: id }); // land on the deck you just made
-        }}
+        title={
+          anyPlaying
+            ? 'add a song — it is made and left waiting, because the room is playing something'
+            : 'add a song — nothing is playing, so it opens on the new one'
+        }
+        onClick={() => { void addSong('empty'); }}
       >
-        + song
-      </button>
-      <button
-        className="btn small ghost"
-        style={{ flex: '0 0 auto' }}
-        title="copy this song's pads into a new song — the usual way to start the next one"
-        onClick={() => {
-          const id = uid('deck');
-          mutate((p) => {
-            p.decks ??= [];
-            const src = p.decks.find((d) => d.id === p.activeDeckId);
-            p.decks.push({
-              id,
-              name: `${src?.name ?? 'Song'} copy`,
-              columns: [...p.columns],
-              // the live layer cells ARE the active deck — copy those
-              cells: Object.fromEntries(p.layers.map((l) => [l.id, [...l.cells]])),
-            });
-          });
-          // flush before switching — the deck must exist on the engine first
-          flushProjectWrite();
-          send({ type: 'switchDeck', deckId: id });
-        }}
-      >
-        ⧉ duplicate
+        + song ▾
       </button>
     </div>
   );

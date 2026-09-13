@@ -258,7 +258,9 @@ export const size = {
   "guide-strip": 24,
   layertabs: 24,
   gridstrip: 114,
-  "remote-head-w": 48
+  "remote-head-w": 48,
+  "songnow-max-w": 220,
+  "picker-max-h": 360
 } as const;
 
 /** the Touch-mode values of the sizes that have one */

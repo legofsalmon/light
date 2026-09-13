@@ -1771,3 +1771,19 @@ button.warnchip { background: none; cursor: pointer; }
 /* A status lamp brightens while something is arriving, so a live link and a
    quiet one differ without inventing a second colour (design P8). */
 .statusdot.traffic { box-shadow: 0 0 var(--space-6) currentColor; }
+
+/* ---------- the song row: one chip and a set list (design 2.5) -------------
+   Twenty chips used to sit in a strip that scrolled with its scrollbar hidden,
+   so song 15 from song 1 was fourteen presses of ▶ — fourteen real switches of
+   the room. The song that is playing gets one chip in the colour of what is
+   playing, and the rest of the set is a list behind it. */
+.deckchip.songnow {
+  color: var(--color-live);
+  border-color: var(--line2);
+  max-width: var(--size-songnow-max-w);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.popover.songpicker { width: var(--size-picker-w); max-height: var(--size-picker-max-h); overflow-y: auto; }
+.popover.songpicker .text { width: 100%; margin-bottom: var(--space-4); }

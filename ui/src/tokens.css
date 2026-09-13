@@ -253,6 +253,8 @@
   --size-layertabs: 24px;
   --size-gridstrip: 114px;
   --size-remote-head-w: 48px;
+  --size-songnow-max-w: 220px;
+  --size-picker-max-h: 360px;
   /* type: families, weights, leading, sizes, then one set of properties per text style */
   --font: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
   --mono: 'IBM Plex Mono', 'SF Mono', ui-monospace, Menlo, monospace;
