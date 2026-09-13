@@ -17,6 +17,7 @@ import { COMPILER_VERSION } from '../../shared/types.ts';
 import type { MidiMapping, Snapshot } from '../../shared/types.ts';
 import { APC40_MK2, APC_COLS, APC_LAYER_ROWS, APC_MINI_MK2, SURFACES, computeLeds, nearest } from '../../ui/src/surfaces.ts';
 import { apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
+import { lookFace, lookSwatch } from '../../ui/src/lookColors.ts';
 
 /** The demo show these tests were written against — five fixtures at known
  *  addresses, looks with known ids. Deliberately NOT the shipped default: that
@@ -391,6 +392,59 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
     const stray = [...leds.keys()].filter((n) => !surface.clear.some(([a, b]) => n >= a && n <= b));
     check(`surface: ${surface.name} lights only notes it blanks on attach`, stray.length === 0, `stray ${stray.join(',')}`);
   }
+}
+
+// ---------- the pad's two readings: the stripe the hardware mirrors, and the
+//            rig miniature the screen draws (design #30) ----------
+//
+// `lookFace` is a SECOND reading of a look, added beside `lookSwatch` rather
+// than replacing it. The browser LED mirror reads `lookSwatch(...)[0]`
+// (surfaces.ts) and core/src/apc.rs re-implements that first-colour rule by
+// hand as `swatch_first` — nothing reads the other's code, so a quiet change
+// to the swatch would light the APC a different colour from the pad under the
+// same look, with the golden in apc.rs the only thing between the two.
+//
+// This holds the swatch itself: every look in the shipped show, hashed. It is
+// pinned to that show's artistic content on purpose — the looks are the data
+// the rule is exercised against — so if the set list changes deliberately, the
+// failure prints the new digest to record here. A change nobody meant is the
+// case it exists for.
+{
+  const shipped = JSON.parse(
+    fs.readFileSync(path.join(process.cwd(), 'shared/defaultProject.json'), 'utf8'),
+  ) as Project;
+  const ids = Object.keys(shipped.looks).sort();
+  const swatchOf = (id: string) => lookSwatch(shipped.looks[id], shipped.looks).join(' ');
+  const before = ids.map(swatchOf);
+  // FNV-1a, so the recorded value is short enough to read in a diff
+  const digest = (s: string) => {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(16).padStart(8, '0');
+  };
+  const got = digest(ids.map((id, i) => `${id}|${before[i]}`).join('\n'));
+  check(
+    'look colours: the swatch of every look in the shipped show is unchanged',
+    got === 'f0355f94' && ids.length === 190,
+    `${ids.length} looks, digest ${got} — if the set list changed on purpose, record this digest`,
+  );
+
+  // And the face never becomes the swatch: they are memoised separately, and
+  // asking for one must not disturb the other.
+  for (const id of ids) lookFace(shipped.looks[id], shipped);
+  check(
+    'look colours: drawing the face leaves the swatch byte-identical',
+    ids.every((id, i) => swatchOf(id) === before[i]),
+  );
+  check(
+    'look colours: the face never lands on a group that is not in the rig',
+    ids.every((id) =>
+      lookFace(shipped.looks[id], shipped).marks.every((m) => shipped.groups.some((g) => g.id === m.groupId)),
+    ),
+  );
 }
 
 // ---------- SYNC lands on a bar, in both engines ----------
