@@ -22,6 +22,27 @@ Shortcuts are ignored while you are typing in a field. A text field left focused
 would otherwise swallow your cue keys, so the search box in the look library
 hands the keyboard back on `Esc`, on `Enter`, and when you start dragging a look.
 
+## Gestures
+
+Everything the pointer does that is not a click. The wording on the left is what
+a mouse or trackpad does; on glass the same gesture is a hold, and the app says
+so — the sheet, the tooltips and this table all pick their words from the same
+touch flag.
+
+| With a mouse | On glass | Does |
+|---|---|---|
+| right-click a pad’s name | hold a pad’s name | open that pad’s menu |
+| drag a pad’s name | drag a pad’s name | move the look to another pad — the two swap what they hold |
+| right-click a column head | hold a column head | rename, insert or delete that column |
+| click the layer’s ✕ | hold the layer’s ✕ until the ring fills | stop that layer |
+| click a library tile, then a pad’s name | tap a library tile, then a pad’s name | put that look on the pad — the tile stays armed until Esc |
+| type a name on the plan | type a name on the plan | select the lights whose names start with what you type |
+| hold the lock | hold the lock | unlock this screen — it asks for the passcode |
+
+The gesture list lives in `ui/src/gestures.ts`, the sheet renders it beside the
+keys, and the engine test suite reads the table above back out of this file and
+requires the two to match — so a gesture cannot be added without appearing here.
+
 ## Hover help
 
 Every control in the app carries a tooltip — buttons, pickers, number fields
