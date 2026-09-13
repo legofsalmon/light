@@ -40,6 +40,8 @@
 
 /* ---------- the stripe (design 2.6 A2) ---------- */
 
+/* The design asks for a 3 px rule here and there is no 3 px token yet, so this
+   is --size-rule (2) until --size-stripe lands in tokens.json. */
 .stripe {
   display: flex;
   align-items: center;
