@@ -14,7 +14,10 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: var(--text-body-size);
+  font-size: var(--text-ui-size);
+  /* one figure set for the whole desk: BPM, masters, addresses and counts line
+     up, and a zero cannot be read as an O (design 3.2) */
+  font-variant-numeric: tabular-nums slashed-zero;
   user-select: none;
   -webkit-user-select: none;
   /* a held finger must open OUR menu, not the OS callout or a text selection */
@@ -112,16 +115,18 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 .librarystrip { grid-area: library; }
 .editorstrip { grid-area: editor; }
 
-/* drag handles between panels — the grid track each occupies is set inline */
+/* drag handles between panels — the grid track each occupies is set inline.
+   Six pixels of chrome with a hairline down the middle: a seam, not a black
+   bar, and it brightens under the pointer without turning cyan (design 3.5). */
 .vsplit, .hsplit {
-  background: var(--color-bg-seam);
+  background: var(--panel);
   position: relative;
   z-index: 5;
   transition: background var(--motion-base);
 }
-.vsplit { cursor: col-resize; }
-.hsplit { cursor: row-resize; }
-.vsplit:hover, .vsplit.active, .hsplit:hover, .hsplit.active { background: var(--accent); }
+.vsplit { cursor: col-resize; border-left: 1px solid var(--line); }
+.hsplit { cursor: row-resize; border-top: 1px solid var(--line); }
+.vsplit:hover, .vsplit.active, .hsplit:hover, .hsplit.active { background: var(--raise2); }
 /* widen the hit area without widening the visual */
 .vsplit::after, .hsplit::after { content: ''; position: absolute; inset: -4px; }
 
@@ -135,49 +140,88 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
   align-items: center;
   justify-content: center;
   color: var(--text-dim);
-  letter-spacing: var(--text-splash-tracking);
-  font-size: var(--text-splash-size);
+  letter-spacing: var(--text-wordmark-tracking);
+  font-size: var(--text-wordmark-size);
 }
-.splash .dot { animation: pulse var(--motion-pulse-splash) infinite; color: var(--accent); letter-spacing: 0; }
+.splash .dot { animation: pulse var(--motion-pulse-splash) infinite; color: var(--color-live); letter-spacing: 0; }
 @keyframes pulse { 50% { opacity: 0.25; } }
 
 /* ---------- small primitives ---------- */
 
+/* ---- caps live on three styles only: micro, label and key (design 3.2) ----
+   Two rules carry every uppercase on the desk. Names, prose, menus and
+   chips that hold a name are never forced to caps. */
+.label, .sectionhead, .colhead, .controlhead .name, .ctlcell .ctlname, .ctlcell .ctlmidi,
+.chip, .fader .val, table.tbl th { text-transform: uppercase; }
+.btn, .seg button, .tab, .layerhead .name, .offlinebar { text-transform: uppercase; }
+
 .label {
   font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
   letter-spacing: var(--text-label-tracking);
-  text-transform: uppercase;
   color: var(--text-dim);
   white-space: nowrap;
 }
 
+/* ---- keys are hardware keys (design 2.1) ----
+   A flat face with a 1px top edge and a 1px bottom shade, text in text/key.
+   Hover changes the text and the edge, never the fill; a press raises the
+   face for the press; a latched key is a lamp — the face raised and a 5px
+   tungsten bar at the left edge, the same family as what is playing. Cyan
+   never reaches a key: it is the cursor, and a key is not where the cursor is. */
 .btn {
-  background: var(--raise);
-  border: 1px solid var(--line2);
+  background: var(--color-key-fill);
+  border: 1px solid var(--line);
+  border-top-color: var(--color-key-edge-hi);
+  border-bottom-color: var(--color-key-edge-lo);
   border-radius: var(--radius-sm);
-  color: var(--text);
+  color: var(--text-dim);
   min-height: var(--size-btn);
   padding: var(--space-4) var(--space-10);
-  font-size: var(--text-control-size);
-  letter-spacing: var(--text-control-tracking);
-  text-transform: uppercase;
+  font-size: var(--text-key-size);
+  font-weight: var(--text-key-weight);
+  letter-spacing: var(--text-key-tracking);
+  line-height: var(--text-key-leading);
   cursor: pointer;
-  line-height: var(--text-control-leading);
+  transition: background var(--motion-press), color var(--motion-fast), border-color var(--motion-fast);
 }
-.btn:hover { background: var(--raise2); }
-.btn:active { transform: translateY(0.5px); }
-.btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.btn:hover { color: var(--text); border-top-color: var(--color-key-edge-hi-hover); }
+.btn:active { background: var(--raise2); color: var(--text); }
 .btn.hot { background: var(--color-status-bad-fill); border-color: var(--hot); color: var(--hot); }
 /* layer clear: lighter red identity */
 .btn.clearbtn { color: var(--color-danger-text); border-color: var(--color-danger-border); }
 .btn.clearbtn:hover { color: var(--color-danger-text-hover); border-color: var(--color-danger-border-hover); }
-/* blackout: deep, unmissable red — brighter when armed */
-.btn.blackout { color: var(--color-blackout-text); border-color: var(--color-danger-border-deep); background: var(--color-blackout-fill); }
-.btn.blackout.hot { background: var(--color-blackout-armed-fill); border-color: var(--color-blackout-armed-border); color: var(--color-blackout-armed-text); box-shadow: var(--elevation-glow-blackout); }
-.btn.warn.on { background: var(--color-status-warn-fill); border-color: var(--warn); color: var(--warn); }
-.btn.small { min-height: var(--size-btn-sm); padding: var(--space-2) var(--space-7); font-size: var(--text-control-sm-size); }
+/* blackout: the one control allowed its own red — idle is border-only, armed
+   is filled and carries the strip's only pulse, matching the APC's blinking
+   STOP ALL LED */
+.btn.blackout { color: var(--color-blackout-text); border-color: var(--color-blackout-border); background: transparent; }
+.btn.blackout.hot {
+  background: var(--hot);
+  border-color: var(--color-blackout-armed-border);
+  color: var(--color-text-on-accent);
+  box-shadow: var(--elevation-glow-blackout);
+  animation: blackoutpulse var(--motion-pulse-blackout) ease-in-out infinite;
+}
+@keyframes blackoutpulse { 50% { filter: brightness(0.72); } }
+.btn.small { min-height: var(--size-btn-sm); padding: var(--space-2) var(--space-7); }
 .btn.ghost { background: transparent; border-color: var(--line); color: var(--text-dim); }
 .btn.ghost:hover { color: var(--text); border-color: var(--line2); }
+/* the lamp: latched. After .ghost so a ghost key that latches (help) lights too */
+.btn.on {
+  background: var(--raise2);
+  border-color: var(--line);
+  color: var(--text);
+  box-shadow: inset var(--size-lamp) 0 0 var(--color-lamp);
+}
+/* FREEZE reads HELD, MIDI LEARN is armed: the lamp goes amber — the strip's only amber */
+.btn.warn.on { color: var(--warn); box-shadow: inset var(--size-lamp) 0 0 var(--warn); }
+/* menu entries are buttons that are not keys: text/ui, sentence case */
+.popover .btn {
+  font-size: var(--text-ui-size);
+  font-weight: var(--text-ui-weight);
+  letter-spacing: var(--text-ui-tracking);
+  text-transform: none;
+}
 
 /* a chip you can actually operate: same shape, but it opens a menu */
 .chipsel {
@@ -195,9 +239,9 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
   background-repeat: no-repeat;
 }
 .chipsel:hover { color: var(--text); border-color: var(--text-dim); }
-/* the blend chip must show its whole word closed — "brightest" needs 80px, and
-   a select's intrinsic width ignores the tracking, so it clips without this */
-.layerhead .chipsel { min-width: var(--size-blend-chip-w); }
+/* in the 120px head the blend is a read-only tag (design 2.4); until the markup
+   follows, the select gives way to the name rather than the other way round */
+.layerhead .chipsel { min-width: 0; flex: 0 1 auto; }
 .chipsel:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 
 .chip {
@@ -205,9 +249,9 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
   border: 1px solid var(--line2);
   border-radius: var(--radius-xs);
   padding: var(--space-1) var(--space-5);
-  font-size: var(--text-tag-size);
-  letter-spacing: var(--text-tag-tracking);
-  text-transform: uppercase;
+  font-size: var(--text-micro-size);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
   color: var(--text-dim);
 }
 
@@ -221,7 +265,7 @@ input.text, input.num, select.sel {
   min-height: var(--size-input);
 }
 input.text:focus, input.num:focus, select.sel:focus { border-color: var(--accent); }
-input.num { width: var(--size-num-w); font-family: var(--mono); font-size: var(--text-num-size); }
+input.num { width: var(--size-num-w); font-family: var(--text-value-family); font-size: var(--text-value-size); letter-spacing: var(--text-value-tracking); }
 select.sel { cursor: pointer; }
 
 .row { display: flex; align-items: center; gap: var(--space-8); min-width: 0; }
@@ -240,11 +284,12 @@ select.sel { cursor: pointer; }
   overflow: hidden;
   min-width: var(--size-fader-min-w);
 }
+/* a master at rest is neutral — the light is on stage, not in the fader */
 .fader .fill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: linear-gradient(180deg, var(--color-accent-fill-hi), var(--color-accent-fill-lo));
-  border-right: 1px solid var(--accent);
+  background: var(--color-fader-fill-rest);
+  border-right: 1px solid var(--text-dim);
 }
 .fader.dim .fill {
   background: linear-gradient(180deg, var(--color-overlay-fader-dim-hi), var(--color-overlay-fader-dim-lo));
@@ -257,14 +302,22 @@ select.sel { cursor: pointer; }
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--space-6);
-  font-size: var(--text-fader-value-size);
-  letter-spacing: var(--text-fader-value-tracking);
-  text-transform: uppercase;
+  font-size: var(--text-micro-size);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
   color: var(--text-dim);
   pointer-events: none;
   white-space: nowrap;
 }
-.fader .val b { color: var(--text); font-family: var(--mono); font-weight: var(--text-fader-value-weight); }
+.fader .val b {
+  color: var(--text);
+  font-family: var(--text-value-family);
+  font-size: var(--text-value-size);
+  font-weight: var(--text-value-weight);
+  letter-spacing: var(--text-value-tracking);
+}
+/* below full: the one state worth spotting from across a room (the .subcell.down rule) */
+.fader.down .val b { color: var(--color-fader-down); }
 .fader.hue .fill { border-right: none; opacity: 0; }
 .fader.hue {
   background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); /* not a token: the hue wheel is physics, not palette */
@@ -278,7 +331,7 @@ select.sel { cursor: pointer; }
   box-shadow: 0 0 0 1px var(--grey-0);
   transform: translateX(-1.5px);
 }
-.fader.learnable.learn-armed { outline: 2px solid var(--warn); outline-offset: -1px; }
+.fader.learnable.learn-armed { outline: 2px dashed var(--accent); outline-offset: -1px; }
 
 /* ---------- top bar ---------- */
 
@@ -304,13 +357,22 @@ select.sel { cursor: pointer; }
   color: var(--text);
   padding-right: var(--space-2);
 }
-.wordmark span { color: var(--accent); }
-.projname { color: var(--text-faint); font-size: var(--text-project-name-size); letter-spacing: var(--text-project-name-tracking); }
+.wordmark span { color: var(--text); }
+/* the project name is a name: text/name, as typed */
+.btn.projname {
+  color: var(--text-dim);
+  font-size: var(--text-name-size);
+  font-weight: var(--text-name-weight);
+  letter-spacing: var(--text-name-tracking);
+  text-transform: none;
+}
 
 .bpmblock { display: flex; align-items: center; gap: var(--space-6); }
 .bpm {
-  font-family: var(--mono);
-  font-size: var(--text-bpm-size);
+  font-family: var(--text-readout-family);
+  font-size: var(--text-readout-size);
+  font-weight: var(--text-readout-weight);
+  letter-spacing: var(--text-readout-tracking);
   color: var(--text);
   min-width: var(--size-bpm-w);
   text-align: right;
@@ -319,7 +381,7 @@ select.sel { cursor: pointer; }
 /* A tempo arriving from a MIDI beat clock is not one this readout can set:
    the follower rewrites it every frame. Colour it like the control that owns
    it and stop offering the drag cursor. */
-.bpm.followed { color: var(--accent); cursor: default; }
+.bpm.followed { color: var(--color-live); cursor: default; }
 /* The typing state of the same readout: same box, same digits, so the number
    does not jump when it becomes a field. */
 .bpm.bpmedit {
@@ -349,17 +411,18 @@ input.num,
   touch-action: none;
 }
 .beatled {
-  width: var(--size-led);
-  height: var(--size-led);
+  width: var(--size-lamp);
+  height: var(--size-lamp);
   border-radius: 50%;
   background: var(--raise2);
 }
-.beatled.on { background: var(--accent); box-shadow: var(--elevation-glow-accent); }
+/* hard on/off: a lamp, no glow */
+.beatled.on { background: var(--color-lamp); }
 
 .statusdots { display: flex; gap: var(--space-10); align-items: center; }
 .dotline { display: flex; align-items: center; gap: var(--space-4); }
 .statusdot { width: var(--size-statusdot); height: var(--size-statusdot); border-radius: 50%; background: var(--raise2); }
-.statusdot.ok { background: var(--good); }
+.statusdot.ok { background: var(--color-status-ok); }
 .statusdot.warn { background: var(--warn); }
 .statusdot.bad { background: var(--hot); }
 
@@ -370,6 +433,10 @@ input.num,
   overflow: auto;
   padding: var(--space-10);
 }
+/* an editing page sits off the rig under the blind tint; learn and the latch
+   wash the grid in the cursor colour — both are alphas laid over --bg */
+.gridwrap.blind { background-image: linear-gradient(var(--color-bg-blind), var(--color-bg-blind)); }
+.gridwrap.learn { background-image: linear-gradient(var(--color-bg-wash-learn), var(--color-bg-wash-learn)); }
 .lookgrid { display: grid; gap: var(--space-3); width: max-content; min-width: 100%; }
 
 .colhead {
@@ -380,40 +447,72 @@ input.num,
   background: var(--panel2);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  font-size: var(--text-colhead-size);
-  letter-spacing: var(--text-colhead-tracking);
-  text-transform: uppercase;
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+  letter-spacing: var(--text-label-tracking);
   color: var(--text-dim);
   cursor: pointer;
 }
 .colhead:hover { color: var(--text); border-color: var(--line2); background: var(--raise); }
-.colhead.learn-armed { outline: 2px solid var(--warn); outline-offset: -1px; }
+.colhead.learn-armed { outline: 2px dashed var(--accent); outline-offset: -1px; }
+/* every layer holding a pad here is playing it: a 2px tungsten rule; only some:
+   1px (the mini's column-LED rule, surfaces.ts) — attached by #14 */
+.colhead.live { border-bottom: var(--size-rule) solid var(--color-live); }
+.colhead.live.partial { border-bottom-width: 1px; }
 
 /* Keep the two things you steer by on screen while the grid scrolls. With 12+
    columns (or 8 on the tablet) scrolling right to reach a later cue used to
    hide every layer master and the ✕ that stops a layer, and scrolling down hid
    the column names — exactly what you need to see mid-show. Opaque backgrounds
    are already set above, which is what makes sticky safe here. */
-.layerhead { position: sticky; left: 0; z-index: 2; }
-.colhead { position: sticky; top: 0; z-index: 1; }
+.layerhead { position: sticky; left: 0; z-index: 4; }
+.colhead { position: sticky; top: 0; z-index: 3; }
 
+/* 120 wide and the pad's own height: line 1 the name in text/key, the blend
+   tag and a ✕ that is a ghost unless something is playing; line 2 the
+   now-playing well; line 3 the master. In Pads the row is the 72px pad; in
+   Build's context row the head keeps at least the 58px pad and grows if the
+   type needs it, until #42 gives Build its layer tab strip. */
 .layerhead {
   width: var(--size-layerhead-w);
-  padding: var(--space-6) var(--space-8);
+  min-height: var(--size-pad-h);
+  padding: var(--space-3) var(--space-6);
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-2);
   justify-content: center;
 }
-.layerhead .name { font-size: var(--text-control-tracked-size); letter-spacing: var(--text-control-tracked-tracking); color: var(--text); text-transform: uppercase; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.layerhead .row { gap: var(--space-5); }
+.app.view-pads .layerhead, .app.view-pads .cell { height: var(--size-pad-h-pads); }
+.layerhead .name {
+  font-size: var(--text-key-size);
+  font-weight: var(--text-key-weight);
+  letter-spacing: var(--text-key-tracking);
+  line-height: var(--leading-solid);
+  color: var(--text);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.layerhead .row { gap: var(--space-4); }
+/* the ✕ is a ghost until the layer plays something — the hardware's rule
+   (surfaces.ts): a hover on an idle layer changes nothing. `.live` is the
+   class hook; :has() reads the now-playing line until the markup carries it. */
+.layerhead .btn.clearbtn { color: var(--text-faint); border-color: transparent; background: transparent; min-height: 0; padding: 0 var(--space-4); line-height: var(--leading-control); }
+.layerhead .btn.clearbtn:hover { color: var(--text-faint); border-color: transparent; }
+.layerhead.live .btn.clearbtn, .layerhead.live .btn.clearbtn:hover { color: var(--color-danger-text); border-color: var(--color-danger-border); }
+.layerhead:has(.nowplaying.on) .btn.clearbtn { color: var(--color-danger-text); border-color: var(--color-danger-border); }
+.layerhead.live .btn.clearbtn:hover, .layerhead:has(.nowplaying.on) .btn.clearbtn:hover { color: var(--color-danger-text-hover); border-color: var(--color-danger-border-hover); }
 
 .cell {
   /* --padname-h (size/pad-name) is the name strip's height, shared with the
-     colour block above it so the two halves cannot drift apart */
+     colour block above it so the two halves cannot drift apart.
+     --pad-glow is the look's first colour, set inline from lookSwatch[0] by
+     the component; until it is, the glow is nothing. */
+  --pad-glow: transparent;
   position: relative;
   width: var(--size-pad-w);
   height: var(--size-pad-h);
@@ -425,9 +524,17 @@ input.num,
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: var(--space-5) var(--space-6) var(--space-4);
+  padding: 0;
+  transition: border-color var(--motion-glow), box-shadow var(--motion-glow);
 }
-.cell:hover { border-color: var(--line2); background: var(--raise); }
+/* Brightness is state: the face rests at 0.55, lifts to 0.70 under the
+   pointer, and goes to 1.0 in 70ms on press — the block keeps its shape, because
+   it fires. Release eases back over the base duration. `.face` is the rig
+   miniature #30 draws; `.swatch` is the stripe it replaces — same rules. */
+.cell .swatch, .cell .face { opacity: var(--opacity-face-rest); transition: opacity var(--motion-base); }
+.cell:hover .swatch, .cell:hover .face { opacity: var(--opacity-face-hover); }
+.cell:active .swatch, .cell:active .face { opacity: var(--opacity-face-playing); transition-duration: var(--motion-press); }
+.cell.empty:hover { background: var(--color-bg-wash-hover); }
 /* a fixture whose profile is a placeholder — imported with addresses but no
    personality. Not an error: the row works, it just cannot do what the fixture
    can, and nothing else on screen would say so. */
@@ -441,37 +548,56 @@ tr.rowstub td:first-child { box-shadow: inset 2px 0 0 var(--warn); }
    a stub, because the rig still works; it is the look editor that looks short */
 tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
 
-.cell.empty { background: var(--color-bg-wash-empty); }
-.cell.selected { border-color: var(--text-dim); }
-.cell.active { border-color: var(--accent); background: var(--accent-soft); }
-.cell.active .cellname { color: var(--color-text-on-accent); }
+/* empty: a fill-only well, no border */
+.cell.empty { background: var(--color-bg-wash-empty); border-color: var(--color-border-pad-empty); }
+/* playing: face 1.0, a 1px tungsten halo, a 14px glow in the look's own colour
+   — the one place saturated colour leaves the pad — and a tungsten name. No
+   fill wash. It rises one step so the glow reaches over its neighbours. */
+.cell.active { border-color: var(--color-live); box-shadow: var(--elevation-glow-pad); z-index: 1; }
+.cell.active .swatch, .cell.active .face { opacity: var(--opacity-face-playing); }
+.cell.active .cellname { color: var(--color-live); }
+/* held: a flash look under a finger — face 1.0 and the halo, no glow: it is
+   not playing, it is being held */
+.cell.held { border-color: var(--color-live); box-shadow: none; }
+.cell.held .swatch, .cell.held .face { opacity: var(--opacity-face-playing); }
+.cell.held .flashmark { color: var(--color-live); }
+/* inert: a pad on an editing page — it selects, it does not fire */
+.cell.inert { cursor: not-allowed; }
+.cell.inert .swatch, .cell.inert .face, .cell.inert:hover .swatch, .cell.inert:hover .face { opacity: var(--opacity-face-rest); }
 /* The name is its own control, the way a Resolume clip name is: clicking it
    selects the look for editing and previewing WITHOUT firing it. Everything
    above it fires. Stretched to the cell edges (negative margins cancel the
    cell's padding) so the whole bottom strip is the target rather than just the
    glyphs — a 10px line of text is not a hit area you can find in the dark. */
 .cell .cellname {
+  flex: 0 0 var(--padname-h);
+  height: var(--padname-h);
   font-size: var(--text-pad-name-size);
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: var(--text-pad-name-weight);
   letter-spacing: var(--text-pad-name-tracking);
-  /* Breathing room above and below the text, which both reads better and makes
-     the select target easier to hit. Still the smaller half: firing a cue is
-     the thing you do in a hurry, so the colour block keeps the bulk of the pad. */
-  font-size: var(--text-pad-name-size);
   line-height: var(--text-pad-name-leading);
-  margin: 0 -6px -4px;
-  padding: var(--space-3) var(--space-6) var(--space-3);
+  color: var(--text);
+  /* two lines of 11 fill the 22px strip; a one-line name sits in the middle of
+     it (-webkit-box-pack centres along the vertical box axis) */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-box-pack: center;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding: 0 var(--space-6);
   border-radius: 0 0 var(--radius-xs) var(--radius-xs);
 }
 .cell .cellname:hover {
   background: var(--color-bg-wash-hover);
-  color: var(--color-text-on-accent);
+  color: var(--text);
 }
-/* the selected look reads as selected even when another one is playing */
-.cell.selected .cellname { background: var(--color-bg-wash-selected); }
+/* selected: a 2px cursor rule on the strip's top edge and an accent name. The
+   border is untouched, so it composes with playing — after .active so the
+   cursor's name colour wins when both hold. */
+.cell.selected .cellname { box-shadow: inset 0 var(--size-rule) 0 var(--accent); color: var(--accent); }
 /* The colour fills the whole trigger area rather than sitting as a stripe on
    top of it. That is the visual difference between the two targets: the block
    of colour fires, the dark strip under it selects — you can tell them apart at
@@ -483,17 +609,19 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
   right: 0;
   bottom: var(--padname-h);
   display: flex;
-  opacity: 0.85;
 }
 .cell .swatch i { flex: 1; }
+/* the flash mark: a bolt in --text (the word goes with #31); --flash stays for
+   the APC's held-flash LED */
 .cell .flashmark {
   position: absolute;
   top: var(--space-3);
   right: var(--space-4);
   font-size: var(--text-micro-size);
-  color: var(--flash);
+  font-weight: var(--text-micro-weight);
+  color: var(--text);
   letter-spacing: var(--text-micro-tracking);
-  /* it now sits on the colour, which can be any brightness */
+  /* it sits on the colour, which can be any brightness */
   text-shadow: 0 1px 2px var(--color-overlay-text-shadow);
 }
 .cell .fadebar {
@@ -501,23 +629,27 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
   bottom: 0;
   left: 0;
   height: var(--size-rule);
-  background: var(--accent);
+  background: var(--color-live);
   z-index: 2; /* above the colour block */
 }
-.cell.learn-armed { outline: 2px solid var(--warn); outline-offset: -1px; }
+.cell.learn-armed { outline: 2px dashed var(--accent); outline-offset: -1px; }
 /* a library look held over this pad — dropping points the pad at it */
 .cell.droptarget { outline: 2px dashed var(--accent); outline-offset: -1px; background: var(--accent-soft); }
 /* this column is what the layer is playing, but the look on the pad is not:
    the engine keeps playing the look captured at trigger time, so the pad is
    armed-but-not-live until it is fired again */
-.cell.stale { border-color: var(--warn); }
+.cell.stale .cellname { color: var(--warn); }
+/* the corner mark: a flag in the top-right, not a border */
 .cell.stale::after {
   content: '';
   position: absolute;
-  inset: 0;
-  border: 1px dashed var(--warn);
-  opacity: 0.55;
+  top: 0;
+  right: 0;
+  width: var(--size-cornermark);
+  height: var(--size-cornermark);
+  background: linear-gradient(to bottom left, var(--warn) 50%, transparent 50%);
   pointer-events: none;
+  z-index: 2;
 }
 
 /* ---------- the control row (grid row five) ----------------------------
@@ -540,7 +672,7 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
 .controlrow .controlhead { flex: 0 0 var(--size-layerhead-w); }
 .controlrow .ctlcell { flex: 0 0 var(--size-pad-w); }
 .controlhead { background: var(--panel2); border-color: var(--line2); }
-.controlhead .name { color: var(--text-dim); letter-spacing: var(--text-control-head-tracking); }
+.controlhead .name { color: var(--text-dim); font-size: var(--text-label-size); font-weight: var(--text-label-weight); letter-spacing: var(--text-label-tracking); }
 
 .ctlcell {
   display: flex;
@@ -553,9 +685,9 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
 }
 .ctlcell.riding { border-color: var(--warn); }
 .ctlcell .ctlname {
-  font-size: var(--text-control-name-size);
-  letter-spacing: var(--text-control-name-tracking);
-  text-transform: uppercase;
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+  letter-spacing: var(--text-label-tracking);
   color: var(--text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -568,9 +700,9 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
    until one exists rather than promising hardware that is not bound */
 .ctlcell .ctlmidi.partial { color: var(--warn); }
 .ctlcell .ctlmidi {
-  font-size: var(--text-control-midi-size);
-  letter-spacing: var(--text-control-midi-tracking);
-  text-transform: uppercase;
+  font-size: var(--text-micro-size);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -582,7 +714,7 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
 .ctlcell.empty.addable { cursor: pointer; }
 .ctlcell.empty.addable:hover { background: var(--raise); }
 .ctlcell .ctladd { color: var(--text-faint); font-size: var(--font-size-15); }
-.ctlcell.empty.addable:hover .ctladd { color: var(--accent); }
+.ctlcell.empty.addable:hover .ctladd { color: var(--text); }
 
 /* ---------- look library (pads view, bottom right) ---------- */
 
@@ -614,7 +746,7 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--text-body-s-size);
+  font-size: var(--text-ui-size);
 }
 .librow .chip { flex: 0 0 auto; }
 .libhint {
@@ -622,8 +754,8 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
   padding: var(--space-6) var(--space-10);
   border-top: 1px solid var(--line);
   color: var(--text-faint);
-  font-size: var(--text-library-hint-size);
-  line-height: var(--text-library-hint-leading);
+  font-size: var(--text-prose-size);
+  line-height: var(--text-prose-leading);
 }
 
 /* ---------- bottom panel ---------- */
@@ -644,18 +776,18 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
 .tab {
   padding: var(--space-7) var(--space-16);
   background: var(--panel);
-  font-size: var(--text-tab-size);
-  letter-spacing: var(--text-tab-tracking);
-  text-transform: uppercase;
+  font-size: var(--text-key-size);
+  font-weight: var(--text-key-weight);
+  letter-spacing: var(--text-key-tracking);
   color: var(--text-dim);
   cursor: pointer;
-  border-top: var(--size-rule) solid transparent;
+  border-bottom: var(--size-rule) solid transparent;
 }
 .tab:hover { color: var(--text); }
-.tab.on { color: var(--accent); border-top-color: var(--accent); background: var(--panel2); }
+.tab.on { color: var(--text); border-bottom-color: var(--text); background: var(--panel2); }
 .tabbody { flex: 1; overflow: auto; padding: var(--space-12); min-height: 0; }
 
-.hint { color: var(--text-faint); padding: var(--space-18); text-align: center; letter-spacing: var(--text-hint-tracking); }
+.hint { color: var(--text-faint); padding: var(--space-18); text-align: center; font-size: var(--text-prose-size); line-height: var(--text-prose-leading); }
 
 /* ---------- look editor ---------- */
 
@@ -691,7 +823,7 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
   cursor: pointer;
   background: var(--panel2);
 }
-.enable.on { background: var(--accent); border-color: var(--accent); }
+.enable.on { background: var(--color-lamp); border-color: var(--color-lamp); }
 .swatches { display: flex; gap: var(--space-3); }
 .swatches i {
   width: var(--size-swatch);
@@ -720,15 +852,16 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
   background: var(--panel2);
   border: none;
   padding: var(--space-3) var(--space-9);
-  font-size: var(--text-segment-size);
-  letter-spacing: var(--text-segment-tracking);
-  text-transform: uppercase;
+  font-size: var(--text-key-size);
+  font-weight: var(--text-key-weight);
+  letter-spacing: var(--text-key-tracking);
   color: var(--text-dim);
   cursor: pointer;
   border-right: 1px solid var(--line);
 }
 .seg button:last-child { border-right: none; }
-.seg button.on { background: var(--accent-soft); color: var(--accent); }
+/* the view keys: the one showing carries a 2px --text underline, not a fill */
+.seg button.on { background: var(--raise2); color: var(--text); box-shadow: inset 0 calc(-1 * var(--size-rule)) 0 var(--text); }
 
 /* ---------- tables ---------- */
 
@@ -737,14 +870,13 @@ table.tbl th {
   text-align: left;
   font-size: var(--text-table-head-size);
   letter-spacing: var(--text-table-head-tracking);
-  text-transform: uppercase;
   color: var(--text-faint);
   padding: var(--space-4) var(--space-8);
   border-bottom: 1px solid var(--line);
   font-weight: var(--text-table-head-weight);
 }
 table.tbl td { padding: var(--space-4) var(--space-8); border-bottom: 1px solid var(--line); }
-table.tbl td.mono { font-family: var(--mono); font-size: var(--text-num-size); }
+table.tbl td.mono { font-family: var(--text-value-family); font-size: var(--text-value-size); letter-spacing: var(--text-value-tracking); }
 table.tbl tr.rowsel td { background: var(--accent-soft); }
 table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 .conflict { color: var(--hot); }
@@ -755,11 +887,11 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
   margin: var(--space-1);
   border: 1px solid var(--line2);
   border-radius: var(--radius-xs);
-  font-size: var(--text-chip-head-size);
+  font-size: var(--text-ui-size);
   color: var(--text-dim);
   cursor: pointer;
 }
-.headchip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.headchip.on { border-color: var(--text-dim); color: var(--text); background: var(--raise2); }
 
 /* ---------- previz ---------- */
 
@@ -791,10 +923,10 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
   cursor: pointer;
 }
 .previzstrip { grid-area: pstrip; }
-.librarystrip .label, .editorstrip .label { writing-mode: vertical-rl; letter-spacing: var(--text-strip-vertical-tracking); }
+.librarystrip .label, .editorstrip .label { writing-mode: vertical-rl; font-size: var(--text-strip-vertical-size); letter-spacing: var(--text-strip-vertical-tracking); }
 .previzstrip:hover .label,
 .librarystrip:hover .label,
-.editorstrip:hover .label { color: var(--accent); }
+.editorstrip:hover .label { color: var(--text); }
 
 /* the look editor as a pads-view column: the bottom panel's tab body without
    the tabs, so the same editor code scrolls the same way in both homes */
@@ -840,7 +972,8 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 .previewview { flex: 1; }
 .previewbar { flex: 0 0 auto; }
 .previewbar .previewname {
-  font-size: var(--text-preview-name-size);
+  font-size: var(--text-name-size);
+  font-weight: var(--text-name-weight);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -852,8 +985,9 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 /* ---------- osc monitor ---------- */
 
 .oscmon {
-  font-family: var(--mono);
-  font-size: var(--text-log-size);
+  font-family: var(--text-value-family);
+  font-size: var(--text-value-size);
+  letter-spacing: var(--text-value-tracking);
   background: var(--panel2);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -864,13 +998,13 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
   flex-direction: column;
   gap: var(--space-2);
 }
-.oscmon .addr { color: var(--accent); }
+.oscmon .addr { color: var(--text); }
 .oscmon .args { color: var(--text-dim); }
 
 .sectionhead {
-  font-size: var(--text-section-size);
-  letter-spacing: var(--text-section-tracking);
-  text-transform: uppercase;
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+  letter-spacing: var(--text-label-tracking);
   color: var(--text-faint);
   border-bottom: 1px solid var(--line);
   padding-bottom: var(--space-4);
@@ -893,16 +1027,17 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
   background: var(--panel2);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  font-size: var(--text-chip-deck-size);
-  letter-spacing: var(--text-chip-deck-tracking);
-  text-transform: uppercase;
+  font-size: var(--text-name-size);
+  font-weight: var(--text-name-weight);
+  letter-spacing: var(--text-name-tracking);
   color: var(--text-dim);
   cursor: pointer;
   user-select: none;
 }
 .deckchip:hover { color: var(--text); border-color: var(--line2); }
-.deckchip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-.deckchip .deckx { color: var(--text-faint); font-size: var(--text-body-size); padding: 0 var(--space-2); }
+/* the current song is what is playing: tungsten, no fill */
+.deckchip.on { border-color: var(--color-live); color: var(--color-live); }
+.deckchip .deckx { color: var(--text-faint); font-size: var(--text-name-size); padding: 0 var(--space-2); }
 .deckchip .deckx:hover { color: var(--hot); }
 
 /* ---------- the project menu (Figma: Popover menu) ---------- */
@@ -930,7 +1065,7 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
   background: var(--color-status-nudge-fill);
   border-color: var(--color-status-nudge);
   color: var(--color-status-nudge);
-  font-weight: var(--text-chip-nudge-weight);
+  font-weight: var(--text-micro-weight);
 }
 
 /* ---------- modal dialogs (WKWebView has no window.confirm/prompt) ---------- */
@@ -963,26 +1098,28 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
   position: sticky;
   right: 0;
   background: var(--panel);
-  font-size: var(--text-cog-size);
-  line-height: var(--text-cog-leading);
+  font-size: var(--text-name-size);
+  line-height: var(--leading-solid);
   padding: var(--space-3) var(--space-8);
 }
 .topbar .btn.cog:hover { background: var(--raise); }
 
-.modaltitle { font-size: var(--text-title-size); color: var(--text); margin-bottom: var(--space-6); }
-.modalbody { font-size: var(--text-body-relaxed-size); color: var(--text-dim); line-height: var(--text-body-relaxed-leading); white-space: pre-line; }
+.modaltitle { font-size: var(--text-name-size); font-weight: var(--text-name-weight); color: var(--text); margin-bottom: var(--space-6); }
+.modalbody { font-size: var(--text-prose-size); color: var(--text-dim); line-height: var(--text-prose-leading); white-space: pre-line; }
 .modalrow { display: flex; gap: var(--space-8); justify-content: flex-end; margin-top: var(--space-16); flex-wrap: wrap; }
 .btn.danger { color: var(--color-danger-text); border-color: var(--color-danger-border); }
 .btn.danger:hover { border-color: var(--hot); color: var(--color-text-on-accent); background: var(--color-danger-bg-hover); }
 
-/* ---------- disabled controls must look disabled ---------- */
+/* ---------- disabled controls must look disabled ----------
+   face 0.4, no edges, a plain cursor; the title says why */
 .btn:disabled,
 button:disabled,
 select:disabled,
 input:disabled {
   opacity: 0.4;
-  cursor: not-allowed;
+  cursor: default;
 }
+.btn:disabled { border-top-color: var(--line); border-bottom-color: var(--line); }
 .btn:disabled:hover,
 button:disabled:hover {
   border-color: var(--line);
@@ -1052,8 +1189,9 @@ table.tbl th { color: var(--text-dim); }
   grid-area: offline;
   background: var(--hot);
   color: var(--color-text-on-accent);
-  font-size: var(--text-offline-size);
-  letter-spacing: var(--text-offline-tracking);
+  font-size: var(--text-key-size);
+  font-weight: var(--text-key-weight);
+  letter-spacing: var(--text-key-tracking);
   text-align: center;
   padding: var(--space-5) var(--space-8);
   animation: offlinepulse var(--motion-pulse-offline) ease-in-out infinite;
@@ -1062,35 +1200,31 @@ table.tbl th { color: var(--text-dim); }
 
 /* ---------- gig tools ---------- */
 .btn.allstop {
-  background: var(--color-danger-bg-deep);
+  background: transparent;
   border-color: var(--color-danger-border-deep);
   color: var(--color-danger-text);
-  letter-spacing: var(--text-control-tracked-tracking);
 }
 .btn.allstop:hover { background: var(--hot); color: var(--color-text-on-accent); border-color: var(--hot); }
 .mutedchip {
-  font-size: var(--text-chip-muted-size);
-  letter-spacing: var(--text-chip-muted-tracking);
+  font-size: var(--text-ui-size);
+  letter-spacing: var(--text-ui-tracking);
   color: var(--color-danger-text);
   border: 1px solid var(--color-danger-border);
   border-radius: var(--radius-sm);
   padding: var(--space-3) var(--space-7);
   white-space: nowrap;
 }
-/* identify overrides blackout, so its chip earns the warn colour and a pulse —
+/* find overrides blackout, so its chip earns the warn colour and a pulse —
    it is the one held state that can burn a light into the room during a
    blackout, and it must read at a glance from across a dark stage */
 .identifychip {
   color: var(--warn);
   border-color: var(--warn);
-  animation: identifypulse var(--motion-pulse-identify) ease-in-out infinite;
+  animation: findpulse var(--motion-pulse-find) ease-in-out infinite;
 }
-@keyframes identifypulse {
+@keyframes findpulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .identifychip { animation: none; }
 }
 .deckmove {
   margin-left: var(--space-5);
@@ -1101,14 +1235,14 @@ table.tbl th { color: var(--text-dim); }
 .deckmove:hover { opacity: 1; }
 .decknext {
   flex: 0 0 auto;
-  font-size: var(--text-body-s-size);
+  font-size: var(--text-ui-size);
   color: var(--text-dim);
   padding: 0 var(--space-8);
   white-space: nowrap;
 }
 .warnchip {
-  font-size: var(--text-chip-warn-size);
-  letter-spacing: var(--text-chip-warn-tracking);
+  font-size: var(--text-ui-size);
+  letter-spacing: var(--text-ui-tracking);
   color: var(--warn);
   border: 1px solid var(--color-status-warn-border);
   border-radius: var(--radius-sm);
@@ -1119,16 +1253,21 @@ table.tbl th { color: var(--text-dim); }
 .layerhead .nowplaying {
   display: flex;
   align-items: center;
-  gap: var(--space-6);
-  margin: var(--space-3) 0 var(--space-4);
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0 var(--space-4);
   min-height: var(--size-nowplaying);
-  font-size: var(--text-body-s-size);
-  color: var(--text-dim);
+  font-size: var(--text-name-size);
+  font-weight: var(--text-name-weight);
+  line-height: var(--text-name-leading);
+  color: var(--text-faint);
+  background: var(--panel2);
+  border-radius: var(--radius-xs);
   overflow: hidden;
   white-space: nowrap;
 }
-.layerhead .nowplaying.on { color: var(--text); }
-.layerhead .nowplaying.fading { opacity: 0.72; }
+.layerhead .nowplaying.on { color: var(--color-live); }
+.layerhead .nowplaying.fading { color: var(--color-live-dim); }
 .layerhead .nowplaying .ellip { overflow: hidden; text-overflow: ellipsis; }
 .swatch.mini {
   display: inline-flex;
@@ -1157,13 +1296,14 @@ table.tbl th { color: var(--text-dim); }
    (review M11) — the two rendered as unstyled text beside real section heads */
 .patchsec { margin-top: var(--space-18); }
 .progress { height: var(--size-progress-h); background: var(--panel2); border-radius: var(--radius-sm); overflow: hidden; }
-.progress .fill { height: 100%; background: var(--accent); border-radius: var(--radius-sm); transition: width var(--motion-fast) linear; }
+.progress .fill { height: 100%; background: var(--text-dim); border-radius: var(--radius-sm); transition: width var(--motion-fast) linear; }
 
 /* ---------- prose: help copy reads as sentences, not as a tracked caption ---------- */
 .prose {
-  font-size: var(--text-body-relaxed-size);
-  line-height: var(--text-body-relaxed-leading);
-  letter-spacing: 0;
+  font-size: var(--text-prose-size);
+  font-weight: var(--text-prose-weight);
+  line-height: var(--text-prose-leading);
+  letter-spacing: var(--text-prose-tracking);
   text-transform: none;
   color: var(--text-dim);
   white-space: normal;
@@ -1185,8 +1325,8 @@ table.tbl th { color: var(--text-dim); }
 /* ---------- notices ---------- */
 .toasts {
   position: fixed;
-  left: var(--space-12);
-  bottom: var(--space-12);
+  top: var(--size-toast-top);
+  right: var(--space-12);
   z-index: 150;
   display: flex;
   flex-direction: column;
@@ -1200,11 +1340,11 @@ table.tbl th { color: var(--text-dim); }
   padding: var(--space-8) var(--space-8) var(--space-8) var(--space-10);
   background: var(--panel);
   border: 1px solid var(--line2);
-  border-left: 3px solid var(--good);
+  border-left: 3px solid var(--color-status-ok);
   border-radius: var(--radius-md);
   box-shadow: var(--elevation-menu);
-  font-size: var(--text-body-relaxed-size);
-  line-height: var(--text-body-relaxed-leading);
+  font-size: var(--text-prose-size);
+  line-height: var(--text-prose-leading);
   color: var(--text);
 }
 .toast.bad { border-left-color: var(--hot); }
@@ -1219,17 +1359,18 @@ button.warnchip { background: none; cursor: pointer; }
   width: var(--size-badge);
   height: var(--size-badge);
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--warn);
 }
 
 /* ---------- keyboard focus: every operable thing shows where focus is (review M13) ---------- */
-.btn:focus-visible, .seg button:focus-visible, .tab:focus-visible, .cell:focus-visible, .colhead:focus-visible,
+.btn:focus-visible, .seg button:focus-visible, .tab:focus-visible, .colhead:focus-visible,
 .deckchip:focus-visible, .enable:focus-visible, .swatches i:focus-visible, .headchip:focus-visible,
 .chipsel:focus-visible, input.text:focus-visible, input.num:focus-visible, select.sel:focus-visible,
 .previzstrip:focus-visible, .librarystrip:focus-visible, .editorstrip:focus-visible, .warnchip:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--accent);
 }
+.cell:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 
 /* ---------- touch mode (review M14/M15) ----------
    `.app.touch` — automatic when the browser reports a coarse pointer (the LAN
@@ -1241,22 +1382,21 @@ button.warnchip { background: none; cursor: pointer; }
    applies under the same class; what is left here is spacing and visibility.
    The laptop keeps its density: none of this applies without the class. */
 .app.touch .btn { padding: var(--space-5) var(--space-12); }
-.app.touch .btn.small { padding: var(--space-3) var(--space-9); font-size: var(--font-size-10); }
+.app.touch .btn.small { padding: var(--space-3) var(--space-9); }
 .app.touch .seg button { min-height: var(--size-touch-target); padding: var(--space-5) var(--space-11); }
 .app.touch .tab { padding: var(--space-9) var(--space-18); }
 .app.touch input.text, .app.touch input.num, .app.touch select.sel { padding: var(--space-5) var(--space-7); }
 .app.touch .chipsel { min-height: var(--size-touch-target); }
 .app.touch .bpm { min-height: var(--size-fader); line-height: var(--size-fader); }
-/* The pad's name strip: 24px a thumb can aim at without firing the look, its
-   text centred in what the padding leaves; the colour block above it is still
+/* The pad's name strip is 26px on glass (size/pad-name, Touch mode) — a thumb
+   can aim at it without firing the look; the colour block above it is still
    the bigger half — firing is the thing you do in a hurry. */
-.app.touch .cell .cellname { font-size: var(--font-size-10-5); line-height: calc(var(--padname-h) - 2 * var(--space-6)); padding: var(--space-6) var(--space-6); }
 /* the live-destructive ✕ beside a select: at least the touch floor, and a gap */
 .app.touch .layerhead .btn.clearbtn { min-width: var(--size-touch-target); margin-left: var(--space-4); }
 .app.touch .enable { position: relative; }
 .app.touch .enable::after { content: ''; position: absolute; inset: -4px; } /* a 26px hit on an 18px box */
 .app.touch .swatches { gap: var(--space-4); }
-.app.touch .headchip { padding: var(--space-5) var(--space-9); margin: var(--space-2); font-size: var(--font-size-10); line-height: calc(var(--size-touch-target) - 2 * var(--space-5)); }
+.app.touch .headchip { padding: var(--space-5) var(--space-9); margin: var(--space-2); line-height: calc(var(--size-touch-target) - 2 * var(--space-5)); }
 .app.touch table.tbl td { padding: var(--space-7) var(--space-8); }
 .app.touch .librow { padding: var(--space-9) var(--space-8); }
 .app.touch .deckchip { padding: var(--space-6) var(--space-14); min-height: var(--size-btn); }
@@ -1315,7 +1455,7 @@ button.warnchip { background: none; cursor: pointer; }
   gap: var(--space-10);
   padding: var(--space-12);
   background: var(--panel);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--line2);
   border-radius: var(--radius-md);
   box-shadow: var(--elevation-modal);
 }
@@ -1334,7 +1474,7 @@ button.warnchip { background: none; cursor: pointer; }
 }
 .setupstep:hover { border-color: var(--line2); color: var(--text); }
 /* ticked by reading the project, so this is a statement of fact, not a claim */
-.setupstep.done { color: var(--good); border-color: var(--good); }
+.setupstep.done { color: var(--color-status-ok); border-color: var(--color-status-ok); }
 .setupstep.next { color: var(--accent); border-color: var(--accent); }
 .setupmark { font-variant-numeric: tabular-nums; }
 
@@ -1381,9 +1521,9 @@ button.warnchip { background: none; cursor: pointer; }
 }
 .fxitem:hover { background: var(--raise); border-color: var(--line); }
 /* the one currently playing on the part — this list is an audition, not a menu */
-.fxitem.on { background: var(--accent-soft); border-color: var(--accent); }
+.fxitem.on { background: var(--raise2); border-color: var(--line2); }
 .fxname { color: var(--text); }
-.fxitem.on .fxname { color: var(--accent); }
+.fxitem.on .fxname { color: var(--color-live); }
 
 /* ---------- group levels, the row under the dials (backlog #6) ----------
    Scrolls sideways rather than wrapping: a rig with twenty auto-groups would
@@ -1469,4 +1609,16 @@ button.warnchip { background: none; cursor: pointer; }
   border-radius: var(--radius-sm);
   border: 1px solid var(--line2);
   cursor: pointer;
+}
+
+/* ---------- motion (design 3.4) ----------
+   A fold changes height and nothing else — no slide, no fade, nothing moves
+   sideways over the pads. The class is what a folding row or band carries. */
+.fold { transition: height var(--motion-fold), min-height var(--motion-fold); overflow: hidden; }
+/* Reduced motion: the pulses go steady and the glow no longer eases in. The
+   states still read — armed blackout is still filled, a playing pad still
+   glows — they simply arrive at once. */
+@media (prefers-reduced-motion: reduce) {
+  .identifychip, .btn.blackout.hot, .offlinebar, .splash .dot { animation: none; }
+  .cell, .cell .swatch, .cell .face, .btn, .fold { transition: none; }
 }

@@ -397,6 +397,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
         onChange={(v) => send({ type: 'setMaster', v })}
         def={1}
         learn={{ kind: 'grand' }}
+        variant="dim"
       />
       {(snap?.muted?.length ?? 0) > 0 && (
         <span className="mutedchip" title="fixtures silenced — they are receiving all zeros">
