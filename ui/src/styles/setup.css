@@ -23,8 +23,13 @@
   position: sticky;
   top: 0;
 }
+/* A key is a plain button, centred text; a rail row is a line of a contents
+   list, so it reads from the left and its tag sits against the rule. */
 .setupnav .btn {
+  display: flex;
+  align-items: center;
   justify-content: flex-start;
+  text-align: left;
   width: 100%;
   border-color: transparent;
   background: transparent;
@@ -36,7 +41,10 @@
   background: var(--color-bg-wash-selected);
   color: var(--text);
 }
-.setupbody { min-width: 0; }
+/* The Output panel's table is wider than a 680px sheet minus its rail. It
+   scrolls inside the section rather than pushing the sheet sideways — nothing
+   on this desk scrolls a whole surface to reach a column. */
+.setupbody { min-width: 0; overflow-x: auto; }
 /* A count or a state beside a section name — "3 mapped", "locked". */
 .setupnav .tag {
   margin-left: auto;
@@ -62,6 +70,8 @@
 
 /* ---------- the address a phone can reach, and the same address as a code ---------- */
 .addressblock { display: flex; align-items: center; gap: var(--space-16); flex-wrap: wrap; }
+/* the words sit BESIDE the code, not under it: they shrink rather than wrap */
+.addressblock > .col { flex: 1 1 0; min-width: 0; }
 .addressblock .address {
   font-family: var(--text-readout-family);
   font-size: var(--text-readout-size);
@@ -139,6 +149,23 @@
   flex: 0 0 auto;
 }
 .guidestrip::-webkit-scrollbar { display: none; }
+/* Its home is above the Rig page's rail, in flow, taking its own 24px.
+   Until the Rig page mounts it there App renders it as a bare child of the app
+   grid, whose template has no area for it — auto-placement would drop it into
+   whichever cell happened to be free that render, which on a lost engine is
+   the one the OFFLINE bar wants. So a direct child of .app is taken out of
+   flow and docked along the bottom edge instead: one predictable place, and
+   the grid is untouched. The rule stops applying the moment it is mounted
+   somewhere that is not the app grid. */
+.app > .guidestrip {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 120;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
 .guidestrip .guidesteps { display: flex; align-items: center; gap: var(--space-4); }
 .guidestrip .btn {
   height: var(--size-btn-sm);
