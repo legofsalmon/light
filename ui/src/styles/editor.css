@@ -75,7 +75,14 @@
   flex-wrap: wrap;
 }
 /* the shared-by chip: how many pads carry this look, across every song */
-.chip.sharedby { cursor: pointer; }
+.chip.sharedby {
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+.chip.sharedby:hover { color: var(--text); border-color: var(--text-dim); }
+/* on more than one pad an edit here reaches further than this pad, so it reads */
+.chip.sharedby.many { color: var(--text); border-color: var(--text-dim); }
 
 /* ---------- the feature row (design 2.6 A1) ---------- */
 
