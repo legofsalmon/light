@@ -39,7 +39,21 @@ export type SetupSection = 'output' | 'sync' | 'display' | 'lock' | 'licence' | 
  *  OFFLINE gate or a lamp, `openSetup()` from the cog. */
 const useSetup = create<{ open: boolean; section: SetupSection }>()(() => ({ open: false, section: 'output' }));
 
+/** How many SetupSheets are mounted to answer an open request. App still gates
+ *  AdminModal on a flag of its own, so until it mounts the sheet instead there
+ *  is nobody listening, and a key that opens nothing is worse than the tab it
+ *  replaced. */
+let mounted = 0;
+
 export function openSetup(section: SetupSection = 'output'): void {
+  // Output and Sync · MIDI still have a home on the Rig page until its tab bar
+  // goes; sending someone there is the same destination by the old route.
+  if (mounted === 0 && (section === 'output' || section === 'sync')) {
+    const st = useStore.getState();
+    st.setView('patch'); // sets the tab to Fixtures on arrival, so ask after
+    st.setTab(section);
+    return;
+  }
   useSetup.setState({ open: true, section });
 }
 export function closeSetup(): void {
@@ -303,6 +317,10 @@ function Sheet({ onClose, onOpenShortcuts }: {
  *  because the DIALS head can load a layout without ever opening one. */
 export function SetupSheet({ onOpenShortcuts }: { onOpenShortcuts?: () => void }): React.ReactElement {
   const open = useSetup((s) => s.open);
+  useEffect(() => {
+    mounted += 1;
+    return () => { mounted -= 1; };
+  }, []);
   return (
     <>
       <PresetUndoChip />

@@ -4,7 +4,7 @@
 // reference, not a screen: the question this section actually answers on a
 // show day is "is my controller on", and that is the summary line.
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { create } from 'zustand';
 import type { MidiMapping, Project } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
@@ -95,7 +95,10 @@ function MidiSummary(): React.ReactElement {
   const [why, setWhy] = useState(false);
   const [table, setTable] = useState(false);
   const [pick, setPick] = useState(false);
-  const preset = loadedPreset(project);
+  // Naming the layout means rebuilding every preset against this show and
+  // comparing; cheap, but not something to redo on every fader frame that
+  // lands a new project.
+  const preset = useMemo(() => loadedPreset(project), [project]);
   const n = project.midi.length;
 
   return (
