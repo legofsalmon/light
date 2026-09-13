@@ -16,8 +16,9 @@ import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, isStal
 import { COMPILER_VERSION } from '../../shared/types.ts';
 import type { EffectTarget, MidiMapping, Snapshot } from '../../shared/types.ts';
 import { APC40_MK2, APC_COLS, APC_LAYER_ROWS, APC_MINI_MK2, SURFACES, computeLeds, nearest } from '../../ui/src/surfaces.ts';
-import { apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
+import { CONTROLLER_PRESETS, apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
 import { lookFace, lookSwatch } from '../../ui/src/lookColors.ts';
+import { describeLearned } from '../../ui/src/labels.ts';
 
 /** The demo show these tests were written against — five fixtures at known
  *  addresses, looks with known ids. Deliberately NOT the shipped default: that
@@ -35,6 +36,7 @@ import { PROFILES } from '../../shared/profiles.ts';
 import { FX_CATEGORIES, FX_LIBRARY, fxSearch, unusable } from '../../ui/src/fxLibrary.ts';
 import { SHORTCUTS, SHORTCUT_GROUPS, runShortcut } from '../../ui/src/shortcuts.ts';
 import { GESTURES, GESTURE_GROUPS } from '../../ui/src/gestures.ts';
+import { qrCode } from '../../ui/src/qr.ts';
 import { repairEffect } from '../../shared/types.ts';
 import { parseOsc } from '../osc.ts';
 import { ArtnetOut } from '../artnet.ts';
@@ -380,6 +382,24 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
           [...Array(APC_COLS).keys()].every((n) => noteAction(n) === undefined));
       }
     }
+    // The table the Sync section and the DIALS head's controller menu read has
+    // to be the same list tested above, or a layout added to the table ships
+    // without ever being held against the LED map it will light.
+    const sig = (m: MidiMapping[]) => JSON.stringify(m.map((x) => [x.type, x.channel, x.number, x.action]));
+    check('preset: the controller table is the list tested here',
+      CONTROLLER_PRESETS.map((c) => c.label).join('|') === presets.map(([n]) => n).join('|'),
+      CONTROLLER_PRESETS.map((c) => c.label).join('|'));
+    check('preset: each entry builds the mappings its own function builds',
+      CONTROLLER_PRESETS.every((c, i) => sig(c.build(p)) === sig(presets[i][1])));
+
+    // A learn says what it bound, in the words the rest of the app uses for the
+    // same thing (design 2.10) — not "mapped".
+    const bound = apc40Mk2Mappings(p).find((m) => m.action.kind === 'cell')!;
+    const layer = p.layers.find((l) => l.id === (bound.action as { layerId: string }).layerId)!;
+    const col = (bound.action as { col: number }).col;
+    check('learn: the confirmation names the pair in the app\'s words',
+      describeLearned(p, bound).startsWith(`note ${bound.number} → ${layer.name} · pad ${col + 1}`),
+      describeLearned(p, bound));
   }
 
   // every note the map can produce must be inside the ranges attach blanks
@@ -1734,6 +1754,103 @@ await new Promise<void>((resolve) => {
   const kept = sanitizeProject(shadow)!.profiles ?? {};
   check('profiles: one shadowing a built-in id is dropped', !Object.hasOwn(kept, 'generic-rgb-par-3ch'), Object.keys(kept).join(','));
   check('profiles: and the rest are left alone', Object.hasOwn(kept, 'gdtf-x'), Object.keys(kept).join(','));
+}
+
+// --- the address code on the setup surface -----------------------------------
+// A hand-written QR encoder (ui/src/qr.ts, design 2.10) has no library behind
+// it, so this reads back what it drew: the format string names a level-L mask,
+// every Reed-Solomon syndrome is zero, and the bytes come out as they went in.
+// A code that is one module wrong still LOOKS like a code on the screen.
+{
+  const EXP: number[] = [];
+  const LOG: number[] = [];
+  for (let i = 0, x = 1; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; }
+  for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+  const gmul = (a: number, b: number) => (a === 0 || b === 0 ? 0 : EXP[LOG[a] + LOG[b]]);
+  // BCH(15,5) over level L, computed rather than copied from the encoder
+  const fmt = (mask: number) => {
+    const v = (0b01 << 3) | mask;
+    let d = v << 10;
+    for (let i = 14; i >= 10; i--) if ((d >> i) & 1) d ^= 0x537 << (i - 10);
+    return ((v << 10) | d) ^ 0x5412;
+  };
+  const MASK = [
+    (r: number, c: number) => (r + c) % 2 === 0,
+    (r: number) => r % 2 === 0,
+    (_r: number, c: number) => c % 3 === 0,
+    (r: number, c: number) => (r + c) % 3 === 0,
+    (r: number, c: number) => (((r / 2) | 0) + ((c / 3) | 0)) % 2 === 0,
+    (r: number, c: number) => ((r * c) % 2) + ((r * c) % 3) === 0,
+    (r: number, c: number) => (((r * c) % 2) + ((r * c) % 3)) % 2 === 0,
+    (r: number, c: number) => (((r + c) % 2) + ((r * c) % 3)) % 2 === 0,
+  ];
+  const CAP: [number, number][] = [[19, 7], [34, 10], [55, 15], [80, 20], [108, 26]];
+
+  const readBack = (text: string): string => {
+    const out = qrCode(text);
+    if (!out) return 'no code';
+    const n = out.size - 8;
+    const version = (n - 17) / 4;
+    if (!Number.isInteger(version) || version < 1 || version > 5) return `size ${out.size}`;
+    const m: number[][] = [...Array(n)].map(() => Array(n).fill(0));
+    for (const s of out.path.matchAll(/M(\d+) (\d+)h1v1h-1z/g)) m[Number(s[2]) - 4][Number(s[1]) - 4] = 1;
+    for (const [br, bc] of [[0, 0], [0, n - 7], [n - 7, 0]]) {
+      for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
+        if (m[br + r][bc + c] !== (Math.max(Math.abs(r - 3), Math.abs(c - 3)) === 2 ? 0 : 1)) return 'finder';
+      }
+    }
+    for (let i = 8; i < n - 8; i++) if (m[6][i] !== (i % 2 === 0 ? 1 : 0) || m[i][6] !== (i % 2 === 0 ? 1 : 0)) return 'timing';
+    if (m[4 * version + 9][8] !== 1) return 'dark module';
+    let f1 = 0;
+    let f2 = 0;
+    for (let i = 0; i < 15; i++) {
+      f1 |= (i < 6 ? m[8][i] : i === 6 ? m[8][7] : i === 7 ? m[8][8] : i === 8 ? m[7][8] : m[14 - i][8]) << i;
+      f2 |= (i < 7 ? m[n - 1 - i][8] : m[8][n - 15 + i]) << i;
+    }
+    if (f1 !== f2) return 'format copies differ';
+    const mask = [...Array(8)].findIndex((_, k) => fmt(k) === f1);
+    if (mask < 0) return 'format is not level L';
+    // the function patterns the zigzag steps over, marked out from the spec
+    const fn: boolean[][] = [...Array(n)].map(() => Array(n).fill(false));
+    const mark = (r0: number, c0: number, h: number, w: number) => {
+      for (let r = r0; r < r0 + h; r++) for (let c = c0; c < c0 + w; c++) if (r >= 0 && c >= 0 && r < n && c < n) fn[r][c] = true;
+    };
+    mark(0, 0, 9, 9); mark(0, n - 8, 9, 8); mark(n - 8, 0, 8, 9); mark(6, 0, 1, n); mark(0, 6, n, 1);
+    if (version > 1) {
+      const cs = [6, 4 * version + 10];
+      for (const cr of cs) for (const cc of cs) if (!(cr === 6 && cc > 6) && !(cc === 6 && cr > 6) && !(cr === 6 && cc === 6)) mark(cr - 2, cc - 2, 5, 5);
+    }
+    const bits: number[] = [];
+    let up = true;
+    for (let right = n - 1; right > 0; right -= 2) {
+      if (right === 6) right = 5;
+      for (let step = 0; step < n; step++) {
+        const r = up ? n - 1 - step : step;
+        for (const c of [right, right - 1]) if (!fn[r][c]) bits.push(m[r][c] ^ (MASK[mask](r, c) ? 1 : 0));
+      }
+      up = !up;
+    }
+    const [dataLen, ecLen] = CAP[version - 1];
+    const words: number[] = [];
+    for (let i = 0; i + 8 <= (dataLen + ecLen) * 8; i += 8) words.push(bits.slice(i, i + 8).reduce((a, b) => (a << 1) | b, 0));
+    for (let s = 0; s < ecLen; s++) {
+      let acc = 0;
+      for (const w of words) acc = gmul(acc, EXP[s]) ^ w;
+      if (acc !== 0) return `syndrome ${s}`;
+    }
+    if (words[0] >> 4 !== 4) return 'not byte mode';
+    const len = ((words[0] & 0xf) << 4) | (words[1] >> 4);
+    const got: number[] = [];
+    for (let i = 0; i < len; i++) got.push((((words[1 + i] & 0xf) << 4) | (words[2 + i] >> 4)) & 0xff);
+    return new TextDecoder().decode(Uint8Array.from(got));
+  };
+
+  for (const text of ['http://192.168.1.12:9900', 'http://localhost:9900', 'http://light.local:9935', 'a', 'x'.repeat(17), 'x'.repeat(18), 'x'.repeat(106)]) {
+    const back = readBack(text);
+    check(`qr: "${text.length > 24 ? `${text.length} bytes` : text}" reads back as itself`, back === text, back);
+  }
+  check('qr: more than version 5 holds is refused rather than drawn wrong', qrCode('x'.repeat(107)) === null);
+  check('qr: the smallest version that fits is the one used', qrCode('x'.repeat(17))?.size === 29 && qrCode('x'.repeat(18))?.size === 33);
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

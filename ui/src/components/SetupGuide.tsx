@@ -1,8 +1,8 @@
-// The setup path (backlog #1). Five surfaces have to be visited before a rig
-// does anything — where the DMX goes, what is on the truss, how big the room
-// is, what moves together, and where the movers point — and they were five
-// unordered tabs with nothing saying they were a sequence or that you had
-// finished one.
+// The setup path (backlog #1, design #40). Five surfaces have to be visited
+// before a rig does anything — where the DMX goes, what is on the truss, how
+// big the room is, what moves together, and where the movers point — and they
+// were five unordered tabs with nothing saying they were a sequence or that you
+// had finished one.
 //
 // It guides rather than hosts: each step sends you to the real surface, full
 // size, and ticks itself off by READING the project rather than asking you to
@@ -11,14 +11,22 @@
 // which is the difference between a checklist and a wizard that makes you
 // re-do work.
 //
+// It is a STRIP, not a card. A card beside the work sat over the bottom right
+// of the screen — which is where the tables it points at are, so the guide
+// covered the thing it was asking you to look at, and rolling it up to see
+// under it was a control the guide had to invent. One line, always the same
+// height, docked above the surface it sends you into.
+//
 // It opens by itself when a project has no fixtures, which is exactly a new
 // project and nothing else. A fresh install boots the demo show, and the demo
 // needs no setting up — so a first launch is left alone to be played with.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import type { Project } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
 import { profileMeta } from '../profileInfo.ts';
+import { openSetup } from './AdminModal.tsx';
+import '../styles/setup.css';
 
 type Step = {
   id: string;
@@ -40,7 +48,9 @@ function hasMovers(p: Project): boolean {
   });
 }
 
-/** Send the operator to a section of the Rig view and scroll it into sight. */
+/** Jump to a section of the Rig page. The anchors are the rail's own sections
+ *  (design 2.9): while the rail is being built this still scrolls the marked
+ *  block into view, which is the same destination by a slower route. */
 function toRig(section?: string): void {
   const st = useStore.getState();
   st.setView('patch');
@@ -58,11 +68,8 @@ const STEPS: Step[] = [
     title: 'Output',
     blurb: 'Say where the DMX goes: switch on Art-Net or sACN for the universes your nodes are listening to.',
     done: (p) => p.universes.some((u) => u.artnet || u.sacn),
-    go: () => {
-      const st = useStore.getState();
-      st.setView('patch');
-      st.setTab('output');
-    },
+    // Output is a setup-surface section now, not a tab on the Rig page.
+    go: () => openSetup('output'),
   },
   {
     id: 'fixtures',
@@ -102,10 +109,6 @@ export function SetupGuide(): React.ReactElement | null {
   const setSetupGuide = useStore((s) => s.setSetupGuide);
   const live = useStore((s) => s.snap?.transmit) === true;
   const send = useStore((s) => s.send);
-  // It sits over the bottom-right of the work area, which is where the tables
-  // it sends you to are. Rolled up it is one line of progress and gets out of
-  // the way without losing your place.
-  const [rolled, setRolled] = useState(false);
 
   // A project with no fixtures is a new project and nothing else: the demo has
   // thirteen, and any real show has more.
@@ -122,69 +125,51 @@ export function SetupGuide(): React.ReactElement | null {
   const left = state.filter((s) => !s.done).length;
 
   return (
-    <div className="setupguide" role="dialog" aria-label="rig setup">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <button
-          className="btn small ghost"
-          title={rolled ? 'show the steps again' : 'roll this up out of the way — it keeps your place'}
-          aria-expanded={!rolled}
-          onClick={() => setRolled(!rolled)}
-        >
-          {rolled ? '▸' : '▾'} set up your rig
-        </button>
-        <span className="label">{left === 0 ? 'all done' : `${left} of ${steps.length} to go`}</span>
-        <button
-          className="btn small ghost"
-          title="close this — the show is yours to work on either way. Settings brings it back."
-          onClick={() => setSetupGuide(false, true)}
-        >
-          ✕
-        </button>
+    <div className="guidestrip" role="group" aria-label="rig setup">
+      <span className="label">set up your rig</span>
+      <div className="guidesteps">
+        {state.map(({ step, done }, i) => (
+          <button
+            key={step.id}
+            className={`btn small ghost ${done ? 'done' : ''} ${step === next?.step ? 'next' : ''}`}
+            title={`${step.blurb}${done ? ' — done: this is read off the show, not something you tick.' : ''}`}
+            onClick={step.go}
+          >
+            {done ? '✓' : i + 1} {step.title}
+          </button>
+        ))}
       </div>
-      {!rolled && (
+      <span className="label">{left === 0 ? 'all done' : `${left} to go`}</span>
+      {next ? (
         <>
-          <div className="setupsteps">
-            {state.map(({ step, done }, i) => (
-              <button
-                key={step.id}
-                className={`setupstep ${done ? 'done' : ''} ${step === next?.step ? 'next' : ''}`}
-                title={step.blurb}
-                onClick={step.go}
-              >
-                <span className="setupmark">{done ? '✓' : i + 1}</span>
-                <span className="label">{step.title}</span>
-              </button>
-            ))}
-          </div>
-          {next ? (
-            <>
-              <div className="prose">{next.step.blurb}</div>
-              <button className="btn" onClick={next.step.go}>take me there</button>
-            </>
-          ) : (
-            <>
-              <div className="prose">
-                That is the whole setup. LIGHT is still offline, so nothing has reached the rig
-                yet — going live starts sending on the universes you switched on.
-              </div>
-              <div className="row" style={{ gap: 8 }}>
-                {!live && (
-                  <button
-                    className="btn warn on"
-                    title="start sending on every universe switched on in the Output tab"
-                    onClick={() => send({ type: 'setTransmit', v: true })}
-                  >
-                    go live
-                  </button>
-                )}
-                <button className="btn ghost" onClick={() => setSetupGuide(false, true)}>
-                  {live ? 'done' : 'later'}
-                </button>
-              </div>
-            </>
+          <span className="prose" title={next.step.blurb}>{next.step.blurb}</span>
+          <div className="grow" />
+          <button className="btn small" onClick={next.step.go}>take me there</button>
+        </>
+      ) : (
+        <>
+          <span className="prose">
+            That is the whole setup. LIGHT is still offline, so nothing has reached the rig yet.
+          </span>
+          <div className="grow" />
+          {!live && (
+            <button
+              className="btn small warn on"
+              title="start sending on every universe switched on in Output — the rig lights when this is pressed"
+              onClick={() => send({ type: 'setTransmit', v: true })}
+            >
+              go live
+            </button>
           )}
         </>
       )}
+      <button
+        className="btn small ghost"
+        title="close this — the show is yours to work on either way. Setup ▸ Help brings it back."
+        onClick={() => setSetupGuide(false, true)}
+      >
+        ✕
+      </button>
     </div>
   );
 }
