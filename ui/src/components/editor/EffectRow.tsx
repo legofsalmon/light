@@ -190,10 +190,10 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
       <span className="label" title="the same rate as a tempo — what this cycle comes to at the speed the show is running. It moves when the tempo does, because the rate is musical">
         = {rateBpm(rate, bpm, speed)}
       </span>
-      <Fader label="size" width={104} value={soft('size') ?? fx.size} def={1} onChange={(v) => onField('size', v, (x) => (x.size = v))} fmt={fmtPct} variant="dim" />
-      <Fader label="spread" width={104} value={soft('spread') ?? fx.spread} def={0} onChange={(v) => onField('spread', v, (x) => (x.spread = v))} fmt={fmtPct} variant="dim" />
+      <Fader label="size" width={104} value={soft('size') ?? fx.size} nudged={soft('size') !== undefined} def={1} onChange={(v) => onField('size', v, (x) => (x.size = v))} fmt={fmtPct} variant="dim" />
+      <Fader label="spread" width={104} value={soft('spread') ?? fx.spread} nudged={soft('spread') !== undefined} def={0} onChange={(v) => onField('spread', v, (x) => (x.spread = v))} fmt={fmtPct} variant="dim" />
       {fx.target !== 'shape' && (fx.wave === 'square' || fx.wave === 'chase') && (
-        <Fader label="width" width={104} value={soft('width') ?? fx.width} def={0.5} onChange={(v) => onField('width', v, (x) => (x.width = v))} fmt={fmtPct} variant="dim" />
+        <Fader label="width" width={104} value={soft('width') ?? fx.width} nudged={soft('width') !== undefined} def={0.5} onChange={(v) => onField('width', v, (x) => (x.width = v))} fmt={fmtPct} variant="dim" />
       )}
       {fx.target === 'shape' && (
         <>
@@ -226,9 +226,9 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
           </button>
         </>
       )}
-      <Fader label="phase" width={104} value={soft('phase') ?? fx.phase} def={0} onChange={(v) => onField('phase', v, (x) => (x.phase = v))} fmt={fmtPct} variant="dim" />
+      <Fader label="phase" width={104} value={soft('phase') ?? fx.phase} nudged={soft('phase') !== undefined} def={0} onChange={(v) => onField('phase', v, (x) => (x.phase = v))} fmt={fmtPct} variant="dim" />
       {/* wet/dry: how much of the effect lands. 100% is full effect. */}
-      <Fader label="mix" width={104} value={soft('mix') ?? fx.mix} def={1} onChange={(v) => onField('mix', v, (x) => (x.mix = v))} fmt={fmtPct} variant="dim" />
+      <Fader label="mix" width={104} value={soft('mix') ?? fx.mix} nudged={soft('mix') !== undefined} def={1} onChange={(v) => onField('mix', v, (x) => (x.mix = v))} fmt={fmtPct} variant="dim" />
       <DialMenu lookId={lookId} partId={partId} effectId={fx.id} fields={rowFields} />
       <button className="btn small ghost" title="save this effect to the FX pool as a reusable preset" onClick={onSaveToPool}>☆</button>
       <button title="remove this effect" className="btn small ghost" onClick={onRemove}>✕</button>

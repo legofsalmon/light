@@ -299,7 +299,8 @@ export const motion = {
 export const opacity = {
   "face-rest": 0.55,
   "face-hover": 0.7,
-  "face-playing": 1
+  "face-playing": 1,
+  disabled: 0.35
 } as const;
 
 /** fractions of a window or an area */

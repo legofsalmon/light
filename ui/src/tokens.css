@@ -342,6 +342,7 @@
   --opacity-face-rest: 0.55;
   --opacity-face-hover: 0.7;
   --opacity-face-playing: 1;
+  --opacity-disabled: 0.35;
   /* ratio (Figma: Ratio) — fractions of a window or an area */
   --ratio-band-pads: 0.26;
   --ratio-plan-w: 0.38;

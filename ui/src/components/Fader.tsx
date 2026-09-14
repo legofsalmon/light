@@ -50,9 +50,14 @@ type Props = {
   variant?: 'accent' | 'dim' | 'hue';
   /** midi-learn action for this control */
   learn?: MidiAction;
+  /** A live nudge is holding this away from what the show has stored (design
+   *  A3). One mark, in the one amber, wherever a nudged value is drawn — the
+   *  dials and the group levels already carry it, and a fader in the editor
+   *  looked identical to a stored one. */
+  nudged?: boolean;
 };
 
-export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def, width, variant = 'accent', learn }: Props) {
+export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def, width, variant = 'accent', learn, nudged = false }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const norm = clamp((value - min) / (max - min));
   // Where the controller bound to this fader physically sits, if anything has
@@ -184,7 +189,7 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
   return (
     <div
       ref={ref}
-      className={`fader ${variant === 'dim' ? 'dim' : ''} ${variant === 'hue' ? 'hue' : ''} ${learn ? 'learnable' : ''} ${armed ? 'learn-armed' : ''}`}
+      className={`fader ${nudged ? 'nudged' : ''} ${variant === 'dim' ? 'dim' : ''} ${variant === 'hue' ? 'hue' : ''} ${learn ? 'learnable' : ''} ${armed ? 'learn-armed' : ''}`}
       style={{ width }}
       role="slider"
       tabIndex={0}

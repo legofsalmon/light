@@ -86,6 +86,7 @@ export function OffsetDials({ lookId, look }: { lookId: string; look: Look }): R
         return (
           <div className={`offsetdial ${off ? 'off' : ''}`} key={d.dial}>
             <Fader
+            nudged={v !== OFFSET_NEUTRAL[d.dial]}
               label={d.label}
               // wide enough for the longest caption beside the longest reading
               // (`dimmer 1.00×`): a dial whose number is clipped is a dial you
@@ -100,7 +101,7 @@ export function OffsetDials({ lookId, look }: { lookId: string; look: Look }): R
               help={off ? d.empty : d.help}
               onChange={(x) => apply(d.dial, x, addresses)}
             />
-            {v !== OFFSET_NEUTRAL[d.dial] && <i className="offsetmark" aria-hidden="true" />}
+
           </div>
         );
       })}

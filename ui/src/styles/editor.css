@@ -193,3 +193,10 @@
 }
 .fader .bindtag.clash { color: var(--hot); }
 .fader .bindtag.unbound { color: var(--text-faint); }
+
+/* A live nudge is holding this fader away from what the show has stored
+   (design A3). The dials and the group levels already carried the mark; a
+   fader in the editor looked identical to a stored one, which is the whole
+   question Keep and Discard are asking about. One amber, one shape. */
+.fader.nudged { border-color: var(--color-status-nudge); }
+.fader.nudged .val b { color: var(--color-status-nudge); }

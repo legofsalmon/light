@@ -24,20 +24,7 @@
    swing — so the dial is there, greyed and inert, with its help saying why.
    The same treatment (and the same value) as a parameter whose ⏻ is off. */
 .offsetdial.off .fader {
-  opacity: 0.35;
+  opacity: var(--opacity-disabled);
   pointer-events: none;
 }
 
-/* The nudge mark the design gives every nudged control: this dial is holding
-   the look away from what it has stored. It sits on the dial's top-right
-   corner so it never covers the reading. */
-.offsetdial .offsetmark {
-  position: absolute;
-  top: calc(-1 * var(--space-2));
-  right: calc(-1 * var(--space-2));
-  width: var(--size-lamp);
-  height: var(--size-lamp);
-  border-radius: var(--radius-pill);
-  background: var(--color-status-nudge);
-  pointer-events: none;
-}

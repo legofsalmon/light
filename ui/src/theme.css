@@ -928,7 +928,7 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
 }
 .paramrow { display: flex; align-items: center; gap: var(--space-8); }
 .paramrow .label { width: var(--size-param-label-w); flex-shrink: 0; }
-.paramrow.off .fader { opacity: 0.35; pointer-events: none; }
+.paramrow.off .fader { opacity: var(--opacity-disabled); pointer-events: none; }
 .enable {
   width: var(--size-enable);
   height: var(--size-enable);

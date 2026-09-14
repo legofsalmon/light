@@ -212,7 +212,7 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
               <Enable on={prm.dimmer !== undefined} toggle={() => edit((pt) => (pt.params.dimmer = pt.params.dimmer === undefined ? 1 : undefined))} />
               <span className="label">dimmer</span>
               <div className={`grow paramrow ${prm.dimmer === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
-                <Fader help="intensity for this part. Double-click to reset to full" value={softFor('dimmer') ?? prm.dimmer ?? 1} def={1} onChange={(v) => setP('dimmer', v, (pt) => (pt.params.dimmer = v))} fmt={fmtPct} width="100%" />
+                <Fader help="intensity for this part. Double-click to reset to full" value={softFor('dimmer') ?? prm.dimmer ?? 1} nudged={softFor('dimmer') !== undefined} def={1} onChange={(v) => setP('dimmer', v, (pt) => (pt.params.dimmer = v))} fmt={fmtPct} width="100%" />
               </div>
               <DialMenu lookId={lookId} partId={part.id} fields={['dimmer']} />
             </div>
@@ -225,7 +225,7 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
                   {/* A rate, not a percentage: what the fader is really setting
                       is flashes a second, and the number an operator counts on
                       the wall is the one worth showing. */}
-                  <Fader help="strobe rate — flashes a second, slow at the left and fastest at the right" value={softFor('strobe') ?? prm.strobe ?? 0.6} onChange={(v) => setP('strobe', v, (pt) => (pt.params.strobe = v))} fmt={fmtStrobe} width={180} variant="dim" />
+                  <Fader help="strobe rate — flashes a second, slow at the left and fastest at the right" value={softFor('strobe') ?? prm.strobe ?? 0.6} nudged={softFor('strobe') !== undefined} onChange={(v) => setP('strobe', v, (pt) => (pt.params.strobe = v))} fmt={fmtStrobe} width={180} variant="dim" />
                   {/* the pattern, where something in the group has one: a band
                       of its own on the shutter channel. A fixture without the
                       pattern strobes plain, so this can never silence a head. */}
@@ -269,7 +269,7 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
                   <Fader
                     label="white"
                     width={180}
-                    value={softFor('white') ?? prm.white ?? 1}
+                    value={softFor('white') ?? prm.white ?? 1} nudged={softFor('white') !== undefined}
                     def={1}
                     onChange={(v) => setP('white', v, (pt) => (pt.params.white = v))}
                     fmt={fmtPct}
@@ -289,7 +289,7 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
                     width="38%"
                     min={0}
                     max={360}
-                    value={softFor('hue') ?? prm.color?.h ?? 0}
+                    value={softFor('hue') ?? prm.color?.h ?? 0} nudged={softFor('hue') !== undefined}
                     onChange={(v) => setP('hue', v, (pt) => (pt.params.color = { h: v, s: pt.params.color?.s ?? 1 }))}
                     fmt={(v) => `${Math.round(v)}°`}
                     help="hue — the colour round the wheel. Saturation is the fader beside it"
@@ -298,7 +298,7 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
                   <Fader
                     label="sat"
                     width={90}
-                    value={softFor('sat') ?? prm.color?.s ?? 1}
+                    value={softFor('sat') ?? prm.color?.s ?? 1} nudged={softFor('sat') !== undefined}
                     def={1}
                     onChange={(v) => setP('sat', v, (pt) => (pt.params.color = { h: pt.params.color?.h ?? 0, s: v }))}
                     fmt={fmtPct}
@@ -370,7 +370,7 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
                   <Enable on={prm.ringFx !== undefined} toggle={() => edit((pt) => (pt.params.ringFx = pt.params.ringFx === undefined ? 0.5 : undefined))} />
                   <span className="label">ring fx</span>
                   <div className={`grow paramrow ${prm.ringFx === undefined ? 'off' : ''}`}>
-                    <Fader help="the fixture's own built-in ring effect, where it has one" value={softFor('ringFx') ?? prm.ringFx ?? 0.5} onChange={(v) => setP('ringFx', v, (pt) => (pt.params.ringFx = v))} fmt={fmtPct} width={180} variant="dim" />
+                    <Fader help="the fixture's own built-in ring effect, where it has one" value={softFor('ringFx') ?? prm.ringFx ?? 0.5} nudged={softFor('ringFx') !== undefined} onChange={(v) => setP('ringFx', v, (pt) => (pt.params.ringFx = v))} fmt={fmtPct} width={180} variant="dim" />
                   </div>
                   <DialMenu lookId={lookId} partId={part.id} fields={['ringFx']} />
                 </div>
@@ -394,8 +394,8 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
                 })} />
                 <span className="label">position</span>
                 <div className={`grow paramrow ${prm.pan === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
-                  <Fader label="pan" width={140} value={softFor('pan') ?? prm.pan ?? 0.5} def={0.5} onChange={(v) => setP('pan', v, (pt) => (pt.params.pan = v))} fmt={fmtPct} variant="dim" />
-                  <Fader label="tilt" width={140} value={softFor('tilt') ?? prm.tilt ?? 0.5} def={0.5} onChange={(v) => setP('tilt', v, (pt) => (pt.params.tilt = v))} fmt={fmtPct} variant="dim" />
+                  <Fader label="pan" width={140} value={softFor('pan') ?? prm.pan ?? 0.5} nudged={softFor('pan') !== undefined} def={0.5} onChange={(v) => setP('pan', v, (pt) => (pt.params.pan = v))} fmt={fmtPct} variant="dim" />
+                  <Fader label="tilt" width={140} value={softFor('tilt') ?? prm.tilt ?? 0.5} nudged={softFor('tilt') !== undefined} def={0.5} onChange={(v) => setP('tilt', v, (pt) => (pt.params.tilt = v))} fmt={fmtPct} variant="dim" />
                 </div>
                 <DialMenu lookId={lookId} partId={part.id} fields={['pan', 'tilt']} />
               </div>
@@ -434,7 +434,7 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
                   <Fader
                     label={prm.motorMode === 'aim' ? 'position' : 'speed'}
                     width={160}
-                    value={softFor('motorValue') ?? prm.motorValue ?? 0.3}
+                    value={softFor('motorValue') ?? prm.motorValue ?? 0.3} nudged={softFor('motorValue') !== undefined}
                     onChange={(v) => setP('motorValue', v, (pt) => (pt.params.motorValue = v))}
                     fmt={fmtPct}
                     variant="dim"
@@ -508,8 +508,8 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
             })} />
             <span className="label">haze</span>
             <div className={`grow paramrow ${prm.haze === undefined ? 'off' : ''}`} style={{ gap: 8 }}>
-              <Fader label="output" width={140} value={softFor('haze') ?? prm.haze ?? 0.5} onChange={(v) => setP('haze', v, (pt) => (pt.params.haze = v))} fmt={fmtPct} variant="dim" />
-              <Fader label="haze fan" width={140} value={softFor('fan') ?? prm.fan ?? 0.35} onChange={(v) => setP('fan', v, (pt) => (pt.params.fan = v))} fmt={fmtPct} variant="dim" />
+              <Fader label="output" width={140} value={softFor('haze') ?? prm.haze ?? 0.5} nudged={softFor('haze') !== undefined} onChange={(v) => setP('haze', v, (pt) => (pt.params.haze = v))} fmt={fmtPct} variant="dim" />
+              <Fader label="haze fan" width={140} value={softFor('fan') ?? prm.fan ?? 0.35} nudged={softFor('fan') !== undefined} onChange={(v) => setP('fan', v, (pt) => (pt.params.fan = v))} fmt={fmtPct} variant="dim" />
             </div>
             <DialMenu lookId={lookId} partId={part.id} fields={['haze', 'fan']} />
           </div>
