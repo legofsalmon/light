@@ -119,7 +119,9 @@ select.libchip { padding-right: var(--space-14); }
 .libtile .corner.chain { right: var(--space-3); }
 .libtile .corner.bolt + .chain { right: var(--space-14); }
 .libtile .corner b { font-weight: var(--text-micro-weight); }
-svg.mark {
+/* A corner mark is the drawn set at corner-mark size: the glyph is the same
+   shape the rest of the app uses, sized for the corner it sits in. */
+.libtile .corner .glyph {
   width: var(--size-cornermark);
   height: var(--size-cornermark);
   display: block;

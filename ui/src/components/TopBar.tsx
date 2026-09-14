@@ -6,6 +6,7 @@ import { HeldChip } from './HeldChip.tsx';
 import { BAR, clamp } from '../../../shared/types.ts';
 import { size } from '../tokens.ts';
 import { openSetup } from './AdminModal.tsx';
+import { Glyph } from '../glyphs.tsx';
 
 function StatusDot({ ok, label, warn, bad, traffic, title }: {
   ok: boolean; label: string; warn?: boolean; bad?: boolean; traffic?: boolean; title?: string;
@@ -316,7 +317,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
     <>
       {!moved.has('wordmark') && (
         <div className="wordmark" title={`LIGHT v${__APP_VERSION__}`}>
-          LIGHT<span>■</span>
+          LIGHT<span><Glyph name="bolt" /></span>
         </div>
       )}
       {/* While the grid is showing a song the room is not playing, the name
@@ -559,7 +560,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
             aria-label={undoDepth === 0 ? 'nothing to undo' : `undo ${undoLabel ?? 'the last edit'}`}
             onClick={() => useStore.getState().undo()}
           >
-            ↺
+            <Glyph name="prev" alone />
           </button>
           <button
             className="btn small ghost"
@@ -568,7 +569,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
             aria-label={redoDepth === 0 ? 'nothing to redo' : `redo ${redoLabel ?? 'the last undone edit'}`}
             onClick={() => useStore.getState().redo()}
           >
-            ↻
+            <Glyph name="next" alone />
           </button>
           <button
             className={`btn small ${project.sync.linkEnabled ? 'on' : ''}`}
@@ -744,7 +745,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
             aria-label={updateWaiting ? 'settings, update waiting' : 'settings'}
             onClick={onOpenAdmin}
           >
-            ⚙{updateWaiting && <i className="badge" aria-hidden="true" />}
+            <Glyph name="cog" alone />{updateWaiting && <i className="badge" aria-hidden="true" />}
           </button>
         </div>
       </div>

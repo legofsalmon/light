@@ -9,6 +9,7 @@ import type { HeadKind } from '../../../../shared/profiles.ts';
 import type { BeamCaps } from '../../profileInfo.ts';
 import { DISTRIBUTE_WORD, SHAPE_LABEL, TARGET_LABEL, WAVE_LABEL } from '../../labels.ts';
 import { Fader, fmtPct } from '../Fader.tsx';
+import { Glyph, type GlyphName } from '../../glyphs.tsx';
 import { DialMenu, IntInput } from './fields.tsx';
 import { capableTargets } from './groups.ts';
 import { type SpreadPreview, useEditorStore } from '../../editorStore.ts';
@@ -29,15 +30,19 @@ export const RATES: { v: number; label: string }[] = [
 const WAVES: Wave[] = ['sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random'];
 
 /** Spread bases in display order, with the labels the operators know. */
-const DISTRIBUTE_LABELS: { v: Distribute; label: string; title: string }[] = [
-  { v: 'index', label: 'order', title: 'patch order — the classic spread, one after another' },
-  { v: 'x', label: 'X', title: 'sweep stage left → right (world position)' },
-  { v: 'y', label: 'Y', title: 'sweep bottom → top' },
-  { v: 'z', label: 'Z', title: 'sweep upstage → downstage' },
-  { v: 'radial', label: '◎', title: 'ripple out from the group centre' },
-  { v: 'shuffle', label: '⤨', title: 'seeded scatter — re-roll with ↻, same seed = same look' },
-  { v: 'row', label: 'row', title: 'sweep each fixture’s own pixel rows — every fixture runs the same wave' },
-  { v: 'col', label: 'col', title: 'sweep each fixture’s own pixel columns — every fixture runs the same wave' },
+/** Spread bases in display order. The picture is the label here — these are
+ *  the one set in the app where a drawing beats a word, because each says a
+ *  DIRECTION across the rig, and eight words at 9px say nothing at a glance
+ *  (design 3.3). The words stay in the help and in the folded line's summary. */
+const DISTRIBUTE_LABELS: { v: Distribute; glyph: GlyphName; title: string }[] = [
+  { v: 'index', glyph: 'spread-order', title: 'patch order — the classic spread, one after another' },
+  { v: 'x', glyph: 'spread-x', title: 'sweep stage left → right (world position)' },
+  { v: 'y', glyph: 'spread-y', title: 'sweep bottom → top' },
+  { v: 'z', glyph: 'spread-z', title: 'sweep upstage → downstage' },
+  { v: 'radial', glyph: 'spread-radial', title: 'ripple out from the group centre' },
+  { v: 'shuffle', glyph: 'spread-shuffle', title: 'seeded scatter — re-roll with the reshuffle key, same seed = same look' },
+  { v: 'row', glyph: 'spread-row', title: 'sweep each fixture’s own pixel rows — every fixture runs the same wave' },
+  { v: 'col', glyph: 'spread-col', title: 'sweep each fixture’s own pixel columns — every fixture runs the same wave' },
 ];
 
 /** The musical length this rate is locked to. */
@@ -264,7 +269,7 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
               title={d.title}
               onClick={() => onEdit((x) => (x.distribute = d.v))}
             >
-              {d.label}
+              <Glyph name={d.glyph} alone />
             </button>
           ))}
         </div>

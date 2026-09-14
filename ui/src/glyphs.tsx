@@ -38,6 +38,7 @@ export type GlyphName =
   | 'pin'
   | 'home'
   | 'tray'
+  | 'cog'
   | 'spread-order'
   | 'spread-x'
   | 'spread-y'
@@ -68,6 +69,7 @@ const NAMES: Record<GlyphName, string> = {
   pin: 'pinned',
   home: 'home',
   tray: 'the tray',
+  cog: 'settings',
   'spread-order': 'in patch order',
   'spread-x': 'left to right',
   'spread-y': 'bottom to top',
@@ -143,6 +145,16 @@ const SHAPES: Record<GlyphName, React.ReactNode> = {
     </>,
   ),
   home: S(<path d="M2.4 6 6 2.6 9.6 6M3.6 5.2v4.4h4.8V5.2" />),
+  // Settings. Not in the design's list of twenty-five, which is an omission
+  // rather than an instruction: the cog is the one affordance every operator
+  // already knows, and `more` (three dots) means "more actions here", not
+  // "the settings for the whole desk".
+  cog: S(
+    <>
+      <circle cx="6" cy="6" r="1.9" />
+      <path d="M6 1.3v1.3M6 9.4v1.3M1.3 6h1.3M9.4 6h1.3M2.7 2.7l.9.9M8.4 8.4l.9.9M9.3 2.7l-.9.9M3.6 8.4l-.9.9" />
+    </>,
+  ),
   // the desk's pull-out, not a hamburger: a drawer with a handle
   tray: S(
     <>

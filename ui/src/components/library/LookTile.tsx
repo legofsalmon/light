@@ -11,7 +11,7 @@ import React from 'react';
 import { contextPress } from '../../touch.ts';
 import { KIND_LABEL } from '../../labels.ts';
 import type { LibraryEntry } from './model.ts';
-import { Bolt, Chain } from './marks.tsx';
+import { Glyph } from '../../glyphs.tsx';
 import { Face } from './face.tsx';
 
 /** The two drag payloads, spelled as LookGrid spells them: the look, and the
@@ -91,10 +91,10 @@ export function LookTile({
       {...menu}
     >
       <Face face={face} />
-      {look.flash && <span className="corner bolt"><Bolt /></span>}
+      {look.flash && <span className="corner bolt"><Glyph name="bolt" /></span>}
       {steps > 0 && (
         <span className="corner chain">
-          <Chain />
+          <Glyph name="chain" />
           <b>{steps}</b>
         </span>
       )}

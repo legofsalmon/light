@@ -21,7 +21,7 @@ import { useStore } from '../store.ts';
 import { openLibrarySheet } from '../libraryStore.ts';
 import { usage } from './library/model.ts';
 import { firstPad, selectPad, showColumn, showGroup } from './library/reveal.ts';
-import { Find as FindMark } from './library/marks.tsx';
+import { Glyph } from '../glyphs.tsx';
 import '../styles/library.css';
 
 type FindStore = { open: boolean; set: (v: boolean) => void };
@@ -175,7 +175,7 @@ export function Find() {
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="findbar">
-        <FindMark />
+        <Glyph name="find" />
         <input
           ref={inputRef}
           className="text findfield"

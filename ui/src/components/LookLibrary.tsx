@@ -7,7 +7,7 @@ import { closeLibrarySheet, useEditingDeckId, useLibraryStore } from '../library
 import { BANK, FILTERS, FILTER_HELP, FILTER_LABEL, entries, filtered, type LibraryEntry, type LibraryFilter } from './library/model.ts';
 import { LookTile } from './library/LookTile.tsx';
 import { Menu, type MenuAt, type MenuItem } from './library/Menu.tsx';
-import { Add, Find } from './library/marks.tsx';
+import { Glyph } from '../glyphs.tsx';
 import { firstPad, selectPad, showOnPlan } from './library/reveal.ts';
 import '../styles/library.css';
 
@@ -372,19 +372,19 @@ function LibraryBody({ close, pick }: { close?: Close; pick?: { current: string 
           <div className="libempty chip">
             {q.trim() ? (
               <>
-                <Find />
+                <Glyph name="find" />
                 <span>nothing called “{q.trim()}”</span>
                 <button className="btn small ghost" onClick={() => setQ('')}>clear search</button>
               </>
             ) : all.length === 0 ? (
               <>
-                <Add />
+                <Glyph name="add" />
                 <span>no looks yet</span>
                 <button className="btn small ghost" onClick={newLook}>+ new look</button>
               </>
             ) : (
               <>
-                <Find />
+                <Glyph name="find" />
                 <span>no {FILTER_LABEL[filter]} looks</span>
                 <button className="btn small ghost" onClick={() => setFilter('all')}>show all</button>
               </>
