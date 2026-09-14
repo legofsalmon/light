@@ -17,6 +17,8 @@ import { Fader, fmtPct } from './Fader.tsx';
 import { lookFace, lookSwatch } from '../lookColors.ts';
 import { Face } from './library/face.tsx';
 import { placeArmed, useEditingDeckId, useLibraryStore } from '../libraryStore.ts';
+import { REMOTE_PAGE_COLS, useRemote } from '../remoteStore.ts';
+import { HeldChip } from './HeldChip.tsx';
 import { openSetup } from './AdminModal.tsx';
 import { APC_COLS, APC_KNOB_BANKS, APC_LAYER_ROWS } from '../apcFeedback.ts';
 
@@ -658,6 +660,7 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
 
 function DeckBar() {
   const project = useStore((s) => s.project)!;
+  const remote = useRemote((s) => s.remote);
   const send = useStore((s) => s.send);
   const mutate = useStore((s) => s.mutate);
   const flushProjectWrite = useStore((s) => s.flushProjectWrite);
@@ -789,9 +792,76 @@ function DeckBar() {
 
   if (decks.length === 0) return null;
 
+  /** The song that is playing, as one chip with the whole set list behind
+   *  it. On the remote it sits between the two step keys, which is where a
+   *  thumb reads it: the design's own song row (2.11). */
+  const songChip = (
+    <>
+    {/* One chip for the song that is playing, not twenty in a strip that
+        scrolled with its scrollbar hidden. Song 15 from song 1 was fourteen
+        live presses of ▶, each one a real switch of the room; it is now one
+        gesture in a list (design 2.5). */}
+    <div ref={pickerBoxRef} style={{ position: 'relative', flex: '0 0 auto' }}>
+      <button
+        className="deckchip on songnow"
+        aria-haspopup="listbox"
+        aria-expanded={picker}
+        title={`${active?.name ?? 'song'} — click for the whole set list · ${touch ? 'hold' : 'right-click'} to rename, move or delete`}
+        {...contextPress(() => { if (active) songMenu(active); })}
+        onClick={() => {
+          const r = pickerBoxRef.current?.getBoundingClientRect();
+          if (r) setPickerPos({ top: r.bottom + 2, left: r.left });
+          setFilter('');
+          setPicker((o) => !o);
+        }}
+      >
+        {songNo(active)} · {active?.name ?? '—'} ▾
+      </button>
+      {picker && (
+        <div className="popover songpicker" style={{ top: pickerPos.top, left: pickerPos.left }} role="listbox">
+          <input
+            className="text"
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- the click that opened it asked for the caret
+            autoFocus
+            placeholder="find a song"
+            aria-label="find a song"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { setPicker(false); return; }
+              if (e.key !== 'Enter') return;
+              const hit = shown[0];
+              if (hit && hit.id !== project.activeDeckId) send({ type: 'switchDeck', deckId: hit.id });
+              setPicker(false);
+            }}
+          />
+          {shown.map((d) => (
+            <button
+              key={d.id}
+              className={`btn small ghost ${d.id === project.activeDeckId ? 'on' : ''}`}
+              role="option"
+              aria-selected={d.id === project.activeDeckId}
+              style={{ justifyContent: 'flex-start' }}
+              title={d.id === project.activeDeckId ? 'this song is playing' : `switch the room to ${d.name} — the pads change under your hands`}
+              onClick={() => {
+                if (d.id !== project.activeDeckId) send({ type: 'switchDeck', deckId: d.id });
+                setPicker(false);
+              }}
+            >
+              {songNo(d)} · {d.name}
+            </button>
+          ))}
+          {shown.length === 0 && <div className="prose" style={{ padding: 'var(--space-6)' }}>nothing called “{filter}”</div>}
+        </div>
+      )}
+    </div>
+    </>
+  );
+
+
   return (
     <div className="deckbar" role="tablist" aria-label="songs">
-      <span className="label">song</span>
+      {!remote && <span className="label">song</span>}
       <button
         className="btn small ghost"
         title="previous song ( [ )"
@@ -806,6 +876,7 @@ function DeckBar() {
       >
         ◀
       </button>
+      {remote && songChip}
       <button
         className="btn small ghost"
         title="next song ( ] )"
@@ -819,65 +890,8 @@ function DeckBar() {
       >
         ▶
       </button>
-      {/* One chip for the song that is playing, not twenty in a strip that
-          scrolled with its scrollbar hidden. Song 15 from song 1 was fourteen
-          live presses of ▶, each one a real switch of the room; it is now one
-          gesture in a list (design 2.5). */}
-      <div ref={pickerBoxRef} style={{ position: 'relative', flex: '0 0 auto' }}>
-        <button
-          className="deckchip on songnow"
-          aria-haspopup="listbox"
-          aria-expanded={picker}
-          title={`${active?.name ?? 'song'} — click for the whole set list · ${touch ? 'hold' : 'right-click'} to rename, move or delete`}
-          {...contextPress(() => { if (active) songMenu(active); })}
-          onClick={() => {
-            const r = pickerBoxRef.current?.getBoundingClientRect();
-            if (r) setPickerPos({ top: r.bottom + 2, left: r.left });
-            setFilter('');
-            setPicker((o) => !o);
-          }}
-        >
-          {songNo(active)} · {active?.name ?? '—'} ▾
-        </button>
-        {picker && (
-          <div className="popover songpicker" style={{ top: pickerPos.top, left: pickerPos.left }} role="listbox">
-            <input
-              className="text"
-              // eslint-disable-next-line jsx-a11y/no-autofocus -- the click that opened it asked for the caret
-              autoFocus
-              placeholder="find a song"
-              aria-label="find a song"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') { setPicker(false); return; }
-                if (e.key !== 'Enter') return;
-                const hit = shown[0];
-                if (hit && hit.id !== project.activeDeckId) send({ type: 'switchDeck', deckId: hit.id });
-                setPicker(false);
-              }}
-            />
-            {shown.map((d) => (
-              <button
-                key={d.id}
-                className={`btn small ghost ${d.id === project.activeDeckId ? 'on' : ''}`}
-                role="option"
-                aria-selected={d.id === project.activeDeckId}
-                style={{ justifyContent: 'flex-start' }}
-                title={d.id === project.activeDeckId ? 'this song is playing' : `switch the room to ${d.name} — the pads change under your hands`}
-                onClick={() => {
-                  if (d.id !== project.activeDeckId) send({ type: 'switchDeck', deckId: d.id });
-                  setPicker(false);
-                }}
-              >
-                {songNo(d)} · {d.name}
-              </button>
-            ))}
-            {shown.length === 0 && <div className="prose" style={{ padding: 'var(--space-6)' }}>nothing called “{filter}”</div>}
-          </div>
-        )}
-      </div>
-      {decks.length > 1 && (() => {
+      {!remote && songChip}
+      {!remote && decks.length > 1 && (() => {
         const i = decks.findIndex((x) => x.id === project.activeDeckId);
         const j = Math.min(decks.length - 1, (i < 0 ? 0 : i) + 1);
         // at the last song there is no next — stepping clamps, so saying
@@ -892,7 +906,10 @@ function DeckBar() {
       {/* The page you are building, which is not the page the room is seeing
           (design 2.5). Picking another song here shows its pads for editing and
           leaves the rig exactly where it is; Escape, or a song switch from any
-          source, comes back. */}
+          source, comes back. Both this and `+ song` are build-time controls,
+          so the remote's song row does without them and keeps the held chip in
+          the width they were using (design 2.11). */}
+      {!remote && (
       <div ref={editBoxRef} style={{ position: 'relative', flex: '0 0 auto' }}>
         <button
           className={`btn small ${editingDeckId ? 'warn on' : 'ghost'}`}
@@ -938,18 +955,24 @@ function DeckBar() {
           </div>
         )}
       </div>
-      <button
-        className="btn small ghost"
-        style={{ flex: '0 0 auto' }} /* a shrinking key wraps its word and grows the song row */
-        title={
-          anyPlaying
-            ? 'add a song — it is made and left waiting, because the room is playing something'
-            : 'add a song — nothing is playing, so it opens on the new one'
-        }
-        onClick={() => { void addSong('empty'); }}
-      >
-        + song ▾
-      </button>
+      )}
+      {!remote && (
+        <button
+          className="btn small ghost"
+          style={{ flex: '0 0 auto' }} /* a shrinking key wraps its word and grows the song row */
+          title={
+            anyPlaying
+              ? 'add a song — it is made and left waiting, because the room is playing something'
+              : 'add a song — nothing is playing, so it opens on the new one'
+          }
+          onClick={() => { void addSong('empty'); }}
+        >
+          + song ▾
+        </button>
+      )}
+      {/* What is standing between the show and the room, beside the song it is
+          holding it away from. It draws nothing when nothing is held. */}
+      {remote && <HeldChip />}
     </div>
   );
 }
@@ -1081,8 +1104,14 @@ function ControlRow() {
   const setView = useStore((s) => s.setView);
   const controls = project.controls ?? [];
   // One slot per hardware pad in the row, so control 3 is always the third pad
-  // whether or not controls 1 and 2 exist yet.
-  const slots = Array.from({ length: APC_COLS }, (_, i) => controls[i] ?? null);
+  // whether or not controls 1 and 2 exist yet. On the remote the row follows
+  // the page the pads are on — four dials under four pads, dial 5 to 8 on the
+  // page that holds column 5 to 8 — and each keeps its own slot number.
+  const remote = useRemote((s) => s.remote);
+  const page = useRemote((s) => s.page);
+  const all = Array.from({ length: APC_COLS }, (_, i) => controls[i] ?? null);
+  const first = remote ? Math.min(page, Math.max(0, Math.ceil(APC_COLS / REMOTE_PAGE_COLS) - 1)) * REMOTE_PAGE_COLS : 0;
+  const slots = remote ? all.slice(first, first + REMOTE_PAGE_COLS) : all;
 
   // Appends, and only the NEXT free slot offers it — clicking the last slot to
   // get a control there would otherwise have to invent every control in
@@ -1123,7 +1152,8 @@ function ControlRow() {
           Dials — tweak whatever is playing
         </div>
       </div>
-      {slots.map((c, i) => {
+      {slots.map((c, k) => {
+        const i = first + k;
         if (!c) {
           const next = i === controls.length; // the one slot that can be filled
           return (
@@ -1276,6 +1306,39 @@ export function LookGrid() {
   useEffect(() => {
     registerShortcutActions({ selectColumn: (col) => { if (col < cols.length) setSelCol(col); } });
   }, [cols.length]);
+  // Four columns at a time on the remote, behind a two-position key (design
+  // 2.11). The pads on screen are a WINDOW on the song's columns, never a
+  // renumbering of them: every head, pad and dial below keeps its real column
+  // index, so what a page fires is what the desk would fire.
+  const remote = useRemote((s) => s.remote);
+  const page = useRemote((s) => s.page);
+  const setPage = useRemote((s) => s.setPage);
+  const pages = remote ? Math.max(1, Math.ceil(cols.length / REMOTE_PAGE_COLS)) : 1;
+  const pageIdx = Math.min(page, pages - 1);
+  const firstCol = remote ? pageIdx * REMOTE_PAGE_COLS : 0;
+  const shownCols = remote ? cols.slice(firstCol, firstCol + REMOTE_PAGE_COLS) : cols;
+  // The head row IS the pager: a native scroll container with mandatory
+  // snapping, so the browser cancels the click that follows a pan itself and
+  // no swipe can leave a trailing click on a head that fires a column. There
+  // is no JS pointer pager here on purpose — that is the misfire the page key
+  // exists to remove.
+  const pagerRef = useRef<HTMLDivElement>(null);
+  const scrolledPage = useRef(0);
+  const onPagerScroll = () => {
+    const el = pagerRef.current;
+    if (!el) return;
+    const p = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
+    scrolledPage.current = p;
+    if (p !== pageIdx) setPage(p);
+  };
+  useEffect(() => {
+    const el = pagerRef.current;
+    // Already there, or a finger is taking it there: a correction mid-snap
+    // would cut the browser's own animation short. Only the page key moves it.
+    if (!el || scrolledPage.current === pageIdx) return;
+    el.scrollLeft = pageIdx * el.clientWidth; // no slides on the grid, ever (design 3.4)
+    scrolledPage.current = pageIdx;
+  }, [pageIdx, remote, cols.length]);
   // The layer head narrows from 120 to 96 when the grid area is under 1,200px
   // (design 2.2), so a panel opening at 1280 narrows the head rather than
   // pushing the pads below their floor. Measured on the wrapper the grid
@@ -1427,6 +1490,75 @@ export function LookGrid() {
     };
   });
 
+  /** The grid's one-line chip. Empty unless it has something to say: the learn
+   *  prompt while learn is armed, otherwise the one verb that would put light
+   *  on the rig (design #17). On the remote it rides the page-key row, because
+   *  the grid's own first track is 48px of layer head there. */
+  const gridLabel = (
+    <div className="gridlabel label">
+      {learnMode
+        ? (learnTarget ? 'move a control…' : 'click a target…')
+        : editing
+          ? (
+            <button
+              className="btn small gridchip warn on"
+              title={`These are ${songLabel}'s pads. ${project.decks?.find((d) => d.id === project.activeDeckId)?.name ?? 'another song'} is playing, and nothing here reaches the rig — press Escape to come back to it.`}
+              onClick={() => setEditingDeckId(null)}
+            >
+              editing {songLabel.slice(0, 2)} · Esc
+            </button>
+          )
+          : <RigChip />}
+    </div>
+  );
+
+  /** One column head. The same element in both layouts — a track of the grid on
+   *  a desk, and a child of the pager on the remote — so the one thing it does
+   *  on a left click is written once. */
+  const columnHead = (col: number) => {
+    const name = cols[col] ?? '';
+    return (
+      <div
+        key={col}
+        className={`colhead ${editing ? 'inert' : colStates[col].cls} ${editing && selCol === col ? 'selcol' : ''} ${learnTarget?.kind === 'column' && learnTarget.col === col ? 'learn-armed' : ''}`}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); e.currentTarget.click(); } }}
+        title={
+          editing
+            ? `select column ${col + 1}${name ? ` · ${name}` : ''} · editing ${songLabel} — fires only on the song that is playing`
+            : `${colStates[col].what} · ${touch ? 'hold' : 'right-click'} to rename, insert or delete`
+        }
+        onClick={() => {
+          // On an editing page a column head selects its column rather than
+          // firing it — the room is playing another song, and a head that
+          // fired the live page from a grid showing a different one is the
+          // ambiguity decision 0 removes.
+          if (editing) {
+            setSelCol(col);
+            return;
+          }
+          if (!useStore.getState().armLearn({ kind: 'column', col })) send({ type: 'column', col });
+        }}
+        // Right-click or a long-press, never a left click: a left click fires
+        // the column, so editing must not be reachable by the gesture that
+        // triggers cues. The hold is the tablet's right-click (review M15).
+        {...contextPress(() => columnMenu(col, name))}
+      >
+        {/* What firing it will do, before you fire it: ▶ when some layer holds
+            a pad here, ■ when none does — an all-empty column clears every
+            layer, which is a cue in its own right and used to look exactly
+            like a column that would light the room. */}
+        {!editing && <span className="colmark" aria-hidden="true">{colStates[col].has ? '▶' : '■'}</span>}
+        {col + 1} · {name}
+        {/* the crossfade running into this column, on the head that fired it */}
+        {!editing && colStates[col].t < 1 && (
+          <i className="colfade" style={{ width: `${Math.round(colStates[col].t * 100)}%` }} aria-hidden="true" />
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
     {/* Build shows one layer at a time, so changing which one is a tap rather
@@ -1455,6 +1587,51 @@ export function LookGrid() {
       </div>
     )}
     <DeckBar />
+    {/* The page key: two positions, like the bank arrows. Tapping one is the
+        route that cannot misfire; the swipe is the pager's own. */}
+    {remote && (
+      <div className="remotekeys">
+        {gridLabel}
+        {pages > 1 && (
+          <div className="pagekey" role="group" aria-label="page">
+            {Array.from({ length: pages }, (_, p) => {
+              const from = p * REMOTE_PAGE_COLS + 1;
+              const to = Math.min(cols.length, (p + 1) * REMOTE_PAGE_COLS);
+              return (
+                <button
+                  key={p}
+                  className={`btn small ${p === pageIdx ? 'on' : 'ghost'}`}
+                  aria-pressed={p === pageIdx}
+                  title={`show columns ${from}–${to} — the pads change under your thumb and nothing fires`}
+                  onClick={() => setPage(p)}
+                >
+                  {from}–{to}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    )}
+    {remote && (
+      <div className="pagerrow">
+        {/* the head column's width, so the heads land over their own pads */}
+        <div />
+        <div className="colpager" ref={pagerRef} onScroll={onPagerScroll}>
+          {Array.from({ length: pages }, (_, p) => (
+            <div
+              key={p}
+              className="colpage"
+              style={{ gridTemplateColumns: `repeat(${REMOTE_PAGE_COLS}, minmax(0, 1fr))` }}
+            >
+              {cols
+                .slice(p * REMOTE_PAGE_COLS, (p + 1) * REMOTE_PAGE_COLS)
+                .map((_, i) => columnHead(p * REMOTE_PAGE_COLS + i))}
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
     <div
       ref={gridRef}
       className={`lookgrid ${narrow ? 'narrow' : ''} ${compact ? 'compact' : ''} ${editing ? 'editingpage' : ''}`}
@@ -1462,73 +1639,35 @@ export function LookGrid() {
       // flexes between its floor and its ceiling so eight columns fill the grid
       // area at every window from the Tauri floor up, and the grid scrolls
       // sideways only once the pads are at their floor (design 2.2).
-      style={{ gridTemplateColumns: `var(--size-layerhead-w) repeat(${cols.length}, minmax(var(--size-pad-w-min), var(--size-pad-w-max))) var(--size-addcol-w)` }}
+      //
+      // On the remote it is the 48px head and four tracks with a floor of zero,
+      // and no add column: a head plus four pads has four gaps, and the pad
+      // floor and the add column together are 30px more than a 390px phone
+      // holds. Four `minmax(0, 1fr)` tracks in a grid that is `width: 100%`
+      // cannot overflow their wrapper, whatever the window (design 2.11).
+      style={{
+        gridTemplateColumns: remote
+          ? `var(--size-layerhead-w) repeat(${shownCols.length}, minmax(0, 1fr))`
+          : `var(--size-layerhead-w) repeat(${cols.length}, minmax(var(--size-pad-w-min), var(--size-pad-w-max))) var(--size-addcol-w)`,
+      }}
     >
-      {/* The grid's one-line chip. Empty unless it has something to say: the
-          learn prompt while learn is armed, otherwise the one verb that would
-          put light on the rig (design #17). */}
-      <div className="gridlabel label">
-        {learnMode
-          ? (learnTarget ? 'move a control…' : 'click a target…')
-          : editing
-            ? (
-              <button
-                className="btn small gridchip warn on"
-                title={`These are ${songLabel}'s pads. ${project.decks?.find((d) => d.id === project.activeDeckId)?.name ?? 'another song'} is playing, and nothing here reaches the rig — press Escape to come back to it.`}
-                onClick={() => setEditingDeckId(null)}
-              >
-                editing {songLabel.slice(0, 2)} · Esc
-              </button>
-            )
-            : <RigChip />}
-      </div>
-      {cols.map((name, col) => (
+      {/* The grid's one-line chip, and the heads. On the remote both are
+          rendered above the grid instead — the chip beside the page key, the
+          heads inside the pager that pages it. */}
+      {!remote && gridLabel}
+      {!remote && cols.map((_, col) => columnHead(col))}
+      {/* The trailing add-column track is an edit affordance, and the remote
+          is locked out of it — so it is not rendered there, which is also the
+          30px the row cannot afford (design 2.11). */}
+      {!remote && (
         <div
-          key={col}
-          className={`colhead ${editing ? 'inert' : colStates[col].cls} ${editing && selCol === col ? 'selcol' : ''} ${learnTarget?.kind === 'column' && learnTarget.col === col ? 'learn-armed' : ''}`}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); e.currentTarget.click(); } }}
-          title={
-            editing
-              ? `select column ${col + 1}${cols[col] ? ` · ${cols[col]}` : ''} · editing ${songLabel} — fires only on the song that is playing`
-              : `${colStates[col].what} · ${touch ? 'hold' : 'right-click'} to rename, insert or delete`
-          }
-          onClick={() => {
-            // On an editing page a column head selects its column rather than
-            // firing it — the room is playing another song, and a head that
-            // fired the live page from a grid showing a different one is the
-            // ambiguity decision 0 removes.
-            if (editing) {
-              setSelCol(col);
-              return;
-            }
-            if (!useStore.getState().armLearn({ kind: 'column', col })) send({ type: 'column', col });
-          }}
-          // Right-click or a long-press, never a left click: a left click fires
-          // the column, so editing must not be reachable by the gesture that
-          // triggers cues. The hold is the tablet's right-click (review M15).
-          {...contextPress(() => columnMenu(col, name))}
+          className="colhead addcol"
+          title="add a column to this song"
+          onClick={() => insertColumn(cols.length - 1)}
         >
-          {/* What firing it will do, before you fire it: ▶ when some layer
-              holds a pad here, ■ when none does — an all-empty column clears
-              every layer, which is a cue in its own right and used to look
-              exactly like a column that would light the room. */}
-          {!editing && <span className="colmark" aria-hidden="true">{colStates[col].has ? '▶' : '■'}</span>}
-          {col + 1} · {name}
-          {/* the crossfade running into this column, on the head that fired it */}
-          {!editing && colStates[col].t < 1 && (
-            <i className="colfade" style={{ width: `${Math.round(colStates[col].t * 100)}%` }} aria-hidden="true" />
-          )}
+          +
         </div>
-      ))}
-      <div
-        className="colhead addcol"
-        title="add a column to this song"
-        onClick={() => insertColumn(cols.length - 1)}
-      >
-        +
-      </div>
+      )}
       {layers.map((layer) => {
         const live = liveLayers?.find((l) => l.id === layer.id);
         // primitives, not the freshly-parsed LayerSnap object, so a memoized
@@ -1541,12 +1680,16 @@ export function LookGrid() {
           <React.Fragment key={layer.id}>
             {/* the head always reads the room, whatever page the pads show */}
             <LayerHead layer={layer} live={live} />
-            {cols.map((_, col) => (
-              <Cell key={col} layer={layer} col={col} lookId={cells[col] ?? null} liveLookId={liveLookId} liveCol={liveCol} fadeT={fadeT} editing={editing} />
-            ))}
+            {shownCols.map((_, i) => {
+              const col = firstCol + i;
+              return (
+                <Cell key={col} layer={layer} col={col} lookId={cells[col] ?? null} liveLookId={liveLookId} liveCol={liveCol} fadeT={fadeT} editing={editing} />
+              );
+            })}
             {/* grid auto-flow is continuous, so every row must fill the
-                add-column track or the next layer head slides up into it */}
-            <div className="gridfiller" />
+                add-column track or the next layer head slides up into it.
+                There is no such track on the remote, and no filler either. */}
+            {!remote && <div className="gridfiller" />}
           </React.Fragment>
         );
       })}
@@ -1561,19 +1704,22 @@ export function LookGrid() {
         return (
           <React.Fragment key={layer.id}>
             <LayerHead layer={layer} live={live} />
-            {cols.map((_, col) => (
-              <Cell
-                key={col}
-                layer={layer}
-                col={col}
-                lookId={cells[col] ?? null}
-                editing={editing}
-                liveLookId={live?.lookId ?? null}
-                liveCol={live?.col ?? null}
-                fadeT={live?.t ?? 1}
-              />
-            ))}
-            <div className="gridfiller" />
+            {shownCols.map((_, i) => {
+              const col = firstCol + i;
+              return (
+                <Cell
+                  key={col}
+                  layer={layer}
+                  col={col}
+                  lookId={cells[col] ?? null}
+                  editing={editing}
+                  liveLookId={live?.lookId ?? null}
+                  liveCol={live?.col ?? null}
+                  fadeT={live?.t ?? 1}
+                />
+              );
+            })}
+            {!remote && <div className="gridfiller" />}
           </React.Fragment>
         );
       })}

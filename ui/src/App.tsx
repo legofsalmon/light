@@ -339,7 +339,10 @@ export function App() {
           <Region name="previz"><PrevizPanel preview={view !== 'patch'} /></Region>
         </div>
       )}
-      {bandHidden && (
+      {/* The band's reveal strip — never on the remote, which has no band to
+          reveal and no grid track to put a strip in: rendered there it takes a
+          column of its own and 50px off the pads. */}
+      {bandHidden && !remote && (
         <div
           className="previzstrip"
           role="button"

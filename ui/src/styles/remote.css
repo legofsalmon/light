@@ -23,13 +23,22 @@
    rows under the grid — so they sit below whatever template the view is using
    instead of making the remote a second set of them. */
 .app.remote.view-pads {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     'offline'
     'top'
-    'grid';
+    'grid'
+    'levels'
+    'lockbar';
 }
+/* A locked desk client has no levels tier and no template of its own, so its
+   lock bar takes the line after the last explicit row — named areas would mean
+   restating the pads template here, and auto-placement would drop it into the
+   empty offline row at the top. */
+.app.locked .bottombar { grid-row: -1; }
+.app.remote .remotelevels { grid-area: levels; }
+.app.remote .bottombar { grid-area: lockbar; }
 
 /* ---- the fixed strip ---------------------------------------------------- */
 /* BLACKOUT · ALL STOP · MASTER · the lamp, at --size-panic-h-touch. The top
@@ -267,6 +276,20 @@
 }
 .editorsheet .previzbar { display: none; }
 .editorsheet .editorbody { flex: 1 1 auto; min-height: 0; overflow: auto; }
+
+/* A toast lands top-right, which on 390px of glass is the whole width of the
+   song row and the page key — and a toast is a live element, so for as long as
+   it is up those two controls do not answer a tap. On the remote it goes to
+   the foot of the grid instead, clear of the levels tier and the bottom bar,
+   where what it covers for a moment is a level and not a cue. */
+.app.remote .toasts {
+  top: auto;
+  bottom: calc(var(--size-panic-h-touch) + var(--size-btn) + var(--space-8));
+  left: var(--space-12);
+  max-width: none;
+  pointer-events: none;
+}
+.app.remote .toast { pointer-events: auto; }
 
 /* ---- what a locked client does not have --------------------------------- */
 /* Locked is the pads and nothing else: no Rig page, no sheets but help, the
