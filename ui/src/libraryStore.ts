@@ -65,7 +65,7 @@ export const libraryIsSheet = (windowWidth: number, touch: boolean): boolean =>
  *  through one place so that when the field appears, every reader gets it at
  *  once rather than one by one. */
 export function useEditingDeckId(): string | null {
-  return useStore((s) => (s as unknown as { editingDeckId?: string | null }).editingDeckId ?? null);
+  return useStore((s) => s.editingDeckId);
 }
 
 /** Open the library as a sheet over the grid — the `L` key, the reveal strip

@@ -8,7 +8,11 @@
 | `T` | tap tempo |
 | `B` | blackout on/off |
 | `[` `]` | previous / next song |
-| `Esc` | disarm a library tile, else deselect |
+| `Esc` | disarm, leave the page you are editing, else deselect |
+| `F` | hold the rig on this frame, or let it through |
+| `K` | keep the live nudges |
+| `D` | discard the live nudges |
+| `A` | select what the top layer is playing |
 | `⌘,` | settings |
 | `L` | open the look library |
 | `/` / `⌘F` | find a look, song, column, group or fixture |

@@ -1840,3 +1840,22 @@ button.warnchip { background: none; cursor: pointer; }
 @keyframes holdfill { from { width: 0; } to { width: 100%; } }
 /* the now-playing line is a control when there is something playing to select */
 .layerhead .nowplaying.on { cursor: pointer; }
+
+/* ---------- the page being edited, which is not the page being played -------
+   Decision 0 (design 2.5, section 9). While the grid shows another song's pads
+   the pad bodies do nothing: the room is playing something else, and a body
+   that fires the live page from a grid showing a different one is exactly the
+   ambiguity this state exists to remove. The name strip still selects, drags
+   and opens the menu, because none of those reach the rig.
+
+   A cue that does not fire is a misfire (section 8, rule 18), so the state is
+   said in four places at once — the strip's name slot, this tint, the dimmed
+   column heads and the grid's own corner chip — and it ends on Escape and on
+   any song switch, from any source. */
+.lookgrid.editingpage { background: var(--color-bg-blind); }
+.cell.inert .face, .cell.inert .swatch { cursor: not-allowed; }
+/* the body is not a control here; the strip below it still is */
+.cell.inert .face, .cell.inert .swatch { pointer-events: none; }
+.colhead.inert { color: var(--text-dim); }
+/* which column a head or a digit key selected, since neither fires here */
+.colhead.selcol { box-shadow: inset 0 calc(-1 * var(--size-rule)) 0 var(--accent); color: var(--text); }

@@ -1602,22 +1602,24 @@ await new Promise<void>((resolve) => {
     shiftKey?: boolean;
     repeat?: boolean;
   };
-  const press = (e: FakeKey): string[] => {
+  const press = (e: FakeKey, editing: string | null = null): string[] => {
     const calls: string[] = [];
     const st = {
       project: { columns: new Array(9).fill(null), decks: [{ id: 'a' }, { id: 'b' }], activeDeckId: 'a' },
-      snap: { blackout: false },
+      snap: { blackout: false, frozen: false, soft: [], layers: [] },
       send: (c: { type: string; col?: number }) => calls.push(c.col === undefined ? c.type : `${c.type}:${c.col}`),
       setView: (v: string) => calls.push(`view:${v}`),
-      setSel: () => calls.push('deselect'),
+      setSel: (x: unknown) => calls.push(x === null ? 'deselect' : 'select'),
+      editingDeckId: editing,
+      setEditingDeckId: (id: string | null) => calls.push(id === null ? 'stop editing' : `edit:${id}`),
       undo: () => calls.push('undo'),
       redo: () => calls.push('redo'),
     };
     runShortcut(e, st as never);
     return calls;
   };
-  const is = (name: string, e: FakeKey, want: string[]) => {
-    const got = press(e);
+  const is = (name: string, e: FakeKey, want: string[], editing: string | null = null) => {
+    const got = press(e, editing);
     check(`shortcuts: ${name}`, JSON.stringify(got) === JSON.stringify(want), `got ${JSON.stringify(got)}`);
   };
 
@@ -1636,6 +1638,13 @@ await new Promise<void>((resolve) => {
   is('a held key does not machine-gun a cue', { key: '1', repeat: true }, []);
   is('a browser chord whose letter is ours is not ours', { key: 'b', metaKey: true }, []);
   is('an unbound key does nothing', { key: 'q' }, []);
+
+  is('F holds the frame', { key: 'f' }, ['setFreeze']);
+  // Decision 0: on a page that is not the room's, a digit selects its column
+  // rather than firing it, and Escape comes back before it clears a selection.
+  is('a digit does NOT fire while another song is being edited', { key: '1' }, [], 'b');
+  is('Escape leaves the page being edited first', { key: 'Escape' }, ['stop editing'], 'b');
+  is('and deselects once it is back on the live page', { key: 'Escape' }, ['deselect']);
 
   check('shortcuts: the modified ones shadow a system chord', SHORTCUTS.some((s) => s.modified));
 }

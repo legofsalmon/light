@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { ControlLink, Layer, LayerBlend, LayerSnap, Project } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
-import { notify, useStore } from '../store.ts';
+import { notify, pageCells, pageColumns, useStore, writePage } from '../store.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
 import { LONG_PRESS_MS, contextPress } from '../touch.ts';
 
 /** A finger wobbles on a hold; a scroll travels. Same slop touch.ts uses. */
 const HOLD_SLOP = 8;
 import { size } from '../tokens.ts';
+import { registerShortcutActions } from '../shortcuts.ts';
 
 /** Below this grid-area width the layer head is its narrow 96px (design 2.2).
  *  Not a token yet: the design names the number and no size/* for it. */
@@ -40,12 +41,7 @@ function placeLook(layerId: string, col: number, lookId: string, deckId: string 
     return;
   }
   st.mutate((p) => {
-    const l = p.layers.find((x) => x.id === layerId);
-    if (!l) return;
-    while (l.cells.length < col) l.cells.push(null); // never leave holes for JSON to invent
-    l.cells[col] = lookId;
-    const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
-    if (deck) deck.cells = Object.fromEntries(p.layers.map((x) => [x.id, [...x.cells]]));
+    writePage(p, deckId, layerId, (cells) => { cells[col] = lookId; });
   });
   st.setSel({ layerId, col }); // the pad you just filled is what you edit next
 }
@@ -66,12 +62,13 @@ const PAD_DRAG = 'application/x-light-pad';
  *  other thing, and the one you cannot get any other way: a real copy to take
  *  somewhere else without touching the original.
  */
-function duplicatePad(layerId: string, col: number, columns: number) {
+function duplicatePad(layerId: string, col: number, columns: number, deckId: string | null) {
   const st = useStore.getState();
   const project = st.project;
   if (!project) return;
   const layer = project.layers.find((l) => l.id === layerId);
-  const srcId = layer?.cells[col] ?? null;
+  const cells = pageCells(project, deckId, layerId);
+  const srcId = cells[col] ?? null;
   if (!srcId || !Object.hasOwn(project.looks, srcId)) {
     notify('that pad is empty');
     return;
@@ -79,19 +76,18 @@ function duplicatePad(layerId: string, col: number, columns: number) {
   // Nearest free pad in the same layer, looking right first because that is
   // the direction a set is built in, then left.
   const free = (() => {
-    for (let c = col + 1; c < columns; c++) if (!layer!.cells[c]) return c;
-    for (let c = col - 1; c >= 0; c--) if (!layer!.cells[c]) return c;
+    for (let c = col + 1; c < columns; c++) if (!cells[c]) return c;
+    for (let c = col - 1; c >= 0; c--) if (!cells[c]) return c;
     return -1;
   })();
   if (free < 0) {
-    notify(`${layer!.name} has no free pad in this song — add a column, or clear one first`);
+    notify(`${layer?.name ?? 'that layer'} has no free pad in this song — add a column, or clear one first`);
     return;
   }
   const id = uid('look');
   st.mutate((p) => {
     const src = p.looks[srcId];
-    const ly = p.layers.find((l) => l.id === layerId);
-    if (!src || !ly) return;
+    if (!src) return;
     // Fresh ids all the way down, the way the FX pool copies an effect. The
     // soft-override map is keyed on (lookId, partId) so a shared part id would
     // not actually collide, but two looks carrying the same part ids is the
@@ -102,19 +98,16 @@ function duplicatePad(layerId: string, col: number, columns: number) {
       for (const fx of part.effects) fx.id = uid('fx');
     }
     p.looks[id] = { ...copy, id, name: `${src.name} copy` };
-    while (ly.cells.length <= free) ly.cells.push(null);
-    ly.cells[free] = id;
-    const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
-    if (deck) deck.cells = Object.fromEntries(p.layers.map((x) => [x.id, [...x.cells]]));
+    writePage(p, deckId, layerId, (cells) => { cells[free] = id; });
   }, 'duplicate a look');
   st.setSel({ layerId, col: free });
 }
 
 /** Where a copy would land on a layer: this column if it is free, else the
  *  first free one to its right. null when the layer is full. */
-function hitPad(layer: Layer, col: number, columns: number): number | null {
-  if (!layer.cells[col]) return col;
-  for (let c = col + 1; c < columns; c++) if (!layer.cells[c]) return c;
+function hitPad(cells: (string | null)[], col: number, columns: number): number | null {
+  if (!cells[col]) return col;
+  for (let c = col + 1; c < columns; c++) if (!cells[c]) return c;
   return null;
 }
 
@@ -128,13 +121,12 @@ function hitPad(layer: Layer, col: number, columns: number): number | null {
  *  blend, check the audition. This is the first four of those in one verb, and
  *  it leaves the wash alone.
  */
-function flashCopy(srcId: string, layerId: string, col: number) {
+function flashCopy(srcId: string, layerId: string, col: number, deckId: string | null) {
   const st = useStore.getState();
   const id = uid('look');
   st.mutate((p) => {
     const src = p.looks[srcId];
-    const ly = p.layers.find((l) => l.id === layerId);
-    if (!src || !ly) return;
+    if (!src) return;
     const copy = structuredClone(src);
     for (const part of copy.parts) {
       part.id = uid('part');
@@ -143,10 +135,7 @@ function flashCopy(srcId: string, layerId: string, col: number) {
     // A flash look is held, not fired, so a column press skips it — which is
     // what makes it a hit rather than a cue.
     p.looks[id] = { ...copy, id, name: `${src.name} · hit`, flash: true };
-    while (ly.cells.length <= col) ly.cells.push(null);
-    ly.cells[col] = id;
-    const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
-    if (deck) deck.cells = Object.fromEntries(p.layers.map((x) => [x.id, [...x.cells]]));
+    writePage(p, deckId, layerId, (cells) => { cells[col] = id; });
   }, 'duplicate a look as a flash');
   st.setSel({ layerId, col });
 }
@@ -207,18 +196,12 @@ function movePad(from: { layerId: string; col: number }, toLayerId: string, toCo
     return;
   }
   st.mutate((p) => {
-    const src = p.layers.find((x) => x.id === from.layerId);
-    const dst = p.layers.find((x) => x.id === toLayerId);
-    if (!src || !dst) return;
-    // never leave holes for JSON to invent
-    while (src.cells.length <= from.col) src.cells.push(null);
-    while (dst.cells.length <= toCol) dst.cells.push(null);
-    const moving = src.cells[from.col] ?? null;
+    let moving: string | null = null;
+    let landing: string | null = null;
+    writePage(p, deckId, from.layerId, (cells) => { moving = cells[from.col] ?? null; });
     if (!moving) return;
-    src.cells[from.col] = dst.cells[toCol] ?? null;
-    dst.cells[toCol] = moving;
-    const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
-    if (deck) deck.cells = Object.fromEntries(p.layers.map((x) => [x.id, [...x.cells]]));
+    writePage(p, deckId, toLayerId, (cells) => { landing = cells[toCol] ?? null; cells[toCol] = moving; });
+    writePage(p, deckId, from.layerId, (cells) => { cells[from.col] = landing; });
   }, 'move a look to another pad');
   st.setSel({ layerId: toLayerId, col: toCol });
 }
@@ -231,15 +214,22 @@ function movePad(from: { layerId: string; col: number }, toLayerId: string, toCo
 const Cell = React.memo(function Cell({
   layer,
   col,
+  lookId,
   liveLookId,
   liveCol,
   fadeT,
+  editing,
 }: {
   layer: Layer;
   col: number;
+  /** what this pad holds ON THE PAGE BEING SHOWN — which is not the live page
+   *  while another song is being built */
+  lookId: string | null;
   liveLookId: string | null;
   liveCol: number | null;
   fadeT: number;
+  /** the page being shown is not the one on stage: nothing here fires */
+  editing: boolean;
 }) {
   const project = useStore((s) => s.project)!;
   const sel = useStore((s) => s.sel);
@@ -248,7 +238,6 @@ const Cell = React.memo(function Cell({
   const send = useStore((s) => s.send);
   const setSel = useStore((s) => s.setSel);
 
-  const lookId = layer.cells[col] ?? null;
   // hasOwn, not a bare index: a cell holding "constructor" or "toString"
   // resolves to a function off the prototype and renders as a phantom look
   const look = lookId && Object.hasOwn(project.looks, lookId) ? project.looks[lookId] : null;
@@ -319,7 +308,8 @@ const Cell = React.memo(function Cell({
     // otherwise the first free column to its right. Said in the menu row, so
     // the pad it will use is known before the press rather than after.
     const top = project.layers[project.layers.length - 1];
-    const hit = top ? hitPad(top, col, project.columns.length) : null;
+    const pageCols = pageColumns(project, editingDeckId);
+    const hit = top ? hitPad(pageCells(project, editingDeckId, top.id), col, pageCols.length) : null;
     void askChoice(`${look.name} — ${layer.name}, column ${col + 1}`, [
       { value: 'duplicate', label: 'Duplicate', primary: true },
       ...(top && top.id !== layer.id && hit !== null
@@ -332,16 +322,12 @@ const Cell = React.memo(function Cell({
         'Duplicate makes an independent copy on the next free pad in this layer. Two pads pointing at the SAME look change together when you edit either one; a duplicate is how you get one you can change on its own.'
         + (top && top.id !== layer.id && hit === null ? ` ${top.name} is full, so there is nowhere to put a flash copy.` : ''),
     }).then((choice) => {
-      if (choice === 'duplicate') duplicatePad(layer.id, col, project.columns.length);
-      else if (choice === 'hit' && top && hit !== null) flashCopy(look.id, top.id, hit);
+      if (choice === 'duplicate') duplicatePad(layer.id, col, pageCols.length, editingDeckId);
+      else if (choice === 'hit' && top && hit !== null) flashCopy(look.id, top.id, hit, editingDeckId);
       else if (choice === 'everysong') putInEverySong(layer.id, col);
       else if (choice === 'clear') {
         useStore.getState().mutate((p) => {
-          const ly = p.layers.find((l) => l.id === layer.id);
-          if (!ly) return;
-          ly.cells[col] = null;
-          const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
-          if (deck) deck.cells = Object.fromEntries(p.layers.map((x) => [x.id, [...x.cells]]));
+          writePage(p, editingDeckId, layer.id, (cells) => { cells[col] = null; });
         }, 'clear a pad');
       }
     });
@@ -349,7 +335,7 @@ const Cell = React.memo(function Cell({
 
   return (
     <div
-      className={`cell ${look ? '' : 'empty'} ${active ? 'active' : ''} ${held ? 'held' : ''} ${staleLive ? 'stale' : ''} ${selected ? 'selected' : ''} ${armed ? 'learn-armed' : ''} ${dropHover ? 'droptarget' : ''}`}
+      className={`cell ${look ? '' : 'empty'} ${editing ? 'inert' : ''} ${active && !editing ? 'active' : ''} ${held ? 'held' : ''} ${staleLive && !editing ? 'stale' : ''} ${selected ? 'selected' : ''} ${armed ? 'learn-armed' : ''} ${dropHover ? 'droptarget' : ''}`}
       style={swatch ? { ['--pad-glow' as string]: swatch[0] } : undefined}
       onDragEnter={(e) => {
         if (!e.dataTransfer.types.includes(LOOK_DRAG)) return;
@@ -411,7 +397,7 @@ const Cell = React.memo(function Cell({
       onKeyDown={(e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         e.preventDefault();
-        if (e.repeat) return;
+        if (e.repeat || editing) return;
         setSel({ layerId: layer.id, col });
         fire();
         if (look?.flash && !learnMode) setHeld(true);
@@ -682,6 +668,12 @@ function DeckBar() {
   const [pickerPos, setPickerPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [filter, setFilter] = useState('');
   const pickerBoxRef = useRef<HTMLDivElement>(null);
+  const editingDeckId = useStore((s) => s.editingDeckId);
+  const setEditingDeckId = useStore((s) => s.setEditingDeckId);
+  const editingSong = decks.find((d) => d.id === editingDeckId) ?? null;
+  const [editPicker, setEditPicker] = useState(false);
+  const [editPos, setEditPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const editBoxRef = useRef<HTMLDivElement>(null);
   const active = decks.find((d) => d.id === project.activeDeckId);
   /** the song's place in the set, so the list reads like a set list */
   const songNo = (d: { id: string } | undefined) => {
@@ -691,6 +683,14 @@ function DeckBar() {
   const shown = filter.trim()
     ? decks.filter((d) => d.name.toLowerCase().includes(filter.trim().toLowerCase()))
     : decks;
+  useEffect(() => {
+    if (!editPicker) return;
+    const close = (e: PointerEvent) => {
+      if (editBoxRef.current && !editBoxRef.current.contains(e.target as Node)) setEditPicker(false);
+    };
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [editPicker]);
   useEffect(() => {
     if (!picker) return;
     const close = (e: PointerEvent) => {
@@ -889,6 +889,55 @@ function DeckBar() {
           </span>
         );
       })()}
+      {/* The page you are building, which is not the page the room is seeing
+          (design 2.5). Picking another song here shows its pads for editing and
+          leaves the rig exactly where it is; Escape, or a song switch from any
+          source, comes back. */}
+      <div ref={editBoxRef} style={{ position: 'relative', flex: '0 0 auto' }}>
+        <button
+          className={`btn small ${editingDeckId ? 'warn on' : 'ghost'}`}
+          aria-haspopup="listbox"
+          aria-expanded={editPicker}
+          title={
+            editingDeckId
+              ? 'the grid is showing another song’s pads — nothing on it reaches the rig. Escape comes back to what is playing.'
+              : 'build another song’s pads while this one plays — nothing you do there reaches the rig'
+          }
+          onClick={() => {
+            const r = editBoxRef.current?.getBoundingClientRect();
+            if (r) setEditPos({ top: r.bottom + 2, left: r.left });
+            setEditPicker((o) => !o);
+          }}
+        >
+          editing: {editingDeckId ? songNo(editingSong ?? undefined) + ' · ' + (editingSong?.name ?? '') : 'this song'} ▾
+        </button>
+        {editPicker && (
+          <div className="popover songpicker" style={{ top: editPos.top, left: editPos.left }} role="listbox">
+            <button
+              className={`btn small ghost ${editingDeckId === null ? 'on' : ''}`}
+              style={{ justifyContent: 'flex-start' }}
+              title="show the pads the room is seeing"
+              onClick={() => { setEditingDeckId(null); setEditPicker(false); }}
+            >
+              this song — what is playing
+            </button>
+            <div className="popover-rule" />
+            {decks.filter((d) => d.id !== project.activeDeckId).map((d) => (
+              <button
+                key={d.id}
+                className={`btn small ghost ${d.id === editingDeckId ? 'on' : ''}`}
+                role="option"
+                aria-selected={d.id === editingDeckId}
+                style={{ justifyContent: 'flex-start' }}
+                title={`show ${d.name}'s pads for editing — the rig keeps playing what it is playing`}
+                onClick={() => { setEditingDeckId(d.id); setEditPicker(false); }}
+              >
+                {songNo(d)} · {d.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <button
         className="btn small ghost"
         style={{ flex: '0 0 auto' }} /* a shrinking key wraps its word and grows the song row */
@@ -1203,7 +1252,30 @@ export function LookGrid() {
   const send = useStore((s) => s.send);
   const mutate = useStore((s) => s.mutate);
 
-  const cols = project.columns;
+  // The page being shown: the room's, or another song's while it is being built
+  // (design 2.5). Everything below reads through it — the columns, every pad,
+  // and every write — so the grid can show song B while song A is on stage.
+  const editingDeckId = useStore((s) => s.editingDeckId);
+  const setEditingDeckId = useStore((s) => s.setEditingDeckId);
+  const editingSong = (project.decks ?? []).find((d) => d.id === editingDeckId) ?? null;
+  const editing = editingSong !== null;
+  const cols = pageColumns(project, editingDeckId);
+  const songLabel = editingSong
+    ? `${String(((project.decks ?? []).findIndex((d) => d.id === editingSong.id) + 1)).padStart(2, '0')} · ${editingSong.name}`
+    : '';
+  // On an editing page the column heads and keys 1-9 select rather than fire,
+  // so the grid needs somewhere to show which column that was.
+  const [selCol, setSelColRaw] = useState<number | null>(null);
+  const setSelCol = (col: number) => {
+    setSelColRaw(col);
+    gridRef.current?.querySelectorAll('.colhead')[col]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  };
+  useEffect(() => { if (!editing) setSelColRaw(null); }, [editing]);
+  // The digit keys need somewhere to put their selection on a page that does
+  // not fire; the table names the action, this owns it.
+  useEffect(() => {
+    registerShortcutActions({ selectColumn: (col) => { if (col < cols.length) setSelCol(col); } });
+  }, [cols.length]);
   // The layer head narrows from 120 to 96 when the grid area is under 1,200px
   // (design 2.2), so a panel opening at 1280 narrows the head rather than
   // pushing the pads below their floor. Measured on the wrapper the grid
@@ -1252,15 +1324,26 @@ export function LookGrid() {
    *  columns, every layer's cells, and the active deck's stored copy of both.
    *  The engine only syncs the deck when you switch away, so doing it here
    *  keeps a saved show consistent even if you never leave the song. */
+  // Columns are per song, so this edits the page on screen. On the live page
+  // that is the layers plus the song's stored mirror; on any other it is that
+  // song's own arrays, which the engine will not read until it loads them.
   const editColumns = (fn: (cols: string[], cellsOf: (layerId: string) => (string | null)[]) => void) =>
     mutate((p) => {
-      const cellArrays = new Map(p.layers.map((l) => [l.id, l.cells]));
-      fn(p.columns, (id) => cellArrays.get(id)!);
-      const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
-      if (deck) {
-        deck.columns = [...p.columns];
-        deck.cells = Object.fromEntries(p.layers.map((l) => [l.id, [...l.cells]]));
+      const live = editingDeckId === null || editingDeckId === p.activeDeckId;
+      if (live) {
+        const cellArrays = new Map(p.layers.map((l) => [l.id, l.cells]));
+        fn(p.columns, (id) => cellArrays.get(id)!);
+        const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
+        if (deck) {
+          deck.columns = [...p.columns];
+          deck.cells = Object.fromEntries(p.layers.map((l) => [l.id, [...l.cells]]));
+        }
+        return;
       }
+      const deck = (p.decks ?? []).find((d) => d.id === editingDeckId);
+      if (!deck) return;
+      for (const l of p.layers) deck.cells[l.id] ??= [];
+      fn(deck.columns, (id) => (deck.cells[id] ??= []));
     });
 
   const renameColumn = (col: number) => {
@@ -1374,7 +1457,7 @@ export function LookGrid() {
     <DeckBar />
     <div
       ref={gridRef}
-      className={`lookgrid ${narrow ? 'narrow' : ''} ${compact ? 'compact' : ''}`}
+      className={`lookgrid ${narrow ? 'narrow' : ''} ${compact ? 'compact' : ''} ${editing ? 'editingpage' : ''}`}
       // Head + N pad tracks + the add column, from the tokens: each pad track
       // flexes between its floor and its ceiling so eight columns fill the grid
       // area at every window from the Tauri floor up, and the grid scrolls
@@ -1385,17 +1468,41 @@ export function LookGrid() {
           learn prompt while learn is armed, otherwise the one verb that would
           put light on the rig (design #17). */}
       <div className="gridlabel label">
-        {learnMode ? (learnTarget ? 'move a control…' : 'click a target…') : <RigChip />}
+        {learnMode
+          ? (learnTarget ? 'move a control…' : 'click a target…')
+          : editing
+            ? (
+              <button
+                className="btn small gridchip warn on"
+                title={`These are ${songLabel}'s pads. ${project.decks?.find((d) => d.id === project.activeDeckId)?.name ?? 'another song'} is playing, and nothing here reaches the rig — press Escape to come back to it.`}
+                onClick={() => setEditingDeckId(null)}
+              >
+                editing {songLabel.slice(0, 2)} · Esc
+              </button>
+            )
+            : <RigChip />}
       </div>
       {cols.map((name, col) => (
         <div
           key={col}
-          className={`colhead ${colStates[col].cls} ${learnTarget?.kind === 'column' && learnTarget.col === col ? 'learn-armed' : ''}`}
+          className={`colhead ${editing ? 'inert' : colStates[col].cls} ${editing && selCol === col ? 'selcol' : ''} ${learnTarget?.kind === 'column' && learnTarget.col === col ? 'learn-armed' : ''}`}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); e.currentTarget.click(); } }}
-          title={`${colStates[col].what} · ${touch ? 'hold' : 'right-click'} to rename, insert or delete`}
+          title={
+            editing
+              ? `select column ${col + 1}${cols[col] ? ` · ${cols[col]}` : ''} · editing ${songLabel} — fires only on the song that is playing`
+              : `${colStates[col].what} · ${touch ? 'hold' : 'right-click'} to rename, insert or delete`
+          }
           onClick={() => {
+            // On an editing page a column head selects its column rather than
+            // firing it — the room is playing another song, and a head that
+            // fired the live page from a grid showing a different one is the
+            // ambiguity decision 0 removes.
+            if (editing) {
+              setSelCol(col);
+              return;
+            }
             if (!useStore.getState().armLearn({ kind: 'column', col })) send({ type: 'column', col });
           }}
           // Right-click or a long-press, never a left click: a left click fires
@@ -1407,10 +1514,10 @@ export function LookGrid() {
               holds a pad here, ■ when none does — an all-empty column clears
               every layer, which is a cue in its own right and used to look
               exactly like a column that would light the room. */}
-          <span className="colmark" aria-hidden="true">{colStates[col].has ? '▶' : '■'}</span>
+          {!editing && <span className="colmark" aria-hidden="true">{colStates[col].has ? '▶' : '■'}</span>}
           {col + 1} · {name}
           {/* the crossfade running into this column, on the head that fired it */}
-          {colStates[col].t < 1 && (
+          {!editing && colStates[col].t < 1 && (
             <i className="colfade" style={{ width: `${Math.round(colStates[col].t * 100)}%` }} aria-hidden="true" />
           )}
         </div>
@@ -1429,11 +1536,13 @@ export function LookGrid() {
         const liveLookId = live?.lookId ?? null;
         const liveCol = live?.col ?? null;
         const fadeT = live?.t ?? 1;
+        const cells = pageCells(project, editingDeckId, layer.id);
         return (
           <React.Fragment key={layer.id}>
+            {/* the head always reads the room, whatever page the pads show */}
             <LayerHead layer={layer} live={live} />
             {cols.map((_, col) => (
-              <Cell key={col} layer={layer} col={col} liveLookId={liveLookId} liveCol={liveCol} fadeT={fadeT} />
+              <Cell key={col} layer={layer} col={col} lookId={cells[col] ?? null} liveLookId={liveLookId} liveCol={liveCol} fadeT={fadeT} editing={editing} />
             ))}
             {/* grid auto-flow is continuous, so every row must fill the
                 add-column track or the next layer head slides up into it */}
@@ -1448,6 +1557,7 @@ export function LookGrid() {
       {!compact && <SubmasterRow />}
       {overflowLayers.map((layer) => {
         const live = liveLayers?.find((l) => l.id === layer.id);
+        const cells = pageCells(project, editingDeckId, layer.id);
         return (
           <React.Fragment key={layer.id}>
             <LayerHead layer={layer} live={live} />
@@ -1456,6 +1566,8 @@ export function LookGrid() {
                 key={col}
                 layer={layer}
                 col={col}
+                lookId={cells[col] ?? null}
+                editing={editing}
                 liveLookId={live?.lookId ?? null}
                 liveCol={live?.col ?? null}
                 fadeT={live?.t ?? 1}

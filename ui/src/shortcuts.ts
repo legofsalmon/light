@@ -24,6 +24,8 @@ export type ShortcutActions = {
   openLibrary: () => void;
   openFind: () => void;
   openSetup: () => void;
+  /** the grid's own selected-column marker, for a page that does not fire */
+  selectColumn: (col: number) => void;
   /** true when something was disarmed, so Esc stops there rather than going on
    *  to clear a selection the operator still wanted */
   disarmLibrary: () => boolean;
@@ -32,6 +34,7 @@ let actions: ShortcutActions = {
   openLibrary: () => {},
   openFind: () => {},
   openSetup: () => {},
+  selectColumn: () => {},
   disarmLibrary: () => false,
 };
 export function registerShortcutActions(a: Partial<ShortcutActions>): void {
@@ -63,11 +66,19 @@ export type KeyPress = {
  *  rather than assumed away here. */
 export type State = {
   project: { columns: unknown[]; decks?: { id: string }[]; activeDeckId?: string } | null;
-  snap: { blackout: boolean } | null;
+  snap: {
+    blackout: boolean;
+    frozen?: boolean;
+    soft?: unknown[];
+    layers?: { id: string; lookId?: string | null; col?: number | null }[];
+  } | null;
   send: (cmd: Command) => void;
   /** the same union as ViewMode in store.ts; the call site enforces it */
   setView: (v: 'pads' | 'previz' | 'patch' | 'split') => void;
-  setSel: (s: null) => void;
+  setSel: (s: { layerId: string; col: number } | null) => void;
+  /** the song whose pads the grid is showing, when that is not the live one */
+  editingDeckId: string | null;
+  setEditingDeckId: (id: string | null) => void;
   undo: () => void;
   redo: () => void;
 };
@@ -99,7 +110,16 @@ export const SHORTCUTS: Shortcut[] = [
     match: (e) => e.key >= '1' && e.key <= '9',
     run: (st, e) => {
       const col = Number(e.key) - 1;
-      if (st.project && col < st.project.columns.length) st.send({ type: 'column', col });
+      if (!st.project) return;
+      // On a page that is not the room's, a digit selects its column instead of
+      // firing it — the same rule the column head follows (decision 0). The
+      // grid is showing another song; firing the live page from it would be the
+      // ambiguity that state exists to remove.
+      if (st.editingDeckId !== null) {
+        actions.selectColumn(col);
+        return;
+      }
+      if (col < st.project.columns.length) st.send({ type: 'column', col });
     },
   },
   {
@@ -137,12 +157,52 @@ export const SHORTCUTS: Shortcut[] = [
     // narrowest of those, so it goes first — pressing Esc twice to get back to
     // an empty selection is understood; losing a selection you still wanted
     // because a tile was quietly armed is not.
-    label: 'disarm a library tile, else deselect',
+    label: 'disarm, leave the page you are editing, else deselect',
     group: 'Getting around',
     match: (e) => e.key === 'Escape',
     run: (st) => {
       if (actions.disarmLibrary()) return;
+      // Leaving a page that withholds cues comes before clearing a selection:
+      // a state the grid is in outranks a state one pad is in.
+      if (st.editingDeckId !== null) {
+        st.setEditingDeckId(null);
+        return;
+      }
       st.setSel(null);
+    },
+  },
+  {
+    keys: '`F`',
+    label: 'hold the rig on this frame, or let it through',
+    group: 'Cues and tempo',
+    match: (e) => e.key.toLowerCase() === 'f',
+    run: (st) => st.send({ type: 'setFreeze', v: !st.snap?.frozen }),
+  },
+  {
+    keys: '`K`',
+    label: 'keep the live nudges',
+    group: 'Cues and tempo',
+    match: (e) => e.key.toLowerCase() === 'k',
+    run: (st) => { if ((st.snap?.soft?.length ?? 0) > 0) st.send({ type: 'softCommit' }); },
+  },
+  {
+    keys: '`D`',
+    label: 'discard the live nudges',
+    group: 'Cues and tempo',
+    match: (e) => e.key.toLowerCase() === 'd',
+    run: (st) => { if ((st.snap?.soft?.length ?? 0) > 0) st.send({ type: 'softClear' }); },
+  },
+  {
+    keys: '`A`',
+    // Eos calls it Select Active. The live pad can be scrolled off the grid or
+    // on another song's page; this is the way back to it that never fires.
+    label: 'select what the top layer is playing',
+    group: 'Getting around',
+    match: (e) => e.key.toLowerCase() === 'a',
+    run: (st) => {
+      const playing = (st.snap?.layers ?? []).filter((l) => l.lookId && l.col != null);
+      const last = playing[playing.length - 1];
+      if (last && last.col != null) st.setSel({ layerId: last.id, col: last.col });
     },
   },
   {

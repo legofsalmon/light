@@ -21,7 +21,9 @@ export type ViewMode = 'pads' | 'previz' | 'patch' | 'split';
  *  each with its own remembered hide state — hiding it on the pads to perform
  *  full-height must not also hide the plan you patch against. */
 export type BandView = 'pads' | 'patch' | 'split';
-export type Sel = { layerId: string; col: number } | null;
+/** A selected pad, and the song whose page it was selected on. `deckId: null`
+ *  means the live page — the one the room is seeing. */
+export type Sel = { layerId: string; col: number; deckId: string | null } | null;
 /** Touch mode (review M14/M15). 'auto' follows the pointer the browser
  *  reports — a fingertip is coarse, a mouse or trackpad fine — and can be
  *  forced either way, because a touchscreen laptop or a tablet with a trackpad
@@ -29,6 +31,63 @@ export type Sel = { layerId: string; col: number } | null;
 export type TouchPref = 'auto' | 'on' | 'off';
 /** What a drag does in the 2D plan on a tablet, where ⌥ and ⇧ do not exist. */
 export type PlanTool = 'move' | 'rotate' | 'select';
+
+/** The pads of one song's page.
+ *
+ *  The live song's cells live on the layers — that is the copy the engine plays
+ *  — and every other song's live in its own entry under `decks`. Reading
+ *  through this is what lets the grid show song B while song A is on stage. */
+export function pageCells(project: Project, deckId: string | null, layerId: string): (string | null)[] {
+  if (deckId === null || deckId === project.activeDeckId) {
+    return project.layers.find((l) => l.id === layerId)?.cells ?? [];
+  }
+  return (project.decks ?? []).find((d) => d.id === deckId)?.cells[layerId] ?? [];
+}
+
+/** The column names of one song's page, with the same rule. */
+export function pageColumns(project: Project, deckId: string | null): string[] {
+  if (deckId === null || deckId === project.activeDeckId) return project.columns;
+  return (project.decks ?? []).find((d) => d.id === deckId)?.columns ?? project.columns;
+}
+
+/** Edit one song's page inside a `mutate`.
+ *
+ *  On the live page the layers are the truth and the song's stored copy is
+ *  mirrored after, because that is the copy a switch back will load. On any
+ *  other page only that song's own cells are touched — the engine never reads
+ *  them until the song becomes live, so nothing here can reach the rig. The
+ *  array is padded to the page's own column count either way: a non-live page
+ *  is not padded or validated by either engine until it loads, so leaving a
+ *  hole would shift every pad after it. */
+export function writePage(
+  p: Project,
+  deckId: string | null,
+  layerId: string,
+  fn: (cells: (string | null)[]) => void,
+): void {
+  const live = deckId === null || deckId === p.activeDeckId;
+  const width = pageColumns(p, deckId).length;
+  if (live) {
+    const layer = p.layers.find((l) => l.id === layerId);
+    if (!layer) return;
+    while (layer.cells.length < width) layer.cells.push(null);
+    fn(layer.cells);
+    const deck = (p.decks ?? []).find((d) => d.id === p.activeDeckId);
+    if (deck) deck.cells = Object.fromEntries(p.layers.map((x) => [x.id, [...x.cells]]));
+    return;
+  }
+  const deck = (p.decks ?? []).find((d) => d.id === deckId);
+  if (!deck) return;
+  const cells = (deck.cells[layerId] ??= []);
+  while (cells.length < width) cells.push(null);
+  fn(cells);
+  // A look deleted from the pool while this page was being built would leave a
+  // dangling id no sanitiser walks until the song loads.
+  for (let i = 0; i < cells.length; i++) {
+    const id = cells[i];
+    if (id && !Object.hasOwn(p.looks, id)) cells[i] = null;
+  }
+}
 
 type Store = {
   connected: boolean;
@@ -47,6 +106,11 @@ type Store = {
   oscLog: OscLogEntry[];
   savedFlash: number;
   sel: Sel;
+  /** The song whose pads the grid is showing, when that is NOT the one on
+   *  stage. null means the grid shows the room. Building the next song used to
+   *  mean switching to it — repainting the grid and the APC's whole LED page
+   *  while the previous song still lit the room. */
+  editingDeckId: string | null;
   tab: Tab;
   view: ViewMode;
   /** Per-view previz band collapse (default shown everywhere). */
@@ -141,7 +205,10 @@ type Store = {
   flushProjectWrite: () => void;
   undo: () => void;
   redo: () => void;
-  setSel: (s: Sel) => void;
+  /** The page is stamped on from `editingDeckId`, so a selection can never be
+   *  re-read against a page it was not made on. */
+  setSel: (s: { layerId: string; col: number } | null) => void;
+  setEditingDeckId: (id: string | null) => void;
   setTab: (t: Tab) => void;
   /** open or close the setup guide; `dismiss` also stops it re-opening itself */
   setSetupGuide: (v: boolean, dismiss?: boolean) => void;
@@ -304,6 +371,9 @@ let currentSlug: string | null = null;
  *  authoritative value, and an edit composed against a base that no longer
  *  matches is rejected and re-synced rather than clobbering the newer state. */
 let lastGen = 0;
+/** the editing song whose cells were already re-sent once after a rejected
+ *  write, so a genuinely contended edit says so instead of looping */
+let resentFor: string | null = null;
 
 /** Send a full-project write stamped with the base it was composed against, and
  *  optimistically advance the local generation. All updateProject sends go
@@ -376,6 +446,7 @@ export const useStore = create<Store>()((set, get) => ({
   oscLog: [],
   savedFlash: 0,
   sel: null,
+  editingDeckId: null,
   tab: 'look',
   view: loadView(),
   previzHidden: loadPrevizHidden(touchFor(loadTouchPref())),
@@ -474,16 +545,30 @@ export const useStore = create<Store>()((set, get) => ({
     get().send({ type: 'redo' });
   },
 
-  setSel: (sel) => {
+  setSel: (s) => {
+    const deckId = get().editingDeckId;
+    const sel: Sel = s ? { ...s, deckId } : null;
     set({ sel });
     // Ask the engine to resolve whatever is now selected so the preview pane can
     // show it. Nothing reaches DMX — the engine renders it into a separate head
-    // set that only the snapshot carries.
+    // set that only the snapshot carries. Read through the page the selection
+    // was made on, or auditioning a pad on song B would show song A's.
     const p = get().project;
-    const layer = sel && p ? p.layers.find((l) => l.id === sel.layerId) : null;
-    const lookId = layer?.cells[sel!.col] ?? null;
+    const lookId = sel && p ? pageCells(p, sel.deckId, sel.layerId)[sel.col] ?? null : null;
     wsSend(JSON.stringify({ type: 'previewLook', lookId: lookId ?? null }));
   },
+
+  /** Show another song's pads without putting it on stage.
+   *
+   *  Setting it to the live song, or to null, is the same thing: the grid is
+   *  the room again. Any selection made on the page being left goes with it —
+   *  a pad reference means nothing once the page under it changes. */
+  setEditingDeckId: (id) =>
+    set((st) => {
+      const editingDeckId = id === null || id === st.project?.activeDeckId ? null : id;
+      if (editingDeckId === st.editingDeckId) return {};
+      return { editingDeckId, sel: null };
+    }),
   setTab: (tab) => set({ tab }),
   setSetupGuide: (setupGuide, dismiss) =>
     set(dismiss ? { setupGuide, setupDismissed: true } : { setupGuide }),
@@ -666,7 +751,47 @@ function connect(): void {
       // rejected write, another client's edit, or an APC deck switch: the next
       // edit we send will quote this base, not the stale one we optimistically
       // advanced to.
+      const stale = ev.gen !== lastGen;
       lastGen = ev.gen;
+      const before = useStore.getState();
+      // A song switch from ANY source — the APC's bank arrows, [ / ], another
+      // client, this window — puts the grid back on the room. A page you are
+      // building means nothing once the page under it has moved, and a state
+      // that withholds cues must never outlive the reason for it.
+      const switched = before.project?.activeDeckId !== ev.project.activeDeckId;
+      if (switched && before.editingDeckId !== null) {
+        useStore.setState({ editingDeckId: null, sel: null });
+        notify('back on the song that is playing', true);
+      }
+      // A full-project write is rejected outright when the generation it was
+      // composed against has moved — an APC fader or a haze move is enough —
+      // and this window adopts the echo without retrying. On the live page that
+      // is right: the newer state wins. On a page nobody is playing it means a
+      // pad you just placed vanishes with no sign. The editing page cannot
+      // conflict with the live one by construction, so re-apply it once.
+      const editing = before.editingDeckId;
+      if (stale && !switched && editing !== null && before.project) {
+        const mine = (before.project.decks ?? []).find((d) => d.id === editing);
+        const theirs = (ev.project.decks ?? []).find((d) => d.id === editing);
+        if (mine && theirs && JSON.stringify(mine.cells) !== JSON.stringify(theirs.cells)) {
+          if (resentFor === editing) {
+            notify(`the show changed while you were placing — nothing was placed on ${mine.name}`);
+            resentFor = null;
+          } else {
+            resentFor = editing;
+            theirs.cells = structuredClone(mine.cells);
+            theirs.columns = [...mine.columns];
+            setTimeout(() => {
+              const st = useStore.getState();
+              if (st.project) sendProjectUpdate(st.send, st.project, { label: 'place a look on another song' });
+            }, 0);
+          }
+        } else {
+          resentFor = null;
+        }
+      } else if (!stale) {
+        resentFor = null;
+      }
       // authoritative patch may have dropped fixtures (delete elsewhere, MVR
       // replace) — a selection of dangling ids would lie about its count
       const ids = new Set(ev.project.fixtures.map((f) => f.id));
@@ -674,11 +799,11 @@ function connect(): void {
       const pruned = cur.filter((id) => ids.has(id));
       // A different show asks about setup again: "no thanks" was about the one
       // you were working on, not a standing answer.
-      const switched = useStore.getState().project?.name !== ev.project.name;
+      const otherShow = useStore.getState().project?.name !== ev.project.name;
       useStore.setState({
         project: ev.project,
         ...(pruned.length === cur.length ? {} : { fxSel: pruned }),
-        ...(switched ? { setupDismissed: false } : {}),
+        ...(otherShow ? { setupDismissed: false } : {}),
       });
     }
     else if (ev.type === 'dmx') {
