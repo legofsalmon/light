@@ -223,6 +223,8 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
   // catches a slowdown: it travels inside the snapshot, so a tick loop that
   // stops entirely freezes it at its last healthy value and the dot stays green.
   const engineOk = connected && !engineStalled && (snap?.stats.fps ?? 0) >= 35;
+  const editingDeckId = useStore((st) => st.editingDeckId);
+  const editingSong = (project.decks ?? []).find((d) => d.id === editingDeckId) ?? null;
   const justSaved = Date.now() - savedFlash < 1500;
 
   // --- the strip measures itself (design 2.1) ------------------------------
@@ -317,7 +319,22 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
           LIGHT<span>■</span>
         </div>
       )}
-      <ProjectMenu name={project.name} short={shrunk.has('project')} />
+      {/* While the grid is showing a song the room is not playing, the name
+          slot says so. A state in which a pad body withholds a cue has to be
+          readable from the top of the screen as well as from the grid — it is
+          the one place the eye goes when something does not happen (design
+          section 8, rule 18). */}
+      {editingSong ? (
+        <button
+          className="btn small warn on"
+          title={`the grid is showing ${editingSong.name}, which is not what is playing — nothing on it reaches the rig. Escape comes back.`}
+          onClick={() => useStore.getState().setEditingDeckId(null)}
+        >
+          editing: {editingSong.name}
+        </button>
+      ) : (
+        <ProjectMenu name={project.name} short={shrunk.has('project')} />
+      )}
       {/* Left, next to the project menu: the right end of this bar is where
           things get squeezed on a laptop, and a view switcher that scrolls out
           of reach is worse than no view switcher. */}
