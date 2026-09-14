@@ -1,0 +1,177 @@
+// Two readings the plan draws, both derived from readings that already exist:
+// WHERE a look reaches (A38), and the order a spread hands its wave out
+// across a group (A39).
+//
+// Neither invents a rule. The groups a look touches, and the order they sit in
+// across the stage, are `lookFace`'s marks — the same reading the pad face and
+// the library tile draw. The families each part enables are `lookKinds`, the
+// same reading the library tile prints as I·C·P·B. And the spread order is
+// read out of `shared/effects.ts` itself rather than restated here: that file
+// is parity-locked against the Rust engine, so a second copy of the fan rule
+// in the UI is a copy that can be wrong.
+
+import type { Effect, Look, Project } from '../../../../shared/types.ts';
+import { applyEffects } from '../../../../shared/effects.ts';
+import {
+  NO_EXTENTS, NO_GEOM, buildGeometry, buildGroupExtents,
+  type GroupExtents, type HeadGeom,
+} from '../../../../shared/geometry.ts';
+import type { LookKind } from '../../labels.ts';
+import { lookFace } from '../../lookColors.ts';
+import { lookKinds } from '../library/model.ts';
+
+/** The key both engines and the plan address one emitter by. */
+export const headKey = (fixtureId: string, head: number): string => `${fixtureId}:${head}`;
+
+/** World geometry and per-group extents for a project, built once.
+ *
+ *  Keyed on the project object: `mutate` clones, so identity change ⇔ project
+ *  change (the same discipline `profileInfo`'s META_CACHE and the renderer's
+ *  gen gate use). Both maps come from the shared builders the engines use, so
+ *  a spread the plan numbers is the spread the rig runs. */
+const PLAN_CACHE = new WeakMap<Project, { geom: Map<string, HeadGeom>; ext: Map<string, GroupExtents> }>();
+export function planGeometry(project: Project): { geom: Map<string, HeadGeom>; ext: Map<string, GroupExtents> } {
+  let g = PLAN_CACHE.get(project);
+  if (!g) {
+    const geom = buildGeometry(project);
+    g = { geom, ext: buildGroupExtents(project, geom) };
+    PLAN_CACHE.set(project, g);
+  }
+  return g;
+}
+
+/** One group a look drives, and what it does to it. */
+export type ReachGroup = {
+  groupId: string;
+  /** the group's name, for the tag */
+  group: string;
+  /** the families this look enables on it, in I·C·P·B order */
+  kinds: LookKind[];
+  /** every head of the group, in the group's own order (= chase order) */
+  heads: string[];
+};
+
+/** Where a look reaches: every group its parts drive, in stage order, each
+ *  tagged with the families it enables there.
+ *
+ *  The group set and its order come from `lookFace` — including a steps look's
+ *  borrow of its first resolvable step — so the plan and the pad face can
+ *  never disagree about which of the rig a look is about. A steps look is
+ *  tagged with the union of every step's families, because over its cycle that
+ *  is what it does. */
+export function lookReach(look: Look, project: Project): ReachGroup[] {
+  const marks = lookFace(look, project).marks;
+  if (marks.length === 0) return [];
+  const byId = new Map(project.groups.map((g) => [g.id, g]));
+  const stepped = !!look.steps?.length;
+  const wholeLook = stepped ? lookKinds(look, project) : null;
+  const out: ReachGroup[] = [];
+  for (const mark of marks) {
+    const group = byId.get(mark.groupId);
+    if (!group) continue; // a part naming a group this rig has not got reaches nothing
+    // One synthetic look per group, so `lookKinds` answers for exactly the
+    // parts that drive it — the same walk the library tile makes, not a second
+    // table of which parameter belongs to which family.
+    const parts = look.parts.filter((p) => p.groupId === mark.groupId);
+    const kinds = wholeLook ?? lookKinds({ ...look, parts, steps: undefined }, project);
+    out.push({
+      groupId: mark.groupId,
+      group: mark.group || group.name,
+      kinds,
+      heads: group.heads.map((h) => headKey(h.fixtureId, h.head)),
+    });
+  }
+  return out;
+}
+
+/** Per project, per look id — the plan asks for this on every frame it draws.
+ *  Same discipline as `lookFace`'s own memo: the map goes with the project it
+ *  belongs to, so an edited look can never read a stale reach. */
+const REACH_CACHE = new WeakMap<Project, Map<string, ReachGroup[]>>();
+export function lookReachCached(look: Look, project: Project): ReachGroup[] {
+  let per = REACH_CACHE.get(project);
+  if (!per) {
+    per = new Map();
+    REACH_CACHE.set(project, per);
+  }
+  const had = per.get(look.id);
+  if (had) return had;
+  const made = lookReach(look, project);
+  per.set(look.id, made);
+  return made;
+}
+
+/** The probe: the real effect with everything but its FAN neutralised.
+ *
+ *  `fanPos` is private to shared/effects.ts and parity-locked, so the order is
+ *  read back through `applyEffects` instead of restated. A ramp on tilt is the
+ *  one target/wave pair whose output is the fan position itself: tilt starts
+ *  from 0.5, moves by `(v − 0.5) · size`, and takes no mirror sign, so at size
+ *  1 the result is the ramp's value, and the ramp's value is the phase. Half a
+ *  spread keeps that phase inside one cycle, so the head at the far end (which
+ *  every spatial basis puts at exactly 1) cannot wrap round onto the near one.
+ *
+ *  A chase's fan is compressed by (n−1)/n inside `fanPos`; the probe reads as
+ *  a ramp, so that compression does not run. It scales the fan linearly, which
+ *  moves no head past another and merges no two — the ORDER, which is all this
+ *  draws, is the same either way. */
+const PROBE_SPREAD = 0.5;
+function fanOf(fx: Effect, j: number, n: number, g: HeadGeom, ext: GroupExtents): number {
+  const probe: Effect = {
+    ...fx,
+    target: 'tilt',
+    wave: 'sawUp',
+    rate: 1,
+    size: 1,
+    mix: 1,
+    spread: PROBE_SPREAD,
+    phase: 0,
+    bypass: false,
+  };
+  const t = applyEffects({}, [probe], 0, [0], j, n, g, ext).tilt;
+  return t === undefined ? 0 : (t / PROBE_SPREAD);
+}
+
+/** What the spread disclosure numbers on the plan: every head of the group,
+ *  numbered in the order the spread hands the wave out. 1 is where the wave
+ *  starts; heads that share a number run together (a mirror fold pairs them,
+ *  and buddy clumps them). */
+export function spreadOrder(project: Project, groupId: string, fx: Effect): Map<string, number> {
+  const out = new Map<string, number>();
+  const group = project.groups.find((g) => g.id === groupId);
+  if (!group) return out;
+  const n = group.heads.length;
+  if (n === 0) return out;
+  const { geom, ext: exts } = planGeometry(project);
+  const ext = exts.get(groupId) ?? NO_EXTENTS;
+  // quantised to 10⁻⁶ on the same grid the geometry is built on, so two heads
+  // a fold lands on one phase share one number rather than differing in the
+  // last bit and reading as two steps
+  const fans = group.heads.map((h, j) => {
+    const key = headKey(h.fixtureId, h.head);
+    const t = fanOf(fx, j, n, geom.get(key) ?? NO_GEOM, ext);
+    return { key, q: Math.floor(t * 1e6 + 0.5) };
+  });
+  const steps = [...new Set(fans.map((f) => f.q))].sort((a, b) => a - b);
+  const rank = new Map(steps.map((q, i) => [q, i + 1]));
+  for (const f of fans) out.set(f.key, rank.get(f.q) ?? 1);
+  return out;
+}
+
+/** Per project, per group+effect. The project object is replaced on every edit,
+ *  so a basis changed in the disclosure re-numbers on the next frame without
+ *  the draw loop re-running the fan for every head of every frame. */
+const ORDER_CACHE = new WeakMap<Project, Map<string, Map<string, number>>>();
+export function spreadOrderCached(project: Project, groupId: string, fx: Effect): Map<string, number> {
+  let per = ORDER_CACHE.get(project);
+  if (!per) {
+    per = new Map();
+    ORDER_CACHE.set(project, per);
+  }
+  const k = `${groupId} ${fx.id}`;
+  const had = per.get(k);
+  if (had) return had;
+  const made = spreadOrder(project, groupId, fx);
+  per.set(k, made);
+  return made;
+}

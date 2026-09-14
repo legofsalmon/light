@@ -1862,5 +1862,251 @@ await new Promise<void>((resolve) => {
   check('qr: the smallest version that fits is the one used', qrCode('x'.repeat(17))?.size === 29 && qrCode('x'.repeat(18))?.size === 33);
 }
 
+// --- a look's reach, and the order a spread runs a group (#38, A38 / A39) ---
+// The plan draws both; neither is allowed to be a second copy of a rule that
+// already exists. The reach is `lookFace`'s groups with `lookKinds`' families;
+// the order is read back OUT of shared/effects.ts through a probe, so the
+// numbers on the plan are the fan the engines actually run.
+{
+  const { lookReach, spreadOrder, headKey } = await import('../../ui/src/components/editor/reach.ts');
+  const { applyEffects } = await import('../../shared/effects.ts');
+  type P = import('../../shared/types.ts').Project;
+  type FX = import('../../shared/types.ts').Effect;
+
+  const par = (id: string, x: number) => ({
+    id, name: id.toUpperCase(), profileId: 'generic-rgb-par-3ch', universeId: 'u1',
+    address: 1, pos: { x, y: 3, z: 0 }, rotY: 0,
+  });
+  const mover = (id: string, x: number) => ({
+    id, name: id.toUpperCase(), profileId: 'generic-mover-10ch', universeId: 'u1',
+    address: 1, pos: { x, y: 3, z: 0 }, rotY: 0,
+  });
+  const project = {
+    fixtures: [par('p0', 0), par('p1', 1), par('p2', 2), par('p3', 3), mover('m0', 5), mover('m1', 6)],
+    groups: [
+      // movers listed FIRST, so a reach that came back in project order rather
+      // than stage order would read m-then-p and fail below
+      { id: 'movers', name: 'Movers', heads: [{ fixtureId: 'm0', head: 0 }, { fixtureId: 'm1', head: 0 }] },
+      { id: 'pars', name: 'Pars', heads: [0, 1, 2, 3].map((i) => ({ fixtureId: `p${i}`, head: 0 })) },
+    ],
+    looks: {},
+    layers: [],
+    columns: [],
+  } as unknown as P;
+  const look = {
+    id: 'lk', name: 'Cold Seam',
+    parts: [
+      { id: 'a', groupId: 'pars', params: { dimmer: 1, color: { h: 200, s: 1 } }, effects: [] },
+      { id: 'b', groupId: 'movers', params: { pan: 0.5, tilt: 0.5 }, effects: [] },
+      { id: 'c', groupId: 'gone', params: { dimmer: 1 }, effects: [] },
+    ],
+  } as unknown as import('../../shared/types.ts').Look;
+  (project.looks as Record<string, unknown>)['lk'] = look;
+
+  const reach = lookReach(look, project);
+  check(
+    'reach: one entry per group the look drives, in stage order',
+    reach.length === 2 && reach[0].groupId === 'pars' && reach[1].groupId === 'movers',
+    reach.map((r) => r.groupId).join(','),
+  );
+  check(
+    'reach: each group carries the families that part enables',
+    reach[0]?.kinds.join('') === 'IC' && reach[1]?.kinds.join('') === 'P',
+    reach.map((r) => `${r.groupId}=${r.kinds.join('')}`).join(' '),
+  );
+  check(
+    'reach: every head of the group is outlined, not just the first',
+    reach[0]?.heads.join(',') === 'p0:0,p1:0,p2:0,p3:0' && reach[0]?.heads[0] === headKey('p0', 0),
+    reach[0]?.heads.join(','),
+  );
+  check(
+    'reach: a part naming a group this rig has not got reaches nothing',
+    !reach.some((r) => r.groupId === 'gone'),
+  );
+
+  // a steps look borrows the groups of its first resolvable step — the same
+  // borrow the pad face makes — and is tagged with what its steps do
+  (project.looks as Record<string, unknown>)['cue'] = {
+    id: 'cue', name: 'Cue', parts: [], steps: [{ lookId: 'lk', beats: 1 }],
+  };
+  const stepReach = lookReach((project.looks as Record<string, import('../../shared/types.ts').Look>)['cue'], project);
+  check(
+    'reach: a steps look reaches through to its step',
+    stepReach.length === 2 && stepReach[0].kinds.join('') === 'ICP',
+    stepReach.map((r) => `${r.groupId}=${r.kinds.join('')}`).join(' '),
+  );
+
+  const fx = {
+    id: 'e', target: 'dimmer', wave: 'sawUp', rate: 1, size: 1, spread: 1, width: 0.5, phase: 0,
+    bypass: false, mix: 1, distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0,
+  } as FX;
+  const run = (over: Partial<FX>): string => {
+    const order = spreadOrder(project, 'pars', { ...fx, ...over } as FX);
+    return [0, 1, 2, 3].map((i) => order.get(`p${i}:0`)).join(',');
+  };
+  check('spread order: in order, one after another', run({}) === '1,2,3,4', run({}));
+  check('spread order: reverse runs it backwards', run({ reverse: true }) === '4,3,2,1', run({ reverse: true }));
+  check(
+    'spread order: a mirror fold gives the two wings the same numbers',
+    run({ fold: 'mirror' }) === '1,2,3,2', run({ fold: 'mirror' }),
+  );
+  check(
+    'spread order: the centre fold leads from the middle',
+    run({ fold: 'centre' }) === '3,2,1,2', run({ fold: 'centre' }),
+  );
+  check(
+    'spread order: buddy clumps adjacent heads onto one number',
+    run({ buddy: 2 }) === '1,1,2,2', run({ buddy: 2 }),
+  );
+  check(
+    'spread order: tile repeats the whole run across the group',
+    run({ parts: 2 }) === '1,2,1,2', run({ parts: 2 }),
+  );
+  check('spread order: X sweeps stage left to right', run({ distribute: 'x' }) === '1,2,3,4', run({ distribute: 'x' }));
+  check(
+    'spread order: a parked or dry effect still previews its order',
+    run({ bypass: true, mix: 0, size: 0 }) === '1,2,3,4',
+    run({ bypass: true, mix: 0, size: 0 }),
+  );
+  check(
+    'spread order: a chase orders its heads the same way the ramp does',
+    run({ wave: 'chase' }) === run({}), `${run({ wave: 'chase' })} vs ${run({})}`,
+  );
+  check('spread order: a group this rig has not got numbers nothing', spreadOrder(project, 'gone', fx).size === 0);
+
+  // and the numbers agree with the fan the ENGINE runs: ranking the four heads
+  // by the phase applyEffects hands them must give the same order the preview
+  // prints, for every basis the disclosure offers
+  {
+    const ext = { minX: 0, maxX: 3, minY: 3, maxY: 3, minZ: 0, maxZ: 0, cx: 1.5, cy: 3, cz: 0, maxR: 1.5 };
+    const gAt = (x: number) => ({ x, y: 3, z: 0, along: 0, row: 0, col: 0, rowT: 0, colT: 0 });
+    let agree = true;
+    const cases: Partial<FX>[] = [
+      {}, { reverse: true }, { fold: 'mirror' }, { fold: 'centre' }, { buddy: 2 }, { parts: 2 },
+      { distribute: 'x' }, { distribute: 'radial' }, { distribute: 'shuffle', seed: 7 },
+    ];
+    for (const over of cases) {
+      const e = { ...fx, ...over, spread: 0.5 } as FX;
+      // dimmer under a full-size ramp IS the fan value, so ranking by it is
+      // ranking by phase — with no reference to how the preview computes it
+      const byEngine = [0, 1, 2, 3].map((j) => applyEffects({ dimmer: 1 }, [e], 0, [0], j, 4, gAt(j), ext).dimmer ?? 0);
+      const steps = [...new Set(byEngine.map((v) => Math.floor(v * 1e6 + 0.5)))].sort((a, b) => a - b);
+      const want = byEngine.map((v) => steps.indexOf(Math.floor(v * 1e6 + 0.5)) + 1).join(',');
+      const got = run(over);
+      if (got !== want) {
+        agree = false;
+        check(`spread order: agrees with the engine for ${JSON.stringify(over)}`, false, `${got} vs ${want}`);
+      }
+    }
+    check('spread order: every basis matches the phase the engine hands each head', agree);
+  }
+}
+
+// --- the look's four offset dials (#44, A41) --------------------------------
+// They ride the existing soft nudge path, so the two things worth pinning are
+// which addresses each one reaches and the value it drives them at: a value
+// the engine's own door would reject is a dial that silently does nothing.
+{
+  const { OFFSET_DIALS, OFFSET_NEUTRAL, offsetTakers } = await import('../../ui/src/components/editor/offsets.ts');
+  const { softClamp } = await import('../../shared/types.ts');
+  type P = import('../../shared/types.ts').Project;
+  type L = import('../../shared/types.ts').Look;
+
+  const anyFixture = (id: string, profileId: string) => ({
+    id, name: id.toUpperCase(), profileId, universeId: 'u1', address: 1,
+    pos: { x: 0, y: 3, z: 0 }, rotY: 0,
+  });
+  const project = {
+    fixtures: [
+      anyFixture('p', 'generic-rgb-par-3ch'),
+      anyFixture('m', 'generic-mover-10ch'),
+      anyFixture('h', 'generic-hazer-2ch'),
+      anyFixture('d', 'generic-dimmer-1ch'),
+    ],
+    groups: [
+      { id: 'pars', name: 'Pars', heads: [{ fixtureId: 'p', head: 0 }] },
+      { id: 'movers', name: 'Movers', heads: [{ fixtureId: 'm', head: 0 }] },
+      { id: 'haze', name: 'Haze', heads: [{ fixtureId: 'h', head: 0 }] },
+      { id: 'dims', name: 'Dims', heads: [{ fixtureId: 'd', head: 0 }] },
+    ],
+    looks: {}, layers: [], columns: [],
+  } as unknown as P;
+
+  const anEffect = (id: string, size: number) => ({
+    id, target: 'dimmer', wave: 'sine', rate: 4, size, spread: 0, width: 0.5, phase: 0,
+    bypass: false, mix: 1, distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0,
+  });
+  const look = {
+    id: 'lk', name: 'Ride me',
+    parts: [
+      { id: 'a', groupId: 'pars', params: { dimmer: 0.8, color: { h: 350, s: 1 } }, effects: [anEffect('f1', 0.5)] },
+      { id: 'b', groupId: 'movers', params: { dimmer: 1, pan: 0.4, tilt: 0.6 }, effects: [anEffect('f2', 1)] },
+      // a hazer takes no brightness dial, and a plain dimmer channel has no
+      // colour to turn — a stored colour on it would never reach a lamp
+      { id: 'c', groupId: 'haze', params: { haze: 0.5, dimmer: 0.5 }, effects: [] },
+      { id: 'd', groupId: 'dims', params: { dimmer: 0.9, color: { h: 10, s: 1 } }, effects: [] },
+    ],
+  } as unknown as L;
+  const takers = offsetTakers(project, look);
+  const ids = (dial: 'hue' | 'dimmer' | 'pan' | 'size') => takers[dial].map((a) => a.partId).join(',');
+
+  check('offsets: hue reaches only the parts that set a colour on a group that has one', ids('hue') === 'a', ids('hue'));
+  check('offsets: dimmer skips the hazer, which takes no brightness', ids('dimmer') === 'a,b,d', ids('dimmer'));
+  check('offsets: pan reaches only the parts that aim a head', ids('pan') === 'b', ids('pan'));
+  check(
+    'offsets: size reaches every effect, addressed by effect',
+    takers.size.map((a) => a.effectId).join(',') === 'f1,f2',
+    takers.size.map((a) => a.effectId).join(','),
+  );
+  check(
+    'offsets: a steps look has no parts of its own to offset',
+    Object.values(offsetTakers(project, { id: 's', name: 'S', parts: [], steps: [{ lookId: 'lk', beats: 1 }] } as unknown as L))
+      .every((a) => a.length === 0),
+  );
+
+  const spec = (d: string) => OFFSET_DIALS.find((x) => x.dial === d)!;
+  check(
+    'offsets: every dial at its neutral leaves the stored value exactly as it is',
+    spec('hue').at(200, OFFSET_NEUTRAL.hue) === 200 && spec('dimmer').at(0.8, OFFSET_NEUTRAL.dimmer) === 0.8 &&
+      spec('pan').at(0.4, OFFSET_NEUTRAL.pan) === 0.4 && spec('size').at(0.5, OFFSET_NEUTRAL.size) === 0.5,
+  );
+  check(
+    'offsets: hue comes round the wheel rather than stopping at the end',
+    spec('hue').at(350, 30) === 20, `${spec('hue').at(350, 30)}`,
+  );
+  check('offsets: hue goes the other way round too', spec('hue').at(10, -30) === 340, `${spec('hue').at(10, -30)}`);
+  check('offsets: dimmer scales, and holds at full', spec('dimmer').at(0.8, 0.5) === 0.4 && spec('dimmer').at(0.8, 2) === 1);
+  check(
+    'offsets: pan swings, and holds at the ends',
+    spec('pan').at(0.4, 0.25) === 0.65 && spec('pan').at(0.4, 0.5) === 0.9 && spec('pan').at(0.9, 0.5) === 1,
+  );
+  check('offsets: size scales the swing flat and back', spec('size').at(0.5, 0) === 0 && spec('size').at(0.5, 2) === 1);
+
+  // nothing a dial can produce may be turned away at the engine's door: a
+  // value softClamp rewrites is a dial whose reading and whose rig disagree
+  let doorOk = true;
+  for (const d of OFFSET_DIALS) {
+    const field = d.dial === 'pan' ? 'pan' : d.dial === 'hue' ? 'hue' : d.dial === 'size' ? 'size' : 'dimmer';
+    for (let i = 0; i <= 20; i++) {
+      const v = d.min + ((d.max - d.min) * i) / 20;
+      for (const base of [0, 0.25, 0.5, 0.9, 1, 10, 200, 359]) {
+        const at = d.at(base, v);
+        if (softClamp(field, at) !== at) {
+          doorOk = false;
+          check(`offsets: ${d.dial} from ${base} at ${v} passes the engine's door`, false, `${at}`);
+        }
+      }
+    }
+  }
+  check('offsets: no dial position produces a value the engine would clamp', doorOk);
+
+  check(
+    'offsets: the readings follow the one number rule',
+    spec('hue').fmt(30) === '+30°' && spec('hue').fmt(0) === '0°' && spec('dimmer').fmt(0.5) === '0.50×' &&
+      spec('pan').fmt(0.12) === '+12\u2009%' && spec('size').fmt(1) === '1.00×',
+    [spec('hue').fmt(30), spec('dimmer').fmt(0.5), spec('pan').fmt(0.12), spec('size').fmt(1)].join(' '),
+  );
+}
+
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

@@ -7,11 +7,11 @@ import type { Distribute, Effect, EffectTarget, ShapeKind, SoftField, Wave } fro
 import { EFFECT_TARGETS, SHAPE_KINDS } from '../../../../shared/types.ts';
 import type { HeadKind } from '../../../../shared/profiles.ts';
 import type { BeamCaps } from '../../profileInfo.ts';
-import { SHAPE_LABEL, TARGET_LABEL, WAVE_LABEL } from '../../labels.ts';
+import { DISTRIBUTE_WORD, SHAPE_LABEL, TARGET_LABEL, WAVE_LABEL } from '../../labels.ts';
 import { Fader, fmtPct } from '../Fader.tsx';
 import { DialMenu, IntInput } from './fields.tsx';
 import { capableTargets } from './groups.ts';
-import { useEditorStore } from '../../editorStore.ts';
+import { type SpreadPreview, useEditorStore } from '../../editorStore.ts';
 import { useStore } from '../../store.ts';
 
 /** Beats per cycle, by the musical length an operator would say. */
@@ -39,17 +39,6 @@ const DISTRIBUTE_LABELS: { v: Distribute; label: string; title: string }[] = [
   { v: 'row', label: 'row', title: 'sweep each fixture’s own pixel rows — every fixture runs the same wave' },
   { v: 'col', label: 'col', title: 'sweep each fixture’s own pixel columns — every fixture runs the same wave' },
 ];
-
-const DISTRIBUTE_WORD: Record<Distribute, string> = {
-  index: 'order',
-  x: 'left → right',
-  y: 'bottom → top',
-  z: 'upstage → down',
-  radial: 'out from the middle',
-  shuffle: 'scattered',
-  row: 'pixel rows',
-  col: 'pixel columns',
-};
 
 /** The musical length this rate is locked to. */
 export const rateLabel = (rate: number): string =>
@@ -106,6 +95,25 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
   const speed = useStore((s) => s.snap?.speed ?? 1);
   const open = useEditorStore((s) => !!s.spreadOpen[fx.id]);
   const toggleSpread = useEditorStore((s) => s.toggleSpread);
+  const setSpreadPreview = useEditorStore((s) => s.setSpreadPreview);
+
+  /** A39: while this row's spread is open — or just under the pointer — the
+   *  plan numbers the group's heads in the order the spread will run them.
+   *  The store holds the address, not a copy, so changing the basis below
+   *  re-numbers on the next frame. */
+  const mine: SpreadPreview = { lookId, partId, effectId: fx.id };
+  const isMine = (p: SpreadPreview | null): boolean =>
+    !!p && p.effectId === fx.id && p.partId === partId && p.lookId === lookId;
+  // what the plan was showing before the pointer arrived, so leaving the line
+  // puts it back rather than blanking another row's open disclosure
+  const under = React.useRef<SpreadPreview | null>(null);
+  React.useEffect(() => {
+    if (open) setSpreadPreview(mine);
+    return () => {
+      if (isMine(useEditorStore.getState().spreadPreview)) setSpreadPreview(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, lookId, partId, fx.id, setSpreadPreview]);
 
   const capable = capableTargets(kinds, canAim, beamCaps);
   // inform, don't forbid: every target stays assignable (an effect is
@@ -232,7 +240,14 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
       className="spreadline"
       aria-expanded={open}
       style={fx.bypass ? { opacity: 0.5 } : undefined}
-      title="how the wave is handed out across the group — open to change the base, the folding and the two counts"
+      title="how the wave is handed out across the group — open to change the base, the folding and the two counts. The plan numbers the heads in the order it will run them"
+      onPointerEnter={() => {
+        under.current = useEditorStore.getState().spreadPreview;
+        setSpreadPreview(mine);
+      }}
+      onPointerLeave={() => {
+        if (isMine(useEditorStore.getState().spreadPreview)) setSpreadPreview(open ? mine : under.current);
+      }}
       onClick={() => toggleSpread(fx.id)}
     >
       <span className="caret">{open ? '▾' : '▸'}</span>

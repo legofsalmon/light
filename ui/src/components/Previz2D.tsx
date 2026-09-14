@@ -1,29 +1,61 @@
 import React, { useEffect, useRef } from 'react';
-import type { HeadSnap, Project } from '../../../shared/types.ts';
+import type { Effect, HeadSnap, Look, Project } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
-import { useStore } from '../store.ts';
+import { pageCells, useStore } from '../store.ts';
 import { STRUCTURE_DEFAULTS, isStructure, offsetOnParent, posFromOffset } from '../../../shared/types.ts';
-import { buildGeometry, localXDir, type HeadGeom } from '../../../shared/geometry.ts';
+import { localXDir, type HeadGeom } from '../../../shared/geometry.ts';
 import { hitsPropFootprint, standingHeightAt } from '../../../shared/beamThrow.ts';
 import { askConfirm } from '../dialog.tsx';
 import { LONG_PRESS_MS } from '../touch.ts';
-import { PROP_LABEL } from '../labels.ts';
+import { DISTRIBUTE_WORD, PROP_LABEL } from '../labels.ts';
+import { useEditorStore } from '../editorStore.ts';
+import {
+  headKey, lookReachCached, planGeometry, spreadOrderCached, type ReachGroup,
+} from './editor/reach.ts';
 import { color } from '../tokens.ts';
 import { DEFAULT_VIEW, stageExtent, stageRect, type StageExtent } from '../../../shared/stageExtent.ts';
+import '../styles/reach.css';
 
 /** Head world positions from the shared geometry module — the same builder the
  *  engines use, so the plan view can never disagree with the 3D previz (it
  *  historically mirrored the head fan on rotated bars: +sin z where everything
- *  renderer-grade uses −sin). Keyed on the project object: mutate() clones, so
- *  identity change ⇔ project change (same pattern as profileInfo's META_CACHE). */
-const GEOM_CACHE = new WeakMap<Project, Map<string, HeadGeom>>();
+ *  renderer-grade uses −sin). Cached per project object by `planGeometry`:
+ *  mutate() clones, so identity change ⇔ project change (same pattern as
+ *  profileInfo's META_CACHE), and the spread-order preview reads the same
+ *  build rather than a second one that could drift from it. */
 function geomOf(project: Project): Map<string, HeadGeom> {
-  let g = GEOM_CACHE.get(project);
-  if (!g) {
-    g = buildGeometry(project);
-    GEOM_CACHE.set(project, g);
+  return planGeometry(project).geom;
+}
+
+/** The look the selected pad holds, on the page the grid is showing. */
+function selectedLook(project: Project): Look | null {
+  const { sel } = useStore.getState();
+  if (!sel) return null;
+  const id = pageCells(project, sel.deckId, sel.layerId)[sel.col] ?? null;
+  return id && Object.hasOwn(project.looks, id) ? project.looks[id] : null;
+}
+
+/** A38: what the selected look reaches, keyed by head, with the group it
+ *  belongs to — so the ring and its I·C·P·B tag come from one reading. */
+function reachByHead(project: Project): Map<string, ReachGroup> {
+  const look = selectedLook(project);
+  const out = new Map<string, ReachGroup>();
+  if (!look) return out;
+  for (const g of lookReachCached(look, project)) {
+    for (const key of g.heads) out.set(key, g);
   }
-  return g;
+  return out;
+}
+
+/** A39: the effect whose spread the editor has open or under the pointer, with
+ *  the group it drives — or null when nothing is being spread. */
+function spreadPreviewOf(project: Project): { fx: Effect; groupId: string } | null {
+  const p = useEditorStore.getState().spreadPreview;
+  if (!p) return null;
+  const look = Object.hasOwn(project.looks, p.lookId) ? project.looks[p.lookId] : undefined;
+  const part = look?.parts.find((x) => x.id === p.partId);
+  const fx = part?.effects.find((x) => x.id === p.effectId);
+  return fx && part ? { fx, groupId: part.groupId } : null;
 }
 
 /** How close a dragged fixture has to come to a bar before it clamps on. */
@@ -251,12 +283,34 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       const headSrc = source === 'preview' ? (previewHeads ?? []) : (snap?.heads ?? []);
       for (const hs of headSrc) headMap.set(`${hs.f}:${hs.h}`, hs);
 
+      // The reach goes on the LIVE plan only. The audition is the pane that
+      // says what a look does; this says where it lands in the room, and
+      // outlining the look's own groups inside a view that is only ever that
+      // look would say nothing. The spread's numbers go on both: in Build the
+      // audition is the only plan there is, and that is where a spread is
+      // usually being built.
+      const reach = source === 'live' ? reachByHead(project) : new Map<string, ReachGroup>();
+      const spread = spreadPreviewOf(project);
+      const order = spread ? spreadOrderCached(project, spread.groupId, spread.fx) : null;
+      /** one I·C·P·B tag per reached group, beside its leftmost outline */
+      const tags = new Map<string, { x0: number; x1: number; y: number; kinds: string }>();
+      /** one reading per fixture: which steps of the spread land on it */
+      const nums: { x: number; y: number; text: string }[] = [];
+
       const geom = geomOf(project);
       for (const f of project.fixtures) {
         const prof = profileMeta(project, f.profileId);
         if (!prof) continue;
         const fx = m.toX(f.pos.x);
         const fy = m.toY(vertOf(f.pos, view));
+        // What this fixture contributes to the two overlays, gathered as its
+        // heads are drawn: the box that holds the heads one group reached, and
+        // the mean position of each distinct step of the spread. Both are per
+        // FIXTURE because a pixel strip is sixty emitters two millimetres
+        // apart on this canvas — a ring and a number on each would be a band
+        // of ink, not a reading.
+        const reached = new Map<string, { x0: number; x1: number; y0: number; y1: number; rad: number; group: ReachGroup }>();
+        const steps = { ranks: new Set<number>(), sx: 0, n: 0, top: Number.POSITIVE_INFINITY, rad: 0 };
         // Heads sit at their real world positions (shared geometry module) and
         // both views are honest projections of them: plan looks down (x, z),
         // front looks along z at (x, y) — so a yawed bar foreshortens in the
@@ -327,6 +381,86 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
               ctx.stroke();
             }
           }
+
+          // A38 / A39: what this head adds to the two overlays. Both are drawn
+          // once the fixture's heads are placed, below.
+          const key = headKey(f.id, hi);
+          const inReach = reach.get(key);
+          if (inReach) {
+            const box = reached.get(inReach.groupId);
+            if (!box) reached.set(inReach.groupId, { x0: hx, x1: hx, y0: hy, y1: hy, rad, group: inReach });
+            else {
+              box.x0 = Math.min(box.x0, hx);
+              box.x1 = Math.max(box.x1, hx);
+              box.y0 = Math.min(box.y0, hy);
+              box.y1 = Math.max(box.y1, hy);
+              box.rad = Math.max(box.rad, rad);
+            }
+          }
+          const num = order?.get(key);
+          if (num !== undefined) {
+            steps.ranks.add(num);
+            steps.sx += hx;
+            steps.n += 1;
+            steps.top = Math.min(steps.top, hy);
+            steps.rad = Math.max(steps.rad, rad);
+          }
+        }
+
+        // A38: the selected look reaches these heads. A solid tungsten outline
+        // round the heads one group has HERE, where a fixture selected for
+        // patching takes a dashed cyan box round the whole fixture (below) —
+        // a different shape, a different colour and a different thing outlined,
+        // so "selected for patching" and "this look reaches here" can never
+        // read as the same mark.
+        for (const box of reached.values()) {
+          const pad = box.rad * 1.6;
+          const x = box.x0 - pad;
+          const y = box.y0 - pad;
+          const w = box.x1 - box.x0 + pad * 2;
+          const h = box.y1 - box.y0 + pad * 2;
+          const path = () => {
+            const r = Math.min(pad, w / 2, h / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + h, r);
+            ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r);
+            ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
+          };
+          path();
+          ctx.strokeStyle = color['alpha/black-55'];
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          path();
+          ctx.strokeStyle = color['live/default'];
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          const had = tags.get(box.group.groupId);
+          if (!had || x < had.x0) {
+            // beside the outline, not over it: above is where the spread's
+            // numbers go and below is the fixture's own name
+            tags.set(box.group.groupId, { x0: x, x1: x + w, y: y + h / 2 + 3, kinds: box.group.kinds.join('·') });
+          }
+        }
+        // A39: which steps of the spread land on this fixture. One reading a
+        // fixture, not one a head: a pixel strip is sixty-four emitters two
+        // millimetres apart on this canvas, and sixty-four numbered discs on
+        // one bar is a blot. So a fixture the spread gives one step reads that
+        // step — which is what "per strip" and a mirror fold both produce, and
+        // the pairing a fold makes is then visible across the row — and a
+        // fixture the spread runs THROUGH reads the span it runs, `1–8`, or
+        // its ends with an ellipsis when the steps it gets are scattered.
+        if (steps.n > 0) {
+          const ranks = [...steps.ranks].sort((a, b) => a - b);
+          const lo = ranks[0];
+          const hi = ranks[ranks.length - 1];
+          const text =
+            ranks.length === 1 ? `${lo}`
+              : ranks.length === hi - lo + 1 ? `${lo}–${hi}`
+                : `${lo}…${hi}`;
+          nums.push({ x: steps.sx / steps.n, y: steps.top - steps.rad - 5, text });
         }
 
         // selection ring (marquee-hover counts as selected-in-progress)
@@ -439,6 +573,44 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             ctx.font = `${Math.max(7, m.scale * 0.1)}px -apple-system, sans-serif`;
             ctx.fillText(`+${lift.toFixed(2)}m`, px, py - rad - 3);
           }
+        }
+      }
+
+      // The tags and the numbers last, over everything else the plan draws: a
+      // truss bar behind a head must not swallow the letters that say what the
+      // look does to it.
+      if (tags.size > 0) {
+        ctx.font = '9px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        for (const tag of tags.values()) {
+          if (!tag.kinds) continue;
+          const tw = ctx.measureText(tag.kinds).width + 6;
+          // left of the outline, unless that runs off the canvas
+          const cx = tag.x0 - 4 - tw / 2 >= 2 ? tag.x0 - 4 - tw / 2 : tag.x1 + 4 + tw / 2;
+          ctx.fillStyle = color['alpha/black-90'];
+          ctx.fillRect(cx - tw / 2, tag.y - 9, tw, 11);
+          ctx.fillStyle = color['live/default'];
+          ctx.fillText(tag.kinds, cx, tag.y);
+        }
+      }
+      if (nums.length > 0) {
+        ctx.font = 'bold 9px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        // Two rows, packed left to right: `17–24` is wider than the gap
+        // between two strips on a club-sized plan, and a reading that sits on
+        // its neighbour is not a reading. A chip that will not fit beside the
+        // last one steps up a line instead of being dropped.
+        const rightOf = [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY];
+        for (const nm of [...nums].sort((a, b) => a.x - b.x)) {
+          const tw = ctx.measureText(nm.text).width + 7;
+          const left = nm.x - tw / 2;
+          const row = left >= rightOf[0] ? 0 : left >= rightOf[1] ? 1 : 0;
+          rightOf[row] = left + tw + 2;
+          const y = nm.y - row * 12;
+          ctx.fillStyle = color['alpha/black-90'];
+          ctx.fillRect(left, y - 9, tw, 11);
+          ctx.fillStyle = color['live/default'];
+          ctx.fillText(nm.text, nm.x, y);
         }
       }
 
@@ -797,6 +969,53 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
   return (
     <div ref={hostRef} style={{ position: 'absolute', inset: 0 }}>
       <canvas ref={canvasRef} />
+      <ReachLegend source={source} />
+    </div>
+  );
+}
+
+/** What the rings and the numbers on the plan mean, in the corner, only while
+ *  one of them is drawn (design 2.8, A38 / A39).
+ *
+ *  It is the plan's own caption rather than a line in either panel's bar,
+ *  because the plan has two homes — the stage band and the Rig page's plan
+ *  column — and a caption that lives with the drawing is the same sentence in
+ *  both of them. */
+function ReachLegend({ source }: { source: 'live' | 'preview' }): React.ReactElement | null {
+  const project = useStore((s) => s.project);
+  const sel = useStore((s) => s.sel);
+  const preview = useEditorStore((s) => s.spreadPreview);
+
+  if (!project) return null;
+  const lookId = sel && source === 'live' ? pageCells(project, sel.deckId, sel.layerId)[sel.col] ?? null : null;
+  const look = lookId && Object.hasOwn(project.looks, lookId) ? project.looks[lookId] : null;
+  const groups = look ? lookReachCached(look, project) : [];
+
+  const part = preview && Object.hasOwn(project.looks, preview.lookId)
+    ? project.looks[preview.lookId].parts.find((p) => p.id === preview.partId)
+    : undefined;
+  const fx = part?.effects.find((e) => e.id === preview?.effectId);
+  const spreadGroup = part ? project.groups.find((g) => g.id === part.groupId)?.name : undefined;
+
+  if (groups.length === 0 && !fx) return null;
+  return (
+    <div className="planlegend">
+      {groups.length > 0 && (
+        <span
+          className="planlegendchip"
+          title={`Where ${look?.name ?? 'this look'} reaches — a ring round every head its parts drive, and the families it enables there: I brightness, C colour, P position, B beam. The audition shows what a look does; this shows where.`}
+        >
+          reach · {groups.map((g) => g.group).filter(Boolean).join(' · ') || `${groups.length} groups`}
+        </span>
+      )}
+      {fx && (
+        <span
+          className="planlegendchip"
+          title={`The order this spread hands its wave out across ${spreadGroup ?? 'the group'} — 1 is where the wave starts. Each fixture reads the step it gets, or the span that runs through it; two reading the same number run together, which is what a mirror fold and a buddy clump do.`}
+        >
+          spread order · {DISTRIBUTE_WORD[fx.distribute]}
+        </span>
+      )}
     </div>
   );
 }
