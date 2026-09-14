@@ -18,6 +18,7 @@ import { lookFace, lookSwatch } from '../lookColors.ts';
 import { Face } from './library/face.tsx';
 import { placeArmed, useEditingDeckId, useLibraryStore } from '../libraryStore.ts';
 import { REMOTE_PAGE_COLS, useRemote } from '../remoteStore.ts';
+import { useLocked } from '../lockStore.ts';
 import { HeldChip } from './HeldChip.tsx';
 import { openSetup } from './AdminModal.tsx';
 import { APC_COLS, APC_KNOB_BANKS, APC_LAYER_ROWS } from '../apcFeedback.ts';
@@ -1080,6 +1081,7 @@ function midiLabel(project: Project, controlId: string): { text: string; partial
  *  rig that came up dark next time with nothing on screen explaining why. */
 function SubmasterRow() {
   const project = useStore((s) => s.project)!;
+  const remote = useRemote((s) => s.remote);
   const send = useStore((s) => s.send);
   const subs = useStore((s) => s.snap?.submasters);
   const groups = project.groups;
@@ -1091,7 +1093,9 @@ function SubmasterRow() {
     <div className="controlrow groupsrow">
       <div className="layerhead controlhead">
         <div className="row">
-          <div className="name grow">GROUPS</div>
+          {/* 48px of head holds one short word, which is the word the design
+              draws there (2.11); the desk keeps the whole one. */}
+          <div className="name grow">{remote ? 'GRPS' : 'GROUPS'}</div>
           {anyDown && (
             <button
               className="btn small ghost"
@@ -1147,6 +1151,7 @@ function ControlRow() {
   // page that holds column 5 to 8 — and each keeps its own slot number.
   const remote = useRemote((s) => s.remote);
   const page = useRemote((s) => s.page);
+  const locked = useLocked();
   const all = Array.from({ length: APC_COLS }, (_, i) => controls[i] ?? null);
   const first = remote ? Math.min(page, Math.max(0, Math.ceil(APC_COLS / REMOTE_PAGE_COLS) - 1)) * REMOTE_PAGE_COLS : 0;
   const slots = remote ? all.slice(first, first + REMOTE_PAGE_COLS) : all;
@@ -1174,7 +1179,7 @@ function ControlRow() {
     <div className="controlrow">
       <div className="layerhead controlhead">
         <div className="row">
-          <div className="name grow">DIALS</div>
+          <div className="name grow">{remote ? 'DIAL' : 'DIALS'}</div>
           <button
             className="btn small ghost"
             title="open the Controls tab — where a dial's links, brackets and pulses are edited"
@@ -1193,7 +1198,9 @@ function ControlRow() {
       {slots.map((c, k) => {
         const i = first + k;
         if (!c) {
-          const next = i === controls.length; // the one slot that can be filled
+          // The one slot that can be filled — and only where editing is
+          // allowed at all: on a locked client an empty slot is an empty slot.
+          const next = i === controls.length && !locked;
           return (
             <div
               key={`empty-${i}`}
@@ -1539,6 +1546,21 @@ export function LookGrid() {
     <div className="gridlabel label">
       {learnMode
         ? (learnTarget ? 'move a control…' : 'click a target…')
+        : latched
+          ? (
+            // A state that withholds cues has to be readable from the grid
+            // itself, not only from the key that armed it — on a laptop the
+            // wash is otherwise the only thing that says why a pad went quiet
+            // (section 8, rule 18). Clicking it drops the latch; it is a chip
+            // that can only STOP a mode, never start a cue.
+            <button
+              className="btn small gridchip warn on"
+              title="the grid is latched for editing: a tap selects a pad, a hold opens its menu, and nothing here fires. Click, or press E, to let it play again."
+              onClick={() => useRemote.getState().setLatch(false)}
+            >
+              latched · E
+            </button>
+          )
         : editing
           ? (
             <button

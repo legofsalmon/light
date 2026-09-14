@@ -167,11 +167,25 @@
    head keeps saying the two things a thumb needs from it. */
 .app.remote .lookgrid { --size-layerhead-w: var(--size-remote-head-w); }
 .app.remote .layerhead {
-  padding: var(--space-2);
+  padding: var(--space-1);
   gap: var(--space-1);
 }
 .app.remote .layerhead .nowplaying { display: none; }
-.app.remote .layerhead .row { gap: var(--space-2); }
+/* every pixel of the 48 goes to the two things the head still says: the
+   layer's key and the ✕, which keeps its 24px touch target */
+.app.remote .layerhead .row { gap: 0; }
+/* In 48px of head the master is the bar the design draws — `4 ▮ ✕` — not a
+   labelled readout. Its 60px floor would spill the fader over the first pad
+   and take that pad's taps with it, and the level is spelled out in full on
+   the levels tier anyway. */
+.app.remote .layerhead .fader { min-width: 0; width: 100%; }
+.app.remote .layerhead .fader .val { display: none; }
+.app.remote .layerhead .btn.clearbtn { padding: 0; }
+/* The dial and group heads keep their word and nothing else: the prose line
+   and the `edit` / `all up` keys have no room beside it, and both are the
+   desk's affordances rather than the remote's. */
+.app.remote .controlhead .prose,
+.app.remote .controlhead .btn { display: none; }
 /* A press is a press: never a pan that follows it, never a double-tap zoom.
    With the grid at 100% there is nothing under a pad to scroll anyway. */
 .app.remote .cell { touch-action: manipulation; }
@@ -205,7 +219,9 @@
   scrollbar-width: none;
 }
 .remotelevels::-webkit-scrollbar { display: none; }
-.remotelevels .fader { flex: 0 0 var(--size-fader-min-w); }
+/* wide enough for the caption AND the reading: a master clipped to `10` is a
+   master you cannot read, and this row is the one place the numbers live */
+.remotelevels .fader { flex: 0 0 var(--size-master-w-narrow); }
 .remotelevels .tapkey { flex: 0 0 auto; }
 
 /* ---- the bottom bar, the tray and the editor ----------------------------- */
@@ -253,6 +269,10 @@
   border-top: 1px solid var(--line);
   box-shadow: var(--elevation-menu);
 }
+
+/* The library sheet opens under the fixed strip rather than over it: the two
+   keys in that strip are the two a hand must always find. */
+.app.remote .librarysheet { top: var(--size-panic-h-touch); }
 
 /* The editor over the whole screen, with its own stripe: on a phone there is
    no column to put it beside, and the stripe is what says whether what you are
