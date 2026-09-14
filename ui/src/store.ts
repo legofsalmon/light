@@ -171,6 +171,10 @@ type Store = {
   /** true when the engine owns native MIDI (Rust core) — the browser must not double-forward */
   engineMidi: boolean;
   lastMidi: string | null;
+  /** the last value each CC reported, keyed `channel:number` (channel 0-based,
+   *  as it arrives on the wire). Runtime only — where a knob physically sits is
+   *  not part of the show. */
+  midiCc: Record<string, number>;
   /** last GDTF/MVR import outcome, shown in the Fixtures tab */
   importMsg: { ok: boolean; text: string } | null;
   /** notices, oldest first — failures stay until dismissed, the rest expire */
@@ -479,6 +483,7 @@ export const useStore = create<Store>()((set, get) => ({
   webMidiNames: [],
   engineMidi: false,
   lastMidi: null,
+  midiCc: {},
   importMsg: null,
   toasts: [],
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
@@ -647,6 +652,14 @@ export const useStore = create<Store>()((set, get) => ({
     const ch = (status & 0x0f) + 1;
     const label = isCC ? `CC ${d1} ch${ch} = ${d2}` : kind === 0x90 || kind === 0x80 ? `Note ${d1} ch${ch} ${isNoteOn ? 'on' : 'off'}` : null;
     if (label) set({ lastMidi: label });
+    // Remember where the hardware left this control. An APC's track faders and
+    // device knobs are absolute, so after a song switch, a look change or
+    // anyone touching the screen, the physical fader is wherever it was left
+    // and the next touch of it JUMPS the value to that position. Knowing the
+    // last position is what lets a fader draw where the hardware is (A35).
+    if (isCC) {
+      set((st) => ({ midiCc: { ...st.midiCc, [`${status & 0x0f}:${d1}`]: d2 } }));
+    }
     get().send({ type: 'midi', status, d1, d2 });
   },
 

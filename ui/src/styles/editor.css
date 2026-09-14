@@ -153,3 +153,17 @@
   text-transform: uppercase;
   color: var(--text-faint);
 }
+
+/* Where the controller sits when that is not where the value is (design A35).
+   Hollow, and outside the fill: it is not a second value, it is a warning that
+   the next touch of a physical fader will jump this one to meet it. */
+.fader .hwtick {
+  position: absolute;
+  top: var(--space-2);
+  bottom: var(--space-2);
+  width: var(--size-rule);
+  margin-left: calc(-1 * var(--size-rule) / 2);
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--warn);
+  pointer-events: none;
+}

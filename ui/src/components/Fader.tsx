@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { MidiAction } from '../../../shared/types.ts';
 import { clamp } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
+import { hardwareAt } from '../midiPos.ts';
 import { size } from '../tokens.ts';
 import '../styles/editor.css';
 
@@ -9,6 +10,11 @@ import '../styles/editor.css';
  *  space before the sign. Masters use no formatter and read bare — `100` is
  *  full. Every fader that shows a percentage formats with this. */
 export const fmtPct = (v: number): string => `${Math.round(v * 100)}\u2009%`;
+
+/** How far the hardware may sit from the value before it is worth saying so.
+ *  Two percent is under one step of a 7-bit CC, so a fader the operator has
+ *  just moved by hand never accuses itself. */
+const HW_SLOP = 0.02;
 
 /** The digits out of a readout — `45 %` is 45, `3200K` is 3200, `1.00×` is 1.
  *  What the operator types back is what the readout showed them. */
@@ -48,6 +54,11 @@ type Props = {
 export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def, width, variant = 'accent', learn }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const norm = clamp((value - min) / (max - min));
+  // Where the controller bound to this fader physically sits, if anything has
+  // moved it this session.
+  const midiCc = useStore((st) => st.midiCc);
+  const project = useStore((st) => st.project);
+  const hw = hardwareAt(project, midiCc, learn);
   const learnMode = useStore((s) => s.learnMode);
   const learnTarget = useStore((s) => s.learnTarget);
   const armed = !!learn && !!learnTarget && JSON.stringify(learnTarget) === JSON.stringify(learn);
@@ -200,6 +211,20 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
         // its own at the right edge (--size-value-w) that the fill never
         // reaches, so a reading is never struck through by the fill's edge.
         <div className="fill" style={{ width: `calc((100% - var(--size-value-w)) * ${norm})` }} />
+      )}
+      {/* Where the hardware is, when that is not where the value is (A35, the
+          blue bar Hog draws for the same reason). An APC's faders and knobs are
+          absolute: after a song switch, a look change or anyone touching the
+          screen, the physical control is wherever it was left, and the next
+          touch of it JUMPS the value there. This is the warning that the jump
+          is coming, and roughly how far. */}
+      {hw !== null && Math.abs(hw - norm) > HW_SLOP && (
+        <div
+          className="hwtick"
+          style={{ left: `calc((100% - var(--size-value-w)) * ${hw})` }}
+          title={`your controller is at ${Math.round(hw * 100)}\u2009% — touching it will jump this there`}
+          aria-hidden="true"
+        />
       )}
       <div className="val">
         <span>{label}</span>
