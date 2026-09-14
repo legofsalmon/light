@@ -17,6 +17,9 @@ import '../../styles/setup.css';
 
 /** a finger wobbles on a hold; a swipe is somebody scrolling */
 const SLOP_PX = 8;
+/** how long after a hold completes its trailing click is still that hold's
+ *  echo — three holds, the same window touch.ts uses, so the two agree */
+const ECHO_MS = 3 * LONG_PRESS_MS;
 
 export function LockBar(): React.ReactElement {
   const locked = useLock((s) => s.locked);
@@ -24,6 +27,11 @@ export function LockBar(): React.ReactElement {
   const [holding, setHolding] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const from = useRef({ x: 0, y: 0 });
+  /** When the hold last succeeded. The click that ENDS a successful unlock
+   *  hold is still a click, and it landed on the key whose click re-locks —
+   *  so the gesture was: hold, unlock, lift, locked again. Same echo window
+   *  contextPress uses for the click that follows a long press. */
+  const unlockedAt = useRef(0);
   // The hold can outlive the element (an unlock re-renders the whole bar away),
   // so the timer is cleared on the way out rather than left to fire into
   // nothing.
@@ -37,6 +45,7 @@ export function LockBar(): React.ReactElement {
 
   const held = () => {
     stop();
+    unlockedAt.current = performance.now();
     if (!passcode) {
       useLock.getState().unlock();
       return;
@@ -79,7 +88,11 @@ export function LockBar(): React.ReactElement {
         onPointerCancel={stop}
         onPointerLeave={stop}
         onContextMenu={(e) => e.preventDefault()}
-        onClick={() => { if (!locked) useLock.getState().lock(); }}
+        onClick={() => {
+          // never the click that ended the hold which just unlocked it
+          if (performance.now() - unlockedAt.current < ECHO_MS) return;
+          if (!locked) useLock.getState().lock();
+        }}
       >
         <svg className="holdring" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="10" pathLength="100" />

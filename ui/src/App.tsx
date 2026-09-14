@@ -111,7 +111,10 @@ export function App() {
   const [chromeH, setChromeH] = useState<number>(size.topbar + APP_GAP);
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return;
-    const els = [...document.querySelectorAll('.offlinebar, .topbar, .statusline')];
+    // `.topbar` has not existed since the bar became a command strip and a
+    // status line; the fallback sum was measuring one element short, so a
+    // window with no band sized its grid against too little chrome.
+    const els = [...document.querySelectorAll('.offlinebar, .commandstrip, .statusline')];
     if (els.length === 0) return;
     const measure = () => {
       const band = document.querySelector('.previz, .previzstrip');

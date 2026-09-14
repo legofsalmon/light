@@ -409,10 +409,25 @@ const Cell = React.memo(function Cell({
         // digit keys already withheld their cue there; the body did not, which
         // left a tap on the grid firing the live song's column from a page
         // showing another song — the misfire decision 0 exists to remove.
-        if (inert) {
-          if (latched) padMenu.onPointerDown?.(e);
-          if (latched && placeArmed(project, layer.id, col, editingDeckId)) return;
+        // Two states withhold the cue, and they are not the same state.
+        //
+        // LATCHED is a touch affordance: on glass a 22px name strip is too
+        // small to aim at, so while the latch is on the whole pad becomes the
+        // select target (design 2.11) and a hold opens its menu.
+        //
+        // An EDITING PAGE is decision 0, and there the body does nothing at
+        // all — not even select. The body's meaning has to stay "fire, or
+        // nothing"; a body that sometimes fires and sometimes selects is the
+        // ambiguity the state exists to remove, and the strip beside it still
+        // selects, drags and opens the menu as it always does.
+        if (latched) {
+          padMenu.onPointerDown?.(e);
+          if (placeArmed(project, layer.id, col, editingDeckId)) return;
           setSel({ layerId: layer.id, col });
+          return;
+        }
+        if (editing) {
+          e.preventDefault();
           return;
         }
         setSel({ layerId: layer.id, col });
