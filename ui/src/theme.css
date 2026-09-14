@@ -1859,3 +1859,16 @@ button.warnchip { background: none; cursor: pointer; }
 .colhead.inert { color: var(--text-dim); }
 /* which column a head or a digit key selected, since neither fires here */
 .colhead.selcol { box-shadow: inset 0 calc(-1 * var(--size-rule)) 0 var(--accent); color: var(--text); }
+
+/* ---------- the drawn glyph set (design 3.3, #31) --------------------------
+   One size, one stroke weight, the colour of the text around it. Sizing lives
+   here rather than on each call site so a glyph scales with the desk; the
+   touch mode gets the larger of the two because a fingertip has to find it. */
+.glyph {
+  width: var(--size-icon);
+  height: var(--size-icon);
+  flex: none;
+  stroke-width: var(--size-icon-stroke);
+  vertical-align: -0.12em;
+}
+.app.touch .glyph { width: var(--size-icon-touch); height: var(--size-icon-touch); }

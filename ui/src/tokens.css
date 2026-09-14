@@ -255,6 +255,9 @@
   --size-remote-head-w: 48px;
   --size-songnow-max-w: 220px;
   --size-picker-max-h: 360px;
+  --size-icon: 12px;
+  --size-icon-touch: 16px;
+  --size-icon-stroke: 1.5px;
   /* type: families, weights, leading, sizes, then one set of properties per text style */
   --font: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
   --mono: 'IBM Plex Mono', 'SF Mono', ui-monospace, Menlo, monospace;

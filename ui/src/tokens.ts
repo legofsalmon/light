@@ -260,7 +260,10 @@ export const size = {
   gridstrip: 114,
   "remote-head-w": 48,
   "songnow-max-w": 220,
-  "picker-max-h": 360
+  "picker-max-h": 360,
+  icon: 12,
+  "icon-touch": 16,
+  "icon-stroke": 1.5
 } as const;
 
 /** the Touch-mode values of the sizes that have one */
