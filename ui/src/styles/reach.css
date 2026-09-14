@@ -1,0 +1,42 @@
+/* ---------- what the plan is marking (design 2.8, A38 / A39, #38) ----------
+   Tokens only, exactly like theme.css — check-tokens.mjs walks every
+   stylesheet under ui/src and this one is not special.
+
+   The rings and the numbers are drawn on the canvas; this is the caption that
+   says what they are. It sits in the plan's own bottom-left corner rather than
+   in either panel's bar, because the plan has two homes — the stage band and
+   the Rig page's plan column — and a caption that travels with the drawing is
+   the same sentence in both. Bottom-left, so it never meets the state tag the
+   band puts top-left. */
+.planlegend {
+  position: absolute;
+  left: var(--space-8);
+  bottom: var(--space-8);
+  z-index: 1;
+  display: flex;
+  gap: var(--space-6);
+  max-width: calc(100% - var(--space-16));
+  pointer-events: none;
+}
+
+/* Chrome, so it is opaque panel with a hairline and it does not glow. The word
+   is tungsten because what it captions is the light — where a look lands, and
+   the order it lands in — and the cursor colour is already spoken for by the
+   dashed box round a fixture selected for patching. `pointer-events` comes
+   back on for the chip alone: the help lives on its title, and everything
+   around it must stay draggable. */
+.planlegend .planlegendchip {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: var(--space-2) var(--space-6);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--color-live-dim);
+  font-size: var(--text-micro-size);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
+  text-transform: uppercase;
+  pointer-events: auto;
+}

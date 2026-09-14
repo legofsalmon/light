@@ -1862,5 +1862,145 @@ await new Promise<void>((resolve) => {
   check('qr: the smallest version that fits is the one used', qrCode('x'.repeat(17))?.size === 29 && qrCode('x'.repeat(18))?.size === 33);
 }
 
+// --- a look's reach, and the order a spread runs a group (#38, A38 / A39) ---
+// The plan draws both; neither is allowed to be a second copy of a rule that
+// already exists. The reach is `lookFace`'s groups with `lookKinds`' families;
+// the order is read back OUT of shared/effects.ts through a probe, so the
+// numbers on the plan are the fan the engines actually run.
+{
+  const { lookReach, spreadOrder, headKey } = await import('../../ui/src/components/editor/reach.ts');
+  const { applyEffects } = await import('../../shared/effects.ts');
+  type P = import('../../shared/types.ts').Project;
+  type FX = import('../../shared/types.ts').Effect;
+
+  const par = (id: string, x: number) => ({
+    id, name: id.toUpperCase(), profileId: 'generic-rgb-par-3ch', universeId: 'u1',
+    address: 1, pos: { x, y: 3, z: 0 }, rotY: 0,
+  });
+  const mover = (id: string, x: number) => ({
+    id, name: id.toUpperCase(), profileId: 'generic-mover-10ch', universeId: 'u1',
+    address: 1, pos: { x, y: 3, z: 0 }, rotY: 0,
+  });
+  const project = {
+    fixtures: [par('p0', 0), par('p1', 1), par('p2', 2), par('p3', 3), mover('m0', 5), mover('m1', 6)],
+    groups: [
+      // movers listed FIRST, so a reach that came back in project order rather
+      // than stage order would read m-then-p and fail below
+      { id: 'movers', name: 'Movers', heads: [{ fixtureId: 'm0', head: 0 }, { fixtureId: 'm1', head: 0 }] },
+      { id: 'pars', name: 'Pars', heads: [0, 1, 2, 3].map((i) => ({ fixtureId: `p${i}`, head: 0 })) },
+    ],
+    looks: {},
+    layers: [],
+    columns: [],
+  } as unknown as P;
+  const look = {
+    id: 'lk', name: 'Cold Seam',
+    parts: [
+      { id: 'a', groupId: 'pars', params: { dimmer: 1, color: { h: 200, s: 1 } }, effects: [] },
+      { id: 'b', groupId: 'movers', params: { pan: 0.5, tilt: 0.5 }, effects: [] },
+      { id: 'c', groupId: 'gone', params: { dimmer: 1 }, effects: [] },
+    ],
+  } as unknown as import('../../shared/types.ts').Look;
+  (project.looks as Record<string, unknown>)['lk'] = look;
+
+  const reach = lookReach(look, project);
+  check(
+    'reach: one entry per group the look drives, in stage order',
+    reach.length === 2 && reach[0].groupId === 'pars' && reach[1].groupId === 'movers',
+    reach.map((r) => r.groupId).join(','),
+  );
+  check(
+    'reach: each group carries the families that part enables',
+    reach[0]?.kinds.join('') === 'IC' && reach[1]?.kinds.join('') === 'P',
+    reach.map((r) => `${r.groupId}=${r.kinds.join('')}`).join(' '),
+  );
+  check(
+    'reach: every head of the group is outlined, not just the first',
+    reach[0]?.heads.join(',') === 'p0:0,p1:0,p2:0,p3:0' && reach[0]?.heads[0] === headKey('p0', 0),
+    reach[0]?.heads.join(','),
+  );
+  check(
+    'reach: a part naming a group this rig has not got reaches nothing',
+    !reach.some((r) => r.groupId === 'gone'),
+  );
+
+  // a steps look borrows the groups of its first resolvable step — the same
+  // borrow the pad face makes — and is tagged with what its steps do
+  (project.looks as Record<string, unknown>)['cue'] = {
+    id: 'cue', name: 'Cue', parts: [], steps: [{ lookId: 'lk', beats: 1 }],
+  };
+  const stepReach = lookReach((project.looks as Record<string, import('../../shared/types.ts').Look>)['cue'], project);
+  check(
+    'reach: a steps look reaches through to its step',
+    stepReach.length === 2 && stepReach[0].kinds.join('') === 'ICP',
+    stepReach.map((r) => `${r.groupId}=${r.kinds.join('')}`).join(' '),
+  );
+
+  const fx = {
+    id: 'e', target: 'dimmer', wave: 'sawUp', rate: 1, size: 1, spread: 1, width: 0.5, phase: 0,
+    bypass: false, mix: 1, distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0,
+  } as FX;
+  const run = (over: Partial<FX>): string => {
+    const order = spreadOrder(project, 'pars', { ...fx, ...over } as FX);
+    return [0, 1, 2, 3].map((i) => order.get(`p${i}:0`)).join(',');
+  };
+  check('spread order: in order, one after another', run({}) === '1,2,3,4', run({}));
+  check('spread order: reverse runs it backwards', run({ reverse: true }) === '4,3,2,1', run({ reverse: true }));
+  check(
+    'spread order: a mirror fold gives the two wings the same numbers',
+    run({ fold: 'mirror' }) === '1,2,3,2', run({ fold: 'mirror' }),
+  );
+  check(
+    'spread order: the centre fold leads from the middle',
+    run({ fold: 'centre' }) === '3,2,1,2', run({ fold: 'centre' }),
+  );
+  check(
+    'spread order: buddy clumps adjacent heads onto one number',
+    run({ buddy: 2 }) === '1,1,2,2', run({ buddy: 2 }),
+  );
+  check(
+    'spread order: tile repeats the whole run across the group',
+    run({ parts: 2 }) === '1,2,1,2', run({ parts: 2 }),
+  );
+  check('spread order: X sweeps stage left to right', run({ distribute: 'x' }) === '1,2,3,4', run({ distribute: 'x' }));
+  check(
+    'spread order: a parked or dry effect still previews its order',
+    run({ bypass: true, mix: 0, size: 0 }) === '1,2,3,4',
+    run({ bypass: true, mix: 0, size: 0 }),
+  );
+  check(
+    'spread order: a chase orders its heads the same way the ramp does',
+    run({ wave: 'chase' }) === run({}), `${run({ wave: 'chase' })} vs ${run({})}`,
+  );
+  check('spread order: a group this rig has not got numbers nothing', spreadOrder(project, 'gone', fx).size === 0);
+
+  // and the numbers agree with the fan the ENGINE runs: ranking the four heads
+  // by the phase applyEffects hands them must give the same order the preview
+  // prints, for every basis the disclosure offers
+  {
+    const ext = { minX: 0, maxX: 3, minY: 3, maxY: 3, minZ: 0, maxZ: 0, cx: 1.5, cy: 3, cz: 0, maxR: 1.5 };
+    const gAt = (x: number) => ({ x, y: 3, z: 0, along: 0, row: 0, col: 0, rowT: 0, colT: 0 });
+    let agree = true;
+    const cases: Partial<FX>[] = [
+      {}, { reverse: true }, { fold: 'mirror' }, { fold: 'centre' }, { buddy: 2 }, { parts: 2 },
+      { distribute: 'x' }, { distribute: 'radial' }, { distribute: 'shuffle', seed: 7 },
+    ];
+    for (const over of cases) {
+      const e = { ...fx, ...over, spread: 0.5 } as FX;
+      // dimmer under a full-size ramp IS the fan value, so ranking by it is
+      // ranking by phase — with no reference to how the preview computes it
+      const byEngine = [0, 1, 2, 3].map((j) => applyEffects({ dimmer: 1 }, [e], 0, [0], j, 4, gAt(j), ext).dimmer ?? 0);
+      const steps = [...new Set(byEngine.map((v) => Math.floor(v * 1e6 + 0.5)))].sort((a, b) => a - b);
+      const want = byEngine.map((v) => steps.indexOf(Math.floor(v * 1e6 + 0.5)) + 1).join(',');
+      const got = run(over);
+      if (got !== want) {
+        agree = false;
+        check(`spread order: agrees with the engine for ${JSON.stringify(over)}`, false, `${got} vs ${want}`);
+      }
+    }
+    check('spread order: every basis matches the phase the engine hands each head', agree);
+  }
+}
+
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

@@ -2,7 +2,7 @@
 // wire keeps `sawUp`; the screen says "ramp up". Retired desk words live in
 // scripts/check-language.mjs, which fails the build if one comes back.
 import type {
-  EffectTarget, MidiAction, MidiMapping, Project, ShapeKind, SoftField, StagePropKind, Wave,
+  Distribute, EffectTarget, MidiAction, MidiMapping, Project, ShapeKind, SoftField, StagePropKind, Wave,
 } from '../../shared/types.ts';
 
 export const WAVE_LABEL: Record<Wave, string> = {
@@ -76,6 +76,20 @@ export const TARGET_LABEL: Record<EffectTarget, string> = {
   prismRotate: 'prism spin',
   flower: 'flower spin',
   shape: 'shape',
+};
+
+/** How a spread hands its wave out across a group, in one phrase — the folded
+ *  effect line reads it, and so does the plan's legend while it is numbering
+ *  the heads in that order. One map, so the two can never say it differently. */
+export const DISTRIBUTE_WORD: Record<Distribute, string> = {
+  index: 'order',
+  x: 'left → right',
+  y: 'bottom → top',
+  z: 'upstage → down',
+  radial: 'out from the middle',
+  shuffle: 'scattered',
+  row: 'pixel rows',
+  col: 'pixel columns',
 };
 
 /** The figures a shape effect traces, by the name a person would say. */
