@@ -26,6 +26,8 @@ export type ShortcutActions = {
   openSetup: () => void;
   /** the grid's own selected-column marker, for a page that does not fire */
   selectColumn: (col: number) => void;
+  /** arm or drop the edit latch: the grid selects, and nothing fires */
+  toggleLatch: () => void;
   /** true when something was disarmed, so Esc stops there rather than going on
    *  to clear a selection the operator still wanted */
   disarmLibrary: () => boolean;
@@ -35,6 +37,7 @@ let actions: ShortcutActions = {
   openFind: () => {},
   openSetup: () => {},
   selectColumn: () => {},
+  toggleLatch: () => {},
   disarmLibrary: () => false,
 };
 export function registerShortcutActions(a: Partial<ShortcutActions>): void {
@@ -204,6 +207,19 @@ export const SHORTCUTS: Shortcut[] = [
       const last = playing[playing.length - 1];
       if (last && last.col != null) st.setSel({ layerId: last.id, col: last.col });
     },
+  },
+  {
+    keys: '`E`',
+    // The remote's edit latch, on the laptop. It is the MIDI-learn arm shape:
+    // a mode that changes what a press MEANS rather than what it reaches, so
+    // the grid can be edited with a finger without a tap putting light in the
+    // room. It drops itself on ALL STOP, a song switch, leaving Pads and 30
+    // seconds untouched, because a mode that withholds cues must not outlive
+    // the operator's attention (design 2.11).
+    label: 'latch the grid for editing — nothing fires',
+    group: 'Getting around',
+    match: (e) => e.key.toLowerCase() === 'e',
+    run: () => actions.toggleLatch(),
   },
   {
     keys: '`⌘,`',

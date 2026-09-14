@@ -1,0 +1,328 @@
+/* ---------- the FOH remote (design 2.11, #36) ----------
+   A layout state, not a fork: `touch` on and a window under 900px. The same
+   components as the desk — the same grid, the same pads, the same library
+   sheet and the same look editor — with what a fingertip cannot use taken off
+   the screen and what it reaches for put where the thumbs are.
+
+   The one rule everything here serves: the row cannot overflow. A head plus
+   four pads in one grid has four gaps, and the add-column track would add a
+   fifth plus 30px — 372 > 370 at 390 wide, a two-pixel sideways scroll over
+   pad bodies, which is the exact thing this design forbids. So under
+   `.app.remote` the template is the 48px head and four `minmax(0, 1fr)`
+   tracks, the add column is not rendered at all (it is an edit affordance a
+   locked remote cannot use), and every row inside the grid gives up the
+   min-widths it keeps on a desk.
+
+   Everything that competes with a theme.css rule of the same weight is written
+   with one class more, because this sheet is imported from App.tsx and
+   therefore reaches the document BEFORE theme.css does. */
+
+/* The template. The band is absent rather than folded (390px of glass has no
+   room for a picture of the room you are standing in), the side panels cannot
+   open at this width, and the levels tier and the bottom bar are auto-placed
+   rows under the grid — so they sit below whatever template the view is using
+   instead of making the remote a second set of them. */
+.app.remote.view-pads {
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'offline'
+    'top'
+    'grid'
+    'levels'
+    'lockbar';
+}
+/* A tablet, or a locked desk client, has no levels tier and no template of its
+   own, so its bottom bar takes the line after the last explicit row of
+   whatever template the view is using. Naming an area would mean restating the
+   pads template here; leaving it to auto-placement would drop it into the
+   empty offline row at the TOP of the screen. */
+.app.remote .remotelevels { grid-area: levels; }
+.app.remote .bottombar { grid-area: lockbar; }
+
+/* ---- the fixed strip ---------------------------------------------------- */
+/* BLACKOUT · ALL STOP · MASTER · the lamp, at --size-panic-h-touch. The top
+   bar keeps its own panic track untouched: those two keys are two of the five
+   gestures that reach the rig, and they are not re-implemented here. */
+.remotetop {
+  grid-area: top;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  background: var(--panel);
+}
+.app.remote .commandbar { flex: 0 0 auto; min-width: 0; }
+.app.remote .commandstrip {
+  min-height: var(--size-panic-h-touch);
+  padding: var(--space-4) var(--space-6);
+  gap: var(--space-6);
+}
+/* The rest of the strip is desk furniture: the view keys, the tempo block, the
+   show's name, the status line under it. A locked phone steers by none of
+   them, and the tray carries the two that matter. */
+.app.remote .stripflow,
+.app.remote .statusline { display: none; }
+.app.remote .panic {
+  margin-left: 0;
+  width: auto;
+  gap: var(--space-4);
+  /* the design's order — blackout first, where the thumb lands */
+  flex-direction: row-reverse;
+}
+.app.remote .panic .btn { min-height: var(--size-btn); }
+
+.remotemaster {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  padding: 0 var(--space-8) 0 var(--space-4);
+}
+.remotemaster .fader { flex: 1 1 auto; min-width: var(--size-fader-min-w); }
+/* The lamp says whether any of this is reaching the rig. A readout and nothing
+   more: going live is a setup action, and a locked phone is not where it is
+   taken. */
+.remotelamp {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-dim);
+}
+.remotelamp .lamp {
+  width: var(--size-lamp);
+  height: var(--size-lamp);
+  border-radius: var(--radius-pill);
+  background: var(--raise2);
+}
+.remotelamp.live { color: var(--color-live); }
+.remotelamp.live .lamp { background: var(--color-live); }
+.remotelamp.lost { color: var(--color-danger-text); }
+.remotelamp.lost .lamp { background: var(--hot); }
+
+/* ---- the song row, the page key and the heads ---------------------------- */
+/* The song row stays put while the grid scrolls under it: on a short phone it
+   is the one line that says which song these pads belong to. */
+.app.remote .deckbar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--bg);
+  margin-bottom: var(--space-6);
+}
+.app.remote .deckbar > .label,
+.app.remote .decknext { display: none; }
+.app.remote .deckbar .deckchip { flex: 1 1 auto; justify-content: center; }
+
+/* the page key row: the grid's own chip on the left, the two positions middle */
+.remotekeys {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+  margin-bottom: var(--space-6);
+}
+.remotekeys .gridlabel { flex: 0 1 auto; justify-content: flex-start; }
+.pagekey {
+  display: flex;
+  gap: var(--space-4);
+  flex: 0 0 auto;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* The heads, and the only place a swipe pages the grid. A native scroll
+   container with mandatory snapping: the browser itself cancels the click that
+   follows a pan, so no trailing click can reach a head's onClick and fire that
+   column live. There is no JS pager here on purpose — a pointer-driven one
+   that let a short swipe inside one head land a click would fire it. */
+.pagerrow {
+  display: grid;
+  grid-template-columns: var(--size-remote-head-w) minmax(0, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.colpager {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  touch-action: pan-x;
+  scrollbar-width: none;
+  min-width: 0;
+}
+.colpager::-webkit-scrollbar { display: none; }
+/* one page is the whole width, so scrollLeft / clientWidth IS the page number,
+   and the four tracks inside it line up with the four pads under them */
+.colpage {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* ---- the grid itself ----------------------------------------------------- */
+/* 48px of head: the layer's key and the ✕, with its master under them. The
+   now-playing line goes — a look name in 48px is three characters — and the
+   head keeps saying the two things a thumb needs from it. */
+.app.remote .lookgrid { --size-layerhead-w: var(--size-remote-head-w); }
+.app.remote .layerhead {
+  padding: var(--space-1);
+  gap: var(--space-1);
+}
+.app.remote .layerhead .nowplaying { display: none; }
+/* every pixel of the 48 goes to the two things the head still says: the
+   layer's key and the ✕, which keeps its 24px touch target */
+.app.remote .layerhead .row { gap: 0; }
+/* In 48px of head the master is the bar the design draws — `4 ▮ ✕` — not a
+   labelled readout. Its 60px floor would spill the fader over the first pad
+   and take that pad's taps with it, and the level is spelled out in full on
+   the levels tier anyway. */
+.app.remote .layerhead .fader { min-width: 0; width: 100%; }
+.app.remote .layerhead .fader .val { display: none; }
+.app.remote .layerhead .btn.clearbtn { padding: 0; }
+/* The dial and group heads keep their word and nothing else: the prose line
+   and the `edit` / `all up` keys have no room beside it, and both are the
+   desk's affordances rather than the remote's. */
+.app.remote .controlhead .prose,
+.app.remote .controlhead .btn { display: none; }
+/* A press is a press: never a pan that follows it, never a double-tap zoom.
+   With the grid at 100% there is nothing under a pad to scroll anyway. */
+.app.remote .cell { touch-action: manipulation; }
+/* The dial and group rows keep the pad track's floor on a desk, where the row
+   is eight wide. Four to a page on glass, so the floor goes — a min-width here
+   is the one thing left that could push the grid past the window. */
+.app.remote .controlrow { min-width: 0; }
+.app.remote .controlrow::after { content: none; }
+.app.remote .controlrow .ctlcell,
+.app.remote .subcell {
+  min-width: 0;
+  max-width: none;
+}
+
+/* ---- the levels tier ----------------------------------------------------- */
+/* The layer masters, speed, haze and tap on one row near the bottom, where a
+   thumb is. It scrolls sideways when the rig has more layers than the glass
+   has room for: a level is a thing you reach for, not a thing you read, and
+   nothing on this row is a pad. */
+.remotelevels {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+  min-height: var(--size-panic-h-touch);
+  padding: var(--space-4) var(--space-8);
+  background: var(--panel);
+  overflow-x: auto;
+  touch-action: pan-x;
+  scrollbar-width: none;
+}
+.remotelevels::-webkit-scrollbar { display: none; }
+/* wide enough for the caption AND the reading: a master clipped to `10` is a
+   master you cannot read, and this row is the one place the numbers live */
+.remotelevels .fader { flex: 0 0 var(--size-master-w-narrow); }
+.remotelevels .tapkey { flex: 0 0 auto; }
+
+/* ---- the bottom bar, the tray and the editor ----------------------------- */
+/* On screen whenever a client is locked, remote or not: a laptop on the
+   network locks itself by default too, and the hold on the lock key is the
+   only way back to the Rig page and the setup surface. */
+.bottombar {
+  grid-row: -1;
+  grid-column: 1 / -1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  padding: var(--space-4) var(--space-8);
+  background: var(--panel);
+}
+.bottombar .lockbar { flex: 1 1 auto; min-width: 0; }
+.bottombar .lockbar .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bottomkeys {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+/* The tray — the desk's pull-out, not a hamburger. It opens over the grid from
+   the key that names it and holds the four surfaces a remote has no room to
+   keep on screen: the looks, what is held, the look editor and setup. */
+.traysheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  z-index: 56;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  padding: var(--space-8);
+  border-top: 1px solid var(--line);
+  box-shadow: var(--elevation-menu);
+}
+
+/* The library sheet opens under the fixed strip rather than over it: the two
+   keys in that strip are the two a hand must always find. */
+.app.remote .librarysheet { top: var(--size-panic-h-touch); }
+
+/* The editor over the whole screen, with its own stripe: on a phone there is
+   no column to put it beside, and the stripe is what says whether what you are
+   typing reaches the rig. The pane's own bar goes — its ▸ hides a column this
+   layout does not have — and the sheet's ✕ is the way out. */
+.editorsheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.editorsheet .sheetbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-8);
+  border-bottom: 1px solid var(--line);
+}
+.editorsheet .previzbar { display: none; }
+.editorsheet .editorbody { flex: 1 1 auto; min-height: 0; overflow: auto; }
+
+/* A toast lands top-right, which on 390px of glass is the whole width of the
+   song row and the page key — and a toast is a live element, so for as long as
+   it is up those two controls do not answer a tap. On the remote it goes to
+   the foot of the grid instead, clear of the levels tier and the bottom bar,
+   where what it covers for a moment is a level and not a cue. */
+.app.remote .toasts {
+  top: auto;
+  bottom: calc(var(--size-panic-h-touch) + var(--size-btn) + var(--space-8));
+  left: var(--space-12);
+  max-width: none;
+  pointer-events: none;
+}
+.app.remote .toast { pointer-events: auto; }
+
+/* ---- what a locked client does not have --------------------------------- */
+/* Locked is the pads and nothing else: no Rig page, no sheets but help, the
+   levels and the song picker — and every performing control still working,
+   because a lock that stopped the show would be worse than the elbow it exists
+   to stop. The view keys and the cog are the two ways off this page, so they
+   are the two that wait for the unlock. */
+.app.locked .viewseg,
+.app.locked .statusline .btn.cog { display: none; }
+/* The quiet half of the status line is the show file and the learn arm — save,
+   undo, redo, the clock switches, MIDI learn. Pads keeps none of them on screen
+   anyway; this holds while the client's remembered view is something else, so
+   the lock does not depend on which page it was left on. The help key, the
+   lamps and anything the strip handed down stay: those are the rig. */
+.app.locked .statusline .linequiet { display: none; }

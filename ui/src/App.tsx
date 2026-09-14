@@ -4,7 +4,7 @@ import { useStore, BUILD_OPENS, PADS_OPENS, type BandView, type ViewMode } from 
 import { runShortcut } from './shortcuts.ts';
 import { DialogHost } from './dialog.tsx';
 import { TopBar } from './components/TopBar.tsx';
-import { LookGrid } from './components/LookGrid.tsx';
+import { LookGrid, headName } from './components/LookGrid.tsx';
 import { BottomPanel } from './components/BottomPanel.tsx';
 import { PrevizPanel } from './components/PrevizPanel.tsx';
 import { LibrarySheet, LookLibrary } from './components/LookLibrary.tsx';
@@ -21,6 +21,13 @@ import { WelcomeCard, welcomeSeen } from './components/WelcomeCard.tsx';
 import { updateAvailable, updateStatus } from './update.ts';
 import { size, sizeTouch, space } from './tokens.ts';
 import { APC_LAYER_ROWS } from './apcFeedback.ts';
+import { Fader } from './components/Fader.tsx';
+import { HeldChip } from './components/HeldChip.tsx';
+import { LockBar } from './components/setup/LockBar.tsx';
+import { useLocked } from './lockStore.ts';
+import { useRemote } from './remoteStore.ts';
+import { openLibrarySheet } from './libraryStore.ts';
+import './styles/remote.css';
 
 /** Keeps one crashing region from blanking the whole console mid-show: the
  *  grid, masters, and blackout survive a previz or editor exception. */
@@ -61,7 +68,21 @@ export function App() {
   const hasProject = useStore((s) => !!s.project);
   const connected = useStore((s) => s.connected);
   const engineStalled = useStore((s) => s.engineStalled);
-  const view = useStore((s) => s.view);
+  const viewPref = useStore((s) => s.view);
+  // The two layout states this file owns beside the window itself.
+  //
+  // `remote` is design 2.11: touch on and a window under 900px — the phone,
+  // never the 1024 tablet, which is Pads at touch density. `locked` is the
+  // client's own lock (lockStore), on by default on glass and on anything that
+  // is not the engine's own host. Both resolve to the SAME Pads view over the
+  // same components; neither is a fork.
+  const remote = useRemote((s) => s.remote);
+  const locked = useLocked();
+  const latched = useRemote((s) => s.latch);
+  // Locked is the pads and nothing else, and the remote IS the pads — so the
+  // saved view is remembered but not obeyed until the lock comes off. Every
+  // performing control keeps working; what goes is the Rig page and the panels.
+  const view: ViewMode = remote || locked ? 'pads' : viewPref;
   const previzHidden = useStore((s) => s.previzHidden);
   const togglePreviz = useStore((s) => s.togglePreviz);
   const libraryHiddenPref = useStore((s) => s.libraryHidden);
@@ -107,8 +128,11 @@ export function App() {
   }, [hasProject, connected, engineStalled]);
   const stripW = touch ? sizeTouch.strip : size.strip;
   const floors = panelFloors(stripW);
-  const libraryFits = win.w >= floors.library;
-  const editorFits = win.w >= floors.editor;
+  // A locked client has no side panels and no reveal strips: they open the
+  // library and the editor, and locked those are reached through the tray —
+  // or not at all. The remote is below both floors anyway.
+  const libraryFits = !locked && win.w >= floors.library;
+  const editorFits = !locked && win.w >= floors.editor;
   const roomForBoth = win.w >= floors.both;
   let libraryHidden = libraryHiddenPref || !libraryFits;
   let editorHidden = editorHiddenPref || !editorFits;
@@ -178,7 +202,10 @@ export function App() {
   // not define, and the whole screen blank.
   const bandPref = bandView === null || !previzHidden[bandView];
   const fit = view === 'pads' ? padsFit(win.h, chromeH, stripH, bandPref) : null;
-  const bandHidden = !bandPref || (fit?.bandFolds ?? false);
+  // On the remote the band is not folded, it is absent: 390px of glass holds
+  // the strip, the pads and the levels, and a stage view on it would be a
+  // picture of the room you are standing in (design 2.11).
+  const bandHidden = remote || !bandPref || (fit?.bandFolds ?? false);
   /** Pads and Build keep separate band heights: Pads opens at a fraction of
    *  the window, Build at the audition's own height (design 2.8). */
   const bandKey: keyof Layout = view === 'split' ? 'buildH' : 'bandH';
@@ -258,7 +285,10 @@ export function App() {
 
   return (
     <div
-      className={`app view-${view} ${bandHidden ? 'previz-off' : ''} ${touch ? 'touch' : ''} ${helpMode ? 'helpmode' : ''} ${fit?.groupsFolded ? 'groups-folded' : ''} ${fit?.padsShort ? 'pads-short' : ''}`}
+      // `previz-off` is the band's reveal strip, which the remote does not
+      // have — its own template has no track for one, and carrying the class
+      // would only hand theme.css a template of the same weight as this one.
+      className={`app view-${view} ${bandHidden && !remote ? 'previz-off' : ''} ${touch ? 'touch' : ''} ${remote ? 'remote' : ''} ${locked ? 'locked' : ''} ${helpMode ? 'helpmode' : ''} ${fit?.groupsFolded ? 'groups-folded' : ''} ${fit?.padsShort ? 'pads-short' : ''}`}
       style={{
         ['--previz-h' as string]: `${layout[bandKey]}px`,
         ['--bottom-h' as string]: `${layout.bottomH}px`,
@@ -280,7 +310,21 @@ export function App() {
             : 'ENGINE OFFLINE — reconnecting… nothing you press is reaching the rig'}
         </div>
       )}
-      <Region name="top bar"><TopBar onOpenAdmin={() => openSetup()} updateWaiting={updateWaiting} trialDaysLeft={trialDaysLeft} /></Region>
+      {/* The fixed strip (design 2.11). On the remote the command strip keeps
+          its panic track and gives up everything else — the view keys, the
+          tempo block, the show's name: a locked phone steers by none of them —
+          and the master and the lamp ride beside the pair at
+          --size-panic-h-touch. The top bar itself is unchanged, because the
+          two keys in that track are two of the five gestures that reach the
+          rig and they may not be re-implemented anywhere. */}
+      {remote ? (
+        <div className="remotetop">
+          <Region name="top bar"><TopBar onOpenAdmin={() => openSetup()} updateWaiting={updateWaiting} trialDaysLeft={trialDaysLeft} /></Region>
+          <RemoteMaster />
+        </div>
+      ) : (
+        <Region name="top bar"><TopBar onOpenAdmin={() => openSetup()} updateWaiting={updateWaiting} trialDaysLeft={trialDaysLeft} /></Region>
+      )}
       {/* Unmounted, not hidden — for the collapsed band too. A previz left
           mounted behind another panel keeps its requestAnimationFrame loop and
           its WebGL context running for a view nobody is looking at — on a
@@ -295,7 +339,10 @@ export function App() {
           <Region name="previz"><PrevizPanel preview={view !== 'patch'} /></Region>
         </div>
       )}
-      {bandHidden && (
+      {/* The band's reveal strip — never on the remote, which has no band to
+          reveal and no grid track to put a strip in: rendered there it takes a
+          column of its own and 50px off the pads. */}
+      {bandHidden && !remote && (
         <div
           className="previzstrip"
           role="button"
@@ -315,9 +362,23 @@ export function App() {
         <Splitter dir="h" area="psplit" onDrag={(d) => resize(bandKey, d)} />
       )}
       {(view === 'split' || view === 'pads') && (
-        <div className="gridwrap">
+        // The latch takes the same cyan wash MIDI learn does, because it is the
+        // same arm shape: the grid is a surface you are pointing at, not one
+        // you are playing (design 2.11).
+        <div className={`gridwrap ${latched ? 'learn' : ''}`}>
           <Region name="look grid"><LookGrid /></Region>
         </div>
+      )}
+      {/* The levels tier and the bottom bar are auto-placed rows under the
+          grid: no template names them, so they sit below whatever template the
+          view is using rather than making the remote a second set of them. */}
+      {remote && <Region name="levels"><RemoteLevels /></Region>}
+      {/* On glass the bar stays after the unlock: the tray is how a tablet
+          reaches the library and the editor (design 2.11), and the lock key is
+          how it goes back to being locked. A desk client sees it only while it
+          is locked — unlocked, it has the setup surface and the panels. */}
+      {(touch || locked) && (
+        <Region name="lock bar"><BottomBar locked={locked} /></Region>
       )}
       {view === 'pads' && !libraryHidden && (
         <Splitter dir="v" area="lsplit" onDrag={(d) => resize('libraryW', -d)} />
@@ -378,20 +439,244 @@ export function App() {
       <SetupGuide />
       {shortcuts && <ShortcutSheet onClose={() => setShortcuts(false)} />}
       {/* After the licence gate by construction: that returns early above. */}
-      {welcome && <WelcomeCard onClose={() => setWelcome(false)} />}
+      {welcome && !locked && <WelcomeCard onClose={() => setWelcome(false)} />}
       <HelpOverlay />
       {/* One sheet for output, sync, display, lock, licence and updates —
           always mounted, drawing nothing until something opens it, because the
           layout menu can load a controller preset without opening it and the
-          undo chip for that has to outlive the sheet. */}
-      <SetupSheet onOpenShortcuts={() => setShortcuts(true)} />
+          undo chip for that has to outlive the sheet.
+
+          Locked, it is not mounted at all: "no sheets but help, levels and the
+          song picker" (design 2.11). Nothing is stranded by that — the lock bar
+          is on screen the whole time a client is locked, and the hold on its
+          key is what brings the setup surface back. */}
+      {!locked && <SetupSheet onOpenShortcuts={() => setShortcuts(true)} />}
       {/* The library laid over the grid, for every window too narrow to hold a
           column beside eight pads, and for glass. The Find field is the one
-          way to ask the show a question — and only a song hit moves a light. */}
-      <LibrarySheet />
-      <Find />
+          way to ask the show a question — and only a song hit moves a light.
+          Both are sheets, so both wait for the unlock. */}
+      {!locked && <LibrarySheet />}
+      {!locked && <Find />}
       <DialogHost />
     </div>
+  );
+}
+
+/** The master and the lamp, beside the panic pair on the remote's fixed strip
+ *  (design 2.11). The master is the same Fader every other master on the desk
+ *  is; the lamp is a readout and nothing more — going live is a setup action,
+ *  and a locked phone at front of house is not where it is taken. */
+function RemoteMaster() {
+  const master = useStore((s) => s.snap?.master);
+  const live = useStore((s) => s.snap?.transmit) === true;
+  const connected = useStore((s) => s.connected);
+  const engineStalled = useStore((s) => s.engineStalled);
+  const send = useStore((s) => s.send);
+  const lost = !connected || engineStalled;
+  return (
+    <div className="remotemaster">
+      <Fader
+        label="master"
+        help="grand master — scales everything the show puts out. Double-tap for full"
+        value={master ?? 1}
+        onChange={(v) => send({ type: 'setMaster', v })}
+        def={1}
+        learn={{ kind: 'grand' }}
+        variant="dim"
+        width="100%"
+      />
+      <div
+        className={`remotelamp ${lost ? 'lost' : live ? 'live' : ''}`}
+        title={
+          lost
+            ? 'the engine is not answering — nothing you press here is reaching the rig'
+            : live
+              ? 'the rig is receiving what this screen is playing'
+              : 'nothing is reaching the rig. The show is running; the output gate is shut'
+        }
+      >
+        <i className="lamp" aria-hidden="true" />
+        <span className="label">{lost ? 'no engine' : live ? 'live' : 'offline'}</span>
+      </div>
+    </div>
+  );
+}
+
+/** The levels tier (design 2.11): the layer masters, speed, haze and tap on one
+ *  row near the bottom, where a thumb is. It scrolls sideways when the rig has
+ *  more layers than the glass has room for — a level is a thing you reach for,
+ *  not a thing you read, and nothing here is a pad. */
+function RemoteLevels() {
+  const layers = useStore((s) => s.project?.layers);
+  const speed = useStore((s) => s.snap?.speed);
+  const haze = useStore((s) => s.snap?.haze);
+  const frozen = useStore((s) => s.snap?.frozen) === true;
+  const send = useStore((s) => s.send);
+  // top of the stack first, the way the grid stacks them
+  const order = [...(layers ?? [])].reverse();
+  return (
+    <div className="remotelevels">
+      {order.map((l) => (
+        <Fader
+          key={l.id}
+          label={headName(l.name)}
+          help={`${l.name} master — scales everything this layer puts out. Double-tap for full`}
+          value={l.master}
+          onChange={(v) => send({ type: 'setLayerMaster', layerId: l.id, v })}
+          def={1}
+          variant="dim"
+          learn={{ kind: 'layerMaster', layerId: l.id }}
+        />
+      ))}
+      <Fader
+        label="speed"
+        help="how fast every effect in the show runs, against the tempo"
+        min={-2}
+        max={2}
+        def={0}
+        value={Math.log2(speed ?? 1)}
+        fmt={(v) => `${Math.pow(2, v).toFixed(2)}×`}
+        onChange={(v) => send({ type: 'setSpeed', v: Math.pow(2, v) })}
+        learn={{ kind: 'speed' }}
+        variant="dim"
+      />
+      <Fader
+        label="haze"
+        help="how much haze the machine puts out — the beams are only as visible as the air"
+        value={haze ?? 0}
+        onChange={(v) => send({ type: 'setHaze', v })}
+        def={0}
+        learn={{ kind: 'haze' }}
+        variant="dim"
+      />
+      <button
+        className="btn tapkey"
+        title="tap the beat — four taps sets the tempo, and every tap also lands the downbeat"
+        onClick={() => {
+          if (!useStore.getState().armLearn({ kind: 'tap' })) send({ type: 'tap' });
+        }}
+      >
+        tap
+      </button>
+      {/* Freeze rides here because the lock promises it: locked is the pads and
+          nothing else, and pads, columns, songs, dials, groups, masters,
+          blackout, all stop and freeze all keep working. The strip it normally
+          sits on is not on this screen, so the key moves rather than the
+          promise. Same command, same words as the desk's own. */}
+      <button
+        className={`btn ${frozen ? 'warn on' : 'ghost'}`}
+        title={
+          frozen
+            ? 'HELD — the rig is repeating the frame it was on, and the show is still running underneath. Tap to let it through.'
+            : 'hold the rig on the frame it is showing, set up the next column, then release'
+        }
+        onClick={() => send({ type: 'setFreeze', v: !frozen })}
+      >
+        {frozen ? 'held' : 'freeze'}
+      </button>
+    </div>
+  );
+}
+
+/** The bottom bar: the lock line, and beside it the tray, the edit latch and
+ *  the help key (design 2.11).
+ *
+ *  It is on screen whenever a client is locked, remote or not — a laptop on the
+ *  network locks itself by default too, and the hold on this key is the only
+ *  way back to the Rig page and the setup surface. */
+function BottomBar({ locked }: { locked: boolean }) {
+  const [tray, setTray] = useState(false);
+  const [editor, setEditor] = useState(false);
+  const helpMode = useStore((s) => s.helpMode);
+  const setHelpMode = useStore((s) => s.setHelpMode);
+  const latched = useRemote((s) => s.latch);
+  const toggleLatch = useRemote((s) => s.toggleLatch);
+  // A lock closes the tray with it: everything in the tray is a sheet, and
+  // locked there are no sheets but help, the levels and the song picker.
+  useEffect(() => {
+    if (!locked) return;
+    setTray(false);
+    setEditor(false);
+  }, [locked]);
+  return (
+    <>
+      <div className="bottombar">
+        <LockBar />
+        <div className="bottomkeys">
+          {!locked && (
+            <button
+              className={`btn tray ${tray ? 'on' : ''}`}
+              aria-expanded={tray}
+              title="the tray — the looks, what is held, the look editor and the setup surface"
+              onClick={() => setTray((o) => !o)}
+            >
+              tray {tray ? '▾' : '▴'}
+            </button>
+          )}
+          {!locked && (
+            <button
+              className={`btn latchkey ${latched ? 'on' : ''}`}
+              aria-pressed={latched}
+              title={
+                latched
+                  ? 'the grid is latched for editing: a tap selects a pad, a hold opens its menu, and nothing fires. Tap to let it play again (keyboard: E)'
+                  : 'latch the grid for editing — while it is on, a tap selects a pad instead of firing it (keyboard: E)'
+              }
+              onClick={() => toggleLatch()}
+            >
+              edit {latched ? '●' : '○'}
+            </button>
+          )}
+          <button
+            className={`btn help ${helpMode ? 'on' : ''}`}
+            aria-pressed={helpMode}
+            title="help — tap anything to find out what it does"
+            onClick={() => setHelpMode(!helpMode)}
+          >
+            ?
+          </button>
+        </div>
+        {tray && !locked && (
+          <div className="traysheet panel">
+            <button
+              className="btn small ghost"
+              title="the look library — tap a look to arm it, then a pad’s name to put it there"
+              onClick={() => { setTray(false); openLibrarySheet(); }}
+            >
+              looks
+            </button>
+            <button
+              className="btn small ghost"
+              title="the look editor, over the whole screen — what the selected pad is playing, and every part of it"
+              onClick={() => { setTray(false); setEditor(true); }}
+            >
+              look editor
+            </button>
+            <button
+              className="btn small ghost"
+              title="output, sync, display, the lock and the licence"
+              onClick={() => { setTray(false); openSetup(); }}
+            >
+              setup
+            </button>
+            {/* What is standing between the show and the room, with the verb
+                that ends it. It draws nothing at all when nothing is held. */}
+            <HeldChip />
+          </div>
+        )}
+      </div>
+      {editor && !locked && (
+        <div className="editorsheet panel">
+          <div className="sheetbar">
+            <span className="label">look editor</span>
+            <button className="btn small ghost" title="close the look editor" onClick={() => setEditor(false)}>
+              ✕
+            </button>
+          </div>
+          <Region name="look editor"><EditorPane /></Region>
+        </div>
+      )}
+    </>
   );
 }
 
