@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { Glyph } from '../glyphs.tsx';
 import { useStore } from '../store.ts';
 import { LookEditor } from './LookEditor.tsx';
 
@@ -29,7 +30,7 @@ export function EditorPane() {
           title="hide the look editor — the pad grid takes the width"
           onClick={() => setEditorHidden(true)}
         >
-          ▸
+          <Glyph name="chevron" alone />
         </button>
         <span className="label">look editor</span>
         {ride && <span className="label" style={{ color: 'var(--warn)' }}>nudging</span>}

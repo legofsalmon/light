@@ -20,6 +20,7 @@ import { ShortcutSheet } from './components/ShortcutSheet.tsx';
 import { WelcomeCard, welcomeSeen } from './components/WelcomeCard.tsx';
 import { updateAvailable, updateStatus } from './update.ts';
 import { size, sizeTouch, space } from './tokens.ts';
+import { Glyph } from './glyphs.tsx';
 import { APC_LAYER_ROWS } from './apcFeedback.ts';
 import { Fader } from './components/Fader.tsx';
 import { HeldChip } from './components/HeldChip.tsx';
@@ -358,7 +359,7 @@ export function App() {
           onClick={() => { if (bandView && !fit?.bandFolds) togglePreviz(bandView); }}
           onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && bandView && !fit?.bandFolds) { e.preventDefault(); togglePreviz(bandView); } }}
         >
-          <span className="label">stage ▾</span>
+          <span className="label">stage <Glyph name="chevron" /></span>
         </div>
       )}
       {view !== 'previz' && !bandHidden && (
@@ -403,7 +404,7 @@ export function App() {
           onClick={revealLibrary}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); revealLibrary(); } }}
         >
-          <span className="label">looks ◂</span>
+          <span className="label">looks <Glyph name="chevron" /></span>
         </div>
       )}
       {/* The look editor as a column: build the next song without leaving the
@@ -426,7 +427,7 @@ export function App() {
           onClick={revealEditor}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); revealEditor(); } }}
         >
-          <span className="label">editor ◂</span>
+          <span className="label">editor <Glyph name="chevron" /></span>
         </div>
       )}
       {/* No splitter under Build's context row: the row is a fixed
@@ -613,7 +614,7 @@ function BottomBar({ locked }: { locked: boolean }) {
               title="the tray — the looks, what is held, the look editor and the setup surface"
               onClick={() => setTray((o) => !o)}
             >
-              tray {tray ? '▾' : '▴'}
+              tray <Glyph name="tray" />
             </button>
           )}
           {!locked && (
@@ -673,7 +674,7 @@ function BottomBar({ locked }: { locked: boolean }) {
           <div className="sheetbar">
             <span className="label">look editor</span>
             <button className="btn small ghost" title="close the look editor" onClick={() => setEditor(false)}>
-              ✕
+              <Glyph name="clear" alone />
             </button>
           </div>
           <Region name="look editor"><EditorPane /></Region>

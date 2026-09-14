@@ -74,7 +74,7 @@ function ProjectMenu({ name, short }: { name: string; short: boolean }) {
         title={short ? `${name} — projects` : 'projects'}
         onClick={openMenu}
       >
-        {short ? '▾' : `${name} ▾`}
+        {short ? <Glyph name="chevron" alone /> : <>{name} <Glyph name="chevron" /></>}
       </button>
       {open && (
         <div className="popover" style={{ top: pos.top, left: pos.left }}>

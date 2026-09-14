@@ -8,6 +8,7 @@ import { LONG_PRESS_MS, contextPress } from '../touch.ts';
 /** A finger wobbles on a hold; a scroll travels. Same slop touch.ts uses. */
 const HOLD_SLOP = 8;
 import { size } from '../tokens.ts';
+import { Glyph } from '../glyphs.tsx';
 import { registerShortcutActions } from '../shortcuts.ts';
 
 /** Below this grid-area width the layer head is its narrow 96px (design 2.2).
@@ -517,7 +518,7 @@ const Cell = React.memo(function Cell({
               padMenu.onPointerUp?.(e);
             }}
           >
-            {look.steps?.length ? '⛓ ' : ''}{look.name}
+            {look.steps?.length ? <Glyph name="chain" /> : null}{look.name}
           </div>
           {fading && <div className="fadebar" style={{ width: `${fadeT * 100}%` }} />}
         </>
@@ -668,7 +669,7 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
             }
           }}
         >
-          ✕
+          <Glyph name="clear" alone />
         </button>
       </div>
       <div
@@ -873,7 +874,7 @@ function DeckBar() {
           setPicker((o) => !o);
         }}
       >
-        {songNo(active)} · {active?.name ?? '—'} ▾
+        {songNo(active)} · {active?.name ?? '—'} <Glyph name="chevron" />
       </button>
       {picker && (
         <div className="popover songpicker" style={{ top: pickerPos.top, left: pickerPos.left }} role="listbox">
@@ -931,7 +932,7 @@ function DeckBar() {
           if (j !== i) send({ type: 'switchDeck', deckId: decks[j].id });
         }}
       >
-        ◀
+        <Glyph name="prev" alone />
       </button>
       {remote && songChip}
       <button
@@ -945,7 +946,7 @@ function DeckBar() {
           if (j !== i) send({ type: 'switchDeck', deckId: decks[j].id });
         }}
       >
-        ▶
+        <Glyph name="next" alone />
       </button>
       {!remote && songChip}
       {!remote && decks.length > 1 && (() => {
@@ -1024,7 +1025,7 @@ function DeckBar() {
           }
           onClick={() => { void addSong('empty'); }}
         >
-          + song ▾
+          + song <Glyph name="chevron" />
         </button>
       )}
       {/* What is standing between the show and the room, beside the song it is
@@ -1634,7 +1635,7 @@ export function LookGrid() {
             a pad here, ■ when none does — an all-empty column clears every
             layer, which is a cue in its own right and used to look exactly
             like a column that would light the room. */}
-        {!inert && <span className="colmark" aria-hidden="true">{colStates[col].has ? '▶' : '■'}</span>}
+        {!inert && <span className="colmark"><Glyph name={colStates[col].has ? 'play' : 'stop'} /></span>}
         {col + 1} · {name}
         {/* the crossfade running into this column, on the head that fired it */}
         {!editing && colStates[col].t < 1 && (
