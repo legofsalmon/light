@@ -510,6 +510,7 @@ function RemoteLevels() {
   const layers = useStore((s) => s.project?.layers);
   const speed = useStore((s) => s.snap?.speed);
   const haze = useStore((s) => s.snap?.haze);
+  const frozen = useStore((s) => s.snap?.frozen) === true;
   const send = useStore((s) => s.send);
   // top of the stack first, the way the grid stacks them
   const order = [...(layers ?? [])].reverse();
@@ -556,6 +557,22 @@ function RemoteLevels() {
         }}
       >
         tap
+      </button>
+      {/* Freeze rides here because the lock promises it: locked is the pads and
+          nothing else, and pads, columns, songs, dials, groups, masters,
+          blackout, all stop and freeze all keep working. The strip it normally
+          sits on is not on this screen, so the key moves rather than the
+          promise. Same command, same words as the desk's own. */}
+      <button
+        className={`btn ${frozen ? 'warn on' : 'ghost'}`}
+        title={
+          frozen
+            ? 'HELD — the rig is repeating the frame it was on, and the show is still running underneath. Tap to let it through.'
+            : 'hold the rig on the frame it is showing, set up the next column, then release'
+        }
+        onClick={() => send({ type: 'setFreeze', v: !frozen })}
+      >
+        {frozen ? 'held' : 'freeze'}
       </button>
     </div>
   );

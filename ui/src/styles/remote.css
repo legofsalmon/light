@@ -300,3 +300,9 @@
    are the two that wait for the unlock. */
 .app.locked .viewseg,
 .app.locked .statusline .btn.cog { display: none; }
+/* The quiet half of the status line is the show file and the learn arm — save,
+   undo, redo, the clock switches, MIDI learn. Pads keeps none of them on screen
+   anyway; this holds while the client's remembered view is something else, so
+   the lock does not depend on which page it was left on. The help key, the
+   lamps and anything the strip handed down stay: those are the rig. */
+.app.locked .statusline .linequiet { display: none; }
