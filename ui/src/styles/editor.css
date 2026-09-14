@@ -167,3 +167,29 @@
   box-shadow: inset 0 0 0 1px var(--warn);
   pointer-events: none;
 }
+
+/* What a control already answers to, printed on it while learn is armed
+   (design #32). Hot where a key drives something ELSE as well, because a press
+   then does both; dim where nothing is bound, which is the answer you came for
+   as often as not. */
+.fader .bindtag {
+  position: absolute;
+  left: var(--space-4);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  pointer-events: none;
+  font-family: var(--mono);
+  font-size: var(--text-micro-size);
+  letter-spacing: var(--text-micro-tracking);
+  color: var(--text);
+  background: var(--color-overlay-veil);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - var(--size-value-w) - var(--space-8));
+}
+.fader .bindtag.clash { color: var(--hot); }
+.fader .bindtag.unbound { color: var(--text-faint); }

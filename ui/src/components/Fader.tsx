@@ -3,6 +3,7 @@ import type { MidiAction } from '../../../shared/types.ts';
 import { clamp } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
 import { hardwareAt } from '../midiPos.ts';
+import { bindingOf } from '../midiBindings.ts';
 import { size } from '../tokens.ts';
 import '../styles/editor.css';
 
@@ -60,6 +61,7 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
   const project = useStore((st) => st.project);
   const hw = hardwareAt(project, midiCc, learn);
   const learnMode = useStore((s) => s.learnMode);
+  const binding = learnMode && learn ? bindingOf(project, learn) : null;
   const learnTarget = useStore((s) => s.learnTarget);
   const armed = !!learn && !!learnTarget && JSON.stringify(learnTarget) === JSON.stringify(learn);
 
@@ -218,6 +220,16 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
           screen, the physical control is wherever it was left, and the next
           touch of it JUMPS the value there. This is the warning that the jump
           is coming, and roughly how far. */}
+      {/* While learn is armed, every mappable control says what it already
+          answers to — or that nothing does (design #32, A48). Arena prints the
+          same thing for the same reason: the questions learn mode cannot
+          answer are exactly the ones worth asking at 1 a.m. A key shared with
+          a DIFFERENT control reads hot, because a press then does both. */}
+      {learnMode && learn && (
+        <div className={`bindtag ${binding?.clash ? 'clash' : ''} ${binding ? '' : 'unbound'}`} aria-hidden="true">
+          {binding ? binding.text : 'unbound'}
+        </div>
+      )}
       {hw !== null && Math.abs(hw - norm) > HW_SLOP && (
         <div
           className="hwtick"
