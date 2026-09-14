@@ -497,7 +497,7 @@ const BLEND_WORD: Record<LayerBlend, string> = { normal: 'replaces', multiply: '
  *  to `L4` in text/key (design 3.2) — when the layer still has its default
  *  name; a layer the owner has named keeps its word. The full name stays in
  *  the head's help. */
-const headName = (name: string): string => name.replace(/^layer\s+(\d+)$/i, 'L$1');
+export const headName = (name: string): string => name.replace(/^layer\s+(\d+)$/i, 'L$1');
 const BLENDS: LayerBlend[] = ['normal', 'multiply', 'htp'];
 
 /** The layer head (design 2.4): line 1 the name in text/key beside a ✕ that is
