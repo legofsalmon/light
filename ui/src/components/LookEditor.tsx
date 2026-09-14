@@ -10,6 +10,7 @@ import { TextField } from './inputs.tsx';
 import { useStore } from '../store.ts';
 import { askConfirm } from '../dialog.tsx';
 import { BeatsInput, FadeInput } from './editor/fields.tsx';
+import { OffsetDials } from './editor/OffsetDials.tsx';
 import { PartEditor } from './editor/PartEditor.tsx';
 import '../styles/editor.css';
 
@@ -247,6 +248,13 @@ export function LookEditor() {
           ⋯
         </button>
       </div>
+
+      {/* The look ridden whole (A41): four dials that offset every part at
+          once, down the same soft path a fader nudge takes — so the held chip
+          counts them, Keep writes them in and Discard drops them. A steps look
+          has no parts of its own to offset; its steps are ridden in their own
+          pads. */}
+      {!look.steps?.length && <OffsetDials lookId={lookId} look={look} />}
 
       {shared && (
         <>

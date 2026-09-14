@@ -1,0 +1,43 @@
+/* ---------- the look's four offset dials (design A41, #44) ----------
+   Tokens only, exactly like theme.css — check-tokens.mjs walks every
+   stylesheet under ui/src and this one is not special.
+
+   A short row under the header's first line: four dials that ride the whole
+   look at once. They are nudges, so nothing here is lit — a nudge is amber,
+   and the only mark in the row is the amber one beside a dial that is off its
+   neutral. */
+.offsetrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  margin-top: var(--space-6);
+}
+
+.offsetdial {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* Nothing in the look carries this one — a look with no movers has no aim to
+   swing — so the dial is there, greyed and inert, with its help saying why.
+   The same treatment (and the same value) as a parameter whose ⏻ is off. */
+.offsetdial.off .fader {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* The nudge mark the design gives every nudged control: this dial is holding
+   the look away from what it has stored. It sits on the dial's top-right
+   corner so it never covers the reading. */
+.offsetdial .offsetmark {
+  position: absolute;
+  top: calc(-1 * var(--space-2));
+  right: calc(-1 * var(--space-2));
+  width: var(--size-lamp);
+  height: var(--size-lamp);
+  border-radius: var(--radius-pill);
+  background: var(--color-status-nudge);
+  pointer-events: none;
+}

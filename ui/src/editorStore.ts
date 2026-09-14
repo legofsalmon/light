@@ -8,6 +8,7 @@
 // no business happening when a disclosure opens in the editor.
 
 import { create } from 'zustand';
+import { OFFSET_NEUTRAL, type LookOffsets, type OffsetDial } from './components/editor/offsets.ts';
 
 /** The five families the editor's part body offers, and the four the effects
  *  catalogue files its presets under (fxLibrary.ts) — one vocabulary, so
@@ -40,19 +41,15 @@ type EditorStore = {
    *  pointer while one is hovered */
   spreadPreview: SpreadPreview | null;
   setSpreadPreview: (p: SpreadPreview | null) => void;
-  /** the four per-look offset dials (A41), by look id — each a position the
-   *  editor fans out over the look's parts through the soft nudge path.
-   *  Screen state only: nothing here reaches the engine, and a look with no
-   *  nudges left on it reads as neutral however these were last left. */
+  /** where the four per-look offset dials (A41) are standing, by look id —
+   *  each a position the editor fans out over the look's parts through the
+   *  soft nudge path. Screen state only: what reaches the engine is the nudge,
+   *  and a look with no nudges left on it reads neutral again however these
+   *  were last left (OffsetDials.tsx watches for that). */
   offsets: Record<string, LookOffsets>;
   setOffset: (lookId: string, dial: OffsetDial, v: number) => void;
   clearOffsets: (lookId: string) => void;
 };
-
-/** The four dials, and the value at which each does nothing. */
-export type OffsetDial = 'hue' | 'dimmer' | 'pan' | 'size';
-export type LookOffsets = Record<OffsetDial, number>;
-export const OFFSET_NEUTRAL: LookOffsets = { hue: 0, dimmer: 1, pan: 0, size: 1 };
 
 export const useEditorStore = create<EditorStore>((set) => ({
   feature: {},

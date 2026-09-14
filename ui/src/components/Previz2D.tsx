@@ -283,16 +283,19 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
       const headSrc = source === 'preview' ? (previewHeads ?? []) : (snap?.heads ?? []);
       for (const hs of headSrc) headMap.set(`${hs.f}:${hs.h}`, hs);
 
-      // The two overlays (A38, A39), on the live plan only: the audition
-      // beside it is the view that says what a look DOES, and this one says
-      // where it lands — drawing the second over the first would crowd the
-      // one small canvas whose whole job is the look's shape on stage.
+      // The reach goes on the LIVE plan only. The audition is the pane that
+      // says what a look does; this says where it lands in the room, and
+      // outlining the look's own groups inside a view that is only ever that
+      // look would say nothing. The spread's numbers go on both: in Build the
+      // audition is the only plan there is, and that is where a spread is
+      // usually being built.
       const reach = source === 'live' ? reachByHead(project) : new Map<string, ReachGroup>();
-      const spread = source === 'live' ? spreadPreviewOf(project) : null;
+      const spread = spreadPreviewOf(project);
       const order = spread ? spreadOrderCached(project, spread.groupId, spread.fx) : null;
-      /** one I·C·P·B tag per reached group, over its leftmost head */
-      const tags = new Map<string, { x: number; y: number; kinds: string }>();
-      const nums: { x: number; y: number; n: number }[] = [];
+      /** one I·C·P·B tag per reached group, beside its leftmost outline */
+      const tags = new Map<string, { x0: number; x1: number; y: number; kinds: string }>();
+      /** one reading per fixture: which steps of the spread land on it */
+      const nums: { x: number; y: number; text: string }[] = [];
 
       const geom = geomOf(project);
       for (const f of project.fixtures) {
@@ -300,6 +303,14 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
         if (!prof) continue;
         const fx = m.toX(f.pos.x);
         const fy = m.toY(vertOf(f.pos, view));
+        // What this fixture contributes to the two overlays, gathered as its
+        // heads are drawn: the box that holds the heads one group reached, and
+        // the mean position of each distinct step of the spread. Both are per
+        // FIXTURE because a pixel strip is sixty emitters two millimetres
+        // apart on this canvas — a ring and a number on each would be a band
+        // of ink, not a reading.
+        const reached = new Map<string, { x0: number; x1: number; y0: number; y1: number; rad: number; group: ReachGroup }>();
+        const steps = { ranks: new Set<number>(), sx: 0, n: 0, top: Number.POSITIVE_INFINITY, rad: 0 };
         // Heads sit at their real world positions (shared geometry module) and
         // both views are honest projections of them: plan looks down (x, z),
         // front looks along z at (x, y) — so a yawed bar foreshortens in the
@@ -371,33 +382,85 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
             }
           }
 
-          // A38: the selected look reaches this head. A tungsten ring round
-          // the HEAD, where a fixture selected for patching takes a dashed
-          // cyan box round the whole FIXTURE (below) — a different shape, a
-          // different scope and a different colour, so "selected for patching"
-          // and "this look reaches here" can never read as the same mark.
+          // A38 / A39: what this head adds to the two overlays. Both are drawn
+          // once the fixture's heads are placed, below.
           const key = headKey(f.id, hi);
-          const reached = reach.get(key);
-          if (reached) {
-            const rr = rad * 2.1;
-            ctx.beginPath();
-            ctx.arc(hx, hy, rr, 0, Math.PI * 2);
-            ctx.strokeStyle = color['alpha/black-55'];
-            ctx.lineWidth = 3;
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(hx, hy, rr, 0, Math.PI * 2);
-            ctx.strokeStyle = color['live/default'];
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-            const had = tags.get(reached.groupId);
-            if (!had || hx < had.x) {
-              tags.set(reached.groupId, { x: hx, y: hy - rr - 4, kinds: reached.kinds.join('·') });
+          const inReach = reach.get(key);
+          if (inReach) {
+            const box = reached.get(inReach.groupId);
+            if (!box) reached.set(inReach.groupId, { x0: hx, x1: hx, y0: hy, y1: hy, rad, group: inReach });
+            else {
+              box.x0 = Math.min(box.x0, hx);
+              box.x1 = Math.max(box.x1, hx);
+              box.y0 = Math.min(box.y0, hy);
+              box.y1 = Math.max(box.y1, hy);
+              box.rad = Math.max(box.rad, rad);
             }
           }
-          // A39: and this is where it comes in the spread's order.
           const num = order?.get(key);
-          if (num !== undefined) nums.push({ x: hx + rad * 2.1 + 8, y: hy, n: num });
+          if (num !== undefined) {
+            steps.ranks.add(num);
+            steps.sx += hx;
+            steps.n += 1;
+            steps.top = Math.min(steps.top, hy);
+            steps.rad = Math.max(steps.rad, rad);
+          }
+        }
+
+        // A38: the selected look reaches these heads. A solid tungsten outline
+        // round the heads one group has HERE, where a fixture selected for
+        // patching takes a dashed cyan box round the whole fixture (below) —
+        // a different shape, a different colour and a different thing outlined,
+        // so "selected for patching" and "this look reaches here" can never
+        // read as the same mark.
+        for (const box of reached.values()) {
+          const pad = box.rad * 1.6;
+          const x = box.x0 - pad;
+          const y = box.y0 - pad;
+          const w = box.x1 - box.x0 + pad * 2;
+          const h = box.y1 - box.y0 + pad * 2;
+          const path = () => {
+            const r = Math.min(pad, w / 2, h / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + h, r);
+            ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r);
+            ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
+          };
+          path();
+          ctx.strokeStyle = color['alpha/black-55'];
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          path();
+          ctx.strokeStyle = color['live/default'];
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          const had = tags.get(box.group.groupId);
+          if (!had || x < had.x0) {
+            // beside the outline, not over it: above is where the spread's
+            // numbers go and below is the fixture's own name
+            tags.set(box.group.groupId, { x0: x, x1: x + w, y: y + h / 2 + 3, kinds: box.group.kinds.join('·') });
+          }
+        }
+        // A39: which steps of the spread land on this fixture. One reading a
+        // fixture, not one a head: a pixel strip is sixty-four emitters two
+        // millimetres apart on this canvas, and sixty-four numbered discs on
+        // one bar is a blot. So a fixture the spread gives one step reads that
+        // step — which is what "per strip" and a mirror fold both produce, and
+        // the pairing a fold makes is then visible across the row — and a
+        // fixture the spread runs THROUGH reads the span it runs, `1–8`, or
+        // its ends with an ellipsis when the steps it gets are scattered.
+        if (steps.n > 0) {
+          const ranks = [...steps.ranks].sort((a, b) => a - b);
+          const lo = ranks[0];
+          const hi = ranks[ranks.length - 1];
+          const text =
+            ranks.length === 1 ? `${lo}`
+              : ranks.length === hi - lo + 1 ? `${lo}–${hi}`
+                : `${lo}…${hi}`;
+          nums.push({ x: steps.sx / steps.n, y: steps.top - steps.rad - 5, text });
         }
 
         // selection ring (marquee-hover counts as selected-in-progress)
@@ -522,28 +585,33 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
         for (const tag of tags.values()) {
           if (!tag.kinds) continue;
           const tw = ctx.measureText(tag.kinds).width + 6;
+          // left of the outline, unless that runs off the canvas
+          const cx = tag.x0 - 4 - tw / 2 >= 2 ? tag.x0 - 4 - tw / 2 : tag.x1 + 4 + tw / 2;
           ctx.fillStyle = color['alpha/black-90'];
-          ctx.fillRect(tag.x - tw / 2, tag.y - 9, tw, 11);
+          ctx.fillRect(cx - tw / 2, tag.y - 9, tw, 11);
           ctx.fillStyle = color['live/default'];
-          ctx.fillText(tag.kinds, tag.x, tag.y);
+          ctx.fillText(tag.kinds, cx, tag.y);
         }
       }
       if (nums.length > 0) {
         ctx.font = 'bold 9px -apple-system, sans-serif';
         ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        for (const nm of nums) {
-          ctx.beginPath();
-          ctx.arc(nm.x, nm.y, 7, 0, Math.PI * 2);
+        // Two rows, packed left to right: `17–24` is wider than the gap
+        // between two strips on a club-sized plan, and a reading that sits on
+        // its neighbour is not a reading. A chip that will not fit beside the
+        // last one steps up a line instead of being dropped.
+        const rightOf = [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY];
+        for (const nm of [...nums].sort((a, b) => a.x - b.x)) {
+          const tw = ctx.measureText(nm.text).width + 7;
+          const left = nm.x - tw / 2;
+          const row = left >= rightOf[0] ? 0 : left >= rightOf[1] ? 1 : 0;
+          rightOf[row] = left + tw + 2;
+          const y = nm.y - row * 12;
           ctx.fillStyle = color['alpha/black-90'];
-          ctx.fill();
-          ctx.strokeStyle = color['live/dim'];
-          ctx.lineWidth = 1;
-          ctx.stroke();
+          ctx.fillRect(left, y - 9, tw, 11);
           ctx.fillStyle = color['live/default'];
-          ctx.fillText(String(nm.n), nm.x, nm.y);
+          ctx.fillText(nm.text, nm.x, y);
         }
-        ctx.textBaseline = 'alphabetic';
       }
 
       // marquee rectangle
@@ -901,7 +969,7 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
   return (
     <div ref={hostRef} style={{ position: 'absolute', inset: 0 }}>
       <canvas ref={canvasRef} />
-      {source === 'live' && <ReachLegend />}
+      <ReachLegend source={source} />
     </div>
   );
 }
@@ -913,13 +981,13 @@ export function Previz2D({ source = 'live' }: { source?: 'live' | 'preview' } = 
  *  because the plan has two homes — the stage band and the Rig page's plan
  *  column — and a caption that lives with the drawing is the same sentence in
  *  both of them. */
-function ReachLegend(): React.ReactElement | null {
+function ReachLegend({ source }: { source: 'live' | 'preview' }): React.ReactElement | null {
   const project = useStore((s) => s.project);
   const sel = useStore((s) => s.sel);
   const preview = useEditorStore((s) => s.spreadPreview);
 
   if (!project) return null;
-  const lookId = sel ? pageCells(project, sel.deckId, sel.layerId)[sel.col] ?? null : null;
+  const lookId = sel && source === 'live' ? pageCells(project, sel.deckId, sel.layerId)[sel.col] ?? null : null;
   const look = lookId && Object.hasOwn(project.looks, lookId) ? project.looks[lookId] : null;
   const groups = look ? lookReachCached(look, project) : [];
 
@@ -943,7 +1011,7 @@ function ReachLegend(): React.ReactElement | null {
       {fx && (
         <span
           className="planlegendchip"
-          title={`The order this spread hands its wave out across ${spreadGroup ?? 'the group'} — 1 is where the wave starts. Heads sharing a number run together, which is what a mirror fold and a buddy clump do.`}
+          title={`The order this spread hands its wave out across ${spreadGroup ?? 'the group'} — 1 is where the wave starts. Each fixture reads the step it gets, or the span that runs through it; two reading the same number run together, which is what a mirror fold and a buddy clump do.`}
         >
           spread order · {DISTRIBUTE_WORD[fx.distribute]}
         </span>

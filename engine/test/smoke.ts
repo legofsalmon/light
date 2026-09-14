@@ -2002,5 +2002,111 @@ await new Promise<void>((resolve) => {
   }
 }
 
+// --- the look's four offset dials (#44, A41) --------------------------------
+// They ride the existing soft nudge path, so the two things worth pinning are
+// which addresses each one reaches and the value it drives them at: a value
+// the engine's own door would reject is a dial that silently does nothing.
+{
+  const { OFFSET_DIALS, OFFSET_NEUTRAL, offsetTakers } = await import('../../ui/src/components/editor/offsets.ts');
+  const { softClamp } = await import('../../shared/types.ts');
+  type P = import('../../shared/types.ts').Project;
+  type L = import('../../shared/types.ts').Look;
+
+  const anyFixture = (id: string, profileId: string) => ({
+    id, name: id.toUpperCase(), profileId, universeId: 'u1', address: 1,
+    pos: { x: 0, y: 3, z: 0 }, rotY: 0,
+  });
+  const project = {
+    fixtures: [
+      anyFixture('p', 'generic-rgb-par-3ch'),
+      anyFixture('m', 'generic-mover-10ch'),
+      anyFixture('h', 'generic-hazer-2ch'),
+      anyFixture('d', 'generic-dimmer-1ch'),
+    ],
+    groups: [
+      { id: 'pars', name: 'Pars', heads: [{ fixtureId: 'p', head: 0 }] },
+      { id: 'movers', name: 'Movers', heads: [{ fixtureId: 'm', head: 0 }] },
+      { id: 'haze', name: 'Haze', heads: [{ fixtureId: 'h', head: 0 }] },
+      { id: 'dims', name: 'Dims', heads: [{ fixtureId: 'd', head: 0 }] },
+    ],
+    looks: {}, layers: [], columns: [],
+  } as unknown as P;
+
+  const anEffect = (id: string, size: number) => ({
+    id, target: 'dimmer', wave: 'sine', rate: 4, size, spread: 0, width: 0.5, phase: 0,
+    bypass: false, mix: 1, distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0,
+  });
+  const look = {
+    id: 'lk', name: 'Ride me',
+    parts: [
+      { id: 'a', groupId: 'pars', params: { dimmer: 0.8, color: { h: 350, s: 1 } }, effects: [anEffect('f1', 0.5)] },
+      { id: 'b', groupId: 'movers', params: { dimmer: 1, pan: 0.4, tilt: 0.6 }, effects: [anEffect('f2', 1)] },
+      // a hazer takes no brightness dial, and a plain dimmer channel has no
+      // colour to turn — a stored colour on it would never reach a lamp
+      { id: 'c', groupId: 'haze', params: { haze: 0.5, dimmer: 0.5 }, effects: [] },
+      { id: 'd', groupId: 'dims', params: { dimmer: 0.9, color: { h: 10, s: 1 } }, effects: [] },
+    ],
+  } as unknown as L;
+  const takers = offsetTakers(project, look);
+  const ids = (dial: 'hue' | 'dimmer' | 'pan' | 'size') => takers[dial].map((a) => a.partId).join(',');
+
+  check('offsets: hue reaches only the parts that set a colour on a group that has one', ids('hue') === 'a', ids('hue'));
+  check('offsets: dimmer skips the hazer, which takes no brightness', ids('dimmer') === 'a,b,d', ids('dimmer'));
+  check('offsets: pan reaches only the parts that aim a head', ids('pan') === 'b', ids('pan'));
+  check(
+    'offsets: size reaches every effect, addressed by effect',
+    takers.size.map((a) => a.effectId).join(',') === 'f1,f2',
+    takers.size.map((a) => a.effectId).join(','),
+  );
+  check(
+    'offsets: a steps look has no parts of its own to offset',
+    Object.values(offsetTakers(project, { id: 's', name: 'S', parts: [], steps: [{ lookId: 'lk', beats: 1 }] } as unknown as L))
+      .every((a) => a.length === 0),
+  );
+
+  const spec = (d: string) => OFFSET_DIALS.find((x) => x.dial === d)!;
+  check(
+    'offsets: every dial at its neutral leaves the stored value exactly as it is',
+    spec('hue').at(200, OFFSET_NEUTRAL.hue) === 200 && spec('dimmer').at(0.8, OFFSET_NEUTRAL.dimmer) === 0.8 &&
+      spec('pan').at(0.4, OFFSET_NEUTRAL.pan) === 0.4 && spec('size').at(0.5, OFFSET_NEUTRAL.size) === 0.5,
+  );
+  check(
+    'offsets: hue comes round the wheel rather than stopping at the end',
+    spec('hue').at(350, 30) === 20, `${spec('hue').at(350, 30)}`,
+  );
+  check('offsets: hue goes the other way round too', spec('hue').at(10, -30) === 340, `${spec('hue').at(10, -30)}`);
+  check('offsets: dimmer scales, and holds at full', spec('dimmer').at(0.8, 0.5) === 0.4 && spec('dimmer').at(0.8, 2) === 1);
+  check(
+    'offsets: pan swings, and holds at the ends',
+    spec('pan').at(0.4, 0.25) === 0.65 && spec('pan').at(0.4, 0.5) === 0.9 && spec('pan').at(0.9, 0.5) === 1,
+  );
+  check('offsets: size scales the swing flat and back', spec('size').at(0.5, 0) === 0 && spec('size').at(0.5, 2) === 1);
+
+  // nothing a dial can produce may be turned away at the engine's door: a
+  // value softClamp rewrites is a dial whose reading and whose rig disagree
+  let doorOk = true;
+  for (const d of OFFSET_DIALS) {
+    const field = d.dial === 'pan' ? 'pan' : d.dial === 'hue' ? 'hue' : d.dial === 'size' ? 'size' : 'dimmer';
+    for (let i = 0; i <= 20; i++) {
+      const v = d.min + ((d.max - d.min) * i) / 20;
+      for (const base of [0, 0.25, 0.5, 0.9, 1, 10, 200, 359]) {
+        const at = d.at(base, v);
+        if (softClamp(field, at) !== at) {
+          doorOk = false;
+          check(`offsets: ${d.dial} from ${base} at ${v} passes the engine's door`, false, `${at}`);
+        }
+      }
+    }
+  }
+  check('offsets: no dial position produces a value the engine would clamp', doorOk);
+
+  check(
+    'offsets: the readings follow the one number rule',
+    spec('hue').fmt(30) === '+30°' && spec('hue').fmt(0) === '0°' && spec('dimmer').fmt(0.5) === '0.50×' &&
+      spec('pan').fmt(0.12) === '+12\u2009%' && spec('size').fmt(1) === '1.00×',
+    [spec('hue').fmt(30), spec('dimmer').fmt(0.5), spec('pan').fmt(0.12), spec('size').fmt(1)].join(' '),
+  );
+}
+
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);
