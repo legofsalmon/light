@@ -13,6 +13,7 @@
 | `K` | keep the live nudges |
 | `D` | discard the live nudges |
 | `A` | select what the top layer is playing |
+| `E` | latch the grid for editing — nothing fires |
 | `⌘,` | settings |
 | `L` | open the look library |
 | `/` / `⌘F` | find a look, song, column, group or fixture |

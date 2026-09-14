@@ -279,6 +279,13 @@ const Cell = React.memo(function Cell({
   const face = look ? lookFace(look, project) : null;
   const editingDeckId = useEditingDeckId();
   const armedLook = useLibraryStore((s) => (s.armed ? project.looks[s.armed]?.name ?? null : null));
+  // The edit latch (design 2.11): the MIDI-learn arm shape, for the pads. While
+  // it is on the WHOLE pad is the select target — tap selects, hold opens the
+  // menu, a tap after arming a library tile places — and nothing fires. It is
+  // the same withholding an editing page does, so the two are one test here;
+  // the latch may never re-enable firing on a page the room is not playing.
+  const latched = useRemote((s) => s.latch);
+  const inert = editing || latched;
 
   // One press, two inputs. An empty pad is also where you START a look — the
   // editor invites "click an empty pad to create one" — so a stray press while
@@ -371,19 +378,38 @@ const Cell = React.memo(function Cell({
         placeLook(layer.id, col, id, deckId);
       }}
       title={
-        staleLive
-          ? `${look!.name} — “${liveName ?? 'the previous look'}” is still on stage from this column; fire this pad to swap`
-          : look
-            ? `${look.name} — click to fire`
-            : liveLookId
-              ? 'empty — click to select (layer keeps playing)'
-              : 'empty — click to stop the layer'
+        latched
+          ? look
+            ? `${look.name} — the grid is latched for editing: this selects it, and fires nothing`
+            : 'empty — the grid is latched for editing, so this selects the pad'
+          : staleLive
+            ? `${look!.name} — “${liveName ?? 'the previous look'}” is still on stage from this column; fire this pad to swap`
+            : look
+              ? `${look.name} — click to fire`
+              : liveLookId
+                ? 'empty — click to select (layer keeps playing)'
+                : 'empty — click to stop the layer'
       }
       role="button"
       tabIndex={0}
       aria-pressed={active}
       aria-label={look ? `${look.name} — ${layer.name}, column ${col + 1}` : `empty pad — ${layer.name}, column ${col + 1}`}
       onPointerDown={(e) => {
+        // Latched, or a page the room is not playing: the whole pad selects and
+        // nothing fires. A tile armed in the library places from the body too —
+        // the name strip is a 22px target, and with the press withheld the
+        // other 50 are free to be the same one (design 2.11).
+        //
+        // This is also where an editing page stops firing. The head and the
+        // digit keys already withheld their cue there; the body did not, which
+        // left a tap on the grid firing the live song's column from a page
+        // showing another song — the misfire decision 0 exists to remove.
+        if (inert) {
+          if (latched) padMenu.onPointerDown?.(e);
+          if (latched && placeArmed(project, layer.id, col, editingDeckId)) return;
+          setSel({ layerId: layer.id, col });
+          return;
+        }
         setSel({ layerId: layer.id, col });
         if (e.button !== 0) return; // right/middle-click must never latch a flash look
         fire();
@@ -392,14 +418,26 @@ const Cell = React.memo(function Cell({
           setHeld(true);
         }
       }}
-      onPointerUp={release}
-      onPointerCancel={release}
+      // While the latch is on the body carries the pad's menu as well: a hold
+      // opens it, and the press it rides on cannot have fired anything.
+      onPointerMove={latched ? padMenu.onPointerMove : undefined}
+      onPointerLeave={latched ? padMenu.onPointerLeave : undefined}
+      onContextMenu={latched ? padMenu.onContextMenu : undefined}
+      onClickCapture={latched ? padMenu.onClickCapture : undefined}
+      onPointerUp={(e) => {
+        if (latched) padMenu.onPointerUp?.(e);
+        release();
+      }}
+      onPointerCancel={(e) => {
+        if (latched) padMenu.onPointerCancel?.(e);
+        release();
+      }}
       // Keyboard: Enter or Space is the press, and letting go releases a flash
       // look — the same two moments a pointer has.
       onKeyDown={(e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         e.preventDefault();
-        if (e.repeat || editing) return;
+        if (e.repeat || inert) return;
         setSel({ layerId: layer.id, col });
         fire();
         if (look?.flash && !learnMode) setHeld(true);
@@ -1281,6 +1319,9 @@ export function LookGrid() {
   const learnTarget = useStore((s) => s.learnTarget);
   const send = useStore((s) => s.send);
   const mutate = useStore((s) => s.mutate);
+  // Latched, nothing in the grid fires — the heads withhold their cue exactly
+  // the way a page the room is not playing does, and select instead.
+  const latched = useRemote((s) => s.latch);
 
   // The page being shown: the room's, or another song's while it is being built
   // (design 2.5). Everything below reads through it — the columns, every pad,
@@ -1300,7 +1341,7 @@ export function LookGrid() {
     setSelColRaw(col);
     gridRef.current?.querySelectorAll('.colhead')[col]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   };
-  useEffect(() => { if (!editing) setSelColRaw(null); }, [editing]);
+  useEffect(() => { if (!editing && !latched) setSelColRaw(null); }, [editing, latched]);
   // The digit keys need somewhere to put their selection on a page that does
   // not fire; the table names the action, this owns it.
   useEffect(() => {
@@ -1517,24 +1558,28 @@ export function LookGrid() {
    *  on a left click is written once. */
   const columnHead = (col: number) => {
     const name = cols[col] ?? '';
+    const inert = editing || latched;
     return (
       <div
         key={col}
-        className={`colhead ${editing ? 'inert' : colStates[col].cls} ${editing && selCol === col ? 'selcol' : ''} ${learnTarget?.kind === 'column' && learnTarget.col === col ? 'learn-armed' : ''}`}
+        className={`colhead ${inert ? 'inert' : colStates[col].cls} ${inert && selCol === col ? 'selcol' : ''} ${learnTarget?.kind === 'column' && learnTarget.col === col ? 'learn-armed' : ''}`}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); e.currentTarget.click(); } }}
         title={
           editing
             ? `select column ${col + 1}${name ? ` · ${name}` : ''} · editing ${songLabel} — fires only on the song that is playing`
-            : `${colStates[col].what} · ${touch ? 'hold' : 'right-click'} to rename, insert or delete`
+            : latched
+              ? `select column ${col + 1}${name ? ` · ${name}` : ''} — the grid is latched for editing, so nothing here fires`
+              : `${colStates[col].what} · ${touch ? 'hold' : 'right-click'} to rename, insert or delete`
         }
         onClick={() => {
           // On an editing page a column head selects its column rather than
           // firing it — the room is playing another song, and a head that
           // fired the live page from a grid showing a different one is the
-          // ambiguity decision 0 removes.
-          if (editing) {
+          // ambiguity decision 0 removes. The latch withholds it for the same
+          // reason: while it is on, nothing in the grid fires.
+          if (inert) {
             setSelCol(col);
             return;
           }
@@ -1549,7 +1594,7 @@ export function LookGrid() {
             a pad here, ■ when none does — an all-empty column clears every
             layer, which is a cue in its own right and used to look exactly
             like a column that would light the room. */}
-        {!editing && <span className="colmark" aria-hidden="true">{colStates[col].has ? '▶' : '■'}</span>}
+        {!inert && <span className="colmark" aria-hidden="true">{colStates[col].has ? '▶' : '■'}</span>}
         {col + 1} · {name}
         {/* the crossfade running into this column, on the head that fired it */}
         {!editing && colStates[col].t < 1 && (

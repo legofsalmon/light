@@ -4,6 +4,7 @@ import { App } from './App.tsx';
 import { initMidi } from './midi.ts';
 import { registerShortcutActions } from './shortcuts.ts';
 import { openLibrarySheet, useLibraryStore } from './libraryStore.ts';
+import { useRemote } from './remoteStore.ts';
 import { openFind } from './components/Find.tsx';
 import { openSetup } from './components/AdminModal.tsx';
 import './tokens.css';
@@ -18,6 +19,7 @@ registerShortcutActions({
   openLibrary: () => openLibrarySheet(),
   openFind: () => openFind(),
   openSetup: () => openSetup(),
+  toggleLatch: () => useRemote.getState().toggleLatch(),
   disarmLibrary: () => {
     if (!useLibraryStore.getState().armed) return false;
     useLibraryStore.getState().disarm();

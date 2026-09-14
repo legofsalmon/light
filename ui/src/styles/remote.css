@@ -32,11 +32,11 @@
     'levels'
     'lockbar';
 }
-/* A locked desk client has no levels tier and no template of its own, so its
-   lock bar takes the line after the last explicit row — named areas would mean
-   restating the pads template here, and auto-placement would drop it into the
-   empty offline row at the top. */
-.app.locked .bottombar { grid-row: -1; }
+/* A tablet, or a locked desk client, has no levels tier and no template of its
+   own, so its bottom bar takes the line after the last explicit row of
+   whatever template the view is using. Naming an area would mean restating the
+   pads template here; leaving it to auto-placement would drop it into the
+   empty offline row at the TOP of the screen. */
 .app.remote .remotelevels { grid-area: levels; }
 .app.remote .bottombar { grid-area: lockbar; }
 
@@ -213,6 +213,7 @@
    network locks itself by default too, and the hold on the lock key is the
    only way back to the Rig page and the setup surface. */
 .bottombar {
+  grid-row: -1;
   grid-column: 1 / -1;
   position: relative;
   display: flex;

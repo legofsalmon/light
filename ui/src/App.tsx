@@ -373,7 +373,11 @@ export function App() {
           grid: no template names them, so they sit below whatever template the
           view is using rather than making the remote a second set of them. */}
       {remote && <Region name="levels"><RemoteLevels /></Region>}
-      {(remote || locked) && (
+      {/* On glass the bar stays after the unlock: the tray is how a tablet
+          reaches the library and the editor (design 2.11), and the lock key is
+          how it goes back to being locked. A desk client sees it only while it
+          is locked — unlocked, it has the setup surface and the panels. */}
+      {(touch || locked) && (
         <Region name="lock bar"><BottomBar locked={locked} /></Region>
       )}
       {view === 'pads' && !libraryHidden && (
