@@ -307,7 +307,11 @@ const Cell = React.memo(function Cell({
   };
   const release = () => {
     setHeld(false);
-    if (!learnMode && look?.flash) send({ type: 'release', layerId: layer.id, col });
+    // A press that could not fire has nothing to let go of: on a latched grid,
+    // or a page the room is not playing, a flash pad never went down, and a
+    // `release` sent anyway would end a flash somebody ELSE is holding from the
+    // APC or another client.
+    if (!learnMode && !inert && look?.flash) send({ type: 'release', layerId: layer.id, col });
   };
 
   // Right-click, or a long press on the NAME (never on the body — a long press
@@ -896,7 +900,6 @@ function DeckBar() {
     </div>
     </>
   );
-
 
   return (
     <div className="deckbar" role="tablist" aria-label="songs">
