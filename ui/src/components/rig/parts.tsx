@@ -2,6 +2,7 @@
 // cell, a popover that stays on screen, and the calibration controls.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Glyph } from '../../glyphs.tsx';
 import type { Fixture } from '../../../../shared/types.ts';
 import { LONG_PRESS_MS } from '../../touch.ts';
 import { useStore } from '../../store.ts';
@@ -102,7 +103,7 @@ export function FindButton({ fixtureId, on }: { fixtureId: string; on: boolean }
       onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); begin(0, 0); } }}
       onKeyUp={stop}
     >
-      ◎
+      <Glyph name="find" alone />
       <span className="ring" aria-hidden="true" />
     </button>
   );

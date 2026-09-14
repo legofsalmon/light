@@ -7,6 +7,7 @@
 // set them once; the six that stayed are what you read every time.
 
 import React, { useState } from 'react';
+import { Glyph } from '../../glyphs.tsx';
 import type { FixtureForm, Project } from '../../../../shared/types.ts';
 import { FIXTURE_FORMS, inferFixtureForm, isStructure, offsetOnParent, posFromOffset } from '../../../../shared/types.ts';
 import { uid } from '../../../../shared/types.ts';
@@ -354,7 +355,7 @@ function SelectionVerbs(): React.ReactElement {
           })();
         }}
       >
-        ✕ delete
+        <Glyph name="clear" /> delete
       </button>
     </>
   );

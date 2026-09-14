@@ -6,6 +6,7 @@
 // thing you could not see. Adding is a picker and a verb now, not a haystack.
 
 import React, { useMemo, useState } from 'react';
+import { Glyph } from '../../glyphs.tsx';
 import type { HeadRef } from '../../../../shared/types.ts';
 import { uid } from '../../../../shared/types.ts';
 import { applyAutoGroups, planAutoGroups } from '../../autoGroups.ts';
@@ -194,7 +195,7 @@ export function GroupsSection(): React.ReactElement {
               })();
             }}
           >
-            ✕
+            <Glyph name="clear" alone />
           </button>
         </div>
       ))}

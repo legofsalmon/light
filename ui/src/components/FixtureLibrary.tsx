@@ -10,6 +10,7 @@
 // lives, like GDTF Share.
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { Glyph } from '../glyphs.tsx';
 import { PROFILES } from '../../../shared/profiles.ts';
 import { askConfirm } from '../dialog.tsx';
 import { addFixture } from '../rig.ts';
@@ -177,7 +178,7 @@ export function FixtureLibrary(): React.ReactElement {
                 </button>
                 {r.file && (
                   <button className="btn small ghost" title="remove this file from the library on this Mac" onClick={() => void remove(r)}>
-                    ✕
+                    <Glyph name="clear" alone />
                   </button>
                 )}
               </td>

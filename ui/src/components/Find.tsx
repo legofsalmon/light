@@ -206,7 +206,7 @@ export function Find() {
           }}
         />
         <button className="btn small ghost" title="close find — Esc does this too" onMouseDown={(e) => e.preventDefault()} onClick={closeFind}>
-          ✕
+          <Glyph name="clear" alone />
         </button>
       </div>
       <div className="findlist" ref={listRef} role="listbox">

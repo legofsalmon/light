@@ -7,6 +7,7 @@
 // dismissed; everything else expires. aria-live so a screen reader hears them.
 
 import React from 'react';
+import { Glyph } from '../glyphs.tsx';
 import { useStore } from '../store.ts';
 
 export function Toasts(): React.ReactElement | null {
@@ -19,7 +20,7 @@ export function Toasts(): React.ReactElement | null {
         <div key={t.id} className={`toast ${t.ok ? 'ok' : 'bad'}`}>
           <span className="toasttext">{t.text}</span>
           <button className="btn small ghost" title="dismiss" aria-label="dismiss" onClick={() => dismiss(t.id)}>
-            ✕
+            <Glyph name="clear" alone />
           </button>
         </div>
       ))}

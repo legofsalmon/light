@@ -236,7 +236,7 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
       <Fader label="mix" width={104} value={soft('mix') ?? fx.mix} nudged={soft('mix') !== undefined} def={1} onChange={(v) => onField('mix', v, (x) => (x.mix = v))} fmt={fmtPct} variant="dim" />
       <DialMenu lookId={lookId} partId={partId} effectId={fx.id} fields={rowFields} />
       <button className="btn small ghost" title="save this effect to the FX pool as a reusable preset" onClick={onSaveToPool}>☆</button>
-      <button title="remove this effect" className="btn small ghost" onClick={onRemove}>✕</button>
+      <button title="remove this effect" className="btn small ghost" onClick={onRemove}><Glyph name="clear" alone /></button>
     </div>
 
     {/* Line 2, folded. It says what it holds, so the spread reads without

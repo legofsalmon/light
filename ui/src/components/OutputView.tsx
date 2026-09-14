@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Glyph } from '../glyphs.tsx';
 import type { Project } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { NumInput, ScrubNumInput, TextField, UnicastInput } from './inputs.tsx';
@@ -484,7 +485,7 @@ export function OutputView() {
                         p.universes = p.universes.filter((x) => x.id !== u.id);
                       })}
                     >
-                      ✕
+                      <Glyph name="clear" alone />
                     </button>
                   </td>
                 </tr>

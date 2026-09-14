@@ -5,6 +5,7 @@
 // show day is "is my controller on", and that is the summary line.
 
 import React, { useMemo, useState } from 'react';
+import { Glyph } from '../glyphs.tsx';
 import { create } from 'zustand';
 import type { MidiMapping, Project } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
@@ -77,7 +78,7 @@ export function PresetUndoChip(): React.ReactElement | null {
         undo
       </button>
       <button className="btn small ghost" title="keep the layout and put this away" onClick={() => useUndo.getState().set(null)}>
-        ✕
+        <Glyph name="clear" alone />
       </button>
     </div>
   );
@@ -209,7 +210,7 @@ function MidiSummary(): React.ReactElement {
                       p.midi = p.midi.filter((x) => x.id !== m.id);
                     })}
                   >
-                    ✕
+                    <Glyph name="clear" alone />
                   </button>
                 </td>
               </tr>

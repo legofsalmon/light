@@ -4,6 +4,7 @@
 // inspector under the table, so the header no longer runs off the right edge.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Glyph } from '../../glyphs.tsx';
 import type { Project } from '../../../../shared/types.ts';
 import { uid } from '../../../../shared/types.ts';
 import { askChoice, askConfirm, askPrompt } from '../../dialog.tsx';
@@ -534,7 +535,7 @@ export function FixtureTable({ conflicts }: { conflicts: Set<string> }): React.R
               <SortTh k="universe" sortKey={sortKey} sortDir={sortDir} onSort={onSort} title="which universe it is plugged into">U</SortTh>
               <SortTh k="address" sortKey={sortKey} sortDir={sortDir} onSort={onSort} title="the channels it answers to, from its start address">Addr</SortTh>
               <SortTh k="channels" sortKey={sortKey} sortDir={sortDir} onSort={onSort} title="how many channels it takes">Ch</SortTh>
-              <th title="mute it, or find it on the truss">● ◎</th>
+              <th title="mute it, or find it on the truss"><i className="lamp" /> <Glyph name="find" /></th>
             </tr>
           </thead>
           <tbody ref={tbodyRef}>
@@ -691,7 +692,7 @@ function RowMenu({ fixtureId, name }: { fixtureId: string; name: string }): Reac
                 })();
               }}
             >
-              ✕ delete
+              <Glyph name="clear" /> delete
             </button>
           </div>
         </>

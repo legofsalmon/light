@@ -7,7 +7,7 @@ import { closeLibrarySheet, useEditingDeckId, useLibraryStore } from '../library
 import { BANK, FILTERS, FILTER_HELP, FILTER_LABEL, entries, filtered, type LibraryEntry, type LibraryFilter } from './library/model.ts';
 import { LookTile } from './library/LookTile.tsx';
 import { Menu, type MenuAt, type MenuItem } from './library/Menu.tsx';
-import { Glyph } from '../glyphs.tsx';
+import { Glyph, type GlyphName } from '../glyphs.tsx';
 import { firstPad, selectPad, showOnPlan } from './library/reveal.ts';
 import '../styles/library.css';
 
@@ -29,7 +29,7 @@ export function LookLibrary() {
   const setLibraryHidden = useStore((s) => s.setLibraryHidden);
   return (
     <LibraryBody
-      close={{ label: '▸', title: 'hide the look library — the pad grid takes the full width', run: () => setLibraryHidden(true) }}
+      close={{ glyph: 'chevron', title: 'hide the look library — the pad grid takes the full width', run: () => setLibraryHidden(true) }}
     />
   );
 }
@@ -46,7 +46,7 @@ export function LibrarySheet() {
           them is a sheet you cannot use mid-song. It is a panel that happens
           to be on top. */}
       <div className="librarysheet panel">
-        <LibraryBody close={{ label: '✕', title: 'close the look library', run: closeLibrarySheet }} />
+        <LibraryBody close={{ glyph: 'clear', title: 'close the look library', run: closeLibrarySheet }} />
       </div>
     </>
   );
@@ -99,7 +99,9 @@ export function LookPicker({
   );
 }
 
-type Close = { label: string; title: string; run: () => void };
+/** The key that puts the library away. The column FOLDS to its strip and the
+ *  sheet CLOSES, which are different things and take different glyphs. */
+type Close = { glyph: GlyphName; title: string; run: () => void };
 
 function LibraryBody({ close, pick }: { close?: Close; pick?: { current: string | null; onPick: (id: string) => void } }) {
   const project = useStore((s) => s.project)!;
@@ -296,7 +298,7 @@ function LibraryBody({ close, pick }: { close?: Close; pick?: { current: string 
       <div className="previzbar libbar">
         {close && (
           <button className="btn small ghost pin" title={close.title} onClick={close.run}>
-            {close.label}
+            <Glyph name={close.glyph} alone />
           </button>
         )}
         <span className="label">looks</span>

@@ -22,6 +22,7 @@
 // needs no setting up — so a first launch is left alone to be played with.
 
 import React, { useEffect } from 'react';
+import { Glyph } from '../glyphs.tsx';
 import type { Project } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
 import { profileMeta } from '../profileInfo.ts';
@@ -168,7 +169,7 @@ export function SetupGuide(): React.ReactElement | null {
         title="close this — the show is yours to work on either way. Setup ▸ Help brings it back."
         onClick={() => setSetupGuide(false, true)}
       >
-        ✕
+        <Glyph name="clear" alone />
       </button>
     </div>
   );

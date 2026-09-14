@@ -4,6 +4,7 @@
 // bodies.
 
 import React, { useState } from 'react';
+import { Glyph } from '../glyphs.tsx';
 import type { Look, Project } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { TextField } from './inputs.tsx';
@@ -468,7 +469,7 @@ export function LookEditor() {
                   if (lk.steps?.length === 0) delete lk.steps;
                 })}
               >
-                ✕
+                <Glyph name="clear" alone />
               </button>
             </div>
           ))}
@@ -564,7 +565,7 @@ export function LookEditor() {
                       if (p.fxPool.length === 0) delete p.fxPool;
                     })}
                   >
-                    ✕
+                    <Glyph name="clear" alone />
                   </button>
                 </div>
               ))}

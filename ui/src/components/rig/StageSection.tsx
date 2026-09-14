@@ -6,6 +6,7 @@
 // with the plan through the store, so a row highlights what it refers to.
 
 import React from 'react';
+import { Glyph } from '../../glyphs.tsx';
 import type { StageProp, StagePropKind } from '../../../../shared/types.ts';
 import { STRUCTURE_DEFAULTS, isStructure, uid } from '../../../../shared/types.ts';
 import { stageExtent } from '../../../../shared/stageExtent.ts';
@@ -258,7 +259,7 @@ export function StageSection(): React.ReactElement {
                         }
                       }, 'delete a structure')}
                     >
-                      ✕
+                      <Glyph name="clear" alone />
                     </button>
                   </td>
                 </tr>
@@ -268,7 +269,7 @@ export function StageSection(): React.ReactElement {
         </table>
       )}
       <div className="prose" style={{ marginTop: 6 }}>
-        Drag a row’s numbers to scrub them; shift-click rows to select more than one. ⧉ duplicates, ✕ deletes.
+        Drag a row’s numbers to scrub them; shift-click rows to select more than one. ⧉ duplicates, <Glyph name="clear" /> deletes.
       </div>
     </>
   );

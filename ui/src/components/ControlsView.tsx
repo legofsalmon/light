@@ -1,4 +1,5 @@
 import React from 'react';
+import { Glyph } from '../glyphs.tsx';
 import type { Control, ControlLink, ModBinding, Modulator, SoftField, Wave } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
@@ -143,7 +144,7 @@ function LinkRow({ link, onEdit, onRemove }: {
       <NumInput value={link.min} title="value at fader 0 — set min above max to invert" onCommit={(x) => onEdit((l) => (l.min = x))} />
       <span className="label">max</span>
       <NumInput value={link.max} title="value at fader 1" onCommit={(x) => onEdit((l) => (l.max = x))} />
-      <button title="remove this link — the control stops driving that parameter" className="btn small ghost" onClick={onRemove}>✕</button>
+      <button title="remove this link — the control stops driving that parameter" className="btn small ghost" onClick={onRemove}><Glyph name="clear" alone /></button>
     </div>
   );
 }
@@ -253,7 +254,7 @@ function BindingRow({ b, onEdit, onRemove }: {
         fmt={(v) => `${Math.round(v * 100)}%`}
         variant="dim"
       />
-      <button title="remove this binding — the pulse stops driving that parameter" className="btn small ghost" onClick={onRemove}>✕</button>
+      <button title="remove this binding — the pulse stops driving that parameter" className="btn small ghost" onClick={onRemove}><Glyph name="clear" alone /></button>
     </div>
   );
 }
@@ -329,7 +330,7 @@ export function ControlsView(): React.ReactElement {
                   );
                 })}
               >
-                ✕
+                <Glyph name="clear" alone />
               </button>
             </div>
             {c.links.map((l, i) => (
@@ -410,7 +411,7 @@ export function ControlsView(): React.ReactElement {
                 if (p.modulators.length === 0) delete p.modulators;
               })}
             >
-              ✕
+              <Glyph name="clear" alone />
             </button>
           </div>
           {m.bindings.map((b, i) => (
