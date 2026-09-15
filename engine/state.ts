@@ -118,6 +118,10 @@ export class EngineState {
    *  blackout, ALL STOP and a project switch: a hold that could swallow a
    *  panic is not a hold anyone should trust. */
   frozen = false;
+  /** Who is holding the frame, when it is HELD rather than latched. A held
+   *  freeze whose owner vanishes is released; a latched one has no owner and
+   *  outlives every disconnect. */
+  frozenBy: number | null = null;
   learnTarget: MidiAction | null = null;
   /** Monotonic project generation. Bumped once per project-changing command by
    *  the transport layer (engine/index.ts) — matching the per-command bump in
@@ -360,6 +364,14 @@ export class EngineState {
    *  release will never arrive — drop the holds it owned. `owner` null drops
    *  every hold whoever started it (all-stop, project reload). */
   releaseAllHeld(t = performance.now(), owner: number | null = null): void {
+    // A held frame is a hold like any other: the hand that took it is on a
+    // client, and if that client is gone the release will never arrive. A
+    // LATCHED freeze has no owner and is left alone here — all-stop and
+    // blackout clear that one deliberately, by name.
+    if (this.frozenBy !== null && (owner === null || this.frozenBy === owner)) {
+      this.frozen = false;
+      this.frozenBy = null;
+    }
     for (const [layerId, live] of this.live) {
       if (live.heldBy === null || !live.lookId) continue;
       if (owner !== null && live.heldBy !== owner) continue; // someone else's
@@ -556,7 +568,7 @@ export class EngineState {
 
   setBlackout(v: boolean): void {
     this.blackout = v;
-    if (v) this.frozen = false;
+    if (v) { this.frozen = false; this.frozenBy = null; }
   }
 
   replaceProject(p: Project): void {
@@ -575,6 +587,7 @@ export class EngineState {
     // A hold belongs to the show it was taken in; repeating the old show's
     // frame over the new one would be nobody's idea of frozen.
     this.frozen = false;
+    this.frozenBy = null;
     this.project.settings.haze = 0;
     this.project.settings.hazeFan = 0;
     this.onChange?.();

@@ -729,3 +729,38 @@ fn a_profile_shadowing_a_builtin_id_is_dropped() {
     let p: light_core::types::Project = serde_json::from_str(json).expect("parses");
     assert!(p.profiles.is_empty(), "a shadowed id is not kept");
 }
+
+/// A held freeze belongs to the client whose finger is down. If that client
+/// goes away the release never arrives, and the rig would repeat one frame for
+/// the rest of the night — the same failure the flash pad's ownership exists to
+/// prevent. A LATCHED freeze is a deliberate choice and must survive.
+#[test]
+fn a_held_freeze_dies_with_the_hand_that_took_it_and_a_latched_one_does_not() {
+    let t0 = 0.0;
+    let mut st = EngineState::new(demo_project(), t0);
+
+    // held by client 7
+    st.handle_command(Command::SetFreeze { v: true, momentary: true }, t0, Some(7));
+    assert!(st.frozen, "the hold freezes the rig");
+    assert_eq!(st.frozen_by, Some(7), "and it is owned by the hand that took it");
+
+    // somebody else's client goes: the hold stands
+    st.release_all_held(t0 + 1.0, Some(9));
+    assert!(st.frozen, "another client leaving does not release this hold");
+
+    // its own client goes: the frame is let through
+    st.release_all_held(t0 + 2.0, Some(7));
+    assert!(!st.frozen, "the owner leaving releases the hold");
+    assert_eq!(st.frozen_by, None);
+
+    // a latch has no owner and outlives every disconnect
+    st.handle_command(Command::SetFreeze { v: true, momentary: false }, t0 + 3.0, Some(7));
+    assert!(st.frozen && st.frozen_by.is_none(), "a latch is ownerless");
+    st.release_all_held(t0 + 4.0, Some(7));
+    assert!(st.frozen, "a disconnect does not undo a deliberate latch");
+
+    // but blackout does, by name — the twin asserts the same in engine/test/smoke.ts
+    st.set_blackout(true);
+    assert!(!st.frozen, "blackout releases a latched freeze");
+    assert_eq!(st.frozen_by, None);
+}

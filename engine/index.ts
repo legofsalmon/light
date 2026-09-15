@@ -490,6 +490,9 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       break;
     case 'setFreeze':
       state.frozen = !!cmd.v;
+      // Only a HELD freeze takes an owner. A latch is a deliberate choice and
+      // outlives the client that made it.
+      state.frozenBy = cmd.v && cmd.momentary ? clientId : null;
       break;
     case 'setHaze':
       state.project.settings.haze = clamp(cmd.v);

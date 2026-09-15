@@ -855,7 +855,17 @@ export type Command =
   /** Hold the frame the rig is showing while the show carries on underneath,
    *  so a look can be edited live without the room watching it being built.
    *  Runtime-only; blackout and ALL STOP release it — engine/output.ts. */
-  | { type: 'setFreeze'; v: boolean }
+  | {
+      type: 'setFreeze';
+      v: boolean;
+      /** Held rather than latched: the frame is held only while a finger is on
+       *  the key, so the client that took it OWNS it. A tablet that drops off
+       *  the Wi-Fi mid-hold would otherwise leave the rig repeating one frame
+       *  with nobody's finger down — the same failure the flash pad's own
+       *  ownership was added for. A latched freeze has no owner and survives
+       *  every disconnect, because somebody chose it deliberately. */
+      momentary?: boolean;
+    }
   | { type: 'setHaze'; v: number }
   | { type: 'setHazeFan'; v: number }
   // baseGen: the project generation this edit was composed against. The engine

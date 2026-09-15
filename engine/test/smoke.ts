@@ -2108,5 +2108,25 @@ await new Promise<void>((resolve) => {
   );
 }
 
+// --- a held freeze belongs to the hand that took it (design #57) -------------
+// The Rust twin asserts the same four facts in core/tests/smoke.rs; this is the
+// Node side of the same rule, so the two engines cannot drift on it.
+{
+  const st = new EngineState(sanitizeProject(demoProject())!);
+  st.frozen = true;
+  st.frozenBy = 7;
+  st.releaseAllHeld(1, 9);
+  check('freeze: another client leaving does not release this hold', st.frozen);
+  st.releaseAllHeld(2, 7);
+  check('freeze: the owner leaving releases the hold', !st.frozen && st.frozenBy === null);
+
+  st.frozen = true;
+  st.frozenBy = null; // a latch is ownerless
+  st.releaseAllHeld(3, 7);
+  check('freeze: a disconnect does not undo a deliberate latch', st.frozen);
+  st.setBlackout(true);
+  check('freeze: blackout releases a latched freeze', !st.frozen && st.frozenBy === null);
+}
+
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

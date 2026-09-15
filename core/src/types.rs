@@ -1390,7 +1390,13 @@ pub enum Command {
     SetTransmit { v: bool },
     /// Hold the frame the rig is showing while the show carries on underneath.
     /// Runtime-only; blackout and ALL STOP release it — crate::output.
-    SetFreeze { v: bool },
+    SetFreeze {
+        v: bool,
+        /// held rather than latched: the client that took it owns it, and a
+        /// disconnect releases it (see `EngineState::release_all_held`)
+        #[serde(default)]
+        momentary: bool,
+    },
     SetHaze { v: f64 },
     SetHazeFan { v: f64 },
     /// Subscribe this client to raw DMX for the given universes; an empty list

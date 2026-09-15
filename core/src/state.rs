@@ -314,6 +314,9 @@ pub struct EngineState {
     /// blackout, ALL STOP and a project switch: a hold that could swallow a
     /// panic is not a hold anyone should trust.
     pub frozen: bool,
+    /// Who is holding the frame, when it is HELD rather than latched. A held
+    /// freeze whose owner vanishes is released; a latched one has no owner.
+    pub frozen_by: Option<u64>,
     /// Whether rendered frames reach the wire at all (crate::output).
     ///
     /// Runtime-only and OFF at every boot, whatever the show says — see
@@ -371,6 +374,7 @@ impl EngineState {
             blackout: false,
             submasters: HashMap::new(),
             frozen: false,
+            frozen_by: None,
             transmit: false,
             muted: std::collections::HashSet::new(),
             identify: None,
@@ -685,6 +689,19 @@ impl EngineState {
     /// release will never arrive — drop the holds it owned. `owner: None` drops
     /// every hold regardless of who started it (all-stop, project reload).
     pub fn release_all_held(&mut self, t: f64, owner: Option<u64>) {
+        // A held frame is a hold like any other: the hand that took it is on a
+        // client, and if that client is gone the release will never arrive. A
+        // LATCHED freeze has no owner and is left alone here — all-stop and
+        // blackout clear that one deliberately, by name.
+        let frozen_owner_gone = match (self.frozen_by, owner) {
+            (None, _) => false,               // latched, or not frozen: leave it
+            (Some(_), None) => true,          // release everything (all-stop, reload)
+            (Some(h), Some(o)) => h == o,     // this client's hold
+        };
+        if frozen_owner_gone {
+            self.frozen = false;
+            self.frozen_by = None;
+        }
         for live in self.live.values_mut() {
             match (live.held_by, owner) {
                 (None, _) => continue,                       // nothing held here
@@ -1156,6 +1173,7 @@ impl EngineState {
         self.blackout = v;
         if v {
             self.frozen = false;
+            self.frozen_by = None;
         }
     }
 
@@ -1174,6 +1192,7 @@ impl EngineState {
         // A hold belongs to the show it was taken in; repeating the old show's
         // frame over the new one would be nobody's idea of frozen.
         self.frozen = false;
+        self.frozen_by = None;
         self.project.settings.haze = 0.0;
         self.project.settings.haze_fan = 0.0;
         // A wholesale swap is the biggest project change there is — advance the
@@ -1366,7 +1385,12 @@ impl EngineState {
             Command::SetBlackout { v } => self.set_blackout(v),
             Command::SetTransmit { v } => self.transmit = v,
             Command::SetSubmaster { group_id, v } => self.set_submaster(&group_id, v),
-            Command::SetFreeze { v } => self.frozen = v,
+            Command::SetFreeze { v, momentary } => {
+                self.frozen = v;
+                // Only a HELD freeze takes an owner. A latch is a deliberate
+                // choice and outlives the client that made it.
+                self.frozen_by = if v && momentary { Some(owner) } else { None };
+            }
             Command::Projects
             | Command::NewProject { .. }
             | Command::OpenProject { .. }

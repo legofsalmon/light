@@ -4,7 +4,7 @@ import { askConfirm, askPrompt } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
 import { HeldChip } from './HeldChip.tsx';
 import { BAR, clamp } from '../../../shared/types.ts';
-import { size } from '../tokens.ts';
+import { motion, size } from '../tokens.ts';
 import { openSetup } from './AdminModal.tsx';
 import { Glyph } from '../glyphs.tsx';
 
@@ -299,6 +299,14 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
       sync
     </button>
   );
+  // Hold it and the frame is held only while your finger is down; click it and
+  // it latches (design 2.1, A29 — MagicQ's Preload is the same key). The two are
+  // one gesture told apart by how long the press lasted, so there is nothing
+  // extra on the strip and nothing to learn.
+  //
+  // A held freeze is OWNED by this client, so if this window goes away mid-hold
+  // the engine releases it. A latch is a deliberate choice and outlives us.
+  const freezeDown = useRef(0);
   const freezeKey = (
     <button
       key="freeze"
@@ -306,9 +314,29 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
       title={
         snap?.frozen
           ? 'HELD — the rig is repeating the frame it was on. The show, the pads and the stage view are all still running, so you can set up the next column without the room watching you do it. Click to let it through. Blackout and ALL STOP release it on their own.'
-          : 'hold the rig on the frame it is showing, set up the next column, then release. The stage view keeps following your edits; the room does not see them until you let it through.'
+          : 'hold the rig on the frame it is showing, set up the next column, then release — or click to latch it. The stage view keeps following your edits; the room does not see them until you let it through.'
       }
-      onClick={() => send({ type: 'setFreeze', v: !snap?.frozen })}
+      onPointerDown={(e) => {
+        if (e.button !== 0 || snap?.frozen) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        freezeDown.current = performance.now();
+        send({ type: 'setFreeze', v: true, momentary: true });
+      }}
+      onPointerUp={() => {
+        if (!freezeDown.current) return;
+        const heldFor = performance.now() - freezeDown.current;
+        freezeDown.current = 0;
+        // A short press is a click, and a click latches: leave it held, and
+        // drop the ownership so it survives this window going away.
+        if (heldFor < motion['hold-latch']) send({ type: 'setFreeze', v: true });
+        else send({ type: 'setFreeze', v: false });
+      }}
+      onPointerCancel={() => {
+        if (!freezeDown.current) return;
+        freezeDown.current = 0;
+        send({ type: 'setFreeze', v: false });
+      }}
+      onClick={() => { if (snap?.frozen && !freezeDown.current) send({ type: 'setFreeze', v: false }); }}
     >
       {snap?.frozen ? 'held' : 'freeze'}
     </button>
