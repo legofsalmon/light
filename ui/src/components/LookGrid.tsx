@@ -606,11 +606,12 @@ function ColumnBinding({ col }: { col: number }) {
  *  is what you steer by, so it keeps line 1 whole; the blend takes the empty
  *  line below, which is exactly the layer that is not doing anything and so
  *  the one you are most likely setting up. */
-function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined }) {
+function LayerHead({ layer, live, layerNo }: { layer: Layer; live: LayerSnap | undefined; layerNo: number }) {
   const send = useStore((s) => s.send);
   const mutate = useStore((s) => s.mutate);
   const project = useStore((s) => s.project)!;
   const touch = useStore((s) => s.touch);
+  const remoteHead = useRemote((s) => s.remote);
   // The grid scrolls and looks fire from MIDI/OSC too, so the active cell can
   // be off-screen. The layer head never scrolls — it is the one place that can
   // always answer "what is this layer doing right now".
@@ -704,7 +705,14 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
           title={`${layer.name} · ${BLEND_HELP[layer.blend]}. ${touch ? 'Hold' : 'Right-click'} to change the blend`}
           {...blendMenu}
         >
-          <div className="name grow">{headName(layer.name)}</div>
+          <div className="name grow">
+            {/* At 48px a real layer name ("Strobe") truncates to one letter and
+                says nothing. The design's own remote sketch draws the layer
+                NUMBER there — `4 ▮ ✕` — which is what the APC's rows are
+                labelled with and what a hand counts up from. The name stays in
+                the head's help. */}
+            {remoteHead ? String(layerNo) : headName(layer.name)}
+          </div>
         </div>
         <button
           className={`btn small ghost clearbtn ${holding ? 'holding' : ''}`}
@@ -1172,10 +1180,18 @@ function SubmasterRow() {
   const remote = useRemote((s) => s.remote);
   const send = useStore((s) => s.send);
   const subs = useStore((s) => s.snap?.submasters);
-  const groups = project.groups;
-  if (groups.length === 0) return null;
+  const allGroups = project.groups;
+  // Four under four pads on the remote, paging with the columns — the same
+  // arithmetic the dial row uses. Eight group faders across four pad widths
+  // gave every one of them a label too narrow to read, which is worse than
+  // showing four you can aim at.
+  const page = useRemote((s) => s.page);
+  const groups = remote
+    ? allGroups.slice(page * REMOTE_PAGE_COLS, page * REMOTE_PAGE_COLS + REMOTE_PAGE_COLS)
+    : allGroups;
+  if (allGroups.length === 0) return null;
   const levelOf = (id: string) => subs?.find((x) => x.id === id)?.v ?? 1;
-  const anyDown = groups.some((g) => levelOf(g.id) < 1);
+  const anyDown = allGroups.some((g) => levelOf(g.id) < 1);
 
   return (
     <div className="controlrow groupsrow">
@@ -1189,7 +1205,7 @@ function SubmasterRow() {
               className="btn small ghost"
               title="put every group level back to full"
               onClick={() => {
-                for (const g of groups) if (levelOf(g.id) < 1) send({ type: 'setSubmaster', groupId: g.id, v: 1 });
+                for (const g of allGroups) if (levelOf(g.id) < 1) send({ type: 'setSubmaster', groupId: g.id, v: 1 });
               }}
             >
               all up
@@ -1891,7 +1907,7 @@ export function LookGrid() {
         return (
           <React.Fragment key={layer.id}>
             {/* the head always reads the room, whatever page the pads show */}
-            <LayerHead layer={layer} live={live} />
+            <LayerHead layer={layer} live={live} layerNo={project.layers.indexOf(layer) + 1} />
             {shownCols.map((_, i) => {
               const col = firstCol + i;
               return (
@@ -1915,7 +1931,7 @@ export function LookGrid() {
         const cells = pageCells(project, editingDeckId, layer.id);
         return (
           <React.Fragment key={layer.id}>
-            <LayerHead layer={layer} live={live} />
+            <LayerHead layer={layer} live={live} layerNo={project.layers.indexOf(layer) + 1} />
             {shownCols.map((_, i) => {
               const col = firstCol + i;
               return (

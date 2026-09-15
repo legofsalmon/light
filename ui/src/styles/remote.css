@@ -199,6 +199,19 @@
   min-width: 0;
   max-width: none;
 }
+/* A group level on glass is a bar you push, not a number you read. In a quarter
+   of 390px the name and a 44px value column cannot both fit, and what clipped
+   was the name — so the value goes and comes back only when the group is pulled
+   down, which is the one state worth seeing from across a room (the
+   `.subcell.down` rule). The levels tier spells the layer masters out in full. */
+.app.remote .subcell .fader .val b { display: none; }
+.app.remote .subcell.down .fader .val b { display: block; }
+
+/* The grid keeps its rows at the pad height and leaves the slack below it on a
+   tall phone. Stretching the rows into it was tried and taken out: the cell
+   keeps its own height, so the row grew and the pad did not, and the grid
+   gained 22px of vertical scroll for nothing. 78 x 72 is already above the
+   design's floor (2.11) and above a fingertip. */
 
 /* ---- the levels tier ----------------------------------------------------- */
 /* The layer masters, speed, haze and tap on one row near the bottom, where a
