@@ -48,13 +48,15 @@ export type ContextPressHandlers = {
  *  long-press (touch and pen only). Spread them onto the element; keep its
  *  own onClick — the click that trails a long-press is swallowed here, so
  *  holding a column head opens its menu without also firing the column. */
-export function contextPress(open: () => void): ContextPressHandlers {
-  const fire = (el: Element) => {
+export function contextPress(open: (at: { x: number; y: number }) => void): ContextPressHandlers {
+  const fire = (el: Element, at: { x: number; y: number }) => {
     const p = presses.get(el) ?? { timer: null, x: 0, y: 0, openedAt: 0 };
     p.timer = null;
     p.openedAt = performance.now();
     presses.set(el, p);
-    open();
+    // Where the gesture happened, so a menu can open AT the thing it is about
+    // rather than over the middle of a grid that is still playing.
+    open(at);
   };
   return {
     onPointerDown: (e) => {
@@ -62,7 +64,8 @@ export function contextPress(open: () => void): ContextPressHandlers {
       const el = e.currentTarget;
       cancel(el);
       const p: Press = { timer: null, x: e.clientX, y: e.clientY, openedAt: presses.get(el)?.openedAt ?? 0 };
-      p.timer = setTimeout(() => fire(el), LONG_PRESS_MS);
+      const at = { x: e.clientX, y: e.clientY };
+      p.timer = setTimeout(() => fire(el, at), LONG_PRESS_MS);
       presses.set(el, p);
     },
     onPointerMove: (e) => {
@@ -80,7 +83,7 @@ export function contextPress(open: () => void): ContextPressHandlers {
       const p = presses.get(el);
       if (p && performance.now() - p.openedAt < ECHO_MS) return;
       cancel(el);
-      fire(el);
+      fire(el, { x: e.clientX, y: e.clientY });
     },
     onClickCapture: (e) => {
       const p = presses.get(e.currentTarget);

@@ -15,6 +15,12 @@ type DialogRequest = {
   body?: string;
   /** present = prompt */
   input?: { initial: string; placeholder?: string };
+  /** Where the gesture that asked happened. Given one, the menu opens THERE as
+   *  an anchored popover with no veil — the pads behind it are playing, and a
+   *  sheet that hides them is a sheet you cannot use mid-song (design #19).
+   *  Without one it is a modal, which is right for a question that should stop
+   *  everything: an import, a destructive confirm. */
+  at?: { x: number; y: number };
   choices: DialogChoice[];
   resolve: (value: string | null) => void;
 };
@@ -82,12 +88,13 @@ export function askPrompt(
 export function askChoice(
   title: string,
   choices: DialogChoice[],
-  opts: { body?: string } = {},
+  opts: { body?: string; at?: { x: number; y: number } } = {},
 ): Promise<string | null> {
   return new Promise((resolve) => {
     useDialogs.getState().push({
       title,
       body: opts.body,
+      at: opts.at,
       choices: [...choices, { value: 'cancel', label: 'Cancel' }],
       resolve: (v) => resolve(v === 'cancel' ? null : v),
     });
@@ -175,6 +182,43 @@ export function DialogHost() {
   if (!req) return null;
   const answer = (value: string) => settle(req.id, req.input ? (value === 'ok' ? text.trim() || null : null) : value);
   const safe = req.choices.find((c) => c.primary && !c.danger) ?? req.choices.find((c) => c.value === 'cancel') ?? req.choices[0];
+
+  // Anchored: a popover at the gesture, nothing over the grid. Clamped so it
+  // never hangs off the window — a menu you cannot reach is a menu that is not
+  // there.
+  if (req.at) {
+    const W = 260;
+    const left = Math.max(8, Math.min(req.at.x, window.innerWidth - W - 8));
+    const top = Math.max(8, Math.min(req.at.y, window.innerHeight - 240));
+    return (
+      <>
+        {/* Catches the press that dismisses, and nothing else: transparent, so
+            the playing grid stays visible and readable underneath. */}
+        <div className="popcatch" onPointerDown={() => settle(req.id, null)} />
+        <div
+          className="popover menupop"
+          style={{ top, left, width: W }}
+          role="menu"
+          aria-label={req.title}
+          ref={modalRef}
+        >
+          <div className="modaltitle">{req.title}</div>
+          {req.body && <div className="modalbody">{req.body}</div>}
+          {req.choices.map((c) => (
+            <button
+              key={c.value}
+              className={`btn small ghost ${c.danger ? 'danger' : ''} ${c.primary ? 'on' : ''}`}
+              style={{ justifyContent: 'flex-start' }}
+              ref={c === safe ? focusRef : undefined}
+              onClick={() => answer(c.value)}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  }
 
   return (
     <div

@@ -1943,3 +1943,17 @@ button.warnchip { background: none; cursor: pointer; }
 }
 .savedot.pending { background: var(--color-status-nudge); }
 .savedot.just { background: var(--color-live); }
+
+/* A menu about a pad opens AT the pad, with nothing over the grid (design #19).
+   The catcher is transparent and exists only to take the press that dismisses:
+   the pads behind a menu are playing, and a sheet that hides them is a sheet
+   you cannot use mid-song. */
+.popcatch { position: fixed; inset: 0; z-index: 200; /* not a token: the same stacking the modal veil uses, theme.css:1190 */ }
+.popover.menupop {
+  position: fixed;
+  z-index: 201; /* not a token: one above the catcher above */
+  max-height: 70vh;
+  overflow: auto;
+}
+.popover.menupop .modaltitle { padding: var(--space-4) var(--space-6) var(--space-2); }
+.popover.menupop .modalbody { padding: 0 var(--space-6) var(--space-4); }

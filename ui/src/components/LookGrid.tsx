@@ -326,7 +326,14 @@ const Cell = React.memo(function Cell({
 
   // Right-click, or a long press on the NAME (never on the body — a long press
   // there is how a flash look is held).
-  const padMenu = contextPress(() => {
+  // Locked is a performing state: pads, columns, songs, levels and the panic
+  // pair all work, and everything that EDITS the show is off (design 2.11).
+  // The menu's verbs — duplicate, clear, put in every song — and the drag that
+  // moves a look to another pad are edits, and a leaning elbow at front of
+  // house is exactly what the lock is for.
+  const locked = useLocked();
+  const padMenu = contextPress((at) => {
+    if (locked) return;
     if (!look) return;
     // Where a flash copy would land: the top layer, same column if it is free,
     // otherwise the first free column to its right. Said in the menu row, so
@@ -345,6 +352,7 @@ const Cell = React.memo(function Cell({
       body:
         'Duplicate makes an independent copy on the next free pad in this layer. Two pads pointing at the SAME look change together when you edit either one; a duplicate is how you get one you can change on its own.'
         + (top && top.id !== layer.id && hit === null ? ` ${top.name} is full, so there is nowhere to put a flash copy.` : ''),
+      at,
     }).then((choice) => {
       if (choice === 'duplicate') duplicatePad(layer.id, col, pageCols.length, editingDeckId);
       else if (choice === 'hit' && top && hit !== null) flashCopy(look.id, top.id, hit, editingDeckId);
@@ -511,7 +519,7 @@ const Cell = React.memo(function Cell({
           )}
           <div
             className="cellname"
-            draggable
+            draggable={!locked}
             title={`${look.name} — click to select (does not fire), drag to move it to another pad, right-click for more`}
             {...padMenu}
             onDragStart={(e) => {
@@ -681,13 +689,14 @@ function LayerHead({ layer, live, layerNo }: { layer: Layer; live: LayerSnap | u
     onPointerUp: endHold,
     onPointerCancel: endHold,
   };
-  const blendMenu = contextPress(() => {
+  const blendMenu = contextPress((at) => {
     void askChoice(`${layer.name} — blend`, BLENDS.map((b) => ({
       value: b,
       label: BLEND_WORD[b],
       primary: b === layer.blend,
     })), {
       body: 'How this layer combines with the layers under it. Blend only affects intensity — colour, position and strobe always take the upper layer’s value.',
+      at,
     }).then((choice) => {
       const blend = BLENDS.find((b) => b === choice);
       if (!blend || blend === layer.blend) return;
@@ -872,7 +881,7 @@ function DeckBar() {
   };
   // Everything the chip's hover and double-click offer, as a menu: the touch
   // route (a long-press) and the right-click reach it too (review M15).
-  const songMenu = (d: Song) => {
+  const songMenu = (d: Song, at: { x: number; y: number }) => {
     const i = decks.findIndex((x) => x.id === d.id);
     const active = d.id === project.activeDeckId;
     void askChoice(
@@ -883,7 +892,12 @@ function DeckBar() {
         ...(i < decks.length - 1 ? [{ value: 'later', label: 'Move later' }] : []),
         ...(decks.length > 1 && !active ? [{ value: 'delete', label: 'Delete song', danger: true }] : []),
       ],
-      active && decks.length > 1 ? { body: 'The song that is playing cannot be deleted — switch to another one first.' } : {},
+      {
+        at,
+        ...(active && decks.length > 1
+          ? { body: 'The song that is playing cannot be deleted — switch to another one first.' }
+          : {}),
+      },
     ).then((choice) => {
       if (choice === 'rename') renameSong(d);
       else if (choice === 'earlier') moveSong(d, -1);
@@ -943,7 +957,7 @@ function DeckBar() {
         aria-haspopup="listbox"
         aria-expanded={picker}
         title={`${active?.name ?? 'song'} — click for the whole set list · ${touch ? 'hold' : 'right-click'} to rename, move or delete`}
-        {...contextPress(() => { if (active) songMenu(active); })}
+        {...contextPress((at) => { if (active) songMenu(active, at); })}
         onClick={() => {
           const r = pickerBoxRef.current?.getBoundingClientRect();
           if (r) setPickerPos({ top: r.bottom + 2, left: r.left });
@@ -1656,14 +1670,14 @@ export function LookGrid() {
     });
   };
 
-  const columnMenu = (col: number, name: string) => {
+  const columnMenu = (col: number, name: string, at: { x: number; y: number }) => {
     void askChoice(`Column ${col + 1}${name ? ` · ${name}` : ''}`, [
       { value: 'rename', label: 'Rename…', primary: true },
       { value: 'insert', label: 'Insert column after' },
       ...(cols.length > 1
         ? [{ value: 'delete', label: 'Delete column', danger: true }]
         : []),
-    ]).then((choice) => {
+    ], { at }).then((choice) => {
       if (choice === 'rename') renameColumn(col);
       else if (choice === 'insert') insertColumn(col);
       else if (choice === 'delete') deleteColumn(col);
@@ -1770,7 +1784,7 @@ export function LookGrid() {
         // Right-click or a long-press, never a left click: a left click fires
         // the column, so editing must not be reachable by the gesture that
         // triggers cues. The hold is the tablet's right-click (review M15).
-        {...contextPress(() => columnMenu(col, name))}
+        {...contextPress((at) => columnMenu(col, name, at))}
       >
         {/* What firing it will do, before you fire it: ▶ when some layer holds
             a pad here, ■ when none does — an all-empty column clears every
