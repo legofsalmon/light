@@ -193,6 +193,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
   const setHelpMode = useStore((s) => s.setHelpMode);
   const send = useStore((s) => s.send);
   const savedFlash = useStore((s) => s.savedFlash);
+  const pendingWrite = useStore((s) => s.pendingWrite);
   const undoDepth = useStore((s) => s.undoDepth);
   const redoDepth = useStore((s) => s.redoDepth);
   const undoLabel = useStore((s) => s.undoLabel);
@@ -536,13 +537,24 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
           {moved.has('freeze') && freezeKey}
         </div>
         <div className="linequiet">
-          <button
-            className="btn small ghost"
-            title="write the show to disk now (⌘S). Edits autosave about a second after you stop, so this is only for peace of mind."
-            onClick={() => send({ type: 'save' })}
-          >
-            {justSaved ? 'saved' : 'save'}
-          </button>
+          {/* Not a button any more (design 2.1): edits autosave, the engine
+              holds the history, and a SAVE key that is "only for peace of
+              mind" spends strip on a question rather than answering it. The
+              dot answers it — lit while an edit is still on its way to the
+              engine, quiet once the engine has it, and a moment of the live
+              colour when the show reaches the disk. ⌘S still writes now. */}
+          <div
+            className={`savedot ${pendingWrite ? 'pending' : ''} ${justSaved ? 'just' : ''}`}
+            title={
+              pendingWrite
+                ? 'an edit is on its way to the engine'
+                : justSaved
+                  ? 'written to disk'
+                  : 'every edit is in. The show writes itself to disk a moment after you stop; ⌘S writes it now'
+            }
+            role="status"
+            aria-label={pendingWrite ? 'saving' : 'saved'}
+          />
           <button
             className="btn small ghost"
             disabled={undoDepth === 0 || !connected}

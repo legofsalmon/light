@@ -105,6 +105,11 @@ type Store = {
   previewHeads: HeadSnap[] | null;
   oscLog: OscLogEntry[];
   savedFlash: number;
+  /** An edit is composed here but not yet acknowledged by the engine: either
+   *  still inside the write throttle, or sent and awaiting its echo. The dot
+   *  beside the project name reads this, so "is my edit in?" has an answer
+   *  that is not a button you press hopefully. */
+  pendingWrite: boolean;
   sel: Sel;
   /** The song whose pads the grid is showing, when that is NOT the one on
    *  stage. null means the grid shows the room. Building the next song used to
@@ -398,6 +403,7 @@ let projectWriteFirst = 0;
 /** Throttle full-project writes to ~20/s with a bounded 250 ms max latency so
  *  a continuous drag cannot postpone the authoritative echo indefinitely. */
 function queueProjectWrite(send: () => void): void {
+  useStore.setState({ pendingWrite: true });
   const now = Date.now();
   if (projectWriteTimer) {
     if (now - projectWriteFirst < 250) return; // already scheduled, still fresh
@@ -449,6 +455,7 @@ export const useStore = create<Store>()((set, get) => ({
   previewHeads: null,
   oscLog: [],
   savedFlash: 0,
+  pendingWrite: false,
   sel: null,
   editingDeckId: null,
   tab: 'look',
@@ -814,6 +821,7 @@ function connect(): void {
       // you were working on, not a standing answer.
       const otherShow = useStore.getState().project?.name !== ev.project.name;
       useStore.setState({
+        pendingWrite: false,
         project: ev.project,
         ...(pruned.length === cur.length ? {} : { fxSel: pruned }),
         ...(otherShow ? { setupDismissed: false } : {}),

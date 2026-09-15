@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { ControlLink, Layer, LayerBlend, LayerSnap, Project } from '../../../shared/types.ts';
+import type { ControlLink, Layer, LayerBlend, LayerSnap, Project, SoftField } from '../../../shared/types.ts';
 import { uid } from '../../../shared/types.ts';
 import { notify, pageCells, pageColumns, useStore, writePage } from '../store.ts';
 import { askChoice, askConfirm, askPrompt } from '../dialog.tsx';
@@ -10,11 +10,16 @@ const HOLD_SLOP = 8;
 import { size } from '../tokens.ts';
 import { Glyph } from '../glyphs.tsx';
 import { bindingOf } from '../midiBindings.ts';
+import { FIELD_LABEL } from '../labels.ts';
 import { registerShortcutActions } from '../shortcuts.ts';
 
 /** Below this grid-area width the layer head is its narrow 96px (design 2.2).
  *  Not a token yet: the design names the number and no size/* for it. */
 const NARROW_HEAD_BELOW = 1200;
+/** How long a cleared layer offers back what it was playing (design 2.4). Long
+ *  enough to notice a mis-hit mid-song, short enough that it is never still
+ *  sitting there when the next cue lands. */
+const RECOVER_MS = 10_000;
 import { Fader, fmtPct } from './Fader.tsx';
 import { lookFace, lookSwatch } from '../lookColors.ts';
 import { Face } from './library/face.tsx';
@@ -612,6 +617,33 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
   const liveId = live?.lookId ?? null;
   const liveLook = liveId && Object.hasOwn(project.looks, liveId) ? project.looks[liveId] : null;
   const crossfading = !!liveLook && (live?.t ?? 1) < 1;
+
+  // What this layer was playing just before it went dark, for ten seconds
+  // (design 2.4, A34 — Hog's Pig + Clear). The ✕ is deliberately outside undo,
+  // because live state is; that leaves a mis-hit clear with no way back but
+  // hunting for the pad, which on a scrolled grid mid-song is not a thing you
+  // can do. So the line the look's name was on offers it back.
+  //
+  // Never for a flash look: those are held, not played, and re-firing one from
+  // here would latch it with nobody holding it. Never by itself, either — it is
+  // an offer on the head, and it expires.
+  const [recover, setRecover] = useState<{ lookId: string; col: number; name: string } | null>(null);
+  const wasPlaying = useRef<{ lookId: string; col: number; name: string } | null>(null);
+  useEffect(() => {
+    if (liveLook && live?.col != null) {
+      wasPlaying.current = liveLook.flash ? null : { lookId: liveLook.id, col: live.col, name: liveLook.name };
+      setRecover(null);
+      return;
+    }
+    // gone dark: offer back whatever it had, once, briefly
+    const had = wasPlaying.current;
+    wasPlaying.current = null;
+    if (!had) return;
+    setRecover(had);
+    const t = setTimeout(() => setRecover(null), RECOVER_MS);
+    return () => clearTimeout(t);
+  }, [liveLook, live?.col]);
+
   // The hold that clears a layer on glass. Deliberately not contextPress: that
   // opens a menu on a long press and lets the click through, and this must do
   // the opposite — the press itself is the whole gesture, and a short one does
@@ -727,6 +759,17 @@ function LayerHead({ layer, live }: { layer: Layer; live: LayerSnap | undefined 
             </span>
             <span className="grow ellip">{liveLook.name}</span>
           </>
+        ) : recover ? (
+          <button
+            className="btn small ghost recover"
+            title={`put ${recover.name} back on this layer — it was playing until a moment ago`}
+            onClick={() => {
+              send({ type: 'trigger', layerId: layer.id, col: recover.col });
+              setRecover(null);
+            }}
+          >
+            was {recover.name} <Glyph name="prev" />
+          </button>
         ) : (
           <span className="blendtag" {...blendMenu}>{BLEND_WORD[layer.blend]}</span>
         )}
@@ -1182,6 +1225,61 @@ function SubmasterRow() {
   );
 }
 
+/** One press that fills the dial row from the selected look (design #41, A32).
+ *
+ *  A new show has no dials at all, and building one is three dropdowns per link
+ *  in another view — so the row nobody has filled in stays empty, which is why
+ *  a busking hand has nothing under it. This takes whatever the selected look
+ *  actually carries, in the order the editor draws it, and puts the first eight
+ *  on dials. It only ever ADDS: an existing dial keeps its name and its links.
+ */
+function DialsForLook() {
+  const sel = useStore((s) => s.sel);
+  const project = useStore((s) => s.project)!;
+  const mutate = useStore((s) => s.mutate);
+  const lookId = sel ? pageCells(project, sel.deckId ?? null, sel.layerId)[sel.col] ?? null : null;
+  const look = lookId && Object.hasOwn(project.looks, lookId) ? project.looks[lookId] : null;
+  if (!look) return null;
+
+  // What the look has to offer, richest first: a part's own parameters, then
+  // the shape of each effect on it.
+  const rows: { field: SoftField; partId: string; effectId?: string; label: string }[] = [];
+  for (const part of look.parts) {
+    for (const f of ['dimmer', 'hue', 'sat', 'white', 'strobe', 'pan', 'tilt'] as SoftField[]) {
+      if ((part.params as Record<string, unknown>)[f === 'hue' || f === 'sat' ? 'color' : f] !== undefined) {
+        rows.push({ field: f, partId: part.id, label: FIELD_LABEL[f] ?? f });
+      }
+    }
+    for (const fx of part.effects ?? []) {
+      for (const f of ['size', 'rate', 'spread', 'mix'] as SoftField[]) {
+        rows.push({ field: f, partId: part.id, effectId: fx.id, label: FIELD_LABEL[f] ?? f });
+      }
+    }
+  }
+  const take = rows.slice(0, APC_COLS);
+  if (take.length === 0) return null;
+
+  return (
+    <button
+      className="btn small ghost"
+      title={`put this look's ${take.length === 1 ? 'one control' : `first ${take.length} controls`} on the dial row — a dial that already exists keeps what it has`}
+      onClick={() => {
+        mutate((p) => {
+          const controls = [...(p.controls ?? [])];
+          take.forEach((r, i) => {
+            const row = { lookId: look.id, partId: r.partId, effectId: r.effectId, field: r.field, min: 0, max: 1 };
+            if (controls[i]) controls[i] = { ...controls[i]!, links: [...controls[i]!.links, row] };
+            else controls.push({ id: uid('ctl'), name: r.label, value: 0, links: [row] });
+          });
+          p.controls = controls;
+        }, `put ${look.name} on the dials`);
+      }}
+    >
+      dials for this look
+    </button>
+  );
+}
+
 function ControlRow() {
   const project = useStore((s) => s.project)!;
   const live = useStore((s) => s.snap?.controls);
@@ -1225,6 +1323,7 @@ function ControlRow() {
       <div className="layerhead controlhead">
         <div className="row">
           <div className="name grow">{remote ? 'DIAL' : 'DIALS'}</div>
+          <DialsForLook />
           <button
             className="btn small ghost"
             title="open the Controls tab — where a dial's links, brackets and pulses are edited"
