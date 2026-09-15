@@ -828,6 +828,17 @@ function DeckBar() {
     const i = d ? decks.findIndex((x) => x.id === d.id) : -1;
     return i < 0 ? '—' : String(i + 1).padStart(2, '0');
   };
+  /** A song reads `01 · Still Air`: its position, then its name.
+   *
+   *  Operators number songs in the name themselves — the demo ships every song
+   *  as "01 · Still Air" — and printing the position in front of that gave
+   *  `01 · 01 · Still Air`. The position is the number; a name that already
+   *  opens with one has it taken off rather than doubled. */
+  const songLabel = (d: { id: string; name: string } | undefined) => {
+    if (!d) return '—';
+    const bare = d.name.replace(/^\s*\d{1,3}\s*[·.\-:]\s*/, '');
+    return `${songNo(d)} · ${bare || d.name}`;
+  };
   const shown = filter.trim()
     ? decks.filter((d) => d.name.toLowerCase().includes(filter.trim().toLowerCase()))
     : decks;
@@ -965,7 +976,7 @@ function DeckBar() {
           setPicker((o) => !o);
         }}
       >
-        {songNo(active)} · {active?.name ?? '—'} <Glyph name="chevron" />
+        {songLabel(active)} <Glyph name="chevron" />
       </button>
       {picker && (
         <div className="popover songpicker" style={{ top: pickerPos.top, left: pickerPos.left }} role="listbox">
@@ -998,7 +1009,7 @@ function DeckBar() {
                 setPicker(false);
               }}
             >
-              {songNo(d)} · {d.name}
+              {songLabel(d)}
             </button>
           ))}
           {shown.length === 0 && <div className="prose" style={{ padding: 'var(--space-6)' }}>nothing called “{filter}”</div>}
@@ -1048,7 +1059,7 @@ function DeckBar() {
         if (j === i) return null;
         return (
           <span className="decknext" title="what ] or the APC’s bank-forward key will select next">
-            next: {decks[j].name}
+            next: {songLabel(decks[j])}
           </span>
         );
       })()}
@@ -1075,7 +1086,7 @@ function DeckBar() {
             setEditPicker((o) => !o);
           }}
         >
-          editing: {editingDeckId ? songNo(editingSong ?? undefined) + ' · ' + (editingSong?.name ?? '') : 'this song'} <Glyph name="chevron" />
+          editing: {editingDeckId ? songLabel(editingSong ?? undefined) : 'this song'} <Glyph name="chevron" />
         </button>
         {editPicker && (
           <div className="popover songpicker" style={{ top: editPos.top, left: editPos.left }} role="listbox">
@@ -1098,7 +1109,7 @@ function DeckBar() {
                 title={`show ${d.name}'s pads for editing — the rig keeps playing what it is playing`}
                 onClick={() => { setEditingDeckId(d.id); setEditPicker(false); }}
               >
-                {songNo(d)} · {d.name}
+                {songLabel(d)}
               </button>
             ))}
           </div>
