@@ -141,7 +141,7 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
         title={fx.bypass ? 'parked — click to enable' : 'park this effect (keeps it, stops its output)'}
         onClick={() => onEdit((x) => (x.bypass = !x.bypass))}
       >
-        {fx.bypass ? '▷' : '❙❙'}
+        <Glyph name={fx.bypass ? 'play' : 'hold'} alone />
       </button>
       <select className="sel" title="which parameter the wave moves. Targets this group cannot take are still assignable, and flagged" value={fx.target} onChange={(e) => onEdit((x) => (x.target = e.target.value as EffectTarget))}>
         <optgroup label="drives this group">

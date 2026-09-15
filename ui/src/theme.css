@@ -1905,3 +1905,10 @@ button.warnchip { background: none; cursor: pointer; }
 }
 .cell .bindtag.unbound, .colhead .bindtag.unbound { color: var(--text-faint); }
 .cell .bindtag.clash, .colhead .bindtag.clash { color: var(--hot); }
+
+/* A chevron that folds a panel UP points up: one shape, rotated, rather than a
+   second drawing that has to be kept in step with the first. */
+.foldup .glyph { transform: rotate(180deg); }
+/* the side strips fold sideways: the same chevron, a quarter turn */
+.librarystrip .glyph { transform: rotate(90deg); }
+.editorstrip .glyph { transform: rotate(90deg); }

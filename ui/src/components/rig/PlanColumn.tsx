@@ -223,7 +223,7 @@ function AimStrip(): React.ReactElement {
     return (
       <div className="rigaim">
         <div className="rigempty">
-          aim at ▾ — add a musician or a truss on the plan
+          nothing to aim at — add a musician or a truss on the plan
           <button className="btn small ghost" title="the Stage section, where musicians and structures are added" onClick={() => jumpTo('stage')}>
             Stage
           </button>

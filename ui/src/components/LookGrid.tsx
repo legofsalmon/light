@@ -982,7 +982,7 @@ function DeckBar() {
         // "next: <song 1>" would promise a wrap that no longer happens
         if (j === i) return null;
         return (
-          <span className="decknext" title="what ] / the APC bank ▶ will select next">
+          <span className="decknext" title="what ] or the APC’s bank-forward key will select next">
             next: {decks[j].name}
           </span>
         );
@@ -1010,7 +1010,7 @@ function DeckBar() {
             setEditPicker((o) => !o);
           }}
         >
-          editing: {editingDeckId ? songNo(editingSong ?? undefined) + ' · ' + (editingSong?.name ?? '') : 'this song'} ▾
+          editing: {editingDeckId ? songNo(editingSong ?? undefined) + ' · ' + (editingSong?.name ?? '') : 'this song'} <Glyph name="chevron" />
         </button>
         {editPicker && (
           <div className="popover songpicker" style={{ top: editPos.top, left: editPos.left }} role="listbox">
@@ -1300,7 +1300,7 @@ function ControlRow() {
                     : `driven by ${midi.text}`
                 }
               >
-                {midi.partial ? `${midi.text} ⚠` : midi.text}
+                {midi.text}{midi.partial ? <Glyph name="warn" /> : null}
               </div>
             )}
           </div>

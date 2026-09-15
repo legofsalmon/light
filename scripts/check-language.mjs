@@ -139,6 +139,18 @@ function collect(file) {
   return out;
 }
 
+// --- icons are drawn, not typed (design 3.3, #31) ----------------------------
+// Every icon in the app comes from ui/src/glyphs.tsx. A pictograph typed into a
+// string is one of two bugs: a shape from whatever face the stack happens to
+// pick (which on a tablet may be a colour emoji), or a second drawing of
+// something the set already has. Keyboard keys (⌘ ⌥ ⇧ ⌃ ⏎ ⌫), the prose arrow
+// →, and the units · × ° ⌀ are not icons and are left alone.
+//
+// A native <option> cannot hold an SVG, so if one ever genuinely needs a mark,
+// say the word instead — that is what `imported · ` does in the rig's profile
+// lists.
+const TYPED_ICON = /[◀▶◁▷▴▵▾▿◂◃■□●○◆◇★☆⚡⛓⚙⚠◎⤨↺↻⇄⇅⇆⇇⇈⇉⇊⇋⇌⇐⇑⇒⇓⇔⇕⇖⇗⇘⇙⇚⇛⇜⇝⇞⇟⇠⇡⇢⇣⇩⇪▲▼✕✖✓✔⏸⏹⏺⏻]|[\u{1F000}-\u{1FAFF}]|[\u{2600}-\u{27BF}]/u;
+
 const list = process.argv.includes('--list');
 let hits = 0, seen = 0;
 for (const file of walkFiles(SRC)) {
@@ -151,7 +163,15 @@ for (const file of walkFiles(SRC)) {
       const m = text.match(r.re);
       if (m && !(r.unless && (r.unless.test(text) || r.unless.test(ctx)))) { hits++; console.log(`${rel}:${line} [${kind}] "${text}"\n    ↳ retired "${m[0]}" — say ${r.say}`); }
     }
+    // A description of a physical surface names the marks PRINTED ON IT — the
+    // APC40's bank keys carry arrows, and calling them anything else would send
+    // an operator looking for a key that is not there.
+    const icon = rel.endsWith('controllerPresets.ts') ? null : text.match(TYPED_ICON);
+    if (icon) {
+      hits++;
+      console.log(`${rel}:${line} [${kind}] "${text}"\n    ↳ typed icon "${icon[0]}" — draw it: <Glyph name="…" /> from ui/src/glyphs.tsx`);
+    }
   }
 }
-console.log(`\n${seen} visible strings, ${hits} retired-word hit${hits === 1 ? '' : 's'}`);
+console.log(`\n${seen} visible strings, ${hits} hit${hits === 1 ? '' : 's'} (retired words and typed icons)`);
 process.exit(hits ? 1 : 0);

@@ -228,7 +228,7 @@ export function LookEditor() {
           title="fire this look on its layer now, exactly as clicking the pad would"
           onClick={() => send({ type: 'trigger', layerId: layer.id, col: sel.col })}
         >
-          ▶ fire
+          <Glyph name="play" /> fire
         </button>
         <button
           className={`btn small warn ${ride ? 'on' : ''}`}
@@ -531,7 +531,7 @@ export function LookEditor() {
                     if (first) lk.steps = [{ lookId: first.id, beats: 1 }];
                   })}
                 >
-                  ⛓ steps
+                  <Glyph name="chain" /> steps
                 </button>
               );
             })()}

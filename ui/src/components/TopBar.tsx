@@ -85,7 +85,7 @@ function ProjectMenu({ name, short }: { name: string; short: boolean }) {
               title={`open “${p.name}” — the running show is saved first, and undo history does not cross projects`}
               onClick={() => openProject(p.slug, p.name)}
             >
-              {p.slug === projects?.current ? '✓ ' : ''}{p.name}
+              {p.slug === projects?.current ? <Glyph name="tick" /> : null}{p.name}
             </button>
           ))}
           <div className="popover-rule" />
@@ -541,7 +541,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
             title="write the show to disk now (⌘S). Edits autosave about a second after you stop, so this is only for peace of mind."
             onClick={() => send({ type: 'save' })}
           >
-            {justSaved ? 'saved ✓' : 'save'}
+            {justSaved ? 'saved' : 'save'}
           </button>
           <button
             className="btn small ghost"

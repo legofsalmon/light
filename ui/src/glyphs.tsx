@@ -39,6 +39,13 @@ export type GlyphName =
   | 'home'
   | 'tray'
   | 'cog'
+  | 'import'
+  | 'readdress'
+  | 'swap'
+  | 'sort-up'
+  | 'sort-down'
+  | 'tick'
+  | 'warn'
   | 'spread-order'
   | 'spread-x'
   | 'spread-y'
@@ -70,6 +77,13 @@ const NAMES: Record<GlyphName, string> = {
   home: 'home',
   tray: 'the tray',
   cog: 'settings',
+  import: 'import a file',
+  readdress: 're-address',
+  swap: 'swap the order',
+  'sort-up': 'sorted up',
+  'sort-down': 'sorted down',
+  tick: 'this one',
+  warn: 'needs attention',
   'spread-order': 'in patch order',
   'spread-x': 'left to right',
   'spread-y': 'bottom to top',
@@ -155,6 +169,46 @@ const SHAPES: Record<GlyphName, React.ReactNode> = {
       <path d="M6 1.3v1.3M6 9.4v1.3M1.3 6h1.3M9.4 6h1.3M2.7 2.7l.9.9M8.4 8.4l.9.9M9.3 2.7l-.9.9M3.6 8.4l-.9.9" />
     </>,
   ),
+  // Bringing a file in: an arrow into a tray. The rig page's import verb, and
+  // the mark beside a profile that came from a file rather than the library.
+  import: S(
+    <>
+      <path d="M6 1.6v5.2" />
+      <path d="M3.8 4.8 6 7l2.2-2.2" />
+      <path d="M2.2 8.4v1a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1v-1" />
+    </>,
+  ),
+  // Re-address: the same run of channels, moved along.
+  readdress: S(
+    <>
+      <path d="M1.6 4.2h5.6" />
+      <path d="M5.4 2.4 7.2 4.2 5.4 6" />
+      <path d="M10.4 7.8H4.8" />
+      <path d="M6.6 6 4.8 7.8l1.8 1.8" />
+    </>,
+  ),
+  // Swap two things over — the chase order's reorder key.
+  swap: S(
+    <>
+      <path d="M2 4.2h8" />
+      <path d="M8.2 2.4 10 4.2 8.2 6" />
+      <path d="M10 7.8H2" />
+      <path d="M3.8 6 2 7.8l1.8 1.8" />
+    </>,
+  ),
+  tick: S(<path d="M2.4 6.4 4.9 8.9 9.6 3.4" />),
+  // Something is half-done or half-known — a binding that only partly answers,
+  // a value the app cannot vouch for. Not the blackout family's red: this is
+  // amber's shape, and it takes amber from the text around it.
+  warn: S(
+    <>
+      <path d="M6 1.9 11 10.4H1L6 1.9z" />
+      <path d="M6 5.2v2.1" />
+      <path d="M6 8.9v.05" />
+    </>,
+  ),
+  'sort-up': F(<path d="M6 3.2 9.2 8H2.8L6 3.2z" />),
+  'sort-down': F(<path d="M6 8.8 2.8 4h6.4L6 8.8z" />),
   // the desk's pull-out, not a hamburger: a drawer with a handle
   tray: S(
     <>

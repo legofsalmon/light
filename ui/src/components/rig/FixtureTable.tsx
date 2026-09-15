@@ -47,7 +47,7 @@ function SortTh({ k, sortKey, sortDir, onSort, children, ...rest }: {
   return (
     <th {...rest} className="sortable" onClick={() => onSort(k)}>
       {children}
-      <span className="sortmark">{sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : ''}</span>
+      <span className="sortmark">{sortKey === k ? <Glyph name={sortDir === 'asc' ? 'sort-up' : 'sort-down'} /> : null}</span>
     </th>
   );
 }
@@ -144,7 +144,7 @@ export function FixtureBar({ conflicts }: { conflicts: Set<string> }): React.Rea
         style={{ cursor: 'pointer' }}
         title="import a GDTF fixture definition, or an MVR scene (fixtures, addresses, positions and the definitions inside it). Re-importing a file replaces the stored profile; undo puts the old one back."
       >
-        ⇩ import
+        <Glyph name="import" /> import
         <input
           type="file"
           accept=".gdtf,.mvr"
@@ -184,7 +184,7 @@ export function FixtureBar({ conflicts }: { conflicts: Set<string> }): React.Rea
         />
       </label>
       <button ref={readdr.btnRef} className="btn small ghost" title="pack addresses again — the whole rig, or just what is selected" onClick={readdr.toggle}>
-        ⇢ re-address
+        <Glyph name="readdress" /> re-address
       </button>
       {readdr.open && (
         <>
@@ -266,7 +266,7 @@ export function FixtureBar({ conflicts }: { conflicts: Set<string> }): React.Rea
             title="two fixtures on one universe want the same channels — one of them will be driven by the other's look"
             onClick={() => setShowConflicts((v) => !v)}
           >
-            {conflictRows.length} address conflict{conflictRows.length > 1 ? 's' : ''} ▾
+            {conflictRows.length} address conflict{conflictRows.length > 1 ? 's' : ''} <Glyph name="chevron" />
           </button>
           {showConflicts && (
             <div className="popover" style={{ position: 'absolute', right: 0, top: '100%' }}>
@@ -340,7 +340,7 @@ export function FixtureTable({ conflicts }: { conflicts: Set<string> }): React.R
   // metas per render at 40 profiles × 129 rows. Build the options once.
   const profileOptions = useMemo(
     () => allProfileMetas(project).map((pr) => (
-      <option key={pr.id} value={pr.id}>{pr.imported ? '⇩ ' : ''}{pr.label}</option>
+      <option key={pr.id} value={pr.id}>{pr.imported ? 'imported · ' : ''}{pr.label}</option>
     )),
     [project],
   );
@@ -492,7 +492,7 @@ export function FixtureTable({ conflicts }: { conflicts: Set<string> }): React.R
       <div className="rigempty">
         no rig yet
         <AddFixture />
-        <span className="prose">or ⇩ import a GDTF for one fixture, an MVR for the whole plot</span>
+        <span className="prose">or import a GDTF for one fixture, an MVR for the whole plot</span>
       </div>
     );
   }

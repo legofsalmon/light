@@ -70,7 +70,7 @@ function Result({
         GDTF {entry.version} · {entry.modes.length} mode{entry.modes.length === 1 ? '' : 's'} ·{' '}
         {Math.round(entry.filesize / 1024)} KB
         {entry.creator ? ` · ${entry.creator}` : ''}
-        {entry.rating ? ` · ★ ${entry.rating}` : ''}
+        {entry.rating ? ` · rated ${entry.rating}` : ''}
       </span>
     </div>
   );

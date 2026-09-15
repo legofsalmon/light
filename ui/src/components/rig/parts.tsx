@@ -51,7 +51,7 @@ export function MuteButton({ fixtureId, muted }: { fixtureId: string; muted: boo
         : 'mute: silence this fixture without touching the rig (a stuck or dead unit)'}
       onClick={() => send({ type: 'setFixtureMute', fixtureId, on: !muted })}
     >
-      ●
+      <i className="lamp" />
     </button>
   );
 }

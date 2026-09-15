@@ -168,7 +168,7 @@ export function SlotRow({ label, title, names, value, onChange }: {
   );
 }
 
-/** `→ dial ▾` — point a dial at this row (design #41).
+/** `→ dial` — point a dial at this row (design #41).
  *
  *  One knob driving many parameters is the answer to "I want this and this and
  *  this to move together", and until now the only way to build one was to open
@@ -222,7 +222,7 @@ export function DialMenu({ lookId, partId, effectId, fields }: {
           setOpen((o) => !o);
         }}
       >
-        → dial ▾
+        → dial
       </button>
       {open && (
         <>

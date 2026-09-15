@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Glyph } from '../glyphs.tsx';
 import { uid } from '../../../shared/types.ts';
 import type { StagePropKind } from '../../../shared/types.ts';
 import { STRUCTURE_DEFAULTS } from '../../../shared/types.ts';
@@ -114,7 +115,7 @@ function ViewMenu({ mode, preview }: { mode: '3d' | '2d'; preview: boolean }): R
           setOpen((o) => !o);
         }}
       >
-        view ▾
+        view <Glyph name="chevron" />
       </button>
       {open && (
         <div className="popover viewmenu" style={{ top: pos.top, left: pos.left }}>
@@ -267,11 +268,11 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
             would leave nothing. */}
         {!stage && (
           <button
-            className="btn small ghost pin"
+            className="btn small ghost pin foldup"
             title="hide the stage (this view only — the strip left behind brings it back)"
             onClick={() => togglePreviz(view)}
           >
-            ▴
+            <Glyph name="chevron" alone />
           </button>
         )}
         <div className="seg">

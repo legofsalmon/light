@@ -91,7 +91,7 @@ export function GroupsSection(): React.ReactElement {
               e.target.value = '';
             }}
           >
-            <option value="">add {fxSel.length} selected to ▾</option>
+            <option value="">add {fxSel.length} selected to</option>
             {project.groups.map((g) => (
               <option key={g.id} value={g.id}>{g.name}</option>
             ))}
@@ -173,7 +173,7 @@ export function GroupsSection(): React.ReactElement {
               delete x.auto; // edited chase order = promoted to authored
             })}
           >
-            ⇄
+            <Glyph name="swap" alone />
           </button>
           <button
             className="btn small ghost"

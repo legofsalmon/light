@@ -113,7 +113,7 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
       <span className="label">{BEAM_LABELS[k]}</span>
       <div className={`grow paramrow ${prm[k] === undefined ? 'off' : ''}`}>
         <Fader
-          help={`${BEAM_LABELS[k]} — greyed out until the ⏻ beside it enables this parameter for the part`}
+          help={`${BEAM_LABELS[k]} — greyed out until the box beside it enables this parameter for the part`}
           value={softFor(k) ?? prm[k] ?? 0.5}
           def={0.5}
           onChange={(v) => setP(k, v, (pt) => (pt.params[k] = v))}

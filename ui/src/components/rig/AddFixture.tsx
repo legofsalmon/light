@@ -75,7 +75,7 @@ export function AddFixture(): React.ReactElement {
               onChange={(e) => { setProfileId(e.target.value); setAddress(null); }}
             >
               {metas.map((m) => (
-                <option key={m.id} value={m.id}>{m.imported ? '⇩ ' : ''}{m.label}</option>
+                <option key={m.id} value={m.id}>{m.imported ? 'imported · ' : ''}{m.label}</option>
               ))}
             </select>
             <div className="inspectfield">
