@@ -142,6 +142,8 @@ export function describeMidiAction(p: Project, a: MidiAction): string {
       return 'Haze output';
     case 'tap':
       return 'Tap tempo';
+    case 'sync':
+      return 'Sync';
     case 'blackout':
       return 'Blackout';
     case 'deckNext':

@@ -161,6 +161,16 @@ its fader, touch an encoder. Prefer an encoder or fader to a pad: a pad drives a
 continuous target by its velocity on press only (so a release cannot slam a dial
 to zero), which means a pad can push a control up but never bring it back down.
 
+**On the APC40, CLIP STOP is GO.** The row of eight buttons directly under the
+clip grid fires whole columns: CLIP STOP under column 3 fires LIGHT's column 3,
+the same thing the column head on screen does. It says *stop* because Ableton
+made it a stop button and Arena taught you to read it that way — here it starts
+a section, and it is the only row on that surface that can hold the cues without
+taking the dial row underneath the layers. `METRONOME` is SYNC: it calls the
+moment you press it the top of the bar, for the tempo and for every effect
+shape, exactly as the SYNC button on screen does. Both arrive with the APC40 mk2
+layout; load it once and the surface runs the set without the laptop.
+
 **The APC40's eight device knobs drive the eight controls.** Load the APC40 mk2
 preset in the Sync · MIDI tab and knob *N* becomes control *N* — the control row
 shows which knob it is under each fader, read from the mappings themselves, so a

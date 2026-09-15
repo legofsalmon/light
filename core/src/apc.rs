@@ -130,6 +130,18 @@ const APC_LAYER_ROWS: usize = 4;
 /// coloured by a look, because a column holds one per layer.
 const WHITE: (u8, u8) = (3, 1);
 
+/// A column row addressed by CHANNEL: one note, one channel per column.
+/// Mirror of `Surface.columnRow` in `ui/src/surfaces.ts`.
+pub struct ColumnRow {
+    pub note: u8,
+    pub channels: &'static [u8],
+}
+
+/// The APC40 mk2's CLIP STOP row, named once so the LED table and the input
+/// preset (`ui/src/controllerPresets.ts`) cannot drift: one note (0x34), and
+/// the channel is the track.
+pub const APC40_COLUMN_ROW: ColumnRow = ColumnRow { note: 52, channels: &[0, 1, 2, 3, 4, 5, 6, 7] };
+
 /// Where a surface's buttons live and how it wants a pad lit. Data, not a
 /// trait: the two surfaces differ in note numbers and in one encoding
 /// decision, and nothing else.
@@ -145,8 +157,16 @@ pub struct Surface {
     pub blackout: u8,
     /// tap tempo, pulsed on the beat
     pub tap: u8,
-    /// pad row that fires whole columns, where the surface has one
+    /// An RGB PAD row that fires whole columns: eight consecutive notes from
+    /// here on channel 0, lit dim / bright like any other pad (mini mk2).
     pub column_base: Option<u8>,
+    /// A single-colour BUTTON row that fires whole columns: one note, and the
+    /// channel is the column — the APC40 mk2's CLIP STOP row, where the channel
+    /// IS the track. Not a second base note: the eight buttons all carry note 52
+    /// and differ only by channel, which is why the LED map is keyed by the
+    /// pair. Single-colour, so the two-brightness pad rule reduces to one bit
+    /// here: lit while the whole column is on stage, dark otherwise.
+    pub column_row: Option<ColumnRow>,
     /// Some((playing, available)) when brightness is the CHANNEL and the
     /// palette index is just the hue (mini mk2); None when the palette index
     /// carries the brightness itself (APC40 mk2, channel 0 throughout).
@@ -175,6 +195,7 @@ pub const APC40_MK2: Surface = Surface {
     blackout: 81,
     tap: 99,
     column_base: None,
+    column_row: Some(APC40_COLUMN_ROW),
     bright_channels: None,
     clear: &[(0, 39), (81, 86), (99, 99)],
 };
@@ -189,6 +210,7 @@ pub const APC_MINI_MK2: Surface = Surface {
     blackout: 119,
     tap: 118,
     column_base: Some(0),
+    column_row: None,
     bright_channels: Some((6, 1)),
     clear: &[(0, 63), (112, 119)],
 };
@@ -501,7 +523,7 @@ mod tests {
         let mut out = String::from("{\n  \"surfaces\": [\n");
         for (i, s) in SURFACES.iter().enumerate() {
             out.push_str(&format!(
-                "    {{\"name\": \"{}\", \"matches\": [{}], \"layerBase\": {}, \"sceneBase\": {}, \"blackout\": {}, \"tap\": {}, \"columnBase\": {}, \"brightChannels\": {}, \"clear\": [{}]}}{}\n",
+                "    {{\"name\": \"{}\", \"matches\": [{}], \"layerBase\": {}, \"sceneBase\": {}, \"blackout\": {}, \"tap\": {}, \"columnBase\": {}, \"columnRow\": {}, \"brightChannels\": {}, \"clear\": [{}]}}{}\n",
                 s.name,
                 s.matches.iter().map(|m| format!("\"{m}\"")).collect::<Vec<_>>().join(", "),
                 s.layer_base,
@@ -509,6 +531,11 @@ mod tests {
                 s.blackout,
                 s.tap,
                 s.column_base.map_or("null".into(), |c| c.to_string()),
+                s.column_row.as_ref().map_or("null".into(), |c| format!(
+                    "{{\"note\": {}, \"channels\": [{}]}}",
+                    c.note,
+                    c.channels.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")
+                )),
                 s.bright_channels.map_or("null".into(), |(a, b)| format!("[{a}, {b}]")),
                 s.clear.iter().map(|&(a, b)| format!("[{a}, {b}]")).collect::<Vec<_>>().join(", "),
                 if i + 1 == SURFACES.len() { "" } else { "," }

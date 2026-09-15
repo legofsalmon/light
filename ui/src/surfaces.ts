@@ -56,14 +56,29 @@ export type Surface = {
   blackout: number;
   /** tap tempo, pulsed on the beat */
   tap: number;
-  /** pad row that fires whole columns, where the surface has one */
+  /** An RGB PAD row that fires whole columns: eight consecutive notes from
+   *  here on channel 0, lit dim / bright like any other pad (mini mk2). */
   columnBase?: number;
+  /** A single-colour BUTTON row that fires whole columns: one note, and the
+   *  channel is the column — the APC40 mk2's CLIP STOP row, where the channel
+   *  IS the track. Not a second base note: the eight buttons all carry note 52
+   *  and differ only by channel, which is why the LED map is keyed by the pair.
+   *  Single-colour, so the two-brightness pad rule reduces to one bit here: lit
+   *  while the whole column is on stage, dark otherwise. */
+  columnRow?: { note: number; channels: number[] };
   /** [playing, available] when brightness is the CHANNEL and the palette index
    *  is just the hue (mini mk2); absent when the palette index carries the
    *  brightness itself (APC40 mk2, channel 0 throughout). */
   brightChannels?: [number, number];
   /** inclusive note ranges to blank on attach */
   clear: [number, number][];
+};
+
+/** The APC40 mk2's CLIP STOP row, named once so the LED table and the input
+ *  preset cannot drift: one note (0x34), and the channel is the track. */
+export const APC40_COLUMN_ROW: { note: number; channels: number[] } = {
+  note: 52,
+  channels: [0, 1, 2, 3, 4, 5, 6, 7],
 };
 
 /** Only the 5 x 8 clip grid is RGB; scene LEDs are single-colour. The bottom
@@ -75,6 +90,7 @@ export const APC40_MK2: Surface = {
   sceneBase: 82,
   blackout: 81,
   tap: 99,
+  columnRow: APC40_COLUMN_ROW,
   clear: [[0, 39], [81, 86], [99, 99]],
 };
 

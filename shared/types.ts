@@ -478,6 +478,11 @@ export type MidiAction =
   | { kind: 'speed' }
   | { kind: 'haze' }
   | { kind: 'tap' }
+  /** the SYNC key, on a button: "now is the top of the bar". Runs the same
+   *  path as the `resync` command — the clock AND the effect phase — because a
+   *  resync that leaves a bar-long shape where it was is the wrong half of the
+   *  job. See the `align_phase` mirror in core/src/types.rs. */
+  | { kind: 'sync' }
   | { kind: 'blackout' }
   | { kind: 'deckNext' }
   | { kind: 'deckPrev' };

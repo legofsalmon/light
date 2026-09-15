@@ -327,6 +327,7 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
       blackout: s.blackout,
       tap: s.tap,
       columnBase: s.columnBase ?? null,
+      columnRow: s.columnRow ?? null,
       brightChannels: s.brightChannels ?? null,
       clear: s.clear,
     }));
@@ -351,7 +352,12 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
       ['APC mini mk2', apcMiniMk2Mappings(p), APC_MINI_MK2],
     ];
     for (const [name, maps, surface] of presets) {
-      const noteAction = (n: number) => maps.find((m) => m.type === 'note' && m.number === n)?.action;
+      // The channel is part of the address now, not just the number: the
+      // APC40's eight CLIP STOP buttons all carry note 52 and differ only by
+      // it, so a lookup by number alone would find the first of the eight and
+      // call every column correct.
+      const noteAction = (n: number, channel = 0) =>
+        maps.find((m) => m.type === 'note' && m.number === n && m.channel === channel)?.action;
       check(`preset: ${name} tap LED sits on the tap button`,
         noteAction(surface.tap)?.kind === 'tap', JSON.stringify(noteAction(surface.tap)));
       check(`preset: ${name} blackout LED sits on the blackout button`,
@@ -369,19 +375,47 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
         }),
       );
       check(`preset: ${name} pad LEDs sit on that pad`, padsAgree);
-      if (surface.columnBase !== undefined) {
-        const colsAgree = [...Array(APC_COLS).keys()].every((col) => {
-          const a = noteAction(surface.columnBase! + col);
-          return a?.kind === 'column' && a.col === col;
-        });
-        check(`preset: ${name} column LEDs sit on that column`, colsAgree);
-      } else {
-        // the APC40's bottom row is left unmapped for the control row, so
-        // nothing there may light either
+      // Both surfaces fire columns; they just address the row differently —
+      // eight notes on one channel (the mini's pad row), or one note on eight
+      // channels (the APC40's CLIP STOP row).
+      const columnButton = (col: number): [number, number] | null =>
+        surface.columnRow
+          ? [surface.columnRow.channels[col], surface.columnRow.note]
+          : surface.columnBase !== undefined
+            ? [0, surface.columnBase + col]
+            : null;
+      check(`preset: ${name} has a column row at all`, columnButton(0) !== null);
+      const colsAgree = [...Array(APC_COLS).keys()].every((col) => {
+        const at = columnButton(col);
+        if (!at) return false;
+        const a = noteAction(at[1], at[0]);
+        return a?.kind === 'column' && a.col === col;
+      });
+      check(`preset: ${name} column LEDs sit on that column`, colsAgree);
+      if (surface.columnBase === undefined) {
+        // the APC40's bottom GRID row is left unmapped for the control row, so
+        // nothing there may light either — its cues live on CLIP STOP, which is
+        // not part of the 5 x 8 grid
         check(`preset: ${name} leaves the control row unmapped and unlit`,
           [...Array(APC_COLS).keys()].every((n) => noteAction(n) === undefined));
       }
     }
+    // SYNC on a controller means what the SYNC key means, or the effects are
+    // left behind by the resync that was supposed to move them.
+    {
+      const apc = apc40Mk2Mappings(p);
+      const syncs = apc.filter((m) => m.action.kind === 'sync');
+      check('preset: APC40 mk2 binds METRONOME to sync', syncs.length === 1
+        && syncs[0].type === 'note' && syncs[0].number === 90 && syncs[0].channel === 0,
+        JSON.stringify(syncs));
+      // and nothing else may sit on the CLIP STOP row, or a GO would fire two
+      // things at once
+      const stop = apc.filter((m) => m.type === 'note' && m.number === 52);
+      check('preset: the CLIP STOP row fires columns and nothing else',
+        stop.length === APC_COLS && stop.every((m) => m.action.kind === 'column'),
+        JSON.stringify(stop.map((m) => [m.channel, m.action])));
+    }
+
     // The table the Sync section and the DIALS head's controller menu read has
     // to be the same list tested above, or a layout added to the table ships
     // without ever being held against the LED map it will light.
@@ -400,6 +434,36 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
     check('learn: the confirmation names the pair in the app\'s words',
       describeLearned(p, bound).startsWith(`note ${bound.number} → ${layer.name} · pad ${col + 1}`),
       describeLearned(p, bound));
+  }
+
+  // --- what a mapped button does when it is pressed, and when it is let go ---
+  // A mapping that fires a column is a CUE, and the one thing a cue may never
+  // do is go off on its own. The three ways it could: a note OFF resolving as a
+  // press, a bank change landing on the same number, and the attach-time LED
+  // blank (a note-on with velocity 0) coming back round a loopback port. All
+  // three are the same note-off shape, so this pins the shape.
+  {
+    const cue = sanitizeProject(demoProject())!;
+    cue.midi = [
+      { id: 'm-col', type: 'note', channel: 3, number: 52, action: { kind: 'column', col: 3 } },
+      { id: 'm-sync', type: 'note', channel: 0, number: 90, action: { kind: 'sync' } },
+    ];
+    const st = new EngineState(cue);
+    const livePads = () => [...st.live.values()].filter((l) => l.col !== null).length;
+    st.applyMidi(0x83, 52, 0); // note off, CLIP STOP under column 4
+    check('midi: a note off never fires a column', livePads() === 0);
+    st.applyMidi(0x93, 52, 0); // note ON, velocity 0 — the attach-time LED blank
+    check('midi: a zero-velocity note on never fires a column either', livePads() === 0);
+    st.applyMidi(0x90, 52, 127); // the same number on the wrong channel
+    check('midi: the column button is (channel, note), not note', livePads() === 0);
+    st.applyMidi(0x93, 52, 127);
+    check('midi: CLIP STOP on its own channel fires the column', livePads() > 0);
+
+    // SYNC asks for the bar as well as the clock — the whole point of the kind.
+    check('midi: a mapped SYNC asks the renderer for a bar', st.applyMidi(0x90, 90, 127) === BAR);
+    check('midi: letting SYNC go asks for nothing', st.applyMidi(0x80, 90, 0) === null);
+    check('midi: firing a column asks for nothing', st.applyMidi(0x93, 52, 127) === null);
+    check('midi: an unmapped note asks for nothing', st.applyMidi(0x90, 52, 127) === null);
   }
 
   // every note the map can produce must be inside the ranges attach blanks
