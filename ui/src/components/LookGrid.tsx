@@ -9,6 +9,7 @@ import { LONG_PRESS_MS, contextPress } from '../touch.ts';
 const HOLD_SLOP = 8;
 import { size } from '../tokens.ts';
 import { Glyph } from '../glyphs.tsx';
+import { bindingOf } from '../midiBindings.ts';
 import { registerShortcutActions } from '../shortcuts.ts';
 
 /** Below this grid-area width the layer head is its narrow 96px (design 2.2).
@@ -278,6 +279,9 @@ const Cell = React.memo(function Cell({
   // and the layer head's mini swatch both read lookSwatch[0], the rule the APC
   // LED mirror shares, so the screen and the hardware agree (design 2.3).
   const swatch = look ? lookSwatch(look, project.looks) : null;
+  // Only while learn is on: this is a per-pad scan of the mapping list, and the
+  // grid draws forty of them.
+  const padBinding = learnMode ? bindingOf(project, { kind: 'cell', layerId: layer.id, col }) : null;
   const face = look ? lookFace(look, project) : null;
   const editingDeckId = useEditingDeckId();
   const armedLook = useLibraryStore((s) => (s.armed ? project.looks[s.armed]?.name ?? null : null));
@@ -491,6 +495,15 @@ const Cell = React.memo(function Cell({
               put a look on stage every time somebody reached for it. The long
               press belongs here too — on the body it is how a flash look is
               held. */}
+          {/* While learn is armed, every mappable target says what it already
+              answers to — the pad included (design #32, A48). The tag sits over
+              the face, where there is room, and reads hot when its key drives
+              something else as well. */}
+          {learnMode && (
+            <div className={`bindtag ${padBinding?.clash ? 'clash' : ''} ${padBinding ? '' : 'unbound'}`} aria-hidden="true">
+              {padBinding ? padBinding.text : 'unbound'}
+            </div>
+          )}
           <div
             className="cellname"
             draggable
@@ -560,6 +573,19 @@ const BLEND_WORD: Record<LayerBlend, string> = { normal: 'replaces', multiply: '
  *  the head's help. */
 export const headName = (name: string): string => name.replace(/^layer\s+(\d+)$/i, 'L$1');
 const BLENDS: LayerBlend[] = ['normal', 'multiply', 'htp'];
+
+/** What a column head already answers to, while learn is armed. Its own
+ *  component so the scan runs only for the eight heads on screen, and only
+ *  while the mode is on. */
+function ColumnBinding({ col }: { col: number }) {
+  const project = useStore((s) => s.project)!;
+  const b = bindingOf(project, { kind: 'column', col });
+  return (
+    <span className={`bindtag ${b?.clash ? 'clash' : ''} ${b ? '' : 'unbound'}`} aria-hidden="true">
+      {b ? b.text : 'unbound'}
+    </span>
+  );
+}
 
 /** The layer head (design 2.4): line 1 the name in text/key beside a ✕ that is
  *  a ghost until something is playing; line 2 the now-playing line — a mini
@@ -1637,6 +1663,7 @@ export function LookGrid() {
             like a column that would light the room. */}
         {!inert && <span className="colmark"><Glyph name={colStates[col].has ? 'play' : 'stop'} /></span>}
         {col + 1} · {name}
+        {learnMode && <ColumnBinding col={col} />}
         {/* the crossfade running into this column, on the head that fired it */}
         {!editing && colStates[col].t < 1 && (
           <i className="colfade" style={{ width: `${Math.round(colStates[col].t * 100)}%` }} aria-hidden="true" />

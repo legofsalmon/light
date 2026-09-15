@@ -80,6 +80,9 @@ export function App() {
   const remote = useRemote((s) => s.remote);
   const locked = useLocked();
   const latched = useRemote((s) => s.latch);
+  // The same wash says the same thing for learn mode: this grid is not firing
+  // cues right now, it is taking bindings (design #32).
+  const learnMode = useStore((s) => s.learnMode);
   // Locked is the pads and nothing else, and the remote IS the pads — so the
   // saved view is remembered but not obeyed until the lock comes off. Every
   // performing control keeps working; what goes is the Rig page and the panels.
@@ -369,7 +372,7 @@ export function App() {
         // The latch takes the same cyan wash MIDI learn does, because it is the
         // same arm shape: the grid is a surface you are pointing at, not one
         // you are playing (design 2.11).
-        <div className={`gridwrap ${latched ? 'learn' : ''}`}>
+        <div className={`gridwrap ${latched || learnMode ? 'learn' : ''}`}>
           <Region name="look grid"><LookGrid /></Region>
         </div>
       )}

@@ -1872,3 +1872,36 @@ button.warnchip { background: none; cursor: pointer; }
   vertical-align: -0.12em;
 }
 .app.touch .glyph { width: var(--size-icon-touch); height: var(--size-icon-touch); }
+
+/* ---------- learn mode: what each target already answers to (design #32) ----
+   Arena tints every assignable control while mapping is on and prints what it
+   is bound to, duplicates in red. On the grid the tag rides the face, where a
+   pad has room; on a column head it follows the name. Never in the layout's
+   way when learn is off, because it is not rendered then. */
+.cell .bindtag {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  right: var(--space-2);
+  font-size: var(--text-micro-size);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
+  text-transform: uppercase;
+  color: var(--text);
+  background: var(--color-overlay-veil);
+  border-radius: var(--radius-xs);
+  padding: 0 var(--space-2);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.colhead .bindtag {
+  margin-left: var(--space-4);
+  font-size: var(--text-micro-size);
+  letter-spacing: var(--text-micro-tracking);
+  color: var(--text);
+}
+.cell .bindtag.unbound, .colhead .bindtag.unbound { color: var(--text-faint); }
+.cell .bindtag.clash, .colhead .bindtag.clash { color: var(--hot); }
