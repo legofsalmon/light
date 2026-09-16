@@ -1822,7 +1822,9 @@ export function LookGrid() {
             layer, which is a cue in its own right and used to look exactly
             like a column that would light the room. */}
         {!inert && <span className="colmark"><Glyph name={colStates[col].has ? 'play' : 'stop'} /></span>}
-        {col + 1} · {name}
+        {/* one line, cut short with an ellipsis: on the phone four heads share
+            390 px, and a name that wrapped put its second line under the head */}
+        <span className="colname">{col + 1} · {name}</span>
         {learnMode && <ColumnBinding col={col} />}
         {/* the crossfade running into this column, on the head that fired it */}
         {!editing && colStates[col].t < 1 && (

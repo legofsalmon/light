@@ -1459,6 +1459,8 @@ table.tbl th { color: var(--text-dim); }
    a pad there is playing it — and `part` is some but not all. */
 .colhead { position: relative; overflow: hidden; }
 .colmark { color: var(--text-faint); margin-right: var(--space-2); }
+/* a head is one line: what does not fit is cut short, never wrapped under it */
+.colhead .colname { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .colhead.live { color: var(--color-live); box-shadow: inset 0 calc(-1 * var(--size-rule)) 0 var(--color-live); }
 .colhead.live .colmark { color: var(--color-live); }
 .colhead.part { box-shadow: inset 0 -1px 0 var(--color-live); }
