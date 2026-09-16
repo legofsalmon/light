@@ -1734,7 +1734,7 @@ button.warnchip { background: none; cursor: pointer; }
    a click are geometry, and geometry is exact. */
 .colourpop {
   position: fixed;
-  z-index: 60;
+  z-index: 201; /* not a token: above its own transparent .modalveil catcher (200), as .popover is */
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
