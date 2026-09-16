@@ -981,3 +981,59 @@ fn a_switched_off_input_is_carried_by_name_and_not_listened_to() {
     assert!(st.midi_input_on("APC40 LIGHT"), "the other one is");
     assert!(st.midi_input_on("IAC Driver Bus 1"), "and so is everything else");
 }
+
+/// Boot warns about a show it could not read, never about a first run, and falls
+/// back to the default only for a dead pointer. The same cases as BOOT_CASES in
+/// engine/test/boot.ts, read here at the loader the warning is decided from; the
+/// parity harness boots both engines on them and compares what a client is
+/// greeted with. The last case is why the fallback is narrow: a corrupt show
+/// beside a readable default used to open the default without a word.
+#[test]
+fn a_first_run_is_not_a_show_that_could_not_be_read() {
+    use light_core::persist::{load_project, Loaded};
+    let torn = r#"{ "version": 1, "name": "Friday", "fixtures": ["#; // a write cut short
+    let readable = include_str!("data/demo_project.json");
+    // (case, files on disk, warns, what .current names afterwards)
+    let rows: [(&str, &[(&str, &str)], bool, Option<&str>); 6] = [
+        ("an empty directory (a first run)", &[], false, None),
+        ("a corrupt show with no backups", &[("default.project.json", torn)], true, None),
+        ("a missing show whose backups will not parse", &[("default.project.json.bak1", torn)], true, None),
+        ("a pointer to a show with nothing saved anywhere", &[(".current", "friday")], false, Some("default")),
+        (
+            "a pointer to a show that left only unreadable backups",
+            &[(".current", "friday"), ("friday.project.json.bak1", torn)],
+            true,
+            Some("default"),
+        ),
+        (
+            "a corrupt named show beside a readable default",
+            &[(".current", "friday"), ("friday.project.json", torn), ("default.project.json", readable)],
+            true,
+            Some("friday"),
+        ),
+    ];
+    let root = std::env::temp_dir().join(format!("light-boot-{}", std::process::id()));
+    for (i, (name, files, warns, current)) in rows.iter().enumerate() {
+        let dir = root.join(i.to_string());
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (file, body) in files.iter() {
+            std::fs::write(dir.join(file), body).unwrap();
+        }
+        match load_project(&dir) {
+            Loaded::Project(p) => panic!("{name}: nothing here should open, yet {:?} did", p.name),
+            Loaded::Nothing { unreadable } => assert_eq!(unreadable, *warns, "{name}"),
+        }
+        let pointer = std::fs::read_to_string(dir.join(".current")).ok();
+        assert_eq!(pointer.as_deref().map(str::trim), *current, "{name}: the show .current names");
+        if *warns {
+            // the warning promises the file was left alone
+            let kept = std::fs::read_dir(&dir)
+                .unwrap()
+                .flatten()
+                .any(|e| std::fs::read_to_string(e.path()).is_ok_and(|s| s == torn));
+            assert!(kept, "{name}: the unreadable bytes must still be on disk");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}

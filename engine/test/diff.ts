@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import WebSocket from 'ws';
 import { defaultProject } from '../defaultProject.ts';
+import { BOOT_CASES, bootNotices, pointer } from './boot.ts';
 import type { Command, ControlLink, Effect, FxPreset, PartParams, Project, Snapshot } from '../../shared/types.ts';
 import { COMPILER_VERSION } from '../../shared/types.ts';
 
@@ -201,6 +202,36 @@ async function main(): Promise<void> {
   if (!fs.existsSync(RUST_BIN)) {
     console.error('rust engine not built — run: cargo build -p light-core');
     process.exit(1);
+  }
+
+  // --- Boot: both engines warn about a show they could not read, and neither
+  // about a first run; and both fall back to the default only for a dead
+  // pointer. Decided at boot and heard on connect, so each case boots a fresh
+  // engine of each kind on its own scratch directory, compares the greetings
+  // whole and reads where `.current` was left — before the main pair starts, so
+  // nothing here runs beside the timed checks.
+  for (const [i, row] of BOOT_CASES.entries()) {
+    const boot = async (engine: 'node' | 'rust') => {
+      const dir = path.join(TMP, `boot-${i}-${engine}`);
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.mkdirSync(dir, { recursive: true });
+      for (const [file, body] of Object.entries(row.files)) fs.writeFileSync(path.join(dir, file), body);
+      const notices = await bootNotices(engine, dir).catch((err: Error) => err.message);
+      return { notices, current: pointer(dir) };
+    };
+    const n = await boot('node');
+    const r = await boot('rust');
+    check(
+      `boot: ${row.name} — ${row.warns ? 'both warn, in the same words' : 'neither warns'}`,
+      typeof n.notices !== 'string' && JSON.stringify(n.notices) === JSON.stringify(r.notices) &&
+        n.notices.length === (row.warns ? 1 : 0),
+      `node=${JSON.stringify(n.notices)} rust=${JSON.stringify(r.notices)}`,
+    );
+    check(
+      `boot: ${row.name} — both leave .current naming ${row.current ?? 'nothing'}`,
+      n.current === row.current && r.current === row.current,
+      `node=${n.current} rust=${r.current}`,
+    );
   }
 
   const procs: ChildProcess[] = [];

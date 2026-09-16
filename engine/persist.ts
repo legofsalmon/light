@@ -184,33 +184,48 @@ function tryLoad(file: string): Project | null {
   }
 }
 
+/** What loadProject opened, or why it opened nothing.
+ *
+ *  Coming back empty-handed happens two ways, and only one is news to the
+ *  operator. `unreadable` means a show was saved here and neither its file nor
+ *  any backup would parse. Otherwise nothing was ever saved — a fresh install,
+ *  an empty LIGHT_PROJECT_DIR — which is a first run, and boot used to greet it
+ *  with a warning about a file "left untouched" that had never existed. */
+export type Loaded = { project: Project } | { project: null; unreadable: boolean };
+
 /**
  * Load the project — falling back through the rotating backups if the main
  * file is corrupt. A corrupt main file is preserved aside (never silently
  * replaced, never rotated over the good backups).
  */
-export function loadProject(): Project | null {
+export function loadProject(): Loaded {
   if (!fs.existsSync(FILE())) {
     // the pointed-at file is gone (sync hiccup, cleanup script) — its
     // backups may still hold the show; booting a blank default here would
     // rotate them into oblivion within five autosaves
+    let unreadable = false; // a backup is there and would not parse
     for (let i = 1; i <= BACKUPS; i++) {
-      const p = tryLoad(`${FILE()}.bak${i}`);
+      const bak = `${FILE()}.bak${i}`;
+      const p = tryLoad(bak);
       if (p) {
         console.error(`[persist] ${path.basename(FILE())} missing — recovered from .bak${i}`);
         saveProjectNow(p);
-        return p;
+        return { project: p };
       }
+      if (fs.existsSync(bak)) unreadable = true;
     }
     if (slug !== 'default') {
       console.error(`[persist] project "${slug}" has no file or backups — falling back to default`);
       setCurrentSlug('default');
-      return loadProject();
+      const fallback = loadProject();
+      // the default having nothing to read does not make this show's
+      // unreadable backups a first run
+      return unreadable && !fallback.project ? { project: null, unreadable } : fallback;
     }
-    return null;
+    return { project: null, unreadable };
   }
   const main = tryLoad(FILE());
-  if (main) return main;
+  if (main) return { project: main };
 
   console.error('[persist] project file is corrupt — trying backups');
   for (let i = 1; i <= BACKUPS; i++) {
@@ -223,7 +238,7 @@ export function loadProject(): Project | null {
       } catch {
         // best effort — the recovered project is still returned
       }
-      return p;
+      return { project: p };
     }
   }
   try {
@@ -233,7 +248,7 @@ export function loadProject(): Project | null {
   } catch {
     // nothing more we can do
   }
-  return null;
+  return { project: null, unreadable: true };
 }
 
 function rotateBackups(): void {

@@ -4,6 +4,8 @@
 // packet over loopback.
 
 import dgram from 'node:dgram';
+import { tmpdir } from 'node:os';
+import { BOOT_CASES, TORN, bootNotices, pointer, type Notice } from './boot.ts';
 import { EngineState, HISTORY_CAP } from '../state.ts';
 import { Renderer } from '../renderer.ts';
 import fs from 'node:fs';
@@ -2532,6 +2534,53 @@ await new Promise<void>((resolve) => {
   check('input switch: a name that is not this surface is never chosen', choosePort(names, APC_MINI_MK2.matches, []) === -1);
   check('input switch: two units with one name cannot be told apart, so off is off for both',
     choosePort(['APC40 mk2', 'APC40 mk2'], APC40_MK2.matches, ['APC40 mk2']) === -1);
+}
+
+// --- Boot warns about a show it could not read, never about a first run --------
+//
+// loadProject comes back empty-handed two ways, and boot answered both with
+// "saved project could not be read … (your file was left untouched)". On a first
+// run — a fresh install, an empty LIGHT_PROJECT_DIR — that told every client
+// about a file that had never existed. The warning is decided at boot and heard
+// on connect, so each case boots a real engine: its own scratch directory and
+// port, ArtPoll off, and outputs are off at every boot. The parity harness boots
+// the Rust engine on the same cases and compares the greetings.
+{
+  const root = fs.mkdtempSync(path.join(tmpdir(), 'light-boot-'));
+  try {
+    for (const [i, row] of BOOT_CASES.entries()) {
+      const dir = path.join(root, String(i));
+      fs.mkdirSync(dir);
+      for (const [file, body] of Object.entries(row.files)) fs.writeFileSync(path.join(dir, file), body);
+      let notices: Notice[];
+      try {
+        notices = await bootNotices('node', dir);
+      } catch (err) {
+        check(`boot: ${row.name}`, false, (err as Error).message);
+        continue;
+      }
+      if (row.warns) {
+        check(
+          `boot: ${row.name} warns that the saved show could not be read`,
+          notices.length === 1 && !notices[0]!.ok && notices[0]!.message.includes('could not be read'),
+          JSON.stringify(notices),
+        );
+        // ...and the warning promises the file was left alone: its bytes are
+        // still on disk, wherever the recovery ladder moved them
+        const files = fs.readdirSync(dir);
+        check(
+          `boot: ${row.name} keeps the unreadable bytes`,
+          files.some((f) => fs.readFileSync(path.join(dir, f), 'utf8') === TORN),
+          files.join(', '),
+        );
+      } else {
+        check(`boot: ${row.name} gives no warning`, notices.length === 0, JSON.stringify(notices));
+      }
+      check(`boot: ${row.name} leaves .current naming ${row.current ?? 'nothing'}`, pointer(dir) === row.current, `${pointer(dir)}`);
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
