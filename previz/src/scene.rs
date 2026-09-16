@@ -1113,7 +1113,7 @@ pub fn rebuild_fixtures(
             let face = if f.pos.y > 1.2 {
                 Vec3::new(0.0, -0.93, 0.37)
             } else {
-                Vec3::new(0.0, -0.26, 0.97)
+                Vec3::new(0.0, -0.995, 0.0998)
             };
             // Bevy holds rect lights in a FIXED array of 8
             // (MAX_RECT_LIGHTS, render/light.rs:232), unclustered, iterated for
@@ -1209,12 +1209,16 @@ pub fn rebuild_fixtures(
         // left every imported mover bolted in place.
         let aims = prof.aim_head.is_some() || prof.heads.iter().any(|h| h.0 == HeadKind::Mover);
         // Which way this fixture's body faces when nothing is driving it: the
-        // rest pose a mover's yoke deflects from, and — new — the direction a
-        // fixture that does NOT move is bolted pointing.
+        // rest pose a mover's yoke deflects from, and the direction a fixture
+        // that does NOT move is bolted pointing. The mounting tilt composes on
+        // this, so it is what every show's tilts mean — and LITERAL DATA shared
+        // with the web previz (ui/src/restAim.ts), whose smoke test reads these
+        // three rows out of this file. The floor row is the web's: a bar tuned
+        // level in the main window stood on end here while this said 75°.
         let rest_dir = match prof.heads.first().map(|h| h.0) {
             Some(HeadKind::Derby) => Vec3::new(0.0, -0.85, 0.52),
             _ if f.pos.y > 1.2 => Vec3::new(0.0, -0.93, 0.37),
-            _ => Vec3::new(0.0, -0.26, 0.97),
+            _ => Vec3::new(0.0, -0.995, 0.0998),
         };
         let body_rot = Transform::default().looking_to(rest_dir, Vec3::Y).rotation;
 
@@ -1488,7 +1492,7 @@ pub fn rebuild_fixtures(
             let beam_dir = match kind {
                 HeadKind::Derby => Vec3::new(0.0, -0.85, 0.52),
                 _ if rigged => Vec3::new(0.0, -0.93, 0.37),
-                _ => Vec3::new(0.0, -0.26, 0.97),
+                _ => Vec3::new(0.0, -0.995, 0.0998),
             };
             // The emitter's rotation RELATIVE to the body frame it now hangs
             // in. For the ordinary fixture — every head the same kind — this is
@@ -1831,7 +1835,7 @@ mod tests {
         for dir in [
             Vec3::new(0.0, -0.85, 0.52),
             Vec3::new(0.0, -0.93, 0.37),
-            Vec3::new(0.0, -0.26, 0.97),
+            Vec3::new(0.0, -0.995, 0.0998),
         ] {
             let rest = Transform::default().looking_to(dir, Vec3::Y).rotation;
             let tilt_axis = rest * Vec3::X;

@@ -3,11 +3,12 @@
 //
 // LITERAL DATA duplicated in previz/src/scene.rs (`rest_dir`). The native stage
 // window and this one draw the same rig, and for a while they disagreed on
-// where a par points: the native turned the whole can to this direction and
-// composed the mounting tilt on it, the web tipped only the beam and used a
-// different direction below the rig height. A smoke test now holds the two
-// tables against each other, so a change to one that is not made to the other
-// fails before anyone compares windows again.
+// where a par points: below the rig height the native rested a fixture 75° from
+// vertical, this one 6°, and a show's mounting tilts had been set against this
+// one — a bar tuned level here stood on end there. The floor row is therefore
+// the web's, and the native took it. A smoke test holds the two tables against
+// each other, so a change to one that is not made to the other fails before
+// anyone compares windows again.
 //
 // Pure, and outside the component, so the Node suite can read it.
 
@@ -21,8 +22,10 @@ export const REST_DIR = {
   derby: [0, -0.85, 0.52],
   /** hung above the rig height: down, tipped toward the audience */
   rigged: [0, -0.93, 0.37],
-  /** on the floor or a riser: forward, a little down */
-  floor: [0, -0.26, 0.97],
+  /** on the floor, a case or a riser: nearly straight down, a touch toward the
+   *  audience — the mounting tilt is what points it, and every show's tilts
+   *  were set against this */
+  floor: [0, -0.995, 0.0998],
 } as const satisfies Record<string, RestDir>;
 
 /** The rest direction for a fixture whose first head is `kind`, hung at `y`. */

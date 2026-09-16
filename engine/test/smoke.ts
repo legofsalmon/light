@@ -2610,8 +2610,8 @@ await new Promise<void>((resolve) => {
 // --- the two previz agree on where a fixture points at rest -------------------
 // The rest directions are LITERAL DATA in previz/src/scene.rs (`rest_dir`) and
 // ui/src/restAim.ts. Two stage windows that disagree on where a par points is
-// the bug this holds shut: the web tipped a low par 6° from straight down
-// while the native window pointed it 75° from vertical.
+// the bug this holds shut: the native rested a low par 75° from vertical while
+// the web, which every show's mounting tilts were set against, rested it 6°.
 {
   const rs = fs.readFileSync(path.join(process.cwd(), 'previz/src/scene.rs'), 'utf8');
   const block = rs.slice(rs.indexOf('let rest_dir = match'), rs.indexOf('let body_rot'));
@@ -2630,7 +2630,7 @@ await new Promise<void>((resolve) => {
   // the web turns a body that points straight down onto the direction; the
   // three angles are what the old per-beam tips were, and the one that was not
   const deg = (d: readonly number[]) => Math.round(Math.abs(restTiltX(d as never)) * 180 / Math.PI);
-  check('rest aim: rigged is the old 22° tip, derby the old 31°, floor is 75° not 6°', deg(REST_DIR.rigged) === 22 && deg(REST_DIR.derby) === 31 && deg(REST_DIR.floor) === 75, [REST_DIR.rigged, REST_DIR.derby, REST_DIR.floor].map(deg).join(','));
+  check('rest aim: rigged is the 22° tip the web always drew, derby 31°, floor 6°', deg(REST_DIR.rigged) === 22 && deg(REST_DIR.derby) === 31 && deg(REST_DIR.floor) === 6, [REST_DIR.rigged, REST_DIR.derby, REST_DIR.floor].map(deg).join(','));
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
