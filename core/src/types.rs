@@ -1306,6 +1306,12 @@ pub struct Snapshot {
     /// published, and in the browser, which has none to publish.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub midi_port: Option<String>,
+    /// Where each CC last sat, keyed `"<channel>:<number>"` with the channel
+    /// 0-based as it arrives on the wire (design #52, A35). Absent until a knob
+    /// moves. The screen draws a tick at that position whenever it is not where
+    /// the value is, because the next touch of an absolute fader jumps there.
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub midi_cc: std::collections::HashMap<String, u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artnet_nodes: Option<Vec<ArtnetNodeSnap>>,
     #[serde(skip_serializing_if = "Option::is_none")]

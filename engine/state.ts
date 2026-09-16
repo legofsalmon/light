@@ -127,6 +127,9 @@ export class EngineState {
    *  freeze whose owner vanishes is released; a latched one has no owner and
    *  outlives every disconnect. */
   frozenBy: number | null = null;
+  /** Where each CC last sat, keyed "<channel>:<number>". Runtime only: where a
+   *  knob physically is belongs to the room, not to the show. */
+  midiCc = new Map<string, number>();
   learnTarget: MidiAction | null = null;
   /** Monotonic project generation. Bumped once per project-changing command by
    *  the transport layer (engine/index.ts) — matching the per-command bump in
@@ -426,6 +429,9 @@ export class EngineState {
     const isNoteOff = kind === 0x80 || (kind === 0x90 && d2 === 0);
     const isCC = kind === 0xb0;
     if (!isNoteOn && !isNoteOff && !isCC) return null;
+    // Where the hardware left this knob (design #52, A35). Mirrors the Rust
+    // twin: recorded before learn and before dispatch, so every CC counts.
+    if (isCC) this.midiCc.set(`${channel}:${d1}`, d2);
 
     if (this.learnTarget && (isNoteOn || isCC)) {
       const mapping: MidiMapping = {

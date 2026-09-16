@@ -62,7 +62,14 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
   const norm = clamp((value - min) / (max - min));
   // Where the controller bound to this fader physically sits, if anything has
   // moved it this session.
-  const midiCc = useStore((st) => st.midiCc);
+  // Two sources, one answer. When the ENGINE owns MIDI (the shipping app), the
+  // browser never sees a CC and only the snapshot knows where a knob sits. When
+  // the browser owns it, it forwards every message to the engine, so the
+  // snapshot has it too — but ~50 ms later, so the browser's own record wins
+  // where both have one.
+  const localCc = useStore((st) => st.midiCc);
+  const engineCc = useStore((st) => st.snap?.midiCc);
+  const midiCc = React.useMemo(() => ({ ...engineCc, ...localCc }), [engineCc, localCc]);
   const project = useStore((st) => st.project);
   const hw = hardwareAt(project, midiCc, learn);
   const learnMode = useStore((s) => s.learnMode);

@@ -826,6 +826,10 @@ export type Snapshot = {
   heads: HeadSnap[];
   layers: LayerSnap[];
   stats: EngineStats;
+  /** Where each CC last sat, keyed "<channel>:<number>" with the channel
+   *  0-based as it arrives on the wire (design #52, A35). Absent until a knob
+   *  moves. */
+  midiCc?: Record<string, number>;
 };
 
 // The snapshot is IDENTICAL for every client, so the engine serialises it once

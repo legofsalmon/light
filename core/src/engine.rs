@@ -1317,6 +1317,12 @@ fn build_snapshot(
             },
         }),
         midi_port: own_midi_port.map(str::to_string),
+        // Keyed the way the browser keys its own: "<channel>:<number>".
+        midi_cc: state
+            .midi_cc
+            .iter()
+            .map(|((ch, n), v)| (format!("{ch}:{n}"), *v))
+            .collect(),
         artnet_nodes: if artnet.poll_status() != "off"
             || state.project.universes.iter().any(|u| u.artnet)
         {

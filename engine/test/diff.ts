@@ -1989,6 +1989,23 @@ async function main(): Promise<void> {
     }
   }
 
+  // --- Where a knob physically sits (design #52, A35).
+  //
+  // Both engines must report the same positions under the same keys, or the
+  // tick the screen draws would sit in a different place depending on which
+  // engine is running the show.
+  {
+    both({ type: 'midi', status: 0xb3, d1: 7, d2: 99 });
+    both({ type: 'midi', status: 0xb0, d1: 14, d2: 3 });
+    await sleep(400);
+    const ccOf = (c: Client) => JSON.stringify(Object.entries(c.snap?.midiCc ?? {}).sort());
+    check(
+      'knob: both engines report the same positions under the same keys',
+      ccOf(node) === ccOf(rust) && (node.snap?.midiCc?.['3:7'] === 99) && (node.snap?.midiCc?.['0:14'] === 3),
+      `node=${ccOf(node)} rust=${ccOf(rust)}`,
+    );
+  }
+
   // --- A notice about the show file answers the one who asked (design #56).
   //
   // "opened Electronic Set" went to every client. The tablet at front of house

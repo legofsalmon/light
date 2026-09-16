@@ -349,6 +349,9 @@ pub struct EngineState {
     /// Live Named Control positions (P3). Runtime-only; the STORED position
     /// is Control.value in the project. Cleared with the soft layer.
     pub control_live: HashMap<String, f64>,
+    /// Where each CC last sat, keyed (channel, number). Runtime only: where a
+    /// knob physically is belongs to the room, not to the show.
+    pub midi_cc: HashMap<(u8, u8), u8>,
     pub learn_target: Option<MidiAction>,
     /// TEST ONLY — a pending effect-clock pin (LIGHT_TEST_CLOCK gated), consumed
     /// by the engine loop before the next tick. Not show state; never persisted.
@@ -387,6 +390,7 @@ impl EngineState {
             overrides: HashMap::new(),
             soft: HashMap::new(),
             control_live: HashMap::new(),
+            midi_cc: HashMap::new(),
             learn_target: None,
             gen: 1,
             pending_pin: None,
@@ -771,6 +775,14 @@ impl EngineState {
         let is_cc = kind == 0xb0;
         if !is_note_on && !is_note_off && !is_cc {
             return out;
+        }
+        // Where the hardware left this knob (design #52, A35). An APC's faders
+        // and knobs are absolute: they send the position they are at and do not
+        // move when the screen does, so the next touch JUMPS the value there.
+        // The browser can only see this when it owns MIDI; when the engine does,
+        // this is the only place the answer exists.
+        if is_cc {
+            self.midi_cc.insert((channel, d1), d2);
         }
 
         if let Some(target) = self.learn_target.take() {

@@ -2262,5 +2262,17 @@ await new Promise<void>((resolve) => {
   check('carried: so is a home flag of the wrong type', wrong.decks?.[0]?.home === undefined);
 }
 
+// --- where a knob physically sits (design #52, A35) -------------------------
+// The Rust twin asserts the same three facts in core/tests/smoke.rs.
+{
+  const st = new EngineState(sanitizeProject(demoProject())!);
+  st.applyMidi(0xb3, 7, 99);
+  check('knob: a CC nothing is mapped to still records where it is', st.midiCc.get('3:7') === 99);
+  st.applyMidi(0xb3, 7, 12);
+  check('knob: the latest position wins', st.midiCc.get('3:7') === 12);
+  st.applyMidi(0x90, 7, 127);
+  check('knob: a note leaves nothing behind', st.midiCc.size === 1);
+}
+
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

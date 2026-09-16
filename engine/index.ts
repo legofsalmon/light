@@ -888,6 +888,7 @@ function loopBody(): void {
       heads: res.heads,
       layers: res.layers,
       ...(state.muted.size > 0 ? { muted: [...state.muted] } : {}),
+      ...(state.midiCc.size > 0 ? { midiCc: Object.fromEntries(state.midiCc) } : {}),
       ...(state.soft.size > 0 ? { soft: state.softEntries() } : {}),
       ...(state.controlLive.size > 0 ? { controls: state.controlEntries() } : {}),
       ...(state.submasters.size > 0 ? { submasters: state.submasterEntries() } : {}),

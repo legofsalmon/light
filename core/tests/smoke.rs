@@ -813,3 +813,21 @@ fn a_show_without_the_carried_fields_neither_fails_nor_grows_them() {
     assert!(back.palettes.is_empty() && back.pinned_groups.is_empty());
     assert!(back.decks.iter().all(|d| d.note.is_none() && !d.home));
 }
+
+/// Where a knob physically sits (design #52, A35). An APC's faders are absolute:
+/// after the screen moves a value, the hardware is wherever it was left, and the
+/// next touch jumps the value there. When the engine owns MIDI this record is the
+/// only place that answer exists.
+#[test]
+fn every_cc_leaves_its_position_behind_mapped_or_not() {
+    let mut st = EngineState::new(demo_project(), 0.0);
+    // a CC nothing is mapped to still records where the knob is
+    st.apply_midi(0xb3, 7, 99, 0.0);
+    assert_eq!(st.midi_cc.get(&(3, 7)), Some(&99), "channel 3 (0-based), cc 7");
+    // the latest position wins
+    st.apply_midi(0xb3, 7, 12, 1.0);
+    assert_eq!(st.midi_cc.get(&(3, 7)), Some(&12));
+    // a note is not a position
+    st.apply_midi(0x90, 7, 127, 2.0);
+    assert_eq!(st.midi_cc.len(), 1, "notes leave nothing behind");
+}
