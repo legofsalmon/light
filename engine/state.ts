@@ -11,13 +11,18 @@ export type LayerLive = {
   /** Which client is holding this momentary look, if any. A hold started by
    *  MIDI/OSC is owned by LOCAL_CLIENT so no browser disconnect drops it. */
   heldBy: number | null;
+  /** The song this look was fired FROM (design #47, A18). After a song switch
+   *  the rig is still lit by the page that is gone, and the layer head could
+   *  only say the look's name — not that it belongs to another song. Recorded
+   *  at trigger time, because that is the only moment the answer is known. */
+  deckId: string | null;
 };
 
 /** Owner for holds started by MIDI, OSC or any non-socket source. No WS client
  *  ever gets this id, so such a hold survives every browser disconnect. */
 export const LOCAL_CLIENT = Number.MAX_SAFE_INTEGER;
 
-const freshLive = (): LayerLive => ({ lookId: null, prevId: null, col: null, fadeStart: 0, fadeDur: 0, heldBy: null });
+const freshLive = (): LayerLive => ({ lookId: null, prevId: null, col: null, fadeStart: 0, fadeDur: 0, heldBy: null, deckId: null });
 
 /** Authoritative engine state: the project plus everything live. */
 /** Route one soft part-field onto PartParams. Hue/sat address the colour
@@ -170,6 +175,7 @@ export class EngineState {
     live.fadeStart = t;
     live.fadeDur = Math.max(0, look.fade ?? layer.fade);
     live.heldBy = look.flash ? owner : null;
+    live.deckId = this.project.activeDeckId ?? null;
   }
 
   release(layerId: string, col: number, t = performance.now()): void {

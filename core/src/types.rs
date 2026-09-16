@@ -1014,6 +1014,26 @@ pub struct Deck {
     pub name: String,
     pub columns: Vec<String>,
     pub cells: HashMap<String, Vec<Option<String>>>,
+    /// A line for the set list. Absent by default; the renderer never reads it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The song to come back to — at most one in a show.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub home: bool,
+}
+
+/// A named colour the show keeps, rather than one baked into every look that
+/// uses it. Mirror of `Palette` in shared/types.ts.
+///
+/// Carried, never rendered: the engine's job is to keep it across a round trip
+/// so the editor can retune every look that matches. Nothing on the tick reads
+/// it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Palette {
+    pub id: String,
+    pub name: String,
+    pub h: f64,
+    pub s: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1134,6 +1154,14 @@ pub struct Project {
     /// grid pages (one per song); layer.cells mirrors the active deck
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub decks: Vec<Deck>,
+    /// Named colours the show keeps (design A12). Carried, never rendered.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub palettes: Vec<Palette>,
+    /// Which groups get a fader on the performance row, in that order.
+    /// Empty = every group, which is what the row did before it could be
+    /// chosen.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pinned_groups: Vec<String>,
     /// `alias` is the migration: shows written by an earlier build carry the
     /// snake_case spelling, and without it they would silently lose their
     /// active deck on first load. Reads either, always writes camelCase, so a
@@ -1185,6 +1213,11 @@ pub struct LayerSnap {
     pub prev_id: Option<String>,
     pub col: Option<usize>,
     pub t: f64,
+    /// The song this look was fired from, when that is not the song showing.
+    /// Absent means "this one" — so a client built before the field reads the
+    /// same thing it always did (design #47).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deck_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

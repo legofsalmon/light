@@ -600,6 +600,24 @@ function ColumnBinding({ col }: { col: number }) {
   );
 }
 
+/** A song's position in the set, two digits. */
+const songNoIn = (decks: { id: string }[], d: { id: string } | undefined): string => {
+  const i = d ? decks.findIndex((x) => x.id === d.id) : -1;
+  return i < 0 ? '—' : String(i + 1).padStart(2, '0');
+};
+
+/** A song reads `01 · Still Air`: its position, then its name.
+ *
+ *  Operators number songs in the name themselves — the demo ships every song as
+ *  "01 · Still Air" — and printing the position in front of that gave
+ *  `01 · 01 · Still Air`. The position is the number; a name that already opens
+ *  with one has it taken off rather than doubled. */
+const songLabelIn = (decks: { id: string; name: string }[], d: { id: string; name: string } | undefined): string => {
+  if (!d) return '—';
+  const bare = d.name.replace(/^\s*\d{1,3}\s*[·.\-:]\s*/, '');
+  return `${songNoIn(decks, d)} · ${bare || d.name}`;
+};
+
 /** The layer head (design 2.4): line 1 the name in text/key beside a ✕ that is
  *  a ghost until something is playing; line 2 the now-playing line — a mini
  *  swatch in the look's first colour and its name in tungsten, an unlit well
@@ -626,6 +644,13 @@ function LayerHead({ layer, live, layerNo }: { layer: Layer; live: LayerSnap | u
   const liveId = live?.lookId ?? null;
   const liveLook = liveId && Object.hasOwn(project.looks, liveId) ? project.looks[liveId] : null;
   const crossfading = !!liveLook && (live?.t ?? 1) < 1;
+  // The song this look was fired from, when that is not the song showing
+  // (design A18). The engine says nothing while they are the same, so a head
+  // reads exactly as it always did until a switch leaves the rig lit by a page
+  // that is gone — which is the moment the name alone stops being the truth.
+  const firedFrom = live?.deckId
+    ? (project.decks ?? []).find((d) => d.id === live.deckId) ?? null
+    : null;
 
   // What this layer was playing just before it went dark, for ten seconds
   // (design 2.4, A34 — Hog's Pig + Clear). The ✕ is deliberately outside undo,
@@ -753,7 +778,7 @@ function LayerHead({ layer, live, layerNo }: { layer: Layer; live: LayerSnap | u
         tabIndex={liveLook && live?.col != null ? 0 : undefined}
         title={
           liveLook
-            ? `playing: ${liveLook.name}${live?.col != null ? ` (column ${live.col + 1}) — click to edit what is on stage, without firing anything` : ''}`
+            ? `playing: ${liveLook.name}${firedFrom ? ` — fired from ${songLabelIn(project.decks ?? [], firedFrom)}, which is not the song on screen` : ''}${live?.col != null ? ` (column ${live.col + 1}) — click to edit what is on stage, without firing anything` : ''}`
             : 'nothing playing on this layer'
         }
         // Select what this layer is playing (design A6, Eos's Select Active).
@@ -775,6 +800,7 @@ function LayerHead({ layer, live, layerNo }: { layer: Layer; live: LayerSnap | u
               <i style={{ background: lookSwatch(liveLook, project.looks)[0] }} />
             </span>
             <span className="grow ellip">{liveLook.name}</span>
+            {firedFrom && <span className="fromsong">from {songLabelIn(project.decks ?? [], firedFrom)}</span>}
           </>
         ) : recover ? (
           <button
@@ -824,21 +850,8 @@ function DeckBar() {
   const editBoxRef = useRef<HTMLDivElement>(null);
   const active = decks.find((d) => d.id === project.activeDeckId);
   /** the song's place in the set, so the list reads like a set list */
-  const songNo = (d: { id: string } | undefined) => {
-    const i = d ? decks.findIndex((x) => x.id === d.id) : -1;
-    return i < 0 ? '—' : String(i + 1).padStart(2, '0');
-  };
-  /** A song reads `01 · Still Air`: its position, then its name.
-   *
-   *  Operators number songs in the name themselves — the demo ships every song
-   *  as "01 · Still Air" — and printing the position in front of that gave
-   *  `01 · 01 · Still Air`. The position is the number; a name that already
-   *  opens with one has it taken off rather than doubled. */
-  const songLabel = (d: { id: string; name: string } | undefined) => {
-    if (!d) return '—';
-    const bare = d.name.replace(/^\s*\d{1,3}\s*[·.\-:]\s*/, '');
-    return `${songNo(d)} · ${bare || d.name}`;
-  };
+  const songNo = (d: { id: string } | undefined) => songNoIn(decks, d);
+  const songLabel = (d: { id: string; name: string } | undefined) => songLabelIn(decks, d);
   const shown = filter.trim()
     ? decks.filter((d) => d.name.toLowerCase().includes(filter.trim().toLowerCase()))
     : decks;

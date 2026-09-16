@@ -75,11 +75,16 @@ pub struct LayerLive {
     /// is held; a hold started by MIDI/OSC is owned by `LOCAL_CLIENT` so that a
     /// browser disconnecting never drops it.
     pub held_by: Option<u64>,
+    /// The song this look was fired FROM (design #47, A18). After a song switch
+    /// the rig is still lit by the page that is gone, and the layer head could
+    /// only say the look's name — not that it belongs to another song. Recorded
+    /// at trigger time, because that is the only moment the answer is known.
+    pub deck_id: Option<String>,
 }
 
 impl Default for LayerLive {
     fn default() -> Self {
-        LayerLive { look_id: None, prev_id: None, col: None, fade_start: 0.0, fade_dur: 0.0, held_by: None }
+        LayerLive { look_id: None, prev_id: None, col: None, fade_start: 0.0, fade_dur: 0.0, held_by: None, deck_id: None }
     }
 }
 
@@ -424,6 +429,8 @@ impl EngineState {
                 name: "Song 1".into(),
                 columns: self.project.columns.clone(),
                 cells,
+                note: None,
+                home: false,
             });
             self.project.active_deck_id = Some("deck-1".into());
             changed = true;
@@ -636,6 +643,8 @@ impl EngineState {
         let Some(look) = self.project.looks.get(&look_id) else { return };
         let fade = look.fade.unwrap_or(layer.fade).max(0.0);
         let flash = look.is_flash();
+        // cloned before `layer_live` takes its mutable borrow of self
+        let from_deck = self.project.active_deck_id.clone();
         let live = self.layer_live(layer_id);
         // Retriggering the already-active look is a no-op — a double column
         // press mid-fade must not snap the crossfade.
@@ -648,6 +657,7 @@ impl EngineState {
         live.fade_start = t;
         live.fade_dur = fade;
         live.held_by = if flash { Some(owner) } else { None };
+        live.deck_id = from_deck;
     }
 
     pub fn release(&mut self, layer_id: &str, col: usize, t: f64) {

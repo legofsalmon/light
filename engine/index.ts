@@ -236,6 +236,8 @@ function previewHeads(t: number): { previewHeads: HeadSnap[] } | null {
     lookId,
     prevId: null,
     col: null,
+    // the audition is not fired from a song, so it belongs to none
+    deckId: null,
     fadeStart: t - 60_000, // long since faded in
     fadeDur: 0,
     heldBy: null,

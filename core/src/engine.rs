@@ -1259,6 +1259,8 @@ fn preview_heads(
             fade_start: t - 60_000.0, // long since faded in
             fade_dur: 0.0,
             held_by: None,
+            // the audition is not fired from a song, so it belongs to none
+            deck_id: None,
         },
     );
     let res = r.tick(st, t);

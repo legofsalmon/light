@@ -267,11 +267,15 @@ export class Renderer {
 
     // --- layer stack (index 0 = bottom) ---
     const layerSnaps: LayerSnap[] = [];
+    const activeDeckId = st.project.activeDeckId ?? null;
     for (const layer of p.layers) {
       const live = st.layerLive(layer.id);
       const tau = live.fadeDur <= 0 ? 1 : clamp((t - live.fadeStart) / (live.fadeDur * 1000));
       if (tau >= 1 && live.prevId) live.prevId = null;
-      layerSnaps.push({ id: layer.id, lookId: live.lookId, prevId: live.prevId, col: live.col, t: tau });
+      // Only worth saying when it is NOT the song on screen: absent means
+      // "this one", so nothing changes for a show that never switches mid-look.
+      const from = live.deckId && live.deckId !== activeDeckId ? live.deckId : undefined;
+      layerSnaps.push({ id: layer.id, lookId: live.lookId, prevId: live.prevId, col: live.col, t: tau, ...(from ? { deckId: from } : {}) });
       if (!live.lookId && !live.prevId) continue;
 
       // Weighted combination of the outgoing and incoming look, per head.

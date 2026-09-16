@@ -424,6 +424,7 @@ impl Renderer {
 
         // --- layer stack (index 0 = bottom) ---
         let mut layer_snaps: Vec<LayerSnap> = Vec::new();
+        let active_deck_id = st.project.active_deck_id.clone();
         let layer_ids: Vec<String> = st.project.layers.iter().map(|l| l.id.clone()).collect();
         for layer_id in &layer_ids {
             let Some(layer) = st.project.layers.iter().find(|l| &l.id == layer_id).cloned() else { continue };
@@ -442,6 +443,13 @@ impl Renderer {
                 prev_id: live.prev_id.clone(),
                 col: live.col,
                 t: tau,
+                // Only worth saying when it is NOT the song on screen: absent
+                // means "this one", so nothing changes for a show that never
+                // switches mid-look.
+                deck_id: match (&live.deck_id, &active_deck_id) {
+                    (Some(from), Some(now)) if from != now => Some(from.clone()),
+                    _ => None,
+                },
             });
             if live.look_id.is_none() && live.prev_id.is_none() {
                 continue;

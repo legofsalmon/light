@@ -403,6 +403,30 @@ export type Deck = {
   name: string;
   columns: string[];
   cells: Record<string, (string | null)[]>;
+  /** A line for the set list — what this song needs, or what went wrong last
+   *  time. Shown beside the song in the picker, absent by default (Titan's
+   *  set-list notes, design A19). */
+  note?: string;
+  /** The song to come back to: a starred page you can reach in one press from
+   *  anywhere in the set (MagicQ's Home page, design A30). At most one song
+   *  carries it; the UI clears the others when one is set. */
+  home?: boolean;
+};
+
+/** A named colour the show keeps, rather than one baked into every look that
+ *  uses it (design A12, slice 1).
+ *
+ *  Retuning a venue's blue was thirty edits because the twelve swatches were
+ *  hard-coded in the editor and the colour lived inside each look. A palette is
+ *  a name and a hue/saturation pair; the renderer never sees it, so this is a
+ *  field that travels with the show and changes nothing on the tick. */
+export type Palette = {
+  id: string;
+  name: string;
+  /** 0..1 around the wheel, matching PartParams.color */
+  h: number;
+  /** 0..1 */
+  s: number;
 };
 
 export type Layer = {
@@ -699,6 +723,13 @@ export type Project = {
   controls?: Control[];
   /** Global modulators (P2): beat-locked LFOs bound to parameters */
   modulators?: Modulator[];
+  /** Named colours the show keeps (design A12). Absent = the editor's own
+   *  starting set, so an old project opens with what it always had. */
+  palettes?: Palette[];
+  /** Which groups get a fader on the performance row, in the order they sit
+   *  there (design A14). Absent = every group, which is what the row did
+   *  before it could be chosen. */
+  pinnedGroups?: string[];
 };
 
 // ---------- live wire types ----------
@@ -730,6 +761,10 @@ export type LayerSnap = {
   col: number | null;
   /** crossfade progress 0..1 */
   t: number;
+  /** The song this look was fired from, when that is not the song showing.
+   *  Absent means "this one", so a client built before the field reads the
+   *  same thing it always did (design #47, A18). */
+  deckId?: string;
 };
 
 export type EngineStats = { fps: number; jitter: number; artnet: number; sacn: number };
@@ -1102,6 +1137,38 @@ export function sanitizeProject(p: Project): Project | null {
     p.activeDeckId = 'deck-1';
   }
   if (!p.decks.some((d) => d.id === p.activeDeckId)) p.activeDeckId = p.decks[0].id;
+  // The four fields the engine only carries (design #46). Unknown keys pass
+  // through untouched, so these lines are type REPAIR, not survival: a note
+  // that arrives as a number, or a pinned list holding a group that has since
+  // been deleted, would otherwise reach the UI as the wrong shape.
+  for (const d of p.decks) {
+    if (d.note !== undefined && typeof d.note !== 'string') delete d.note;
+    if (d.home !== undefined && typeof d.home !== 'boolean') delete d.home;
+  }
+  // At most one song is home; the first wins if a hand-edited file says two.
+  let seenHome = false;
+  for (const d of p.decks) {
+    if (!d.home) continue;
+    if (seenHome) delete d.home;
+    seenHome = true;
+  }
+  if (p.palettes !== undefined) {
+    if (!Array.isArray(p.palettes)) delete p.palettes;
+    else {
+      p.palettes = p.palettes.filter(
+        (x) => x && typeof x.id === 'string' && typeof x.name === 'string'
+          && Number.isFinite(x.h) && Number.isFinite(x.s),
+      );
+    }
+  }
+  if (p.pinnedGroups !== undefined) {
+    if (!Array.isArray(p.pinnedGroups)) delete p.pinnedGroups;
+    else {
+      // a pinned group that no longer exists would draw a fader over nothing
+      const ids = new Set(p.groups.map((g) => g.id));
+      p.pinnedGroups = p.pinnedGroups.filter((id) => typeof id === 'string' && ids.has(id));
+    }
+  }
   for (const g of p.groups) {
     if (!Array.isArray(g.heads)) g.heads = [];
     // mirror Rust's de_opt_string: a non-string provenance tag loads as absent

@@ -1957,3 +1957,20 @@ button.warnchip { background: none; cursor: pointer; }
 }
 .popover.menupop .modaltitle { padding: var(--space-4) var(--space-6) var(--space-2); }
 .popover.menupop .modalbody { padding: 0 var(--space-6) var(--space-4); }
+
+/* The song a live look was fired from, when that is not the song on screen
+   (design A18). Amber, because it is the head admitting that the rig is lit by
+   a page that is gone — the look's name alone reads as if it belonged here. */
+.layerhead .fromsong {
+  flex: none;
+  font-size: var(--text-micro-size);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
+  text-transform: uppercase;
+  color: var(--warn);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+.lookgrid.narrow .fromsong, .app.remote .fromsong { display: none; }

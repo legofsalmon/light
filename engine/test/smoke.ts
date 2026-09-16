@@ -2222,5 +2222,45 @@ await new Promise<void>((resolve) => {
   check('freeze: blackout releases a latched freeze', !st.frozen && st.frozenBy === null);
 }
 
+// --- the four fields the engine only carries (design #46) --------------------
+// The Rust twin asserts the round trip in core/tests/smoke.rs; this is the Node
+// side, where the job is type REPAIR rather than survival — unknown keys pass
+// through untouched, so a note that arrives as a number is what would reach the
+// UI as the wrong shape.
+{
+  const base = () => sanitizeProject(demoProject())!;
+
+  const kept = sanitizeProject({
+    ...demoProject(),
+    palettes: [{ id: 'pal-1', name: 'venue blue', h: 0.58, s: 0.9 }],
+    pinnedGroups: [demoProject().groups[0]!.id],
+  } as never)!;
+  check('carried: a palette survives the sanitiser', kept.palettes?.length === 1 && kept.palettes[0]!.name === 'venue blue');
+  check('carried: a pinned group that exists survives', kept.pinnedGroups?.length === 1);
+
+  const junk = sanitizeProject({
+    ...demoProject(),
+    palettes: [{ id: 'ok', name: 'fine', h: 0.1, s: 0.2 }, { id: 'bad', name: 'no hue' }],
+    pinnedGroups: [demoProject().groups[0]!.id, 'grp-that-was-deleted'],
+  } as never)!;
+  check('carried: a palette missing its hue is dropped', junk.palettes?.length === 1);
+  check('carried: a pinned group that no longer exists is dropped', junk.pinnedGroups?.length === 1);
+
+  const decks = base().decks!;
+  const noted = sanitizeProject({
+    ...demoProject(),
+    decks: [{ ...decks[0]!, note: 'capo 3', home: true }, { ...decks[0]!, id: 'deck-2', home: true }],
+  } as never)!;
+  check('carried: a set-list note survives', noted.decks?.[0]?.note === 'capo 3');
+  check('carried: only one song is home', noted.decks!.filter((d) => d.home).length === 1);
+
+  const wrong = sanitizeProject({
+    ...demoProject(),
+    decks: [{ ...decks[0]!, note: 42, home: 'yes' }],
+  } as never)!;
+  check('carried: a note of the wrong type is dropped, not coerced', wrong.decks?.[0]?.note === undefined);
+  check('carried: so is a home flag of the wrong type', wrong.decks?.[0]?.home === undefined);
+}
+
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

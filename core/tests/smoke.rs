@@ -764,3 +764,52 @@ fn a_held_freeze_dies_with_the_hand_that_took_it_and_a_latched_one_does_not() {
     assert!(!st.frozen, "blackout releases a latched freeze");
     assert_eq!(st.frozen_by, None);
 }
+
+/// The four fields the UI writes and the engine only carries (design #46).
+///
+/// `Project` and `Deck` have no unknown-field capture: anything the struct does
+/// not declare is dropped the next time the engine broadcasts, silently and one
+/// tick after the operator set it. A palette, a pinned group, a set-list note
+/// and the home song are all UI state that has to survive a round trip through
+/// an engine that never reads them.
+#[test]
+fn the_fields_the_engine_only_carries_survive_a_round_trip() {
+    use light_core::types::Palette;
+    let mut p = demo_project();
+    p.palettes = vec![Palette { id: "pal-1".into(), name: "venue blue".into(), h: 0.58, s: 0.9 }];
+    p.pinned_groups = vec!["grp-derbies".into(), "grp-strips".into()];
+    p.decks[0].note = Some("capo 3 — starts dark".into());
+    p.decks[0].home = true;
+
+    let json = serde_json::to_string(&p).unwrap();
+    // the spelling the UI reads
+    assert!(json.contains("\"pinnedGroups\""), "pinnedGroups must cross as camelCase");
+    assert!(!json.contains("pinned_groups"), "never the snake_case spelling");
+
+    let back: light_core::types::Project = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.palettes.len(), 1);
+    assert_eq!(back.palettes[0].name, "venue blue");
+    assert_eq!(back.palettes[0].h, 0.58);
+    assert_eq!(back.pinned_groups, vec!["grp-derbies".to_string(), "grp-strips".to_string()]);
+    assert_eq!(back.decks[0].note.as_deref(), Some("capo 3 — starts dark"));
+    assert!(back.decks[0].home);
+}
+
+/// A show that predates the four fields loads with them empty, and saving it
+/// again does not write them — an old project stays byte-identical rather than
+/// growing keys it never had.
+#[test]
+fn a_show_without_the_carried_fields_neither_fails_nor_grows_them() {
+    let p = demo_project();
+    let json = serde_json::to_string(&p).unwrap();
+    assert!(!json.contains("palettes"), "absent, not an empty list");
+    assert!(!json.contains("pinnedGroups"));
+    // scoped to the deck: other structs in a show have a `note` of their own
+    let deck_json = serde_json::to_string(&p.decks[0]).unwrap();
+    assert!(!deck_json.contains("note"), "a song without a note writes none: {deck_json}");
+    assert!(!deck_json.contains("home"), "a song that is not home writes nothing: {deck_json}");
+
+    let back: light_core::types::Project = serde_json::from_str(&json).unwrap();
+    assert!(back.palettes.is_empty() && back.pinned_groups.is_empty());
+    assert!(back.decks.iter().all(|d| d.note.is_none() && !d.home));
+}

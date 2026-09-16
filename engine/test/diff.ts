@@ -1944,6 +1944,44 @@ async function main(): Promise<void> {
     await sleep(300);
   }
 
+  // --- Which song a live look was fired from (design #47, A18).
+  //
+  // After a song switch the rig is still lit by the page that is gone. The head
+  // could say the look's name but not that it belongs to another song, so a
+  // stale row read as if it were this song's. The field is absent while the
+  // firing song IS the song showing, so a client built before it reads what it
+  // always did — and both engines have to agree on both halves.
+  {
+    const p = await currentProject(node);
+    const layerId = p.layers[0]?.id;
+    const deckA = p.activeDeckId;
+    const deckB = p.decks?.find((d) => d.id !== deckA)?.id;
+    const fromOf = (c: Client) => c.snap?.layers?.find((l) => l.id === layerId)?.deckId ?? null;
+    if (layerId && deckA && deckB) {
+      both({ type: 'trigger', layerId, col: 0 });
+      await sleep(300);
+      check(
+        'song: a look fired on the song showing names no song, on both',
+        fromOf(node) === null && fromOf(rust) === null,
+        `node=${fromOf(node)} rust=${fromOf(rust)}`,
+      );
+      both({ type: 'switchDeck', deckId: deckB });
+      await sleep(400);
+      check(
+        'song: after a switch both name the song it was fired from',
+        fromOf(node) === deckA && fromOf(rust) === deckA,
+        `node=${fromOf(node)} rust=${fromOf(rust)}`,
+      );
+      // Both engines are mid-crossfade here; let the output stop moving before
+      // comparing it, the way every other DMX checkpoint does.
+      await settle(node, rust);
+      compareDmx('song: naming it changes no byte', node, rust);
+      both({ type: 'switchDeck', deckId: deckA });
+      both({ type: 'allStop' });
+      await sleep(300);
+    }
+  }
+
   // --- Stage size (backlog #14): the one repair rule, on both engines.
   {
     const withStage = async (c: Client, stage: unknown) => ({ ...structuredClone(await currentProject(c)), stage }) as Project;
