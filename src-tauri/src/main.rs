@@ -202,6 +202,14 @@ fn main() {
             share::library_read,
         ])
         .setup(move |app| {
+            // The title names the build, for the tester wondering which one
+            // they have. Read from the package rather than typed into the
+            // config: the config's title was written for the 1.3.0 beta and
+            // went on saying 1.3.0 through two releases.
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.set_title(&format!("LIGHT {}", app.package_info().version));
+            }
+
             // The bundled UI is served over HTTP by the engine as well as
             // loaded in the window, so a phone or tablet on the same network
             // can drive the show at http://<mac>:9900.
