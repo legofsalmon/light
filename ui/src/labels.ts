@@ -138,6 +138,8 @@ export function describeMidiAction(p: Project, a: MidiAction): string {
       return 'Grand master';
     case 'speed':
       return 'Effect speed';
+    case 'fadeScale':
+      return 'Fade master';
     case 'haze':
       return 'Haze output';
     case 'tap':

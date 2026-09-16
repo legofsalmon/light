@@ -1,5 +1,5 @@
 import type { MidiAction, MidiMapping, Project, SoftField } from '../shared/types.ts';
-import { BAR, SOFT_FIELDS, clamp, sanitizeProject, softClamp, uid } from '../shared/types.ts';
+import { BAR, SOFT_FIELDS, clamp, fadeScaleAt, sanitizeProject, softClamp, uid } from '../shared/types.ts';
 import { BeatClock } from './clock.ts';
 
 export type LayerLive = {
@@ -104,6 +104,10 @@ export class EngineState {
   clock = new BeatClock();
   master = 1;
   speed = 1;
+  /** The FADE master (design decision 3): every crossfade a layer starts is
+   *  its programmed length times this. Runtime-only, 1 at boot. Mirrors
+   *  `fade_scale` in core/src/state.rs. */
+  fadeScale = 1;
   blackout = false;
   /** Whether rendered frames reach the wire at all (engine/output.ts).
    *  Runtime-only and OFF at every boot, whatever the show says. */
@@ -184,7 +188,7 @@ export class EngineState {
     live.lookId = lookId;
     live.col = col;
     live.fadeStart = t;
-    live.fadeDur = Math.max(0, look.fade ?? layer.fade);
+    live.fadeDur = Math.max(0, look.fade ?? layer.fade) * this.fadeScale;
     live.heldBy = look.flash ? owner : null;
     live.deckId = this.project.activeDeckId ?? null;
   }
@@ -201,7 +205,8 @@ export class EngineState {
     live.lookId = null;
     live.col = null;
     live.fadeStart = t;
-    live.fadeDur = Math.max(0.02, look.fade ?? 0.05);
+    // the floor stays under the master: a momentary look lets go without a click
+    live.fadeDur = Math.max(0.02, (look.fade ?? 0.05) * this.fadeScale);
     live.heldBy = null;
   }
 
@@ -214,7 +219,7 @@ export class EngineState {
     live.lookId = null;
     live.col = null;
     live.fadeStart = t;
-    live.fadeDur = layer.fade;
+    live.fadeDur = layer.fade * this.fadeScale;
     live.heldBy = null;
   }
 
@@ -399,7 +404,7 @@ export class EngineState {
       live.lookId = null;
       live.col = null;
       live.fadeStart = t;
-      live.fadeDur = Math.max(0.02, look?.fade ?? 0.05);
+      live.fadeDur = Math.max(0.02, (look?.fade ?? 0.05) * this.fadeScale);
       live.heldBy = null;
       void layerId;
     }
@@ -457,7 +462,7 @@ export class EngineState {
       return null;
     }
 
-    const CONTINUOUS = new Set(['layerMaster', 'grand', 'speed', 'haze', 'control']);
+    const CONTINUOUS = new Set(['layerMaster', 'grand', 'speed', 'fadeScale', 'haze', 'control']);
     let align: number | null = null;
     for (const m of this.project.midi) {
       if (m.channel !== channel || m.number !== d1) continue;
@@ -501,6 +506,9 @@ export class EngineState {
         break;
       case 'speed':
         this.speed = 0.25 * Math.pow(16, clamp(value)); // 0.25×..4×, centre 1×
+        break;
+      case 'fadeScale':
+        this.fadeScale = fadeScaleAt(value); // cut..4×, centre as programmed
         break;
       case 'haze':
         this.project.settings.haze = clamp(value);

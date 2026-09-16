@@ -346,6 +346,56 @@ async function main(): Promise<void> {
   const colsR = rust.snap?.layers.map((l) => `${l.id}:${l.col}`).join(' ');
   check('live column state parity', colsN === colsR, `node=[${colsN}] rust=[${colsR}]`);
 
+  // --- the FADE master (design decision 3, A26) ------------------------------
+  // Read when a crossfade starts, the same way in both engines. The curve and
+  // the scaled lengths are held to one bit table in both unit suites; what only
+  // this harness can reach is the command's clamp on the Node side, and the two
+  // claims the fader's help makes out loud: a cut lands at once, and a fade
+  // already running keeps its length when the master moves. Wash looks only —
+  // no effects, so a settled frame is a still one.
+  {
+    const washT = (c: Client) => c.snap?.layers.find((l) => l.id === 'layer-wash')?.t;
+    const scales = () => `node=${node.snap?.fadeScale} rust=${rust.snap?.fadeScale}`;
+    check('fade master: both engines open as programmed', node.snap?.fadeScale === 1 && rust.snap?.fadeScale === 1, scales());
+    both({ type: 'setFadeScale', v: 9 });
+    await sleep(200);
+    check('fade master: both keep it under the top of the fader', node.snap?.fadeScale === 4 && rust.snap?.fadeScale === 4, scales());
+    both({ type: 'setFadeScale', v: -1 });
+    await sleep(200);
+    check('fade master: and above the bottom', node.snap?.fadeScale === 0 && rust.snap?.fadeScale === 0, scales());
+
+    // at the bottom the wash layer's 0.8 s is a cut
+    both({ type: 'trigger', layerId: 'layer-wash', col: 1 });
+    await sleep(150);
+    check('fade master: at the bottom a look lands at once on both', washT(node) === 1 && washT(rust) === 1,
+      `node t=${washT(node)} rust t=${washT(rust)}`);
+    await settle(node, rust);
+    compareDmx('fade master: a cut, parity', node, rust);
+
+    // stretched: 0.8 s × 2.5 = 2 s, still running on both when 0.8 s is up
+    both({ type: 'setFadeScale', v: 2.5 });
+    await sleep(150);
+    both({ type: 'trigger', layerId: 'layer-wash', col: 2 });
+    await sleep(1100);
+    check('fade master: stretched, both are still fading when the look\'s own fade would be done',
+      (washT(node) ?? 1) < 1 && (washT(rust) ?? 1) < 1, `node t=${washT(node)} rust t=${washT(rust)}`);
+    await sleep(1300);
+    await settle(node, rust);
+    compareDmx('fade master: a stretched fade, parity once it has run', node, rust);
+
+    // moving the master mid-fade does not bend the fade already running
+    both({ type: 'trigger', layerId: 'layer-wash', col: 1 });
+    await sleep(300);
+    both({ type: 'setFadeScale', v: 0 });
+    await sleep(800);
+    check('fade master: a fade already running keeps its length on both',
+      (washT(node) ?? 1) < 1 && (washT(rust) ?? 1) < 1, `node t=${washT(node)} rust t=${washT(rust)}`);
+    both({ type: 'setFadeScale', v: 1 });
+    await sleep(1300);
+    await settle(node, rust);
+    compareDmx('fade master: back as programmed, parity', node, rust);
+  }
+
   // --- a column this show does not have must not black the rig out ----------
   // Resolume compositions routinely run wider than the light show. An
   // out-of-range column used to read as "every cell empty", which is the

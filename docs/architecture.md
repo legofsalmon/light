@@ -110,7 +110,7 @@ Plain JSON text frames over `ws://<host>:9900`. Anything that can open a WebSock
 | `midiInputs` | `{ names[] }` | native MIDI devices (empty from the Node engine) |
 | `learned` | `{ mapping }` | a learn completed |
 
-**Snapshot** (`snap`): `beat`, `bpm`, `speed`, `master`, `blackout`, `haze`/`hazeFan`, `stats {fps, jitter, artnet, sacn}`, `layers[] {id, lookId, prevId, col, t}` (crossfade progress), `dmx {universeId: [512 bytes]}`, and `heads[]` — per fixture head: resolved `r g b` colour, intensity `i`, strobe `st`, derby `ring` and motor `mm`/`mv`, `pan`/`tilt`, and `mc` (derby macro component colours) — everything a previz needs without knowing fixture internals.
+**Snapshot** (`snap`): `beat`, `bpm`, `speed`, `fadeScale` (the FADE master's multiplier on every crossfade a layer starts), `master`, `blackout`, `haze`/`hazeFan`, `stats {fps, jitter, artnet, sacn}`, `layers[] {id, lookId, prevId, col, t}` (crossfade progress), `dmx {universeId: [512 bytes]}`, and `heads[]` — per fixture head: resolved `r g b` colour, intensity `i`, strobe `st`, derby `ring` and motor `mm`/`mv`, `pan`/`tilt`, and `mc` (derby macro component colours) — everything a previz needs without knowing fixture internals.
 
 ## Wire formats
 

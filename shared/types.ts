@@ -500,6 +500,9 @@ export type MidiAction =
   | { kind: 'layerClear'; layerId: string }
   | { kind: 'grand' }
   | { kind: 'speed' }
+  /** the FADE master on a fader: position p scales every crossfade by
+   *  fadeScaleAt(p) — the bottom is a cut, the middle is as programmed */
+  | { kind: 'fadeScale' }
   | { kind: 'haze' }
   | { kind: 'tap' }
   /** the SYNC key, on a button: "now is the top of the bar". Runs the same
@@ -775,6 +778,8 @@ export type Snapshot = {
   beat: number;
   bpm: number;
   speed: number;
+  /** the FADE master's multiplier, 0..FADE_SCALE_MAX, 1 = as programmed */
+  fadeScale: number;
   master: number;
   blackout: boolean;
   /** Whether the rig is holding the frame it was showing while the show runs
@@ -885,6 +890,12 @@ export type Command =
   | { type: 'tap' }
   | { type: 'resync' }
   | { type: 'setSpeed'; v: number }
+  /** The FADE master (design decision 3, A26): a multiplier on every crossfade
+   *  a layer starts — a look firing, a layer clearing, a flash letting go.
+   *  0 is a cut, 1 is each look's own fade, 4 is four times as long. Read at
+   *  the moment the crossfade starts, so moving it never bends one already
+   *  running. Runtime-only and never saved, like speed. */
+  | { type: 'setFadeScale'; v: number }
   | { type: 'setMaster'; v: number }
   | { type: 'setLayerMaster'; layerId: string; v: number }
   /** Pull a whole group's intensity down without touching a look.
@@ -1011,6 +1022,20 @@ export const WS_PORT = 9900;
 export function clamp(v: number, lo = 0, hi = 1): number {
   if (!Number.isFinite(v)) return lo; // NaN must never propagate into the engine
   return v < lo ? lo : v > hi ? hi : v;
+}
+
+/** The FADE master's longest stretch: the top of the fader is four times each
+ *  look's own fade, the same reach as the speed master. */
+export const FADE_SCALE_MAX = 4;
+
+/** Where a FADE fader sits (0..1) → the multiplier it puts on a crossfade.
+ *  Quadratic, so the bottom is exactly a cut, the middle exactly as programmed
+ *  and the top exactly FADE_SCALE_MAX, with the fine control near the middle
+ *  where a hand spends its time. Mirrors fade_scale_at in core/src/state.rs:
+ *  the same operations in the same order, so both engines agree to the bit. */
+export function fadeScaleAt(position: number): number {
+  const p = clamp(position);
+  return FADE_SCALE_MAX * p * p;
 }
 
 export function lerp(a: number, b: number, t: number): number {

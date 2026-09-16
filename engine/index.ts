@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { Command, CompiledProfile, HeadSnap, ServerEvent, Snapshot, SoftField } from '../shared/types.ts';
-import { BAR, clamp, sanitizeProject, WS_PORT } from '../shared/types.ts';
+import { BAR, FADE_SCALE_MAX, clamp, sanitizeProject, WS_PORT } from '../shared/types.ts';
 import { PROFILES } from '../shared/profiles.ts';
 import { EngineState, LOCAL_CLIENT } from './state.ts';
 import { Renderer } from './renderer.ts';
@@ -489,6 +489,9 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
     case 'setSpeed':
       state.speed = clamp(cmd.v, 0.1, 8);
       break;
+    case 'setFadeScale':
+      state.fadeScale = clamp(cmd.v, 0, FADE_SCALE_MAX);
+      break;
     case 'setMaster':
       state.master = clamp(cmd.v);
       break;
@@ -898,6 +901,7 @@ function loopBody(): void {
       beat: res.beat,
       bpm: state.clock.bpm,
       speed: state.speed,
+      fadeScale: state.fadeScale,
       master: state.master,
       blackout: state.blackout,
       transmit: state.transmit,

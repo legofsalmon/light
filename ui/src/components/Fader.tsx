@@ -42,6 +42,10 @@ type Props = {
   help?: string;
   /** value formatter shown right-aligned */
   fmt?: (v: number) => string;
+  /** A typed reading back into the value, for a readout that is not a straight
+   *  line in it — speed is a power of two, fade a square. Without it the
+   *  reading is inverted by sampling `fmt` at both ends. */
+  parse?: (typed: number) => number;
   min?: number;
   max?: number;
   /** double-click and right-click reset */
@@ -57,7 +61,7 @@ type Props = {
   nudged?: boolean;
 };
 
-export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def, width, variant = 'accent', learn, nudged = false }: Props) {
+export function Fader({ value, onChange, label, help, fmt, parse, min = 0, max = 1, def, width, variant = 'accent', learn, nudged = false }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const norm = clamp((value - min) / (max - min));
   // Where the controller bound to this fader physically sits, if anything has
@@ -82,17 +86,19 @@ export function Fader({ value, onChange, label, help, fmt, min = 0, max = 1, def
     [fmt, min, max],
   );
 
-  /** The typed number read back into the value. Every formatter in the app is
-   *  affine in the value, so two samples invert it: 45 typed into a percentage
-   *  is 0.45, and 3200 typed into a warmth is the position that lands there. */
+  /** The typed number read back into the value. A formatter that is affine in
+   *  the value is inverted by two samples: 45 typed into a percentage is 0.45,
+   *  and 3200 typed into a warmth is the position that lands there. One that is
+   *  not says how with `parse` — sampled, 1 typed into speed landed on 0.44×. */
   const readback = useCallback(
     (typed: number): number => {
+      if (parse) return parse(typed);
       const lo = digitsOf(show(min));
       const hi = digitsOf(show(max));
       if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi === lo) return typed;
       return min + ((typed - lo) / (hi - lo)) * (max - min);
     },
-    [show, min, max],
+    [parse, show, min, max],
   );
 
   // Typing the value. The readout is the field: it opens on a click or on the

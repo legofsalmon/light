@@ -1064,6 +1064,9 @@ pub enum MidiAction {
     LayerClear { layer_id: String },
     Grand,
     Speed,
+    /// the FADE master on a fader: position p scales every crossfade by
+    /// `fade_scale_at(p)` — the bottom is a cut, the middle is as programmed
+    FadeScale,
     Haze,
     Tap,
     /// the SYNC key, on a button: "now is the top of the bar". Runs the same
@@ -1287,6 +1290,8 @@ pub struct Snapshot {
     pub beat: f64,
     pub bpm: f64,
     pub speed: f64,
+    /// the FADE master's multiplier, 0..FADE_SCALE_MAX, 1 = as programmed
+    pub fade_scale: f64,
     pub master: f64,
     pub blackout: bool,
     /// Whether the engine is putting DMX on the wire. Not derivable from the
@@ -1427,6 +1432,11 @@ pub enum Command {
     Tap,
     Resync,
     SetSpeed { v: f64 },
+    /// The FADE master (design decision 3, A26): a multiplier on every
+    /// crossfade a layer starts — a look firing, a layer clearing, a flash
+    /// letting go. 0 is a cut, 1 is each look's own fade, 4 is four times as
+    /// long. Read when the crossfade starts; runtime-only, like speed.
+    SetFadeScale { v: f64 },
     SetMaster { v: f64 },
     SetLayerMaster { layer_id: String, v: f64 },
     /// Pull a whole group's intensity down without touching a look.

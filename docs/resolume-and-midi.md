@@ -44,7 +44,7 @@ The **OSC monitor** (Sync tab) shows the last messages received live. If nothing
 ### How learn works
 
 1. Arm **MIDI LEARN** in the top bar.
-2. Click the thing to map: a grid cell, a column header, a layer master, the grand master, speed, haze, tap, or blackout.
+2. Click the thing to map: a grid cell, a column header, a layer master, the grand master, speed, fade, haze, tap, or blackout.
 3. Touch your controller. The **engine** captures the next note or CC and stores the mapping in the project.
 
 Because the engine owns the mapping, it works identically whether the MIDI arrives through the browser (WebMIDI) or natively in the app (CoreMIDI) — and in the app, your controller keeps working even if the window is closed.
@@ -52,7 +52,7 @@ Because the engine owns the mapping, it works identically whether the MIDI arriv
 ### Behaviour
 
 - **Notes** act like fingers: note-on fires the cell (or column/tap/blackout), note-off releases it — so a pad held on a *flash* look behaves exactly like holding the mouse button.
-- **CCs** drive continuous targets (masters, speed, haze) with the full 0–127 range. A CC mapped to a button-style target treats > 63 as pressed.
+- **CCs** drive continuous targets (masters, speed, fade, haze) with the full 0–127 range. A CC mapped to a button-style target treats > 63 as pressed.
 - Mappings are per-project. View and delete them in **Sync · MIDI**.
 
 ### Browser vs app

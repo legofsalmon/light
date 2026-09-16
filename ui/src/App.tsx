@@ -23,6 +23,7 @@ import { size, sizeTouch, space } from './tokens.ts';
 import { Glyph } from './glyphs.tsx';
 import { APC_LAYER_ROWS } from './apcFeedback.ts';
 import { Fader } from './components/Fader.tsx';
+import { FadeMaster } from './components/FadeMaster.tsx';
 import { HeldChip } from './components/HeldChip.tsx';
 import { LockBar } from './components/setup/LockBar.tsx';
 import { useLocked } from './lockStore.ts';
@@ -509,7 +510,7 @@ function RemoteMaster() {
   );
 }
 
-/** The levels tier (design 2.11): the layer masters, speed, haze and tap on one
+/** The levels tier (design 2.11): the layer masters, speed, fade, haze and tap on one
  *  row near the bottom, where a thumb is. It scrolls sideways when the rig has
  *  more layers than the glass has room for — a level is a thing you reach for,
  *  not a thing you read, and nothing here is a pad. */
@@ -543,10 +544,12 @@ function RemoteLevels() {
         def={0}
         value={Math.log2(speed ?? 1)}
         fmt={(v) => `${Math.pow(2, v).toFixed(2)}×`}
+        parse={(x) => Math.log2(Math.max(x, 0.25))}
         onChange={(v) => send({ type: 'setSpeed', v: Math.pow(2, v) })}
         learn={{ kind: 'speed' }}
         variant="dim"
       />
+      <FadeMaster />
       <Fader
         label="haze"
         help="how much haze the machine puts out — the beams are only as visible as the air"

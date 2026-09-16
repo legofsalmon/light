@@ -14,10 +14,20 @@ pub struct SoftPatch {
     pub effects: HashMap<String, HashMap<SoftField, f64>>,
 }
 
-/// Route one soft part-field onto PartParams. Hue/Sat address the colour
-/// components, creating the colour with the other component at its default
-/// (s 1 / h 0) when the look never set one. Mirrors applySoftParam in
-/// engine/state.ts — identical routing or stored shows diverge.
+/// The FADE master's longest stretch: the top of the fader is four times each
+/// look's own fade, the same reach as the speed master.
+pub const FADE_SCALE_MAX: f64 = 4.0;
+
+/// Where a FADE fader sits (0..1) → the multiplier it puts on a crossfade.
+/// Quadratic, so the bottom is exactly a cut, the middle exactly as programmed
+/// and the top exactly `FADE_SCALE_MAX`. Mirrors `fadeScaleAt` in
+/// shared/types.ts: the same operations in the same order, so both engines
+/// agree to the bit.
+pub fn fade_scale_at(position: f64) -> f64 {
+    let p = clamp01(position);
+    FADE_SCALE_MAX * p * p
+}
+
 /// How much of the soft layer still reaches the rig: 1 while nothing is being
 /// released, falling to 0 across a timed Discard. Read once per tick.
 pub fn soft_release_weight(release: Option<(f64, f64)>, t: f64) -> f64 {
@@ -49,6 +59,10 @@ pub fn blend_soft(field: SoftField, stored: f64, soft: f64, w: f64) -> f64 {
     stored + (soft - stored) * w
 }
 
+/// Route one soft part-field onto PartParams. Hue/Sat address the colour
+/// components, creating the colour with the other component at its default
+/// (s 1 / h 0) when the look never set one. Mirrors applySoftParam in
+/// engine/state.ts — identical routing or stored shows diverge.
 pub fn apply_soft_param(params: &mut crate::types::PartParams, field: SoftField, v: f64) {
     match field {
         SoftField::Hue => {
@@ -334,6 +348,10 @@ pub struct EngineState {
     pub clock: BeatClock,
     pub master: f64,
     pub speed: f64,
+    /// The FADE master (design decision 3): every crossfade a layer starts is
+    /// its programmed length times this. Runtime-only, 1 at boot. Mirrors
+    /// `fadeScale` in engine/state.ts.
+    pub fade_scale: f64,
     pub blackout: bool,
     /// Group submasters, 0..1, keyed by group id. Only entries BELOW full are
     /// stored, so an empty map is the common case and the renderer's pass
@@ -419,6 +437,7 @@ impl EngineState {
             clock: BeatClock::new(now),
             master: 1.0,
             speed: 1.0,
+            fade_scale: 1.0,
             blackout: false,
             submasters: HashMap::new(),
             frozen: false,
@@ -687,7 +706,7 @@ impl EngineState {
         let Some(layer) = self.project.layers.iter().find(|l| l.id == layer_id) else { return };
         let Some(Some(look_id)) = layer.cells.get(col).cloned() else { return };
         let Some(look) = self.project.looks.get(&look_id) else { return };
-        let fade = look.fade.unwrap_or(layer.fade).max(0.0);
+        let fade = look.fade.unwrap_or(layer.fade).max(0.0) * self.fade_scale;
         let flash = look.is_flash();
         // cloned before `layer_live` takes its mutable borrow of self
         let from_deck = self.project.active_deck_id.clone();
@@ -713,7 +732,8 @@ impl EngineState {
         if !look.is_flash() {
             return;
         }
-        let fade = look.fade.unwrap_or(0.05).max(0.02);
+        // the floor stays under the master: a momentary look lets go without a click
+        let fade = (look.fade.unwrap_or(0.05) * self.fade_scale).max(0.02);
         let live = self.layer_live(layer_id);
         if live.look_id.as_deref() != Some(look_id.as_str()) {
             return;
@@ -728,7 +748,7 @@ impl EngineState {
 
     pub fn clear_layer(&mut self, layer_id: &str, t: f64) {
         let Some(layer) = self.project.layers.iter().find(|l| l.id == layer_id) else { return };
-        let fade = layer.fade;
+        let fade = layer.fade * self.fade_scale;
         let live = self.layer_live(layer_id);
         if live.look_id.is_none() && live.prev_id.is_none() {
             return;
@@ -765,12 +785,13 @@ impl EngineState {
                 _ => {}
             }
             let Some(look_id) = live.look_id.take() else { continue };
-            let fade = self
+            let fade = (self
                 .project
                 .looks
                 .get(&look_id)
                 .and_then(|l| l.fade)
                 .unwrap_or(0.05)
+                * self.fade_scale)
                 .max(0.02);
             live.prev_id = Some(look_id);
             live.col = None;
@@ -866,8 +887,8 @@ impl EngineState {
             // only.
             let continuous = matches!(
                 action,
-                MidiAction::LayerMaster { .. } | MidiAction::Grand | MidiAction::Speed | MidiAction::Haze
-             | MidiAction::Control { .. });
+                MidiAction::LayerMaster { .. } | MidiAction::Grand | MidiAction::Speed | MidiAction::FadeScale
+             | MidiAction::Haze | MidiAction::Control { .. });
             if kind == MidiType::Note && continuous && !is_note_on {
                 continue;
             }
@@ -917,6 +938,7 @@ impl EngineState {
             }
             MidiAction::Grand => self.master = clamp01(value),
             MidiAction::Speed => self.speed = 0.25 * 16f64.powf(clamp01(value)),
+            MidiAction::FadeScale => self.fade_scale = fade_scale_at(value),
             MidiAction::Haze => {
                 self.project.settings.haze = clamp01(value);
                 out.project_changed = true;
@@ -1460,6 +1482,7 @@ impl EngineState {
                 out.align_phase = Some(crate::clock::BAR);
             }
             Command::SetSpeed { v } => self.speed = clamp(v, 0.1, 8.0),
+            Command::SetFadeScale { v } => self.fade_scale = clamp(v, 0.0, FADE_SCALE_MAX),
             Command::SetMaster { v } => self.master = clamp01(v),
             Command::SetLayerMaster { layer_id, v } => {
                 if let Some(layer) = self.project.layers.iter_mut().find(|l| l.id == layer_id) {

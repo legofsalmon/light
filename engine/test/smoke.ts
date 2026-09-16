@@ -15,7 +15,7 @@ import { sanitizeProject, sanitizeStage } from '../../shared/types.ts';
 import { stageExtent } from '../../shared/stageExtent.ts';
 import type { ShareList } from '../../shared/gdtfShare.ts';
 import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, isStaleProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
-import { COMPILER_VERSION } from '../../shared/types.ts';
+import { COMPILER_VERSION, fadeScaleAt } from '../../shared/types.ts';
 import type { EffectTarget, MidiMapping, Snapshot } from '../../shared/types.ts';
 import { APC40_COLUMN_ROW, APC40_MK2, APC_COLS, APC_LAYER_ROWS, APC_MINI_MK2, SURFACES, clearAddresses, computeLeds, ledChannel, ledKey, ledNote, nearest } from '../../ui/src/surfaces.ts';
 import { CONTROLLER_PRESETS, apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
@@ -2390,6 +2390,70 @@ await new Promise<void>((resolve) => {
 
   const reach = playingColourParts(project, ['bed', 'nocolour', 'bed', null, 'gone']);
   check('palettes: a tap reaches the coloured parts of what is playing, once each', reach.length === 1 && reach[0]!.lookId === 'bed');
+}
+
+// --- the FADE master (design decision 3, A26) --------------------------------
+// The Rust twin is `the_fade_master_scales_every_crossfade_a_layer_starts`, held
+// to the same bit table. The command's clamp lives in engine/index.ts, which
+// cannot be imported here, so the parity harness holds that half.
+{
+  const bitsOf = (x: number): string => {
+    const b = new DataView(new ArrayBuffer(8));
+    b.setFloat64(0, x);
+    return [...new Uint8Array(b.buffer)].map((v) => v.toString(16).padStart(2, '0')).join('');
+  };
+  const table: [number, string][] = [
+    [0, '0000000000000000'], // the bottom is a cut
+    [0.5, '3ff0000000000000'], // the middle is as programmed
+    [1, '4010000000000000'], // the top is four times as long
+    [64 / 127, '3ff040c2050c1c40'], // CC 64, a hair past the middle
+    [0.3, '3fd70a3d70a3d70a'],
+    [100 / 127, '4003d70cd729487d'],
+    [-1, '0000000000000000'],
+    [2, '4010000000000000'],
+    [NaN, '0000000000000000'],
+  ];
+  const drift = table.filter(([p, b]) => bitsOf(fadeScaleAt(p)) !== b);
+  check('fade master: the fader curve matches the Rust twin to the bit', drift.length === 0,
+    drift.map(([p]) => `${p} → ${fadeScaleAt(p)}`).join(' '));
+
+  const st = new EngineState(sanitizeProject(demoProject())!);
+  check('fade master: a show opens as programmed', st.fadeScale === 1);
+  const durBits = (layerId: string): string => bitsOf(st.live.get(layerId)!.fadeDur);
+
+  st.fadeScale = 2.5;
+  st.trigger('layer-wash', 1, 1000);
+  check('fade master: a look takes its layer fade, stretched', durBits('layer-wash') === '4000000000000000', `${st.live.get('layer-wash')!.fadeDur}`);
+  st.fadeScale = 0;
+  st.trigger('layer-wash', 2, 2000);
+  check('fade master: at the bottom the next look cuts in', durBits('layer-wash') === '0000000000000000');
+
+  st.fadeScale = 0.5;
+  st.trigger('layer-fx', 1, 3000);
+  st.clearLayer('layer-fx', 3500);
+  check('fade master: a layer clearing is scaled too', durBits('layer-fx') === '3fc3333333333333', `${st.live.get('layer-fx')!.fadeDur}`);
+
+  st.project.looks['strobe-blinder']!.fade = 0.3;
+  st.fadeScale = 2;
+  st.trigger('layer-strobe', 1, 4000);
+  st.release('layer-strobe', 1, 4500);
+  check('fade master: a flash letting go is stretched', durBits('layer-strobe') === '3fe3333333333333', `${st.live.get('layer-strobe')!.fadeDur}`);
+  st.fadeScale = 0;
+  st.trigger('layer-strobe', 1, 5000);
+  st.release('layer-strobe', 1, 5500);
+  check('fade master: and never goes under the 20 ms floor', durBits('layer-strobe') === '3f947ae147ae147b', `${st.live.get('layer-strobe')!.fadeDur}`);
+
+  // on a controller: a fader sets it by the curve, and a pad bound to it is a
+  // fader-style target — letting the pad go must not slam it to a cut
+  st.project.midi.push({ id: 'fade-cc', type: 'cc', channel: 0, number: 20, action: { kind: 'fadeScale' } });
+  st.project.midi.push({ id: 'fade-pad', type: 'note', channel: 0, number: 60, action: { kind: 'fadeScale' } });
+  st.applyMidi(0xb0, 20, 64);
+  check('fade master: a controller fader sets it by the curve', bitsOf(st.fadeScale) === '3ff040c2050c1c40', `${st.fadeScale}`);
+  st.applyMidi(0x90, 60, 100);
+  check('fade master: a pad sets it by its velocity', bitsOf(st.fadeScale) === '4003d70cd729487d', `${st.fadeScale}`);
+  st.applyMidi(0x80, 60, 0);
+  st.applyMidi(0x90, 60, 0);
+  check('fade master: and letting the pad go leaves it where it is', bitsOf(st.fadeScale) === '4003d70cd729487d', `${st.fadeScale}`);
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

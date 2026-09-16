@@ -885,3 +885,77 @@ fn a_timed_discard_empties_the_layer_when_it_arrives() {
     assert_eq!(soft_release_weight(Some((0.0, 1000.0)), 1000.0), 0.0);
     assert_eq!(soft_release_weight(Some((0.0, 1000.0)), 5000.0), 0.0, "past the end stays at the stored show");
 }
+
+/// The FADE master (design decision 3, A26). The fader's curve is held to the
+/// same bit table as the Node twin in engine/test/smoke.ts, and every crossfade
+/// a layer starts is its programmed length times the master: a look firing, a
+/// layer clearing, a flash letting go — whose 20 ms floor stays under it.
+#[test]
+fn the_fade_master_scales_every_crossfade_a_layer_starts() {
+    use light_core::state::fade_scale_at;
+    use light_core::types::{MidiAction, MidiMapping, MidiType};
+    let table: &[(f64, u64)] = &[
+        (0.0, 0x0000000000000000),          // the bottom is a cut
+        (0.5, 0x3ff0000000000000),          // the middle is as programmed
+        (1.0, 0x4010000000000000),          // the top is four times as long
+        (64.0 / 127.0, 0x3ff040c2050c1c40), // CC 64, a hair past the middle
+        (0.3, 0x3fd70a3d70a3d70a),
+        (100.0 / 127.0, 0x4003d70cd729487d),
+        (-1.0, 0x0000000000000000),         // clamped
+        (2.0, 0x4010000000000000),
+        (f64::NAN, 0x0000000000000000),     // NaN never reaches the engine
+    ];
+    for &(p, bits) in table {
+        let got = fade_scale_at(p);
+        assert_eq!(got.to_bits(), bits, "position {p}: got {got}");
+    }
+
+    let mut st = EngineState::new(demo_project(), 0.0);
+    assert_eq!(st.fade_scale, 1.0, "a show opens as programmed");
+
+    // a look with no fade of its own takes its layer's 0.8 s, stretched
+    st.handle_command(Command::SetFadeScale { v: 2.5 }, 0.0, None);
+    st.trigger("layer-wash", 1, 1.0, 0);
+    assert_eq!(st.live["layer-wash"].fade_dur.to_bits(), 0x4000000000000000, "0.8 s × 2.5 = 2 s");
+    // at the bottom the next look cuts in
+    st.handle_command(Command::SetFadeScale { v: 0.0 }, 2.0, None);
+    st.trigger("layer-wash", 2, 2.0, 0);
+    assert_eq!(st.live["layer-wash"].fade_dur.to_bits(), 0, "a cut");
+
+    // a layer clearing: the fx layer's 0.3 s at half
+    st.handle_command(Command::SetFadeScale { v: 0.5 }, 3.0, None);
+    st.trigger("layer-fx", 1, 3.0, 0);
+    st.clear_layer("layer-fx", 3.5);
+    assert_eq!(st.live["layer-fx"].fade_dur.to_bits(), 0x3fc3333333333333, "0.3 s × 0.5");
+
+    // a flash letting go: stretched, and never below the 20 ms floor
+    st.project.looks.get_mut("strobe-blinder").unwrap().fade = Some(0.3);
+    st.handle_command(Command::SetFadeScale { v: 2.0 }, 4.0, None);
+    st.trigger("layer-strobe", 1, 4.0, 0);
+    st.release("layer-strobe", 1, 4.5);
+    assert_eq!(st.live["layer-strobe"].fade_dur.to_bits(), 0x3fe3333333333333, "0.3 s × 2");
+    st.handle_command(Command::SetFadeScale { v: 0.0 }, 5.0, None);
+    st.trigger("layer-strobe", 1, 5.0, 0);
+    st.release("layer-strobe", 1, 5.5);
+    assert_eq!(st.live["layer-strobe"].fade_dur.to_bits(), 0x3f947ae147ae147b, "the floor, not a click");
+
+    // the command keeps it on the fader's range
+    st.handle_command(Command::SetFadeScale { v: 9.0 }, 6.0, None);
+    assert_eq!(st.fade_scale, 4.0);
+    st.handle_command(Command::SetFadeScale { v: -1.0 }, 6.0, None);
+    assert_eq!(st.fade_scale, 0.0);
+    st.handle_command(Command::SetFadeScale { v: f64::NAN }, 6.0, None);
+    assert_eq!(st.fade_scale, 0.0);
+
+    // on a controller: a fader sets it by the curve, and a pad bound to it is
+    // a fader-style target — letting the pad go must not slam it to a cut
+    st.project.midi.push(MidiMapping { id: "fade-cc".into(), kind: MidiType::Cc, channel: 0, number: 20, action: MidiAction::FadeScale });
+    st.project.midi.push(MidiMapping { id: "fade-pad".into(), kind: MidiType::Note, channel: 0, number: 60, action: MidiAction::FadeScale });
+    st.apply_midi(0xb0, 20, 64, 7.0);
+    assert_eq!(st.fade_scale.to_bits(), 0x3ff040c2050c1c40, "CC 64");
+    st.apply_midi(0x90, 60, 100, 8.0);
+    assert_eq!(st.fade_scale.to_bits(), 0x4003d70cd729487d, "a pad sets it by its velocity");
+    st.apply_midi(0x80, 60, 0, 9.0);
+    st.apply_midi(0x90, 60, 0, 9.0);
+    assert_eq!(st.fade_scale.to_bits(), 0x4003d70cd729487d, "and letting it go leaves it where it is");
+}

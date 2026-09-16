@@ -1308,6 +1308,7 @@ fn build_snapshot(
         beat: res.beat,
         bpm: state.clock.bpm,
         speed: state.speed,
+        fade_scale: state.fade_scale,
         master: state.master,
         link: Some(crate::types::LinkSnap { on: link.enabled(), peers: link.peers() }),
         // The source is only meaningful while the follower is being polled —

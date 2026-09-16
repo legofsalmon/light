@@ -3,6 +3,7 @@ import { useStore, type ViewMode } from '../store.ts';
 import { askConfirm, askPrompt } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
 import { HeldChip } from './HeldChip.tsx';
+import { FadeMaster } from './FadeMaster.tsx';
 import { TintKey } from './TintKey.tsx';
 import { BAR, clamp } from '../../../shared/types.ts';
 import { motion, size } from '../tokens.ts';
@@ -158,14 +159,17 @@ const VIEWS: { id: ViewMode; label: string; title: string; key: string }[] = [
  *  `shrink` leaves it on the strip in a smaller form. The order is the design's
  *  (2.1): the two faders nobody reaches for mid-song go first, then SYNC (the
  *  key has a shortcut and the tap is beside it), then the show's name, then the
- *  master narrows, and FREEZE is the last thing to leave. Nothing that stops
- *  the rig is on this list — the panic pair has a track of its own. */
+ *  master narrows. FADE comes after those (decision 3): it is reached for
+ *  mid-song, the moment before a drop, so it keeps its place longer than the
+ *  show's name does. FREEZE is the last thing to leave. Nothing that stops the
+ *  rig is on this list — the panic pair has a track of its own. */
 const DROP_STEPS: { id: string; kind: 'move' | 'shrink' }[] = [
   { id: 'speed', kind: 'move' },
   { id: 'haze', kind: 'move' },
   { id: 'sync', kind: 'move' },
   { id: 'project', kind: 'shrink' },
   { id: 'master', kind: 'shrink' },
+  { id: 'fade', kind: 'move' },
   { id: 'freeze', kind: 'move' },
   // Last of all the wordmark, which performs nothing: below the tablet the
   // remote layout takes over anyway, and a narrow window that still has to
@@ -273,11 +277,13 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
       def={0}
       value={Math.log2(snap?.speed ?? 1)}
       fmt={(v) => `${Math.pow(2, v).toFixed(2)}×`}
+      parse={(x) => Math.log2(Math.max(x, 0.25))}
       onChange={(v) => send({ type: 'setSpeed', v: Math.pow(2, v) })}
       learn={{ kind: 'speed' }}
       variant="dim"
     />
   );
+  const fadeFader = <FadeMaster key="fade" width={92} />;
   const hazeFader = (
     <Fader
       key="haze"
@@ -466,6 +472,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
       </div>
 
       {!moved.has('speed') && speedFader}
+      {!moved.has('fade') && fadeFader}
       {!moved.has('haze') && hazeFader}
       <Fader
         label="master"
@@ -562,6 +569,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
         <div className="lineflow">
           {moved.has('sync') && syncKey}
           {moved.has('speed') && speedFader}
+          {moved.has('fade') && fadeFader}
           {moved.has('haze') && hazeFader}
           {moved.has('freeze') && freezeKey}
         </div>

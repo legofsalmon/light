@@ -77,6 +77,8 @@ the menu does the second.
 
 Each layer has a default fade (seconds) in the project; a look can override it with its own **fade** field in the look editor. Colours fade through RGB space (exactly what the fixture's channels do), intensities fade linearly, and *banded* values — derby colour slots, motor modes — snap at the start of the fade because the hardware can't fade between bands.
 
+The **fade** fader in the top bar stretches or shrinks every crossfade from the moment you move it, without editing a look: at the bottom (`cut`) every pad, column and clear lands at once; in the middle (`1.00×`) each look fades the way it was written; at the top (`4.00×`) they take four times as long. It applies to what fires next: a fade already running keeps its length. A flash still lets go over at least 20 ms, so it never clicks. Like speed, it is not saved with the show, so a show always opens as programmed. Double-click it to put it back in the middle, or type a number (`2` is twice as long).
+
 ## Layers and blend modes
 
 Layers apply bottom-to-top. Each has a **master** (scales that layer's intensity contribution) and a **blend mode**:
