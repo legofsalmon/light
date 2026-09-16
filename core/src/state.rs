@@ -896,7 +896,7 @@ impl EngineState {
             let continuous = matches!(
                 action,
                 MidiAction::LayerMaster { .. } | MidiAction::Grand | MidiAction::Speed | MidiAction::FadeScale
-             | MidiAction::Haze | MidiAction::Control { .. });
+             | MidiAction::Haze | MidiAction::Submaster { .. } | MidiAction::Control { .. });
             if kind == MidiType::Note && continuous && !is_note_on {
                 continue;
             }
