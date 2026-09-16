@@ -2493,6 +2493,29 @@ await new Promise<void>((resolve) => {
   check('fade master: and letting the pad go leaves it where it is', bitsOf(st.fadeScale) === '4003d70cd729487d', `${st.fadeScale}`);
 }
 
+// --- a pad on a group level --------------------------------------------------
+// A fader-style target, like the FADE master above: the press sets the level by
+// its velocity, and letting the pad go must not slam the group to zero. The Rust
+// twin is `letting_go_of_a_pad_on_a_group_level_leaves_the_group_lit`.
+{
+  const st = new EngineState(sanitizeProject(demoProject())!);
+  const pars = { kind: 'submaster', groupId: 'g-pars' } as const;
+  st.project.midi.push({ id: 'sub-pad', type: 'note', channel: 0, number: 60, action: pars });
+  st.project.midi.push({ id: 'sub-cc', type: 'cc', channel: 0, number: 20, action: pars });
+  const level = () => `${st.submasters.get('g-pars')}`;
+
+  st.applyMidi(0x90, 60, 64);
+  check('group pad: a pad sets the level by its velocity', st.submasters.get('g-pars') === 64 / 127, level());
+  st.applyMidi(0x80, 60, 0);
+  check('group pad: a note-off leaves it where it is', st.submasters.get('g-pars') === 64 / 127, level());
+  st.applyMidi(0x90, 60, 0);
+  check('group pad: and so does a note-on at velocity 0', st.submasters.get('g-pars') === 64 / 127, level());
+
+  // a fader is not a pad: its bottom is the group out
+  st.applyMidi(0xb0, 20, 0);
+  check('group pad: a fader at the bottom takes the group out', st.submasters.get('g-pars') === 0, level());
+}
+
 // --- the order of the GROUPS row, and pinning (design A14, decision 2) ------
 {
   const show = sanitizeProject(demoProject())!;

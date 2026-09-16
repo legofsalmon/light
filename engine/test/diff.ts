@@ -1706,6 +1706,53 @@ async function main(): Promise<void> {
       `node=${JSON.stringify(node.snap?.submasters)} rust=${JSON.stringify(rust.snap?.submasters)}`,
     );
     compareDmx('submaster: cleared parity', node, rust);
+
+    // A pad mapped to a group level is a fader-style target: the press sets the
+    // level by its velocity, and letting go must not slam the group to zero.
+    // Both engines used to do exactly that, identically, so agreement alone
+    // proves nothing — the level after the release is asserted as well.
+    await armWash('wash-rainbow', 0);
+    const whole = peak();
+    const withPad = structuredClone(await currentProject(node));
+    withPad.midi = [...withPad.midi, { id: 'm-sub-pad', type: 'note', channel: 0, number: 60, action: { kind: 'submaster', groupId } }];
+    both({ type: 'updateProject', project: withPad });
+    await sleep(400);
+    const atPress = JSON.stringify([{ id: groupId, v: 64 / 127 }]);
+    const reports = () => `node=${JSON.stringify(node.snap?.submasters)} rust=${JSON.stringify(rust.snap?.submasters)}`;
+
+    both({ type: 'midi', status: 0x90, d1: 60, d2: 64 });
+    await settle(node, rust);
+    check(
+      'submaster: a mapped pad sets the level by its velocity on both',
+      JSON.stringify(node.snap?.submasters) === atPress && JSON.stringify(rust.snap?.submasters) === atPress,
+      reports(),
+    );
+    compareDmx('submaster: a mapped pad pressed parity', node, rust);
+
+    both({ type: 'midi', status: 0x80, d1: 60, d2: 0 });
+    both({ type: 'midi', status: 0x90, d1: 60, d2: 0 }); // the other way a pad says "let go"
+    await sleep(400);
+    await settle(node, rust);
+    check(
+      'submaster: letting the pad go leaves the level where it was on both',
+      JSON.stringify(node.snap?.submasters) === atPress && JSON.stringify(rust.snap?.submasters) === atPress,
+      reports(),
+    );
+    check(
+      'submaster: and the group stays lit',
+      Math.abs(peak() - whole * (64 / 127)) < 0.02,
+      `peak ${peak()} against ${whole * (64 / 127)}`,
+    );
+    compareDmx('submaster: a mapped pad released parity', node, rust);
+
+    // clean up the mapping and the level
+    const withoutPad = structuredClone(await currentProject(node));
+    withoutPad.midi = withoutPad.midi.filter((m) => m.id !== 'm-sub-pad');
+    both({ type: 'updateProject', project: withoutPad });
+    await sleep(300);
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
   }
 
   // --- movement shapes (backlog #9). One effect writing pan AND tilt from a

@@ -462,7 +462,7 @@ export class EngineState {
       return null;
     }
 
-    const CONTINUOUS = new Set(['layerMaster', 'grand', 'speed', 'fadeScale', 'haze', 'control']);
+    const CONTINUOUS = new Set(['layerMaster', 'grand', 'speed', 'fadeScale', 'haze', 'submaster', 'control']);
     let align: number | null = null;
     for (const m of this.project.midi) {
       if (m.channel !== channel || m.number !== d1) continue;

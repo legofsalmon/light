@@ -959,3 +959,28 @@ fn the_fade_master_scales_every_crossfade_a_layer_starts() {
     st.apply_midi(0x90, 60, 0, 9.0);
     assert_eq!(st.fade_scale.to_bits(), 0x4003d70cd729487d, "and letting it go leaves it where it is");
 }
+
+/// A pad bound to a group level is a fader-style target, like the FADE master
+/// above: the press sets the level by its velocity, and letting the pad go must
+/// not slam the group to zero. A fader on the same group still reaches a real
+/// zero at the bottom. The Node twin in engine/test/smoke.ts holds the same
+/// values.
+#[test]
+fn letting_go_of_a_pad_on_a_group_level_leaves_the_group_lit() {
+    use light_core::types::{MidiAction, MidiMapping, MidiType};
+    let mut st = EngineState::new(demo_project(), 0.0);
+    let pars = MidiAction::Submaster { group_id: "g-pars".into() };
+    st.project.midi.push(MidiMapping { id: "sub-pad".into(), kind: MidiType::Note, channel: 0, number: 60, action: pars.clone() });
+    st.project.midi.push(MidiMapping { id: "sub-cc".into(), kind: MidiType::Cc, channel: 0, number: 20, action: pars });
+
+    st.apply_midi(0x90, 60, 64, 1.0);
+    assert_eq!(st.submasters.get("g-pars").copied(), Some(64.0 / 127.0), "a pad sets it by its velocity");
+    st.apply_midi(0x80, 60, 0, 2.0);
+    assert_eq!(st.submasters.get("g-pars").copied(), Some(64.0 / 127.0), "a note-off leaves it where it is");
+    st.apply_midi(0x90, 60, 0, 2.0);
+    assert_eq!(st.submasters.get("g-pars").copied(), Some(64.0 / 127.0), "and so does a note-on at velocity 0");
+
+    // a fader is not a pad: its bottom is the group out
+    st.apply_midi(0xb0, 20, 0, 3.0);
+    assert_eq!(st.submasters.get("g-pars").copied(), Some(0.0), "a fader at the bottom takes the group out");
+}
