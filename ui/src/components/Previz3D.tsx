@@ -26,6 +26,7 @@ import type { HeadSnap, Project } from '../../../shared/types.ts';
 import { profileMeta } from '../profileInfo.ts';
 import { useStore } from '../store.ts';
 import { color } from '../tokens.ts';
+import { restDir, restTiltX } from '../restAim.ts';
 import { stageExtent, stageRect } from '../../../shared/stageExtent.ts';
 import { buildOccluders, standingHeightAt, throwDistance, type Occluder } from '../../../shared/beamThrow.ts';
 
@@ -203,6 +204,15 @@ function buildRig(project: Project): {
     fg.position.set(f.pos.x, f.pos.y, f.pos.z);
     fg.rotation.order = 'YXZ'; // yaw, then mounting tilt, then roll
     fg.rotation.set(f.rotX ?? 0, f.rotY, f.rotZ ?? 0);
+    // The rest pose: which way the fixture faces when nothing drives it. The
+    // whole body turns to it — can, cells and beam together — and the
+    // mounting tilt above composes on it, exactly as the native stage window
+    // does (previz/src/scene.rs, body_rot). A mover's base stays bolted; its
+    // yoke pans, and the rest sits between the pan and the tilt, as there.
+    const rest = restTiltX(restDir(prof.heads[0]?.kind, f.pos.y));
+    const frame = new THREE.Group();
+    frame.rotation.x = rest;
+    fg.add(frame);
 
     // body — a bar for a bar, a head for a head. A multi-pixel fixture that
     // AIMS is a moving head with a pixel face, not a metre of truss: drawing
@@ -210,11 +220,13 @@ function buildRig(project: Project): {
     // its middle, which is exactly the wrong story about where the light comes
     // from. (canAim is computed just below; hoisted for the body.)
     const bodyAims = !!prof.hasPan || !!prof.hasTilt;
-    if (prof.heads.length > 1 && !bodyAims) fg.add(basicBox(1.06, 0.09, 0.09, 0x2c2c33));
+    // a body that aims is the mover's base, bolted to the mounting; a body
+    // that does not is the fixture, and it faces where its light goes
+    if (prof.heads.length > 1 && !bodyAims) frame.add(basicBox(1.06, 0.09, 0.09, 0x2c2c33));
     else if (prof.heads.length > 1) fg.add(basicBox(0.3, 0.24, 0.24, 0x2c2c33));
-    else if (prof.heads[0]?.kind === 'derby') fg.add(basicBox(0.26, 0.2, 0.2, 0x2c2c33));
-    else if (prof.heads[0]?.kind === 'hazer') fg.add(basicBox(0.34, 0.26, 0.26, 0x232328));
-    else fg.add(basicBox(0.16, 0.14, 0.16, 0x2c2c33));
+    else if (prof.heads[0]?.kind === 'derby') frame.add(basicBox(0.26, 0.2, 0.2, 0x2c2c33));
+    else if (prof.heads[0]?.kind === 'hazer') frame.add(basicBox(0.34, 0.26, 0.26, 0x232328));
+    else frame.add(basicBox(0.16, 0.14, 0.16, 0x2c2c33));
 
     // Can this fixture AIM? Ask the channels, not the head kind — the same
     // test the look editor and the patch table use. A Robin Spiider is a
@@ -232,7 +244,11 @@ function buildRig(project: Project): {
     if (canAim && !hasMoverHead) {
       panG = new THREE.Group();
       tiltG = new THREE.Group();
-      panG.add(tiltG);
+      // pan, then the rest pose, then tilt — the native's `rot_y(pan) * rest * rot_x(tilt)`
+      const restG = new THREE.Group();
+      restG.rotation.x = rest;
+      panG.add(restG);
+      restG.add(tiltG);
       fg.add(panG);
     }
     const aimBeams: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>[] = [];
@@ -253,7 +269,7 @@ function buildRig(project: Project): {
       // 2D pixel layouts (B1): offsetY lifts a head up the fixture's local Y,
       // so a Spiider's rings and a matrix panel read as their real shape
       headRoot.position.set(hd.offset * aimScale, (hd.offsetY ?? 0) * aimScale, 0);
-      (tiltG ?? fg).add(headRoot);
+      (tiltG ?? frame).add(headRoot);
 
       const handle: HeadHandle = {
         key: `${f.id}:${hi}`,
@@ -279,8 +295,8 @@ function buildRig(project: Project): {
       handle.glow = glow;
 
       if (hd.kind === 'derby') {
+        // the fan's centre is the body's rest direction, carried by the frame
         const aim = new THREE.Group();
-        aim.rotation.x = -0.55; // down + toward the audience
         headRoot.add(aim);
         const fan = new THREE.Group();
         aim.add(fan);
@@ -309,9 +325,16 @@ function buildRig(project: Project): {
         headRoot.add(beam);
         handle.beams.push(beam);
       } else if (hd.kind === 'mover') {
+        // the built-in mover: its own yoke, with the rest pose between pan
+        // and tilt as above — headRoot sits in the frame, so undo the frame's
+        // turn first and the base stays bolted
+        headRoot.rotation.x = -rest;
         const pan = new THREE.Group();
+        const restG = new THREE.Group();
+        restG.rotation.x = rest;
         const tilt = new THREE.Group();
-        pan.add(tilt);
+        pan.add(restG);
+        restG.add(tilt);
         headRoot.add(pan);
         const beam = makeBeam(prof.beamDeg, 5);
         tilt.add(beam);
@@ -320,9 +343,8 @@ function buildRig(project: Project): {
         handle.tilt = tilt;
       } else {
         const aim = new THREE.Group();
-        // A fixture that aims gets its direction from the yoke above; the
-        // fixed downward tip is for things that cannot move.
-        aim.rotation.x = tiltG ? 0 : f.pos.y > 1.2 ? -0.38 : -0.1;
+        // The direction is the frame's (a fixture that cannot move) or the
+        // yoke's (one that can); the beam itself just points down its axis.
         headRoot.add(aim);
         const beam = makeBeam(prof.beamDeg, tiltG ? 5 : 4.2);
         aim.add(beam);

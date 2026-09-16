@@ -23,6 +23,7 @@ import { APC40_COLUMN_ROW, APC40_MK2, APC_COLS, APC_LAYER_ROWS, APC_MINI_MK2, SU
 import { CONTROLLER_PRESETS, apc40Mk2BuskMappings, apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
 import { groupsInRowOrder, livePins, togglePin } from '../../ui/src/groupOrder.ts';
 import { choosePort, midiInputOn } from '../../shared/midiInputs.ts';
+import { REST_DIR, RIG_HEIGHT_M, restDir, restTiltX } from '../../ui/src/restAim.ts';
 import { lookFace, lookSwatch } from '../../ui/src/lookColors.ts';
 import { describeLearned } from '../../ui/src/labels.ts';
 
@@ -2604,6 +2605,32 @@ await new Promise<void>((resolve) => {
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+}
+
+// --- the two previz agree on where a fixture points at rest -------------------
+// The rest directions are LITERAL DATA in previz/src/scene.rs (`rest_dir`) and
+// ui/src/restAim.ts. Two stage windows that disagree on where a par points is
+// the bug this holds shut: the web tipped a low par 6° from straight down
+// while the native window pointed it 75° from vertical.
+{
+  const rs = fs.readFileSync(path.join(process.cwd(), 'previz/src/scene.rs'), 'utf8');
+  const block = rs.slice(rs.indexOf('let rest_dir = match'), rs.indexOf('let body_rot'));
+  const vec = (re: RegExp): number[] | null => { const m = block.match(re); return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null; };
+  const derby = vec(/HeadKind::Derby\) => Vec3::new\(([-\d.]+), ([-\d.]+), ([-\d.]+)\)/);
+  const rigged = vec(/_ if f\.pos\.y > [\d.]+ => Vec3::new\(([-\d.]+), ([-\d.]+), ([-\d.]+)\)/);
+  const floor = vec(/\n\s*_ => Vec3::new\(([-\d.]+), ([-\d.]+), ([-\d.]+)\)/);
+  const height = Number((block.match(/_ if f\.pos\.y > ([\d.]+)/) ?? [])[1]);
+  const same = (a: number[] | null, b: readonly number[]) => !!a && a.every((v, i) => Math.abs(v - b[i]!) < 1e-9);
+  check('rest aim: the native rest_dir was found', !!derby && !!rigged && !!floor && Number.isFinite(height), JSON.stringify({ derby, rigged, floor, height }));
+  check('rest aim: a derby rests where the native says', same(derby, REST_DIR.derby), JSON.stringify(derby));
+  check('rest aim: a rigged fixture rests where the native says', same(rigged, REST_DIR.rigged), JSON.stringify(rigged));
+  check('rest aim: a floor fixture rests where the native says', same(floor, REST_DIR.floor), JSON.stringify(floor));
+  check('rest aim: the rig height is the same number', height === RIG_HEIGHT_M, String(height));
+  check('rest aim: kind and height pick the row', restDir('derby', 3) === REST_DIR.derby && restDir('rgb', 3) === REST_DIR.rigged && restDir('rgb', 0.4) === REST_DIR.floor);
+  // the web turns a body that points straight down onto the direction; the
+  // three angles are what the old per-beam tips were, and the one that was not
+  const deg = (d: readonly number[]) => Math.round(Math.abs(restTiltX(d as never)) * 180 / Math.PI);
+  check('rest aim: rigged is the old 22° tip, derby the old 31°, floor is 75° not 6°', deg(REST_DIR.rigged) === 22 && deg(REST_DIR.derby) === 31 && deg(REST_DIR.floor) === 75, [REST_DIR.rigged, REST_DIR.derby, REST_DIR.floor].map(deg).join(','));
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
