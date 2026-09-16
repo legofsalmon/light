@@ -1,5 +1,5 @@
 import type { MidiAction, MidiMapping, Project, SoftField } from '../shared/types.ts';
-import { SOFT_FIELDS, clamp, sanitizeProject, softClamp, uid } from '../shared/types.ts';
+import { BAR, SOFT_FIELDS, clamp, sanitizeProject, softClamp, uid } from '../shared/types.ts';
 import { BeatClock } from './clock.ts';
 
 export type LayerLive = {
@@ -407,13 +407,19 @@ export class EngineState {
     }
   }
 
-  applyMidi(status: number, d1: number, d2: number): void {
+  /** Returns the phase grid the engine loop must align the effects to — a bar
+   *  for a mapped SYNC, null when the message asked for nothing of the kind.
+   *  Mirrors `Outcome.align_phase` in core/src/state.rs, which the Rust engine
+   *  hands back from its own MIDI arm: the renderer lives outside this class in
+   *  both engines, so the alignment has to be carried out to it rather than
+   *  done here. */
+  applyMidi(status: number, d1: number, d2: number): number | null {
     const kind = status & 0xf0;
     const channel = status & 0x0f;
     const isNoteOn = kind === 0x90 && d2 > 0;
     const isNoteOff = kind === 0x80 || (kind === 0x90 && d2 === 0);
     const isCC = kind === 0xb0;
-    if (!isNoteOn && !isNoteOff && !isCC) return;
+    if (!isNoteOn && !isNoteOff && !isCC) return null;
 
     if (this.learnTarget && (isNoteOn || isCC)) {
       const mapping: MidiMapping = {
@@ -428,24 +434,29 @@ export class EngineState {
       this.project.midi.push(mapping);
       this.notify();
       this.onLearned?.(mapping);
-      return;
+      return null;
     }
 
     const CONTINUOUS = new Set(['layerMaster', 'grand', 'speed', 'haze', 'control']);
+    let align: number | null = null;
     for (const m of this.project.midi) {
       if (m.channel !== channel || m.number !== d1) continue;
       if (m.type === 'note' && (isNoteOn || isNoteOff)) {
         // A pad mapped to a fader-style target must not slam it to zero on
         // release — notes drive continuous targets by velocity, press only.
         if (CONTINUOUS.has(m.action.kind) && !isNoteOn) continue;
-        this.runAction(m.action, isNoteOn, d2 / 127);
+        align = this.runAction(m.action, isNoteOn, d2 / 127) ?? align;
       } else if (m.type === 'cc' && isCC) {
-        this.runAction(m.action, d2 > 63, d2 / 127);
+        align = this.runAction(m.action, d2 > 63, d2 / 127) ?? align;
       }
     }
+    return align;
   }
 
-  runAction(a: MidiAction, pressed: boolean, value: number): void {
+  /** Returns the phase grid this action asks the effects to land on, or null.
+   *  Mirrors run_action in core/src/state.rs, which says the same thing through
+   *  `Outcome.align_phase`. */
+  runAction(a: MidiAction, pressed: boolean, value: number): number | null {
     switch (a.kind) {
       case 'cell':
         if (pressed) this.trigger(a.layerId, a.col);
@@ -478,6 +489,14 @@ export class EngineState {
       case 'tap':
         if (pressed) this.clock.tap();
         break;
+      // The same two halves the `resync` command runs, because it is the same
+      // button under a finger: the clock, and the effect phase. Drop the second
+      // and an APC SYNC snaps the downbeat while a bar-long shape stays where
+      // it was — a silent wrong answer rather than a visible failure.
+      case 'sync':
+        if (!pressed) break;
+        this.clock.resync();
+        return BAR;
       case 'blackout':
         if (pressed) this.setBlackout(!this.blackout);
         break;
@@ -494,6 +513,7 @@ export class EngineState {
         this.setControl(a.controlId, value);
         break;
     }
+    return null;
   }
 
   /** Move a Named Control (P3): resolve every link through the soft layer.

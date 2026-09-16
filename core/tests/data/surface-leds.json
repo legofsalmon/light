@@ -1,7 +1,7 @@
 {
   "surfaces": [
-    {"name": "APC40 mk2", "matches": ["apc40"], "layerBase": 32, "sceneBase": 82, "blackout": 81, "tap": 99, "columnBase": null, "brightChannels": null, "clear": [[0, 39], [81, 86], [99, 99]]},
-    {"name": "APC mini mk2", "matches": ["apc mini", "apcmini"], "layerBase": 56, "sceneBase": 112, "blackout": 119, "tap": 118, "columnBase": 0, "brightChannels": [6, 1], "clear": [[0, 63], [112, 119]]}
+    {"name": "APC40 mk2", "matches": ["apc40"], "layerBase": 32, "sceneBase": 82, "blackout": 81, "tap": 99, "columnBase": null, "columnRow": {"note": 52, "channels": [0, 1, 2, 3, 4, 5, 6, 7]}, "brightChannels": null, "clear": [[0, 39], [81, 86], [99, 99]]},
+    {"name": "APC mini mk2", "matches": ["apc mini", "apcmini"], "layerBase": 56, "sceneBase": 112, "blackout": 119, "tap": 118, "columnBase": 0, "columnRow": null, "brightChannels": [6, 1], "clear": [[0, 63], [112, 119]]}
   ],
   "nearest": [
     ["#ff0000", 5, 7],

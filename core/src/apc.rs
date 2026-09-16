@@ -9,10 +9,15 @@
 //! index as velocity on channel 0, and brightness is baked into the palette:
 //! each hue has a bright index and a dim one. The APC mini mk2 takes the same
 //! palette index but the MIDI CHANNEL selects the behaviour — channel 6 is full
-//! brightness, channel 1 is 25%. So the LED map is computed once as (note →
-//! channel, velocity) and each surface encodes the same "playing / available"
-//! decision its own way. Both can be plugged in at once; each keeps its own
-//! diff cache.
+//! brightness, channel 1 is 25%. So the LED map is computed once as
+//! ((channel, note) → (channel, velocity)) and each surface encodes the same
+//! "playing / available" decision its own way. Both can be plugged in at once;
+//! each keeps its own diff cache.
+//!
+//! The KEY is a pair because the APC40's eight CLIP STOP buttons — the column
+//! row, under the grid — all carry note 52 and differ only by the track
+//! channel. The VALUE keeps its own channel because on the mini the channel is
+//! the brightness, so one button changes channel while staying one button.
 //!
 //! Single-colour buttons (layer, blackout, tap) are velocity 0 off / 1 on /
 //! 2 blink on both. Note 2 is the HARDWARE blink at a fixed rate, which is why
@@ -130,6 +135,18 @@ const APC_LAYER_ROWS: usize = 4;
 /// coloured by a look, because a column holds one per layer.
 const WHITE: (u8, u8) = (3, 1);
 
+/// A column row addressed by CHANNEL: one note, one channel per column.
+/// Mirror of `Surface.columnRow` in `ui/src/surfaces.ts`.
+pub struct ColumnRow {
+    pub note: u8,
+    pub channels: &'static [u8],
+}
+
+/// The APC40 mk2's CLIP STOP row, named once so the LED table and the input
+/// preset (`ui/src/controllerPresets.ts`) cannot drift: one note (0x34), and
+/// the channel is the track.
+pub const APC40_COLUMN_ROW: ColumnRow = ColumnRow { note: 52, channels: &[0, 1, 2, 3, 4, 5, 6, 7] };
+
 /// Where a surface's buttons live and how it wants a pad lit. Data, not a
 /// trait: the two surfaces differ in note numbers and in one encoding
 /// decision, and nothing else.
@@ -145,8 +162,16 @@ pub struct Surface {
     pub blackout: u8,
     /// tap tempo, pulsed on the beat
     pub tap: u8,
-    /// pad row that fires whole columns, where the surface has one
+    /// An RGB PAD row that fires whole columns: eight consecutive notes from
+    /// here on channel 0, lit dim / bright like any other pad (mini mk2).
     pub column_base: Option<u8>,
+    /// A single-colour BUTTON row that fires whole columns: one note, and the
+    /// channel is the column — the APC40 mk2's CLIP STOP row, where the channel
+    /// IS the track. Not a second base note: the eight buttons all carry note 52
+    /// and differ only by channel, which is why the LED map is keyed by the
+    /// pair. Single-colour, so the two-brightness pad rule reduces to one bit
+    /// here: lit while the whole column is on stage, dark otherwise.
+    pub column_row: Option<ColumnRow>,
     /// Some((playing, available)) when brightness is the CHANNEL and the
     /// palette index is just the hue (mini mk2); None when the palette index
     /// carries the brightness itself (APC40 mk2, channel 0 throughout).
@@ -163,6 +188,26 @@ impl Surface {
             None => (0, if active { palette.0 } else { palette.1 }),
         }
     }
+
+    /// Every (channel, note) the attach has to blank, so that nothing the map
+    /// can light is left burning after LIGHT quits. The ranges are channel 0 —
+    /// a velocity-0 note clears a pad whatever channel lit it — plus the column
+    /// row, whose channel IS its address and which no channel-0 message would
+    /// reach. Mirror of `clearAddresses` in `ui/src/surfaces.ts`.
+    pub fn clear_addresses(&self) -> Vec<(u8, u8)> {
+        let mut out = Vec::new();
+        for &(from, to) in self.clear {
+            for n in from..=to {
+                out.push((0, n));
+            }
+        }
+        if let Some(cr) = &self.column_row {
+            for &ch in cr.channels {
+                out.push((ch, cr.note));
+            }
+        }
+        out
+    }
 }
 
 /// Only the 5 x 8 clip grid is RGB; scene LEDs are single-colour. The bottom
@@ -175,6 +220,7 @@ pub const APC40_MK2: Surface = Surface {
     blackout: 81,
     tap: 99,
     column_base: None,
+    column_row: Some(APC40_COLUMN_ROW),
     bright_channels: None,
     clear: &[(0, 39), (81, 86), (99, 99)],
 };
@@ -189,17 +235,27 @@ pub const APC_MINI_MK2: Surface = Surface {
     blackout: 119,
     tap: 118,
     column_base: Some(0),
+    column_row: None,
     bright_channels: Some((6, 1)),
     clear: &[(0, 63), (112, 119)],
 };
 
 pub const SURFACES: &[&Surface] = &[&APC40_MK2, &APC_MINI_MK2];
 
-/// note → (channel, velocity); everything not present = off.
-/// Mirror of `computeLeds` in `ui/src/apcFeedback.ts`.
-fn compute_leds(state: &EngineState, s: &Surface, beat: f64) -> HashMap<u8, (u8, u8)> {
+/// (channel, note) → (channel, velocity); everything not present = off.
+///
+/// The KEY is the button's address; the VALUE still carries the channel the
+/// message goes out on, and the two are not always the same number. On the mini
+/// the channel is the BRIGHTNESS, so one button changes channel while staying
+/// one button — folding that into the key would turn every brightness change
+/// into an off on the old channel and an on on the new one. On the APC40's
+/// CLIP STOP row the channel is the TRACK, so there the address and the send
+/// channel are the same thing.
+///
+/// Mirror of `computeLeds` in `ui/src/surfaces.ts`.
+fn compute_leds(state: &EngineState, s: &Surface, beat: f64) -> HashMap<(u8, u8), (u8, u8)> {
     let p = &state.project;
-    let mut leds: HashMap<u8, (u8, u8)> = HashMap::new();
+    let mut leds: HashMap<(u8, u8), (u8, u8)> = HashMap::new();
 
     // FOUR layer rows, not five: the fifth belongs to the control row the look
     // grid shows underneath the layers, so the 5 x 8 surface and the screen are
@@ -234,22 +290,30 @@ fn compute_leds(state: &EngineState, s: &Surface, beat: f64) -> HashMap<u8, (u8,
             } else {
                 s.pad((bright, dim), active)
             };
-            leds.insert((base + col as i16) as u8, cell);
+            leds.insert((0, (base + col as i16) as u8), cell);
         }
         // layer button (single-colour): on when the layer has something to clear
         if live.is_some_and(|lv| lv.look_id.is_some()) {
-            leds.insert(s.scene_base + row as u8, (0, 1));
+            leds.insert((0, s.scene_base + row as u8), (0, 1));
         }
     }
 
     // The column row, where the surface has one. A column button fires every
-    // layer at once, so it reports the same thing back: lit dim while the
-    // column holds anything, bright while every layer holding something there
-    // is actually playing it — the whole column up, which is exactly what
-    // pressing it does. Change one pad afterwards and it drops to dim, which
-    // is true: the column is no longer what is on stage. White rather than a
-    // look colour, because a column holds one look per layer.
-    if let Some(cb) = s.column_base {
+    // layer at once, so it reports the same thing back: it is bright while
+    // every layer holding something there is actually playing it — the whole
+    // column up, which is exactly what pressing it does. Change one pad
+    // afterwards and it drops, which is true: the column is no longer what is
+    // on stage.
+    //
+    // One rule, two encodings, as everywhere else on these surfaces. The mini's
+    // column row is eight RGB PADS, so it can say both halves: dim while the
+    // column merely holds something, bright while it is up — white rather than
+    // a look colour, because a column holds one look per layer. The APC40's
+    // CLIP STOP row is eight SINGLE-COLOUR buttons (0 off / 1 on / 2 blink), so
+    // it says the half that matters with the house lights down: lit while the
+    // column is on stage. The grid above it already shows which columns hold
+    // content, and a blink means "armed" on this surface — blackout owns that.
+    if s.column_base.is_some() || s.column_row.is_some() {
         for col in 0..p.columns.len().min(8) {
             let holders: Vec<&crate::types::Layer> = p
                 .layers
@@ -264,13 +328,21 @@ fn compute_leds(state: &EngineState, s: &Surface, beat: f64) -> HashMap<u8, (u8,
                     lv.col == Some(col) && lv.look_id.as_deref() == l.cells[col].as_deref()
                 })
             });
-            leds.insert(cb + col as u8, s.pad(WHITE, all_up));
+            if let Some(cr) = &s.column_row {
+                if let Some(&ch) = cr.channels.get(col) {
+                    if all_up {
+                        leds.insert((ch, cr.note), (ch, 1));
+                    }
+                }
+            } else if let Some(cb) = s.column_base {
+                leds.insert((0, cb + col as u8), s.pad(WHITE, all_up));
+            }
         }
     }
 
     // stop-all-clips = blackout: blink while armed
     if state.blackout {
-        leds.insert(s.blackout, (0, 2));
+        leds.insert((0, s.blackout), (0, 2));
     }
 
     // Tap pulses on the beat rather than using the hardware blink, which runs
@@ -278,7 +350,7 @@ fn compute_leds(state: &EngineState, s: &Surface, beat: f64) -> HashMap<u8, (u8,
     // quarter of a beat is longer than the 66 ms update period at any tempo a
     // rig runs at, so no beat is skipped.
     if beat.rem_euclid(1.0) < 0.25 {
-        leds.insert(s.tap, (0, 1));
+        leds.insert((0, s.tap), (0, 1));
     }
 
     leds
@@ -289,7 +361,9 @@ fn compute_leds(state: &EngineState, s: &Surface, beat: f64) -> HashMap<u8, (u8,
 struct Attached {
     surface: &'static Surface,
     conn: MidiOutputConnection,
-    last_sent: HashMap<u8, (u8, u8)>,
+    /// Keyed the way compute_leds is keyed: by the button's (channel, note)
+    /// address, because on the APC40 eight buttons share note 52.
+    last_sent: HashMap<(u8, u8), (u8, u8)>,
 }
 
 /// Owns the output connections; rescans for hot-plug, clears each surface on
@@ -339,10 +413,12 @@ impl ApcOut {
             let Ok(client) = MidiOutput::new("LIGHT") else { continue };
             match client.connect(port, "light-surface-leds") {
                 Ok(mut conn) => {
-                    for &(from, to) in surface.clear {
-                        for n in from..=to {
-                            let _ = conn.send(&[0x90, n, 0]);
-                        }
+                    // Velocity 0, so this can never fire a cue if it comes back
+                    // round a loopback port: a zero-velocity note on is a note
+                    // OFF, and every mapping that fires anything is guarded on
+                    // the press.
+                    for (ch, n) in surface.clear_addresses() {
+                        let _ = conn.send(&[0x90 | ch, n, 0]);
                     }
                     println!("[surface] {} LED feedback attached", surface.name);
                     found.push((surface, conn));
@@ -401,29 +477,32 @@ impl ApcOut {
             let leds = compute_leds(state, a.surface, beat);
             let mut failed = false;
 
-            // explicitly turn off notes that vanished
-            let gone: Vec<(u8, u8)> = a
+            // Explicitly turn off buttons that vanished. The note goes out on
+            // the channel it was LIT on, which is not always the channel in the
+            // key — on the mini the key is the pad and the channel is its
+            // brightness.
+            let gone: Vec<((u8, u8), u8)> = a
                 .last_sent
                 .iter()
-                .filter(|(note, (_, vel))| *vel != 0 && !leds.contains_key(note))
-                .map(|(note, (ch, _))| (*note, *ch))
+                .filter(|(key, (_, vel))| *vel != 0 && !leds.contains_key(key))
+                .map(|(key, (ch, _))| (*key, *ch))
                 .collect();
-            for (note, ch) in gone {
-                if a.conn.send(&[0x90 | ch, note, 0]).is_err() {
+            for (key, ch) in gone {
+                if a.conn.send(&[0x90 | ch, key.1, 0]).is_err() {
                     failed = true;
                 }
-                a.last_sent.insert(note, (ch, 0));
+                a.last_sent.insert(key, (ch, 0));
             }
             // send only changes — the CHANNEL is part of the state, not just
             // the velocity: on the mini a pad that stays the same colour and
             // changes brightness changes only the channel, and folding it away
             // would leave that pad stuck at its old brightness.
-            for (&note, &(ch, vel)) in &leds {
-                if a.last_sent.get(&note).copied() != Some((ch, vel)) {
-                    if a.conn.send(&[0x90 | ch, note, vel]).is_err() {
+            for (&key, &(ch, vel)) in &leds {
+                if a.last_sent.get(&key).copied() != Some((ch, vel)) {
+                    if a.conn.send(&[0x90 | ch, key.1, vel]).is_err() {
                         failed = true;
                     }
-                    a.last_sent.insert(note, (ch, vel));
+                    a.last_sent.insert(key, (ch, vel));
                 }
             }
 
@@ -444,8 +523,16 @@ mod tests {
     /// Off-beat, so the tap pulse is not in the way of a note-table assertion.
     const OFFBEAT: f64 = 0.5;
 
-    fn vel(leds: &HashMap<u8, (u8, u8)>, note: u8) -> Option<u8> {
-        leds.get(&note).map(|&(_, v)| v)
+    /// Velocity of a button on channel 0 — the grid, the scene column, the
+    /// blackout and tap keys. The column row is addressed by channel, so it has
+    /// `at` below instead.
+    fn vel(leds: &HashMap<(u8, u8), (u8, u8)>, note: u8) -> Option<u8> {
+        leds.get(&(0, note)).map(|&(_, v)| v)
+    }
+
+    /// One button by its full address.
+    fn at(leds: &HashMap<(u8, u8), (u8, u8)>, channel: u8, note: u8) -> Option<(u8, u8)> {
+        leds.get(&(channel, note)).copied()
     }
 
     /// A look that stays on stage once fired, chosen the same way every run.
@@ -501,7 +588,7 @@ mod tests {
         let mut out = String::from("{\n  \"surfaces\": [\n");
         for (i, s) in SURFACES.iter().enumerate() {
             out.push_str(&format!(
-                "    {{\"name\": \"{}\", \"matches\": [{}], \"layerBase\": {}, \"sceneBase\": {}, \"blackout\": {}, \"tap\": {}, \"columnBase\": {}, \"brightChannels\": {}, \"clear\": [{}]}}{}\n",
+                "    {{\"name\": \"{}\", \"matches\": [{}], \"layerBase\": {}, \"sceneBase\": {}, \"blackout\": {}, \"tap\": {}, \"columnBase\": {}, \"columnRow\": {}, \"brightChannels\": {}, \"clear\": [{}]}}{}\n",
                 s.name,
                 s.matches.iter().map(|m| format!("\"{m}\"")).collect::<Vec<_>>().join(", "),
                 s.layer_base,
@@ -509,6 +596,11 @@ mod tests {
                 s.blackout,
                 s.tap,
                 s.column_base.map_or("null".into(), |c| c.to_string()),
+                s.column_row.as_ref().map_or("null".into(), |c| format!(
+                    "{{\"note\": {}, \"channels\": [{}]}}",
+                    c.note,
+                    c.channels.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")
+                )),
                 s.bright_channels.map_or("null".into(), |(a, b)| format!("[{a}, {b}]")),
                 s.clear.iter().map(|&(a, b)| format!("[{a}, {b}]")).collect::<Vec<_>>().join(", "),
                 if i + 1 == SURFACES.len() { "" } else { "," }
@@ -553,17 +645,28 @@ mod tests {
         let leds = compute_leds(&state, &APC40_MK2, OFFBEAT);
         // no layer buttons, no blackout blink while idle
         for n in 82..=86 {
-            assert!(!leds.contains_key(&n), "layer button {n} lit while idle");
+            assert!(at(&leds, 0, n).is_none(), "layer button {n} lit while idle");
         }
-        // every lit pad must be a valid velocity on a valid note
-        for (&note, &(ch, v)) in &leds {
-            assert!(note <= 39 || (81..=86).contains(&note), "note {note} out of surface");
+        // Every lit button must be a valid velocity at an address this surface
+        // actually has. The APC40 paints the GRID on channel 0 — but not the
+        // CLIP STOP row, where the channel is the track, so "everything on
+        // channel 0" is no longer the whole truth and saying it that way would
+        // have meant lighting the cue row on the wrong buttons.
+        let col_row = APC40_MK2.column_row.as_ref().expect("the APC40 has a CLIP STOP row");
+        for (&(ch, note), &(send, v)) in &leds {
             assert!(v > 0 && v < 128, "velocity {v} out of range");
-            assert_eq!(ch, 0, "the APC40 paints everything on channel 0");
+            assert_eq!(send, ch, "the APC40 sends on the channel it addresses");
+            if note == col_row.note {
+                assert!(col_row.channels.contains(&ch), "CLIP STOP lit on channel {ch}");
+            } else {
+                assert_eq!(ch, 0, "the APC40 paints everything but CLIP STOP on channel 0");
+                assert!(note <= 39 || (81..=86).contains(&note), "note {note} out of surface");
+            }
         }
 
         // The bottom row is a LAYER row now, not a cue mirror: firing a column
-        // must not paint the old bright-white cue marker over pad 0.
+        // must not paint the old bright-white cue marker over pad 0. The cue
+        // marker lives on CLIP STOP, one row lower and on the track channel.
         state.trigger_column(0, 0.0);
         let leds = compute_leds(&state, &APC40_MK2, OFFBEAT);
         assert_ne!(vel(&leds, 0), Some(3), "pad 0 belongs to the bottom layer now, not the cue row");
@@ -571,7 +674,7 @@ mod tests {
         // blackout blinks stop-all-clips, freeing scene 5 for the fifth layer
         state.blackout = true;
         let leds = compute_leds(&state, &APC40_MK2, OFFBEAT);
-        assert_eq!(leds.get(&81).copied(), Some((0, 2)));
+        assert_eq!(at(&leds, 0, 81), Some((0, 2)));
     }
 
     #[test]
@@ -593,13 +696,13 @@ mod tests {
             layer.cells[col] = Some(played.clone());
         }
         state.trigger(&top_layer, col, 0.0, crate::state::LOCAL_CLIENT);
-        let playing = compute_leds(&state, &APC40_MK2, OFFBEAT).get(&(32 + col as u8)).copied();
+        let playing = at(&compute_leds(&state, &APC40_MK2, OFFBEAT), 0, 32 + col as u8);
 
         // re-point the pad; the engine keeps playing `played`
         if let Some(layer) = state.project.layers.last_mut() {
             layer.cells[col] = Some(swapped);
         }
-        let stale = compute_leds(&state, &APC40_MK2, OFFBEAT).get(&(32 + col as u8)).copied();
+        let stale = at(&compute_leds(&state, &APC40_MK2, OFFBEAT), 0, 32 + col as u8);
         // the surface keeps reporting the stage: same bright colour as before
         // the pad was re-pointed, because the SAME look is still playing
         assert_eq!(stale, playing, "a re-pointed live pad must still report what is on stage");
@@ -609,7 +712,7 @@ mod tests {
         if let Some(layer) = state.project.layers.last_mut() {
             layer.cells[idle_col] = Some(played);
         }
-        let idle = compute_leds(&state, &APC40_MK2, OFFBEAT).get(&(32 + idle_col as u8)).copied();
+        let idle = at(&compute_leds(&state, &APC40_MK2, OFFBEAT), 0, 32 + idle_col as u8);
         assert_ne!(idle, stale, "a pad outside the live column must read as idle");
     }
 
@@ -627,7 +730,7 @@ mod tests {
         }
         let leds = compute_leds(&state, &APC40_MK2, OFFBEAT);
         for note in 0u8..8 {
-            assert!(!leds.contains_key(&note), "bottom row note {note} must stay dark for controls");
+            assert!(at(&leds, 0, note).is_none(), "bottom row note {note} must stay dark for controls");
         }
     }
 
@@ -651,10 +754,10 @@ mod tests {
             }
             state.trigger(&top_layer, col, 0.0, crate::state::LOCAL_CLIENT);
             let note = surface.layer_base + col as u8;
-            let live = compute_leds(&state, surface, OFFBEAT).get(&note).copied();
+            let live = at(&compute_leds(&state, surface, OFFBEAT), 0, note);
             assert!(live.is_some(), "{}: the playing pad is dark", surface.name);
             state.clear_layer(&top_layer, 0.0);
-            let idle = compute_leds(&state, surface, OFFBEAT).get(&note).copied();
+            let idle = at(&compute_leds(&state, surface, OFFBEAT), 0, note);
             assert_ne!(idle, live, "{}: active pad must differ from idle", surface.name);
         }
     }
@@ -677,8 +780,8 @@ mod tests {
         let big = compute_leds(&state, &APC40_MK2, OFFBEAT);
         let mini = compute_leds(&state, &APC_MINI_MK2, OFFBEAT);
 
-        let (big_live, big_idle) = (big[&32], big[&33]);
-        let (mini_live, mini_idle) = (mini[&56], mini[&57]);
+        let (big_live, big_idle) = (big[&(0, 32)], big[&(0, 33)]);
+        let (mini_live, mini_idle) = (mini[&(0, 56)], mini[&(0, 57)]);
         // APC40: one channel, two palette indices
         assert_eq!(big_live.0, 0);
         assert_eq!(big_idle.0, 0);
@@ -705,40 +808,61 @@ mod tests {
         if let Some(layer) = state.project.layers.last_mut() {
             layer.cells[0] = Some(look_id);
         }
-        let before = compute_leds(&state, &APC_MINI_MK2, OFFBEAT)[&56];
+        let before = compute_leds(&state, &APC_MINI_MK2, OFFBEAT)[&(0, 56)];
         state.trigger(&top_layer, 0, 0.0, crate::state::LOCAL_CLIENT);
-        let after = compute_leds(&state, &APC_MINI_MK2, OFFBEAT)[&56];
+        let after = compute_leds(&state, &APC_MINI_MK2, OFFBEAT)[&(0, 56)];
         assert_eq!(before.1, after.1, "same colour");
         assert_ne!(before.0, after.0, "different channel");
         assert_ne!(before, after, "so the pair differs, and the diff sends it");
+        // ...and it is still ONE key, not two. The address identifies a button;
+        // the brightness channel rides in the value. Key on the send channel
+        // instead and every pad that lights would first be blanked on the
+        // channel it used to be lit on — twice the wire traffic, for the most
+        // common change there is.
     }
 
     #[test]
     fn the_column_row_reports_the_whole_column() {
-        // Only the mini has one. It fires every layer at once, so it says the
-        // same thing back: dim while the column merely holds something, bright
-        // only while every layer holding something there is playing it.
+        // BOTH surfaces have one now — the mini's bottom pad row and the
+        // APC40's CLIP STOP row — addressed differently and encoded
+        // differently, from ONE rule: a column button fires every layer at
+        // once, so it says the same thing back. The mini's RGB pads can say
+        // both halves (dim holding, bright up); the APC40's single-colour
+        // buttons say the half that matters with the house lights down.
         let mut p = default_project();
         let look_id = steady_look(&p);
         for layer in &mut p.layers {
             layer.cells[0] = Some(look_id.clone());
         }
         let mut state = EngineState::new(p, 0.0);
-        let held = compute_leds(&state, &APC_MINI_MK2, OFFBEAT)[&0];
+        let stop = |st: &EngineState, col: usize| {
+            at(
+                &compute_leds(st, &APC40_MK2, OFFBEAT),
+                APC40_COLUMN_ROW.channels[col],
+                APC40_COLUMN_ROW.note,
+            )
+        };
+        let minicol = |st: &EngineState| at(&compute_leds(st, &APC_MINI_MK2, OFFBEAT), 0, 0);
+
+        let held = minicol(&state).expect("the mini's column button holds content");
         assert_eq!(held, APC_MINI_MK2.pad(WHITE, false), "holding content, nothing playing");
+        assert_eq!(stop(&state, 0), None, "CLIP STOP is dark until the column is on stage");
 
         state.trigger_column(0, 0.0);
-        let up = compute_leds(&state, &APC_MINI_MK2, OFFBEAT)[&0];
-        assert_eq!(up, APC_MINI_MK2.pad(WHITE, true), "the whole column is on stage");
+        assert_eq!(minicol(&state), Some(APC_MINI_MK2.pad(WHITE, true)), "the whole column is on stage");
+        assert_eq!(stop(&state, 0), Some((0, 1)), "CLIP STOP under column 1 lights when it is on stage");
+        // The eight buttons are one note on eight channels, so the ONE that
+        // lights has to be the one under the column that is up. Keyed by note
+        // alone, every one of them would have claimed it.
+        for col in 1..8 {
+            assert_eq!(stop(&state, col), None, "CLIP STOP under column {} lit too", col + 1);
+        }
 
         // clear one layer and the column is no longer what is on stage
         let one = state.project.layers[0].id.clone();
         state.clear_layer(&one, 0.0);
-        let partial = compute_leds(&state, &APC_MINI_MK2, OFFBEAT)[&0];
-        assert_eq!(partial, held, "a column that is only partly up reads as not up");
-
-        // and the APC40 has no column row at all
-        assert!(!compute_leds(&state, &APC40_MK2, OFFBEAT).contains_key(&0));
+        assert_eq!(minicol(&state), Some(held), "a column that is only partly up reads as not up");
+        assert_eq!(stop(&state, 0), None, "and CLIP STOP goes dark with it");
     }
 
     #[test]
@@ -760,9 +884,18 @@ mod tests {
         let mut state = EngineState::new(p, 0.0);
         state.trigger_column(0, 0.0);
         assert_eq!(
-            compute_leds(&state, &APC_MINI_MK2, OFFBEAT)[&0],
+            compute_leds(&state, &APC_MINI_MK2, OFFBEAT)[&(0, 0)],
             APC_MINI_MK2.pad(WHITE, false),
             "a flash look is not holding the stage"
+        );
+        assert_eq!(
+            at(
+                &compute_leds(&state, &APC40_MK2, OFFBEAT),
+                APC40_COLUMN_ROW.channels[0],
+                APC40_COLUMN_ROW.note
+            ),
+            None,
+            "and CLIP STOP does not claim it either"
         );
     }
 
@@ -770,7 +903,7 @@ mod tests {
     fn tap_pulses_once_a_beat_and_is_never_skipped() {
         let state = EngineState::new(default_project(), 0.0);
         for surface in SURFACES {
-            let lit = |b: f64| compute_leds(&state, surface, b).contains_key(&surface.tap);
+            let lit = |b: f64| compute_leds(&state, surface, b).contains_key(&(0, surface.tap));
             assert!(lit(0.0), "{}: dark on the beat", surface.name);
             assert!(lit(4.05), "{}: dark just after a beat", surface.name);
             assert!(!lit(0.5), "{}: lit between beats", surface.name);
@@ -787,11 +920,13 @@ mod tests {
     }
 
     #[test]
-    fn every_surface_lights_only_notes_it_clears() {
-        // A note lit but never blanked stays on after LIGHT quits — the APC40's
-        // blackout LED did exactly that once, sitting there claiming "armed"
-        // with blackout off. Every note the map can produce must be inside the
-        // ranges the attach blanks.
+    fn every_surface_lights_only_buttons_it_clears() {
+        // A button lit but never blanked stays on after LIGHT quits — the
+        // APC40's blackout LED did exactly that once, sitting there claiming
+        // "armed" with blackout off. Every ADDRESS the map can produce must be
+        // one the attach blanks, which is why this walks (channel, note) pairs:
+        // the CLIP STOP row is eight buttons the old channel-0 note ranges
+        // could not have reached at all.
         let mut p = default_project();
         let look_id = steady_look(&p);
         for layer in &mut p.layers {
@@ -804,13 +939,23 @@ mod tests {
         state.blackout = true;
         for surface in SURFACES {
             let leds = compute_leds(&state, surface, 0.0); // on the beat: tap lit too
-            assert!(leds.contains_key(&surface.tap), "{}: tap not exercised", surface.name);
-            assert!(leds.contains_key(&surface.blackout), "{}: blackout not exercised", surface.name);
-            for &note in leds.keys() {
+            let blanked = surface.clear_addresses();
+            assert!(leds.contains_key(&(0, surface.tap)), "{}: tap not exercised", surface.name);
+            assert!(leds.contains_key(&(0, surface.blackout)), "{}: blackout not exercised", surface.name);
+            // the column row has to be lit here too, or its addresses would go
+            // through this test unexamined
+            let col_lit = leds.keys().any(|&(ch, note)| {
+                surface.column_row.as_ref().is_some_and(|c| c.note == note && c.channels.contains(&ch))
+                    || surface.column_base.is_some_and(|cb| ch == 0 && note == cb)
+            });
+            assert!(col_lit, "{}: the column row not exercised", surface.name);
+            for &key in leds.keys() {
                 assert!(
-                    surface.clear.iter().any(|&(a, b)| (a..=b).contains(&note)),
-                    "{}: note {note} is lit but never blanked on attach",
-                    surface.name
+                    blanked.contains(&key),
+                    "{}: ch {} note {} is lit but never blanked on attach",
+                    surface.name,
+                    key.0,
+                    key.1
                 );
             }
         }

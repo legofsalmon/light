@@ -1100,8 +1100,12 @@ fn handle_msg(
         }
         EngineMsg::Midi(status, d1, d2) => {
             let out = state.apply_midi(status, d1, d2, t);
+            // A mapped SYNC asks for the bar as well as the clock, exactly as
+            // the Resync command does two arms up. This arm used to drop it.
+            let align = out.align_phase;
             // No owner: a controller change belongs to everyone.
             apply_outcome(out, state, bc, osc, tx, dir, dirty_at, project_echo, None);
+            return align;
         }
         // Realtime bytes go to the follower and no further. Whether the
         // follower is allowed to DRIVE the clock is decided on the tick, not

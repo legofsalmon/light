@@ -5,19 +5,26 @@
 
 import type { MidiAction, MidiMapping, Project } from '../../shared/types.ts';
 import { uid } from '../../shared/types.ts';
-import { APC_COLS, APC_KNOB_BANKS, APC_LAYER_ROWS } from './surfaces.ts';
+import { APC40_COLUMN_ROW, APC_COLS, APC_KNOB_BANKS, APC_LAYER_ROWS } from './surfaces.ts';
+
+/** METRONOME, the APC40 mk2's own "now is the top of the bar" key (0x5A). Not
+ *  in the surface table because nothing lights it — it is an input only. */
+const APC40_METRONOME = 90;
 
 /**
  * Akai APC40 mk2 (generic mode 0):
  * clip grid 5×8, notes 0–39 (bottom-left = 0, rows ascend); scene launch
- * column notes 82–86 (top→bottom); STOP ALL CLIPS note 81; track faders CC 7
- * on channels 0–7 (the channel is the track!); master fader CC 14 ch 0; bank
- * ◀ ▶ notes 97/96; tap tempo note 99.
+ * column notes 82–86 (top→bottom); STOP ALL CLIPS note 81; CLIP STOP note 52
+ * on channels 0–7 (the channel is the track!); track faders CC 7 on channels
+ * 0–7 likewise; master fader CC 14 ch 0; bank ◀ ▶ notes 97/96; tap tempo note
+ * 99; METRONOME note 90.
  *
  * Mapping (see apc40Mk2Mappings for the authority): the FOUR upper grid rows
  * mirror the on-screen layers and the bottom row is reserved for the control
- * row the look grid draws beneath them; four scene buttons clear their layer;
+ * row the look grid draws beneath them; the CLIP STOP row under the grid fires
+ * whole columns; four scene buttons clear their layer;
  * STOP ALL CLIPS = blackout (the surface's closest thing to a panic key);
+ * METRONOME = sync;
  * track faders 1–4 = layer masters, 6 = haze, 7 = effect speed; master fader =
  * grand master; bank ◀ ▶ = previous / next song; TAP TEMPO = tap; the eight
  * DEVICE CONTROL knobs drive the eight Named Controls of the control row, bound
@@ -47,9 +54,22 @@ export function apc40Mk2Mappings(p: Project): MidiMapping[] {
     }
     add('note', 0, 82 + row, { kind: 'layerClear', layerId: layer.id });
   });
+  // The CLIP STOP row — the eight buttons directly under the grid — is the GO
+  // row: CLIP STOP under column N fires column N. It is the one row on this
+  // surface that can carry the cues without taking the control row, because it
+  // is not part of the 5 x 8 grid at all. Note 52 on every one of them: on this
+  // surface a per-track button carries the TRACK in its channel, which is why
+  // the LED map is keyed by (channel, note) and why the loop below varies the
+  // channel and not the number.
+  for (let col = 0; col < Math.min(APC_COLS, p.columns.length); col++) {
+    add('note', APC40_COLUMN_ROW.channels[col], APC40_COLUMN_ROW.note, { kind: 'column', col });
+  }
   // Blackout moves to STOP ALL CLIPS: the five scene buttons are now all layer
   // clears, and stop-all is the closest thing the surface has to a panic key.
   add('note', 0, 81, { kind: 'blackout' });
+  // METRONOME is the surface's own name for what LIGHT calls SYNC, and it runs
+  // the same path: the clock AND the effect phase land on the bar.
+  add('note', 0, APC40_METRONOME, { kind: 'sync' });
   add('note', 0, 99, { kind: 'tap' }); // dedicated TAP TEMPO button
   add('note', 0, 97, { kind: 'deckPrev' }); // bank ◀ = previous song page
   add('note', 0, 96, { kind: 'deckNext' }); // bank ▶ = next song page
@@ -136,7 +156,7 @@ export const CONTROLLER_PRESETS = [
   {
     name: 'apc40mk2',
     label: 'APC40 mk2',
-    help: 'top 4 grid rows → layers (the bottom row is the control row, left unmapped) · 8 device knobs → the 8 dials, on every track-selection bank · scene buttons → layer clears · STOP ALL CLIPS → blackout · TAP → tempo · bank ◀ ▶ → prev / next song · track faders 1–4 → layer masters, 6 → haze, 7 → speed · master → grand',
+    help: 'top 4 grid rows → layers (the bottom row is the control row, left unmapped) · CLIP STOP row → fire that column · 8 device knobs → the 8 dials, on every track-selection bank · scene buttons → layer clears · STOP ALL CLIPS → blackout · TAP → tempo · METRONOME → sync · bank ◀ ▶ → prev / next song · track faders 1–4 → layer masters, 6 → haze, 7 → speed · master → grand',
     build: apc40Mk2Mappings,
   },
   {

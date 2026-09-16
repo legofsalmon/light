@@ -1046,6 +1046,11 @@ pub enum MidiAction {
     Speed,
     Haze,
     Tap,
+    /// the SYNC key, on a button: "now is the top of the bar". Runs the same
+    /// path as `Command::Resync` — the clock AND the effect phase, through
+    /// `Outcome.align_phase` — because a resync that leaves a bar-long shape
+    /// where it was is the wrong half of the job.
+    Sync,
     Blackout,
     DeckNext,
     DeckPrev,

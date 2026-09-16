@@ -808,15 +808,25 @@ impl EngineState {
                 continue;
             }
             let pressed = if is_cc { d2 > 63 } else { is_note_on };
-            if self.run_action(&action, pressed, d2 as f64 / 127.0, t) {
-                out.project_changed = true;
-            }
+            self.run_action(&action, pressed, d2 as f64 / 127.0, t, &mut out);
         }
         out
     }
 
-    /// Returns true when the action mutated the project (needs broadcast+save).
-    pub fn run_action(&mut self, a: &MidiAction, pressed: bool, value: f64, t: f64) -> bool {
+    /// Runs one mapped action, reporting through `out` what the surrounding
+    /// loop has to do about it: `project_changed` when the action mutated the
+    /// show, `align_phase` when it re-anchored the bar. The alignment is the
+    /// reason this takes an `Outcome` rather than returning a bool — a SYNC on
+    /// a controller has to reach the renderer exactly as the SYNC key does, and
+    /// a bool had nowhere to say so.
+    pub fn run_action(
+        &mut self,
+        a: &MidiAction,
+        pressed: bool,
+        value: f64,
+        t: f64,
+        out: &mut Outcome,
+    ) {
         match a {
             MidiAction::Cell { layer_id, col } => {
                 if pressed {
@@ -824,63 +834,67 @@ impl EngineState {
                 } else {
                     self.release(layer_id, *col, t);
                 }
-                false
             }
             MidiAction::Column { col } => {
                 if pressed {
                     self.trigger_column(*col, t);
                 }
-                false
             }
             MidiAction::LayerClear { layer_id } => {
                 if pressed {
                     self.clear_layer(layer_id, t);
                 }
-                false
             }
             MidiAction::LayerMaster { layer_id } => {
                 if let Some(layer) = self.project.layers.iter_mut().find(|l| &l.id == layer_id) {
                     layer.master = clamp01(value);
-                    true
-                } else {
-                    false
+                    out.project_changed = true;
                 }
             }
-            MidiAction::Grand => {
-                self.master = clamp01(value);
-                false
-            }
-            MidiAction::Speed => {
-                self.speed = 0.25 * 16f64.powf(clamp01(value));
-                false
-            }
+            MidiAction::Grand => self.master = clamp01(value),
+            MidiAction::Speed => self.speed = 0.25 * 16f64.powf(clamp01(value)),
             MidiAction::Haze => {
                 self.project.settings.haze = clamp01(value);
-                true
+                out.project_changed = true;
             }
             MidiAction::Tap => {
                 if pressed {
                     self.clock.tap(t);
                 }
-                false
+            }
+            // The same two halves `Command::Resync` runs, because it is the
+            // same button under a finger: the clock, and the effect phase. Drop
+            // the second and an APC SYNC snaps the downbeat while a bar-long
+            // shape stays where it was — a silent wrong answer rather than a
+            // visible failure.
+            MidiAction::Sync => {
+                if pressed {
+                    self.clock.resync(t);
+                    out.align_phase = Some(crate::clock::BAR);
+                }
             }
             MidiAction::Submaster { group_id } => {
                 let id = group_id.clone();
                 self.set_submaster(&id, value);
-                false
             }
             MidiAction::Blackout => {
                 if pressed {
                     self.set_blackout(!self.blackout);
                 }
-                false
             }
-            MidiAction::DeckNext => pressed && self.deck_step(1, t),
-            MidiAction::DeckPrev => pressed && self.deck_step(-1, t),
+            MidiAction::DeckNext => {
+                if pressed && self.deck_step(1, t) {
+                    out.project_changed = true;
+                }
+            }
+            MidiAction::DeckPrev => {
+                if pressed && self.deck_step(-1, t) {
+                    out.project_changed = true;
+                }
+            }
             MidiAction::Control { control_id } => {
                 let id = control_id.clone();
                 self.set_control(&id, value);
-                false
             }
         }
     }
@@ -1533,6 +1547,11 @@ impl EngineState {
                 let midi_out = self.apply_midi(status, d1, d2, t);
                 out.project_changed |= midi_out.project_changed;
                 out.learned = midi_out.learned;
+                // A browser session forwards Web MIDI through this command, so
+                // this is the path an APC SYNC takes in dev. Dropping the
+                // alignment here would leave the effects behind in exactly the
+                // session the native path gets right.
+                out.align_phase = midi_out.align_phase;
             }
             Command::Learn { action } => self.learn_target = action,
             // Parse-and-apply, for direct callers and tests. The engine loop
@@ -1712,5 +1731,70 @@ mod history_tests {
         st.replace_project(default_project());
         assert!(st.history.is_empty() && st.redone.is_empty());
         assert!(!st.undo());
+    }
+}
+
+#[cfg(test)]
+mod midi_tests {
+    use super::*;
+    use crate::defaults::default_project;
+
+    fn mapped() -> EngineState {
+        let mut p = default_project();
+        p.midi = vec![
+            MidiMapping {
+                id: "m-col".into(),
+                kind: MidiType::Note,
+                channel: 3,
+                number: 52,
+                action: MidiAction::Column { col: 3 },
+            },
+            MidiMapping {
+                id: "m-sync".into(),
+                kind: MidiType::Note,
+                channel: 0,
+                number: 90,
+                action: MidiAction::Sync,
+            },
+        ];
+        EngineState::new(p, 0.0)
+    }
+
+    fn live_pads(st: &EngineState) -> usize {
+        st.live.values().filter(|l| l.col.is_some()).count()
+    }
+
+    /// A mapping that fires a column is a CUE, and the one thing a cue may
+    /// never do is go off on its own. The three ways it could: a note OFF
+    /// resolving as a press, a bank change landing on the same number, and the
+    /// attach-time LED blank (a note-on with velocity 0) coming back round a
+    /// loopback port. All three are the same note-off shape. Mirrors the
+    /// `midi:` block in engine/test/smoke.ts.
+    #[test]
+    fn nothing_but_a_press_on_its_own_channel_fires_a_column() {
+        let mut st = mapped();
+        st.apply_midi(0x83, 52, 0, 0.0); // note off, CLIP STOP under column 4
+        assert_eq!(live_pads(&st), 0, "a note off fired a column");
+        st.apply_midi(0x93, 52, 0, 0.0); // note on, velocity 0 — the LED blank
+        assert_eq!(live_pads(&st), 0, "a zero-velocity note on fired a column");
+        st.apply_midi(0x90, 52, 127, 0.0); // the same number, wrong channel
+        assert_eq!(live_pads(&st), 0, "the column button is (channel, note), not note");
+        st.apply_midi(0x93, 52, 127, 0.0);
+        assert!(live_pads(&st) > 0, "CLIP STOP on its own channel did not fire the column");
+    }
+
+    /// SYNC on a controller has to reach the renderer exactly as the SYNC key
+    /// does — the clock AND the bar. Mirrors the same checks in smoke.ts.
+    #[test]
+    fn a_mapped_sync_asks_for_the_bar() {
+        let mut st = mapped();
+        assert_eq!(st.apply_midi(0x90, 90, 127, 0.0).align_phase, Some(crate::clock::BAR));
+        assert_eq!(st.apply_midi(0x80, 90, 0, 0.0).align_phase, None, "letting it go asks for nothing");
+        assert_eq!(st.apply_midi(0x93, 52, 127, 0.0).align_phase, None, "a column asks for nothing");
+        assert_eq!(st.apply_midi(0x90, 52, 127, 0.0).align_phase, None, "an unmapped note asks for nothing");
+        // and the same journey through the command the browser forwards Web
+        // MIDI on, which is the path an APC SYNC takes in a dev session
+        let out = st.handle_command(Command::Midi { status: 0x90, d1: 90, d2: 127 }, 0.0, None);
+        assert_eq!(out.align_phase, Some(crate::clock::BAR), "the midi command dropped the alignment");
     }
 }

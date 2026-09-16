@@ -8,14 +8,16 @@
 // alone would leave pads stuck at the wrong brightness.
 
 import { useStore } from './store.ts';
-import { SURFACES, computeLeds, type Surface } from './surfaces.ts';
+import { SURFACES, clearAddresses, computeLeds, ledNote, type Surface } from './surfaces.ts';
 
 // Re-exported so callers keep one import for "the surface": the grid shape is
 // a contract the on-screen look grid keeps with the hardware.
 export { APC_COLS, APC_LAYER_ROWS, APC_ROWS, APC_KNOB_BANKS, SURFACES } from './surfaces.ts';
 
 /** One attached surface, with the diff cache that belongs to it. Two surfaces
- *  plugged in at once must not share a cache — they paint different notes. */
+ *  plugged in at once must not share a cache — they paint different notes.
+ *  Keyed the way computeLeds is keyed: by the button's (channel, note) address,
+ *  because on the APC40 eight buttons share note 52. */
 type Attached = { surface: Surface; out: MIDIOutput; lastSent: Map<number, [number, number]> };
 
 let attached: Attached[] = [];
@@ -29,16 +31,18 @@ export function attachApcOutput(access: MIDIAccess): void {
       return surface.matches.some((m) => n.includes(m));
     });
     if (!out) continue;
-    // Blank the whole surface once on attach. This has to cover every note the
-    // map can produce, including ones it only ever INSERTS: computeLeds adds
-    // the blackout LED when blackout is armed and never sets it to zero, so the
-    // diff loop cannot turn it off either. Quitting with blackout armed left it
-    // blinking "armed" on the hardware while blackout was actually off — a
-    // false safety indicator on the physical surface. A Rust test now pins
-    // every lit note against these ranges.
-    for (const [from, to] of surface.clear) {
-      for (let n = from; n <= to; n++) out.send([0x90, n, 0]);
-    }
+    // Blank the whole surface once on attach. This has to cover every button
+    // the map can produce, including ones it only ever INSERTS: computeLeds
+    // adds the blackout LED when blackout is armed and never sets it to zero,
+    // so the diff loop cannot turn it off either. Quitting with blackout armed
+    // left it blinking "armed" on the hardware while blackout was actually off
+    // — a false safety indicator on the physical surface. A Rust test and a
+    // Node one pin every lit address against this list.
+    //
+    // Velocity 0, so this can never fire a cue if it comes back round a
+    // loopback port: a zero-velocity note on is a note OFF, and every mapping
+    // that fires anything is guarded on the press.
+    for (const [ch, n] of clearAddresses(surface)) out.send([0x90 | ch, n, 0]);
     attached.push({ surface, out, lastSent: new Map() });
   }
 }
@@ -57,22 +61,25 @@ export function scheduleFeedback(): void {
     if (!project) return;
     for (const { surface, out, lastSent } of attached) {
       const leds = computeLeds(project, snap, surface);
-      // diff: send only changes; explicitly turn off notes that vanished
-      for (const [note, [ch, vel]] of lastSent) {
-        if (!leds.has(note) && vel !== 0) {
-          out.send([0x90 | ch, note, 0]);
-          lastSent.set(note, [ch, 0]);
+      // diff: send only changes; explicitly turn off buttons that vanished.
+      // The note goes out on the channel it was LIT on, which is not always the
+      // channel in the key — on the mini the key is the pad and the channel is
+      // its brightness.
+      for (const [key, [ch, vel]] of lastSent) {
+        if (!leds.has(key) && vel !== 0) {
+          out.send([0x90 | ch, ledNote(key), 0]);
+          lastSent.set(key, [ch, 0]);
         }
       }
       // The CHANNEL is part of the state, not just the velocity: on the mini a
       // pad that stays the same colour and changes brightness changes only the
       // channel, and folding it away would leave that pad stuck at its old
       // brightness while its layer lights the rig.
-      for (const [note, [ch, vel]] of leds) {
-        const was = lastSent.get(note);
+      for (const [key, [ch, vel]] of leds) {
+        const was = lastSent.get(key);
         if (!was || was[0] !== ch || was[1] !== vel) {
-          out.send([0x90 | ch, note, vel]);
-          lastSent.set(note, [ch, vel]);
+          out.send([0x90 | ch, ledNote(key), vel]);
+          lastSent.set(key, [ch, vel]);
         }
       }
     }

@@ -660,9 +660,13 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       broadcastProjects();
       break;
     }
-    case 'midi':
-      state.applyMidi(cmd.status, cmd.d1, cmd.d2);
+    case 'midi': {
+      // A mapped SYNC asks for the bar as well as the clock, exactly as the
+      // `resync` case above does. This arm used to drop it.
+      const align = state.applyMidi(cmd.status, cmd.d1, cmd.d2);
+      if (align !== null) renderer.alignPhase(align);
       break;
+    }
     case 'learn':
       state.learnTarget = cmd.action;
       break;

@@ -983,6 +983,61 @@ async function main(): Promise<void> {
     await settle(node, rust);
   }
 
+  // --- a mapped SYNC moves the effects, and by the same amount as the SYNC key
+  // (design #45a). Both MIDI entry points used to drop the alignment the
+  // `resync` command applies — the Rust `EngineMsg::Midi` arm discarded
+  // `out.align_phase` and Node's `'midi'` case never called
+  // `renderer.alignPhase` — so an APC SYNC snapped the clock and left a
+  // bar-long shape exactly where it was. That is a silent wrong answer, which
+  // is why this pins the effect FRAME and not just the two engines against each
+  // other: a dropped alignment is parity-clean and still wrong.
+  {
+    const p = structuredClone(await currentProject(node));
+    p.midi = [
+      ...(p.midi ?? []).filter((m) => m.action.kind !== 'sync'),
+      { id: 'm-sync', type: 'note', channel: 0, number: 90, action: { kind: 'sync' } },
+    ];
+    both({ type: 'updateProject', project: p });
+    await sleep(300);
+
+    // A pinned effBeat of 3.7 is 0.3 short of a bar line, so align_phase(BAR)
+    // rounds it UP to 4.0: a different frame of the same wave, and the same
+    // frame on both engines whatever each one's own clock was doing. armWash
+    // rather than a bare trigger because the cue-list block parks its own looks
+    // on this cell — and a running cue list is exactly the thing align_phase
+    // does NOT move (it shifts the anchors with it), so a stale cell would have
+    // made this read "nothing happened" whatever the engines did.
+    await armWash('wash-rainbow', 3.7); // hue sawUp, rate 16
+    compareDmx('midi sync: the unaligned frame is parity to start with', node, rust);
+    const unaligned = frameOf(node);
+
+    both({ type: 'midi', status: 0x90, d1: 90, d2: 127 }); // METRONOME
+    await settle(node, rust);
+    compareDmx('midi sync: both engines land the same bar', node, rust);
+    const afterMidi = frameOf(node);
+    check('midi sync: the effect actually moved', afterMidi !== unaligned,
+      'the frame did not move — the alignment was dropped');
+
+    // and it lands where the SYNC key lands: one path, two entrances.
+    await armWash('wash-rainbow', 3.7);
+    both({ type: 'resync' });
+    await settle(node, rust);
+    compareDmx('sync key: both engines land the same bar', node, rust);
+    check('midi sync: a mapped SYNC lands where the SYNC key lands',
+      frameOf(node) === afterMidi, 'the two entrances to the resync path disagree');
+
+    // letting the button go must do nothing at all
+    both({ type: 'midi', status: 0x80, d1: 90, d2: 0 });
+    await settle(node, rust);
+    compareDmx('midi sync: the note off is parity too', node, rust);
+    check('midi sync: letting the button go moves nothing', frameOf(node) === afterMidi,
+      'a note off re-synced');
+
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
+  }
+
   // --- P4 phase-continuous rate: editing an effect's rate on a LIVE look must
   // not jump its waveform (the old code set phase = beat/rate, which snapped),
   // and both engines must apply the identical correction.

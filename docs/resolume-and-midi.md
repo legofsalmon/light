@@ -107,6 +107,30 @@ Notes fire when they arrive and that is all. Locking a show to a timeline is
 meant to come through Arena's column follow rather than a direct DAW hook, which
 is why the OSC path above is the one with the sequencing in it.
 
+### The APC40 mk2 layout
+
+Load it from **Sync · MIDI**, or from `controller ▾` on the dial row. What the
+surface does then:
+
+| Control | Does |
+|---|---|
+| Top 4 grid rows | The four layers, pad for pad with the screen |
+| Bottom grid row | Nothing — it is the dial row the grid draws there |
+| **CLIP STOP row** (under the grid) | **Fires that column** — CLIP STOP under column 3 is a GO for column 3 |
+| Scene launch 1–4 | Clear that layer |
+| STOP ALL CLIPS | Blackout |
+| TAP TEMPO | Tap |
+| **METRONOME** | **SYNC** — now is the top of the bar, for the tempo and for every effect shape |
+| Bank ◀ ▶ | Previous / next song |
+| Track faders 1–4, 6, 7 | Layer masters, haze, effect speed |
+| Master fader | Grand master |
+| 8 device knobs | The eight dials, on every track-selection bank |
+
+CLIP STOP reads as *stop* beside Arena, and here it starts a section instead.
+That is deliberate: it is one note (52) on eight MIDI channels, one per track,
+which is what makes it the only row on the surface that can carry eight cues
+without taking the dial row. Its LED lights while the whole column is on stage.
+
 ### Suggested starter layout (pad + fader controller)
 
 | Control | Map to |
