@@ -415,8 +415,8 @@
   --color-border-selected: var(--grey-500);
   --color-border-focus: var(--cyan-700);
   --text: var(--grey-850);
-  --text-dim: var(--grey-350);
-  --text-faint: var(--grey-300);
+  --text-dim: var(--grey-500);
+  --text-faint: var(--grey-350);
   --color-text-inverse: var(--grey-white);
   --accent: var(--cyan-700);
   --accent-soft: var(--alpha-cyan-deep-16);
