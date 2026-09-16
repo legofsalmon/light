@@ -664,6 +664,18 @@ Standing rules from the merged avoid lists of all seven reports. A proposal agai
 
 ## 9. Open decisions for the owner
 
+**All seven are decided.** Kept below as they were asked, because the reasons live in the questions.
+
+| # | decided | what was built |
+|---|---|---|
+| 0 | the default: inert bodies on an editing page; `0`, `F`, `E` kept | lane 2, #22, #26 and #36 |
+| 1 | column 8 stays on page 2 of the phone; BLACKOUT covers it | nothing to build |
+| 2 | a second preset beside the default, `APC40 mk2 · busk` | f693a93, with pinned groups (A14) to choose its four faders |
+| 3 | yes: the FADE master | b887b45 |
+| 4 | only if the busk preset shows the need; masters still scale intensity only | nothing yet |
+| 5 | 72 | lane 1, `--size-pad-h-pads` |
+| 6 | 1024 is a desktop size: the Tauri floor is 1024×665 | 761dd84, with the bar's give-way fixed both ways |
+
 0. **The editing page, and the keys that change meaning with it.** The hard constraint says a pad body fires. On an editing page this design makes the body inert (a press flashes the chip), the heads and `1`–`9` select, and shows the state in four places (2.5). The alternative: the editing page exists only in Build, so Pads never shows any page but the live one and nothing on Pads ever changes meaning — W-B then costs one view switch each way. Bundled with this yes: three new bare keys — `0` (home: a live song switch, the same class as ◀ ▶ on the row), `F` (FREEZE latch; momentary later), `E` (the edit latch, which withholds fires until Esc) — none behind a modifier. Say yes to the default, yes to Build-only, or strike any of the keys.
 1. **Column 8 on the phone.** It sits on page 2 behind the page key; BLACKOUT at the top covers the demo's use of it. Accept, or pin the last column to both pages (a five-column page at ≈ 61 px pads, under a fingertip)?
 2. **The busk preset's faders.** Track faders 5–8 today drive haze (ch 5) and speed (ch 6), with 4 and 7 unbound (`controllerPresets.ts:67-68`). `APC40 mk2 · busk` would put the first four pinned groups on 5–8 and leave haze and speed on screen. A second preset beside the default, or the default?
