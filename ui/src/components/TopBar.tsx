@@ -10,13 +10,17 @@ import { motion, size } from '../tokens.ts';
 import { openSetup } from './AdminModal.tsx';
 import { Glyph } from '../glyphs.tsx';
 
-function StatusDot({ ok, label, warn, bad, traffic, title }: {
+function StatusDot({ ok, label, warn, bad, traffic, title, bare = false }: {
   ok: boolean; label: string; warn?: boolean; bad?: boolean; traffic?: boolean; title?: string;
+  /** the line is short of room: a lamp that is fine says it with the dot
+   *  alone. One in trouble keeps its word whatever the line says. */
+  bare?: boolean;
 }) {
+  const quiet = bare && !bad && !warn;
   return (
-    <div className="dotline" title={title ?? label}>
+    <div className="dotline" title={title ?? label} aria-label={quiet ? label : undefined}>
       <div className={`statusdot ${bad ? 'bad' : ok ? 'ok' : warn ? 'warn' : ''} ${traffic ? 'traffic' : ''}`} />
-      <span className="label">{label}</span>
+      {!quiet && <span className="label">{label}</span>}
     </div>
   );
 }
@@ -177,6 +181,15 @@ const DROP_STEPS: { id: string; kind: 'move' | 'shrink' }[] = [
   { id: 'wordmark', kind: 'move' },
 ];
 
+/** What gives way on the status line when it runs out of room. That happens
+ *  only once the strip has handed controls down to it, on the narrow windows
+ *  the desktop floor allows (decision 6). The lamps that are fine let their
+ *  words go: the dot still lights and the tooltip still says it, and a lamp in
+ *  trouble keeps its word, because that is the one worth reading from across a
+ *  room. The quiet keys are the last resort — they may be cut short rather
+ *  than the lamps, ? or settings (theme.css). */
+const LINE_STEPS: { id: 'words' }[] = [{ id: 'words' }];
+
 export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = null }: {
   onOpenAdmin: () => void;
   /** a newer build is downloaded-able — a dot on the cog, nothing louder */
@@ -244,24 +257,11 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
   // no window width can be caught between two of them with a strip that
   // overflows.
   const flowRef = useRef<HTMLDivElement>(null);
-  const [steps, setSteps] = useState(0);
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const el = flowRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => setTick((t) => t + 1));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  useLayoutEffect(() => {
-    const el = flowRef.current;
-    if (!el) return;
-    const over = el.scrollWidth - el.clientWidth;
-    if (over > 1 && steps < DROP_STEPS.length) setSteps(steps + 1);
-    // Only take a control back when there is room to spare, or a width sitting
-    // exactly on the boundary would drop and restore it on every frame.
-    else if (over <= -RESTORE_SLACK && steps > 0) setSteps(steps - 1);
-  });
+  const steps = useGiveWay(flowRef, DROP_STEPS.length);
+  // and the line under it, which holds whatever the strip hands down
+  const lineRef = useRef<HTMLDivElement>(null);
+  const lineSteps = useGiveWay(lineRef, LINE_STEPS.length);
+  const bareLamps = LINE_STEPS.slice(0, lineSteps).some((s) => s.id === 'words');
   const applied = DROP_STEPS.slice(0, steps);
   const moved = new Set(applied.filter((s) => s.kind === 'move').map((s) => s.id));
   const shrunk = new Set(applied.filter((s) => s.kind === 'shrink').map((s) => s.id));
@@ -565,7 +565,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
           ways in — because the grid is what that view is for. Anything the
           strip handed down stays here in every view, or a narrow window would
           put a control out of reach entirely. */}
-      <div className={`statusline ${view === 'pads' ? 'folded' : ''}`}>
+      <div className={`statusline ${view === 'pads' ? 'folded' : ''}`} ref={lineRef}>
         <div className="lineflow">
           {moved.has('sync') && syncKey}
           {moved.has('speed') && speedFader}
@@ -671,6 +671,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
           )}
           <div className="statusdots">
             <StatusDot
+              bare={bareLamps}
               ok={engineOk}
               // A stalled or lost engine is a fault, not a shade of grey: the
               // watchdog's own state paints the dot, so "engine 40fps" can
@@ -704,6 +705,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
               if ((artnetOn || sacnOn) && snap?.transmit !== true) {
                 return (
                   <StatusDot
+                    bare={bareLamps}
                     ok={false}
                     warn
                     label="not sending"
@@ -731,6 +733,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
                       : 'sending sACN (E1.31) — multicast has no reply, so this is what LIGHT is doing, not what arrived';
               return (
                 <StatusDot
+                  bare={bareLamps}
                   ok={fresh.length > 0 || (sacnOn && !artnetOn)}
                   warn={artnetOn && fresh.length === 0}
                   label={label}
@@ -743,6 +746,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
                 was presence and the other activity, so a quiet OSC link and an
                 unplugged controller looked identical. */}
             <StatusDot
+              bare={bareLamps}
               ok={midiInputs.length > 0}
               label="midi"
               title={
@@ -752,6 +756,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
               }
             />
             <StatusDot
+              bare={bareLamps}
               ok={snap?.oscIn !== 'failed'}
               bad={snap?.oscIn === 'failed'}
               traffic={oscAlive}
@@ -806,3 +811,60 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
 /** Slack before a control the strip handed down is taken back, so a window
  *  resting on the boundary cannot flip one up and down every frame. */
 const RESTORE_SLACK = 40;
+
+/** Room left in a row that clips rather than wraps, in px: negative when what
+ *  it holds runs past its edge. Summed from each child's own extent, not read
+ *  off the row's scroll width — that can never fall below the row's own width,
+ *  so it could never say there was room to take a control back, and a window
+ *  narrowed to 1024 and widened again kept SPEED on the line for good. */
+function spareIn(el: HTMLElement): number {
+  const cs = getComputedStyle(el);
+  const inner = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const gap = parseFloat(cs.columnGap) || 0;
+  let used = 0;
+  let shown = 0;
+  for (const k of el.children) {
+    if (!(k instanceof HTMLElement) || k.getClientRects().length === 0) continue;
+    // scrollWidth for a group that may be cut short (it reports what it holds),
+    // the box for everything else (scrollWidth leaves the border out)
+    used += Math.max(k.scrollWidth, k.getBoundingClientRect().width);
+    shown++;
+  }
+  return inner - used - gap * Math.max(0, shown - 1);
+}
+
+/** The measured give-way (design 2.1) for a row that clips rather than wraps:
+ *  one more step while what it holds runs past its edge, and the last step back
+ *  only once there is room for what that step gave. What a step gives is
+ *  measured as it is applied, because a control that has been handed down is
+ *  not there to be measured when the question is whether it would fit again. */
+function useGiveWay(ref: React.RefObject<HTMLDivElement | null>, count: number): number {
+  const [steps, setSteps] = useState(0);
+  const [, setTick] = useState(0);
+  const freed = useRef<number[]>([]);
+  const applying = useRef<{ step: number; spare: number } | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setTick((t) => t + 1));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    // a row that is not drawn (the remote hides the line) has nothing to fit
+    if (!el || el.getClientRects().length === 0) return;
+    const spare = spareIn(el);
+    if (applying.current) {
+      freed.current[applying.current.step] = spare - applying.current.spare;
+      applying.current = null;
+    }
+    if (spare < -1 && steps < count) {
+      applying.current = { step: steps, spare };
+      setSteps(steps + 1);
+    } else if (steps > 0 && spare >= (freed.current[steps - 1] ?? Number.POSITIVE_INFINITY) + RESTORE_SLACK) {
+      setSteps(steps - 1);
+    }
+  });
+  return steps;
+}

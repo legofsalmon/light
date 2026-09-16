@@ -395,8 +395,16 @@ select.sel { cursor: pointer; }
   display: flex;
   align-items: center;
   gap: var(--space-10);
-  min-width: 0;
+  flex: 0 0 auto;
 }
+/* A row that is short of room gives way in its stated order (TopBar's
+   useGiveWay); nothing in it is squashed, so a key never breaks onto two lines
+   and the measurement sees what each control really takes. */
+.stripflow > *, .statusline .lineflow > *, .statusline .linequiet > *, .statusline .linekeep > * { flex-shrink: 0; }
+.stripflow .btn, .statusline .btn { white-space: nowrap; }
+/* Once every step is spent the quiet keys are what is cut short — never the
+   controls the strip handed down, the lamps, ? or settings. */
+.statusline .linequiet { flex: 0 1 auto; min-width: 0; overflow: hidden; }
 .statusline .linekeep { margin-left: auto; }
 /* In Pads the line keeps only what says something about the rig. */
 .statusline.folded .linequiet { display: none; }

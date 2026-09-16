@@ -15,8 +15,8 @@
         "title": "LIGHT 1.3.0 beta",
         "width": 1500,
         "height": 950,
-        "minWidth": 1100,
-        "minHeight": 700,
+        "minWidth": 1024,
+        "minHeight": 665,
         "dragDropEnabled": false
       }
     ],
