@@ -9,7 +9,7 @@
 
 import React, { useState } from 'react';
 import { Glyph } from '../../glyphs.tsx';
-import type { Effect, LookPart, SoftField, StrobeMode } from '../../../../shared/types.ts';
+import type { Effect, LookPart, Palette, Project, SoftField, StrobeMode } from '../../../../shared/types.ts';
 import { uid } from '../../../../shared/types.ts';
 import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../../shared/color.ts';
 import { BEAM_FADERS, BEAM_LABELS, BEAM_PARAMS, type BeamParam, fmtStrobe } from '../../profileInfo.ts';
@@ -22,12 +22,111 @@ import { EffectRow } from './EffectRow.tsx';
 import { FEATURE_FIELDS, FEATURE_ORDER, FEATURE_PARAMS, capableTargets, featuresFor, groupCaps } from './groups.ts';
 import { type Feature, FEATURE_LABEL, useEditorStore } from '../../editorStore.ts';
 import { useStore } from '../../store.ts';
+import { askChoice, askConfirm, askPrompt } from '../../dialog.tsx';
+import { contextPress } from '../../touch.ts';
+import { DEFAULT_PALETTES, applyRetune, onPalette, palettesOf, retunePlan } from '../../palettes.ts';
 
-const SWATCHES: { h: number; s: number }[] = [
-  { h: 0, s: 1 }, { h: 30, s: 1 }, { h: 52, s: 1 }, { h: 120, s: 1 },
-  { h: 160, s: 0.95 }, { h: 195, s: 1 }, { h: 228, s: 1 }, { h: 262, s: 1 },
-  { h: 290, s: 1 }, { h: 315, s: 1 }, { h: 345, s: 0.9 }, { h: 0, s: 0 },
-];
+/** The show's palettes as the editor offers them: materialise the starting
+ *  twelve the first time the show makes one of its own, so an edit never loses
+ *  the rest. */
+const paletteList = (p: Project): Palette[] => {
+  if (!p.palettes || p.palettes.length === 0) p.palettes = DEFAULT_PALETTES.map((x) => ({ ...x }));
+  return p.palettes;
+};
+
+/** A colour as the question names it: the numbers the faders show. */
+const colourWords = (c: { h: number; s: number }): string => `${Math.round(c.h)}\u00b0 at ${Math.round(c.s * 100)}% saturation`;
+
+/** One palette swatch. Click sets the colour; right-click or hold opens what a
+ *  palette can do — the retune that carries every part on its old colour along
+ *  with it, in one undoable step (design A12, W-E). */
+function PaletteSwatch({ pal, onPick, current, nudged }: {
+  pal: Palette;
+  onPick: () => void;
+  current: { h: number; s: number } | null;
+  /** a nudge is riding this part's colour — the fader shows the nudge, the
+   *  retune takes the colour the part is set to */
+  nudged: boolean;
+}) {
+  const mutate = useStore((s) => s.mutate);
+  const [r, g, b] = hsvToRgb(pal.h, pal.s, 1);
+  const on = !!current && onPalette(current, pal);
+  // Retuning a palette to the colour it already is would move nothing, so it is
+  // offered only when the part holds a different colour to carry it to.
+  const canRetune = !!current && !on;
+  const menu = contextPress((at) => {
+    const project = useStore.getState().project;
+    if (!project) return;
+    // A show with no palettes of its own offers the starting twelve, so deleting
+    // the last one would bring all twelve back. The last one stays.
+    const last = palettesOf(project).length <= 1;
+    void askChoice(pal.name, [
+      ...(canRetune ? [{ value: 'retune', label: 'Retune to this part\u2019s colour…', primary: true }] : []),
+      { value: 'rename', label: 'Rename…' },
+      ...(last ? [] : [{ value: 'delete', label: 'Delete', danger: true }]),
+    ], {
+      at,
+      body: canRetune
+        ? 'Retune moves this palette to the colour the part is set to now, and carries every part in the show that was set to the old one along with it.'
+        : current
+          ? 'The part is on this palette already. Set the part to the new colour first, then retune the palette to it.'
+          : 'Give the part a colour first to retune this palette to it.',
+    }).then(async (choice) => {
+      if (choice === 'rename') {
+        const name = await askPrompt('Rename palette', pal.name, { confirmLabel: 'Rename' });
+        if (!name || !name.trim()) return;
+        mutate((p) => {
+          const x = paletteList(p).find((q) => q.id === pal.id);
+          if (x) x.name = name.trim();
+        }, `rename palette \u201c${pal.name}\u201d`);
+      } else if (choice === 'delete' && !last) {
+        mutate((p) => {
+          p.palettes = paletteList(p).filter((q) => q.id !== pal.id);
+        }, `delete palette \u201c${pal.name}\u201d`);
+      } else if (choice === 'retune' && current && canRetune) {
+        const plan = retunePlan(project, { h: pal.h, s: pal.s }, current);
+        const moving = plan.exact.length;
+        const ok = await askConfirm(
+          moving === 0 ? `Retune ${pal.name}?` : `Retune ${moving} part${moving === 1 ? '' : 's'} in ${plan.looks} look${plan.looks === 1 ? '' : 's'}?`,
+          {
+            body: [
+              moving === 0
+                ? `No part in the show is set to this palette\u2019s colour, so only the palette moves, to ${colourWords(current)}.`
+                : `Every part set to ${pal.name} moves to ${colourWords(current)}.`,
+              nudged ? 'The nudge riding this part is not included \u2014 keep it first to retune to it.' : '',
+              plan.near.length > 0
+                ? `${plan.near.length} part${plan.near.length === 1 ? ' is' : 's are'} near this colour but not on it — set by hand, or nudged and kept — and ${plan.near.length === 1 ? 'is' : 'are'} not changed.`
+                : '',
+              'One step to undo.',
+            ].filter(Boolean).join(' '),
+            confirmLabel: 'Retune',
+          },
+        );
+        if (!ok) return;
+        const to = { h: current.h, s: current.s };
+        mutate((p) => {
+          const x = paletteList(p).find((q) => q.id === pal.id);
+          if (x) { x.h = to.h; x.s = to.s; }
+          applyRetune(p, plan, to);
+        }, `retune palette \u201c${pal.name}\u201d`);
+      }
+    });
+  });
+  return (
+    <i
+      role="button"
+      tabIndex={0}
+      aria-label={pal.name}
+      aria-pressed={on}
+      className={on ? 'on' : ''}
+      title={`${pal.name} — click to set it; right-click or hold to rename it, or retune it everywhere it is used`}
+      style={{ background: rgbHex(r, g, b) }}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(); } }}
+      onClick={onPick}
+      {...menu}
+    />
+  );
+}
 
 export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookPart; ride: boolean }) {
   const project = useStore((s) => s.project)!;
@@ -101,6 +200,16 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
 
   const [wheel, setWheel] = useState(false);
   const colourChip = React.useRef<HTMLButtonElement>(null);
+
+  /** Keep a colour as a named palette — the first half of retuning it
+   *  everywhere later. */
+  const keepColour = async (c: { h: number; s: number }): Promise<void> => {
+    const name = await askPrompt('Keep this colour', '', { placeholder: 'palette name — venue blue', confirmLabel: 'Keep' });
+    if (!name || !name.trim()) return;
+    mutate((p) => {
+      paletteList(p).push({ id: uid('pal'), name: name.trim(), h: c.h, s: c.s });
+    }, `keep colour \u201c${name.trim()}\u201d`);
+  };
 
   /** One optional 0..1 parameter: enable, label, fader. Beam shaping and the
    *  two optics rotations share it. The middle is the default because on a
@@ -306,21 +415,27 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
                     variant="dim"
                   />
                   <div className="swatches">
-                    {SWATCHES.map((sw, i) => {
-                      const [r, g, b] = hsvToRgb(sw.h, sw.s, 1);
-                      return (
-                        <i
-                          key={i}
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`colour swatch ${i + 1}`}
-                          title="set this colour"
-                          style={{ background: rgbHex(r, g, b) }}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
-                          onClick={() => setColour(sw.h, sw.s)}
-                        />
-                      );
-                    })}
+                    {palettesOf(project).map((pal) => (
+                      <PaletteSwatch
+                        key={pal.id}
+                        pal={pal}
+                        onPick={() => setColour(pal.h, pal.s)}
+                        current={prm.color ?? null}
+                        nudged={softFor('hue') !== undefined || softFor('sat') !== undefined}
+                      />
+                    ))}
+                    {/* Keep this colour as a named palette — the first half of
+                        retuning a venue colour everywhere at once. */}
+                    {prm.color && (
+                      <button
+                        className="btn small ghost swatchadd"
+                        title="keep this part's colour as a named palette, so it can be picked again — and retuned everywhere it is used"
+                        aria-label="keep this colour"
+                        onClick={() => void keepColour(prm.color!)}
+                      >
+                        <Glyph name="add" alone />
+                      </button>
+                    )}
                   </div>
                   <button
                     ref={colourChip}

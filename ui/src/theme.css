@@ -1982,3 +1982,14 @@ button.warnchip { background: none; cursor: pointer; }
    is lit by the colour it carries and must not be dimmed by this. */
 .lamp.toggle { opacity: var(--opacity-disabled); }
 .lamp.toggle.lit { opacity: 1; }
+
+/* The palette a part is set to wears the cursor ring: the swatch is content
+   (its own colour), and which one is chosen is the programmer's cursor
+   (design 3.6), so the ring is cyan and the fill is left alone. */
+.swatches i.on { box-shadow: 0 0 0 1px var(--bg), 0 0 0 2px var(--accent); }
+.swatches .swatchadd { min-height: 0; padding: 0 var(--space-3); align-self: center; }
+
+/* The tint strip: the show's palettes, a tap nudging what is playing. */
+.popover.tintstrip { position: fixed; z-index: 201; /* not a token: one above the menu catcher, theme.css */ padding: var(--space-4) var(--space-6); }
+/* six to a row, measured in swatches rather than pixels */
+.popover.tintstrip .swatches { flex-wrap: wrap; max-width: calc(6 * (var(--size-swatch) + var(--space-3))); }

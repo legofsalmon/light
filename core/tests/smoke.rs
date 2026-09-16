@@ -776,7 +776,7 @@ fn a_held_freeze_dies_with_the_hand_that_took_it_and_a_latched_one_does_not() {
 fn the_fields_the_engine_only_carries_survive_a_round_trip() {
     use light_core::types::Palette;
     let mut p = demo_project();
-    p.palettes = vec![Palette { id: "pal-1".into(), name: "venue blue".into(), h: 0.58, s: 0.9 }];
+    p.palettes = vec![Palette { id: "pal-1".into(), name: "venue blue".into(), h: 214.0, s: 0.9 }];
     p.pinned_groups = vec!["grp-derbies".into(), "grp-strips".into()];
     p.decks[0].note = Some("capo 3 — starts dark".into());
     p.decks[0].home = true;
@@ -789,7 +789,7 @@ fn the_fields_the_engine_only_carries_survive_a_round_trip() {
     let back: light_core::types::Project = serde_json::from_str(&json).unwrap();
     assert_eq!(back.palettes.len(), 1);
     assert_eq!(back.palettes[0].name, "venue blue");
-    assert_eq!(back.palettes[0].h, 0.58);
+    assert_eq!(back.palettes[0].h, 214.0);
     assert_eq!(back.pinned_groups, vec!["grp-derbies".to_string(), "grp-strips".to_string()]);
     assert_eq!(back.decks[0].note.as_deref(), Some("capo 3 — starts dark"));
     assert!(back.decks[0].home);

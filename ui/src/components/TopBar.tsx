@@ -3,6 +3,7 @@ import { useStore, type ViewMode } from '../store.ts';
 import { askConfirm, askPrompt } from '../dialog.tsx';
 import { Fader } from './Fader.tsx';
 import { HeldChip } from './HeldChip.tsx';
+import { TintKey } from './TintKey.tsx';
 import { BAR, clamp } from '../../../shared/types.ts';
 import { motion, size } from '../tokens.ts';
 import { openSetup } from './AdminModal.tsx';
@@ -649,6 +650,7 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
         {/* Kept in every view: one chip for everything holding the rig away
             from the show, and the lamps that say whether it is listening. */}
         <div className="linekeep">
+          <TintKey />
           <HeldChip />
           {trialDaysLeft !== null && trialDaysLeft <= 3 && (
             <button

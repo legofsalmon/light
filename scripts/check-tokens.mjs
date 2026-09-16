@@ -237,6 +237,7 @@ for (const p of sources.filter((f) => f.endsWith('.tsx') && !RENDERERS.has(f.spl
     [/\binput[.\w-]*:focus\b/, 'the text cursor'],
     [/\.bpmedit\b/, 'the tempo being typed'],
     [/\.selected\b/, 'the selected pad'],
+    [/\.swatches i\.on\b/, 'the palette the part being edited is set to'],
     [/\.selcol\b/, 'the column a head or a digit key selected on a page that does not fire'],
     [/\.rowsel\b/, 'the selected row'],
     [/\.learn-armed\b|\.learn\b/, 'a control armed for MIDI learn, and the wash behind it'],

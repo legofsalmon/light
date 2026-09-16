@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Project, SoftField } from '../../shared/types.ts';
 import { discardFade } from '../../ui/src/discardFade.ts';
+import { applyRetune, onPalette, palettesOf, playingColourParts, retunePlan } from '../../ui/src/palettes.ts';
 import { sanitizeProject, sanitizeStage } from '../../shared/types.ts';
 import { stageExtent } from '../../shared/stageExtent.ts';
 import type { ShareList } from '../../shared/gdtfShare.ts';
@@ -2233,7 +2234,7 @@ await new Promise<void>((resolve) => {
 
   const kept = sanitizeProject({
     ...demoProject(),
-    palettes: [{ id: 'pal-1', name: 'venue blue', h: 0.58, s: 0.9 }],
+    palettes: [{ id: 'pal-1', name: 'venue blue', h: 214, s: 0.9 }],
     pinnedGroups: [demoProject().groups[0]!.id],
   } as never)!;
   check('carried: a palette survives the sanitiser', kept.palettes?.length === 1 && kept.palettes[0]!.name === 'venue blue');
@@ -2241,7 +2242,7 @@ await new Promise<void>((resolve) => {
 
   const junk = sanitizeProject({
     ...demoProject(),
-    palettes: [{ id: 'ok', name: 'fine', h: 0.1, s: 0.2 }, { id: 'bad', name: 'no hue' }],
+    palettes: [{ id: 'ok', name: 'fine', h: 36, s: 0.2 }, { id: 'bad', name: 'no hue' }],
     pinnedGroups: [demoProject().groups[0]!.id, 'grp-that-was-deleted'],
   } as never)!;
   check('carried: a palette missing its hue is dropped', junk.palettes?.length === 1);
@@ -2336,6 +2337,59 @@ await new Promise<void>((resolve) => {
   check('discard fade: a look with none uses its layer\'s', discardFade(proj, { soft: [{ lookId: 'c' }] }) === 0.4);
   check('discard fade: nothing nudged, nothing to time', discardFade(proj, { soft: [] }) === undefined);
   check('discard fade: a look that has gone is not guessed at', discardFade(proj, { soft: [{ lookId: 'gone' }] }) === undefined);
+}
+
+// --- palettes: retune by value, and what a tap on the performance row reaches (design #49)
+{
+  const look = (id: string, colours: ({ h: number; s: number } | undefined)[]) => ({
+    id, name: id, parts: colours.map((c, i) => ({ id: `${id}-p${i}`, groupId: 'g', params: c ? { color: c } : {}, effects: [] })),
+  });
+  const project = {
+    palettes: undefined,
+    looks: {
+      bed: look('bed', [{ h: 228, s: 1 }]),
+      floor: look('floor', [{ h: 228, s: 1 }, { h: 228, s: 1 }]),
+      nudged: look('nudged', [{ h: 236, s: 0.95 }]), // blue, nudged a few degrees and kept
+      red: look('red', [{ h: 0, s: 1 }]),
+      nocolour: look('nocolour', [undefined]),
+    },
+  } as never;
+
+  check('palettes: a show with none opens with the twelve it always had', palettesOf({ palettes: undefined }).length === 12);
+  check('palettes: a show with its own uses them', palettesOf({ palettes: [{ id: 'x', name: 'venue blue', h: 214, s: 0.9 }] })[0]!.name === 'venue blue');
+
+  const plan = retunePlan(project, { h: 228, s: 1 });
+  check('palettes: retune carries the parts set to exactly that colour', plan.exact.length === 3);
+  check('palettes: and counts the looks they span, for the question', plan.looks === 2);
+  check('palettes: a part nudged near it is named, never changed', plan.near.length === 1 && plan.near[0]!.lookId === 'nudged');
+  check('palettes: an unrelated colour is neither', !plan.exact.concat(plan.near).some((x) => x.lookId === 'red'));
+
+  // the part the palette is being retuned TO is where the retune lands, not a
+  // near miss it leaves behind
+  const landing = retunePlan(project, { h: 228, s: 1 }, { h: 236, s: 0.95 });
+  check('palettes: a part already on the new colour is not reported as left behind', landing.near.length === 0 && landing.exact.length === 3);
+
+  const wrap = retunePlan({ looks: { a: look('a', [{ h: 358, s: 1 }]) } } as never, { h: 3, s: 1 });
+  check('palettes: near is measured the short way round the wheel', wrap.near.length === 1, `358° vs 3° is 5°`);
+
+  const whites = retunePlan({ looks: { a: look('a', [{ h: 140, s: 0 }]) } } as never, { h: 0, s: 0 });
+  check('palettes: white has no hue to disagree about', whites.exact.length === 1);
+
+  // The swatch lights by the same test the retune moves by — white with a stray
+  // hue lit no swatch while the retune still carried it
+  check('palettes: the lit swatch and the retune agree on white', onPalette({ h: 140, s: 0 }, { h: 0, s: 0 }));
+  check('palettes: rounding is on the palette, a degree is not', onPalette({ h: 228.3, s: 1 }, { h: 228, s: 1 }) && !onPalette({ h: 229, s: 1 }, { h: 228, s: 1 }));
+  check('palettes: the wheel edge is the same colour', onPalette({ h: 359.8, s: 1 }, { h: 0, s: 1 }));
+
+  const edited = structuredClone((project as { looks: object }));
+  applyRetune(edited as never, plan, { h: 214, s: 0.9 });
+  const bedColour = (edited as { looks: Record<string, { parts: { params: { color?: { h: number } } }[] }> }).looks.bed!.parts[0]!.params.color!.h;
+  const nudgedColour = (edited as { looks: Record<string, { parts: { params: { color?: { h: number } } }[] }> }).looks.nudged!.parts[0]!.params.color!.h;
+  check('palettes: applying the retune moves the exact parts', bedColour === 214);
+  check('palettes: and leaves the near one where it was', nudgedColour === 236);
+
+  const reach = playingColourParts(project, ['bed', 'nocolour', 'bed', null, 'gone']);
+  check('palettes: a tap reaches the coloured parts of what is playing, once each', reach.length === 1 && reach[0]!.lookId === 'bed');
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
