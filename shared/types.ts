@@ -535,6 +535,12 @@ export type SyncCfg = {
   /** Resolume column connect → trigger the same column here */
   followColumns: boolean;
   bpmFromOsc: boolean;
+  /** MIDI inputs LIGHT does not listen to, by port name: a controller that
+   *  belongs to another app on this Mac (Resolume's own APC), whose pads send
+   *  the same notes and would fire LIGHT's cues too. Its LEDs are left to that
+   *  app. Absent when every input is listened to, as every show before was.
+   *  shared/midiInputs.ts holds the rule; core/src/state.rs mirrors it. */
+  midiInputsOff?: string[];
 };
 
 export type Settings = {
@@ -1109,6 +1115,12 @@ export function sanitizeProject(p: Project): Project | null {
     followColumns: sync.followColumns ?? true,
     bpmFromOsc: sync.bpmFromOsc ?? true,
   };
+  // Inputs switched off by name (Sync · MIDI): strings only, once each, and
+  // no list at all when nothing is off — the shape every show before had.
+  const off = Array.isArray(sync.midiInputsOff)
+    ? [...new Set(sync.midiInputsOff.filter((n): n is string => typeof n === 'string'))]
+    : [];
+  if (off.length > 0) p.sync.midiInputsOff = off;
   const settings = (p.settings ?? {}) as Partial<Settings>;
   p.settings = {
     haze: Number.isFinite(settings.haze) ? (settings.haze as number) : 0,

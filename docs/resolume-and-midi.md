@@ -148,6 +148,25 @@ and pin the ones you want in the order you want them. Pinned groups come first
 on the row, and the rest follow in the show's order. The faders take the row as
 it is when the layout loads, so after changing the pins, load it again.
 
+### Two controllers on one Mac
+
+An APC for LIGHT and an APC for Resolume send the same notes, and LIGHT listens
+to every MIDI input it can see — so out of the box the Resolume unit's CLIP STOP
+row fires LIGHT's columns and its STOP ALL CLIPS is a blackout. Two things fix
+it:
+
+1. macOS names both units "APC40 mk2", and LIGHT can only tell inputs apart by
+   name. Open **Audio MIDI Setup**, open one unit, and rename it (say
+   `APC40 LIGHT`). Both apps then list the two under their own names.
+2. In **Sync · MIDI**, each input is a key: lit while LIGHT listens to it.
+   Switch the Resolume unit off. LIGHT ignores what it sends, learn does not
+   hear it, and its LEDs are left to Resolume. LIGHT's LED feedback goes to the
+   APC that is switched on. The switch is saved with the show.
+
+Do the same the other way round in Resolume's MIDI preferences: switch the
+LIGHT unit off there, for input and output, or Resolume paints its clips onto
+LIGHT's pads. Both units are bus-powered, so use a powered hub.
+
 ### Suggested starter layout (pad + fader controller)
 
 | Control | Map to |

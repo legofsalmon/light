@@ -959,3 +959,25 @@ fn the_fade_master_scales_every_crossfade_a_layer_starts() {
     st.apply_midi(0x90, 60, 0, 9.0);
     assert_eq!(st.fade_scale.to_bits(), 0x4003d70cd729487d, "and letting it go leaves it where it is");
 }
+
+/// Two controllers on one Mac (Sync · MIDI's input switch). The inputs LIGHT
+/// does not listen to are carried by name, absent when there are none, and
+/// decide what the engine hears. The Node twin holds the same rule from
+/// shared/midiInputs.ts; the LED side is `the_leds_go_to_the_apc_that_is_switched_on`
+/// in apc.rs.
+#[test]
+fn a_switched_off_input_is_carried_by_name_and_not_listened_to() {
+    let mut p = demo_project();
+    let json = serde_json::to_string(&p).unwrap();
+    assert!(!json.contains("midiInputsOff"), "nothing off: absent, not an empty list");
+    p.sync.midi_inputs_off = vec!["APC40 mk2".into()];
+    let json = serde_json::to_string(&p).unwrap();
+    assert!(json.contains("\"midiInputsOff\":[\"APC40 mk2\"]"), "{json}");
+    let back: light_core::types::Project = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.sync.midi_inputs_off, vec!["APC40 mk2".to_string()]);
+
+    let st = EngineState::new(back, 0.0);
+    assert!(!st.midi_input_on("APC40 mk2"), "the Resolume unit is not listened to");
+    assert!(st.midi_input_on("APC40 LIGHT"), "the other one is");
+    assert!(st.midi_input_on("IAC Driver Bus 1"), "and so is everything else");
+}

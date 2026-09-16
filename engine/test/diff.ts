@@ -396,6 +396,29 @@ async function main(): Promise<void> {
     compareDmx('fade master: back as programmed, parity', node, rust);
   }
 
+  // --- the input switch (Sync · MIDI): carried by both engines, by name ----
+  // No harness client can name the port a `midi` command came from, so what
+  // parity holds is the field: written once, both engines broadcast it
+  // unchanged, neither renders differently for it, and switching everything
+  // back on leaves no list on either. The rule that drops a switched-off
+  // input's messages is held in both unit suites.
+  {
+    const p = structuredClone(await currentProject(node));
+    p.sync.midiInputsOff = ['APC40 mk2'];
+    both({ type: 'updateProject', project: p });
+    await sleep(500);
+    const offOn = (c: Client | null) => JSON.stringify(c?.project?.sync.midiInputsOff ?? null);
+    check('input switch: both engines carry the switched-off input',
+      offOn(nodeObs) === '["APC40 mk2"]' && offOn(rustObs) === '["APC40 mk2"]', `node=${offOn(nodeObs)} rust=${offOn(rustObs)}`);
+    await settle(node, rust);
+    compareDmx('input switch: the render is untouched', node, rust);
+    delete p.sync.midiInputsOff;
+    both({ type: 'updateProject', project: p });
+    await sleep(500);
+    check('input switch: switching everything back on leaves no list on either',
+      offOn(nodeObs) === 'null' && offOn(rustObs) === 'null', `node=${offOn(nodeObs)} rust=${offOn(rustObs)}`);
+  }
+
   // --- a column this show does not have must not black the rig out ----------
   // Resolume compositions routinely run wider than the light show. An
   // out-of-range column used to read as "every cell empty", which is the

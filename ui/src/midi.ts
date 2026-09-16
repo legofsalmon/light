@@ -1,5 +1,6 @@
 import { useStore } from './store.ts';
 import { attachApcOutput, scheduleFeedback } from './apcFeedback.ts';
+import { midiInputOn } from '../../shared/midiInputs.ts';
 
 /**
  * WebMIDI input for browser-hosted sessions. In the Tauri app MIDI arrives
@@ -14,14 +15,20 @@ export function initMidi(): void {
   nav
     .requestMIDIAccess({ sysex: false })
     .then((access) => {
+      const offNow = () => useStore.getState().project?.sync.midiInputsOff ?? [];
       const attach = () => {
         const names: string[] = [];
         access.inputs.forEach((input) => {
-          names.push(input.name ?? 'MIDI input');
+          const name = input.name ?? 'MIDI input';
+          names.push(name);
           input.onmidimessage = (e: MIDIMessageEvent) => {
             // When the engine owns native MIDI (Rust core), it already sees
             // this event — forwarding again would double-trigger.
             if (useStore.getState().engineMidi) return;
+            // A switched-off input (Sync · MIDI) is another app's controller:
+            // nothing it sends reaches the engine, learn included. The same
+            // rule, by the same name, that the native engine applies.
+            if (!midiInputOn(useStore.getState().project?.sync, name)) return;
             const d = e.data;
             if (!d || d.length === 0) return;
             // System realtime — clock, start, continue, stop. A source sending
@@ -35,12 +42,22 @@ export function initMidi(): void {
         });
         // always report what WebMIDI sees; the store decides which list wins
         useStore.getState().setMidiInputs(names);
-        attachApcOutput(access);
+        attachApcOutput(access, offNow());
       };
       access.onstatechange = attach;
       attach();
-      // LED feedback follows engine state (throttled + diffed internally)
-      useStore.subscribe(() => scheduleFeedback());
+      // LED feedback follows engine state (throttled + diffed internally),
+      // and the surface it goes to follows the switch: when the off list
+      // changes, the outputs are chosen again.
+      let lastOff = offNow().join('\t');
+      useStore.subscribe(() => {
+        const off = offNow().join('\t');
+        if (off !== lastOff) {
+          lastOff = off;
+          attach();
+        }
+        scheduleFeedback();
+      });
     })
     .catch(() => {
       // no MIDI permission — the Sync panel explains how to enable it

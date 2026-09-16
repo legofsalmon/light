@@ -151,6 +151,8 @@ The **speed** fader in the top bar multiplies all effect rates (0.25×–4×) wi
 2. Click any pad, column header, layer master, or top-bar control.
 3. Touch the control on your device — pad or encoder. Done; the mapping is stored in the project.
 
+Every MIDI input LIGHT can see is a key in **Sync · MIDI**, lit while LIGHT listens to it. A controller that belongs to another app on the same Mac — Resolume's own APC — goes off there, or its pads fire LIGHT's cues too; see *Two controllers on one Mac* in the Resolume and MIDI guide.
+
 Notes fire pads (note-off releases flash looks); CCs drive faders. Manage or delete mappings in the **Sync · MIDI** tab.
 
 A MIDI clip in a DAW can fire pads the same way. While the app is running it

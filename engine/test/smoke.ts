@@ -20,6 +20,7 @@ import type { EffectTarget, MidiMapping, Snapshot } from '../../shared/types.ts'
 import { APC40_COLUMN_ROW, APC40_MK2, APC_COLS, APC_LAYER_ROWS, APC_MINI_MK2, SURFACES, clearAddresses, computeLeds, ledChannel, ledKey, ledNote, nearest } from '../../ui/src/surfaces.ts';
 import { CONTROLLER_PRESETS, apc40Mk2BuskMappings, apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
 import { groupsInRowOrder, livePins, togglePin } from '../../ui/src/groupOrder.ts';
+import { choosePort, midiInputOn } from '../../shared/midiInputs.ts';
 import { lookFace, lookSwatch } from '../../ui/src/lookColors.ts';
 import { describeLearned } from '../../ui/src/labels.ts';
 
@@ -2508,6 +2509,29 @@ await new Promise<void>((resolve) => {
   togglePin(show, 'g-hazer');
   check('pins: the last unpin leaves no list behind', show.pinnedGroups === undefined);
   check('pins: a pin to a deleted group means nothing', livePins({ groups: show.groups, pinnedGroups: ['gone'] }).length === 0);
+}
+
+// --- the input switch (Sync · MIDI): two controllers on one Mac ---------------
+// The Rust twins are `a_switched_off_input_is_carried_by_name_and_not_listened_to`
+// (core/tests/smoke.rs) and `the_leds_go_to_the_apc_that_is_switched_on` (apc.rs).
+{
+  const base = sanitizeProject(demoProject())!;
+  check('input switch: a show with nothing off carries no list', base.sync.midiInputsOff === undefined);
+  const off = sanitizeProject({ ...demoProject(), sync: { ...base.sync, midiInputsOff: ['APC40 mk2', 'APC40 mk2', 7, null] } } as never)!;
+  check('input switch: the sanitiser keeps strings, once each, and drops the rest',
+    JSON.stringify(off.sync.midiInputsOff) === '["APC40 mk2"]', JSON.stringify(off.sync.midiInputsOff));
+  const empty = sanitizeProject({ ...demoProject(), sync: { ...base.sync, midiInputsOff: [] } } as never)!;
+  check('input switch: an empty list is no list', empty.sync.midiInputsOff === undefined);
+  check('input switch: a switched-off input is not listened to, everything else is',
+    !midiInputOn(off.sync, 'APC40 mk2') && midiInputOn(off.sync, 'APC40 LIGHT') && midiInputOn(undefined, 'anything'));
+
+  const names = ['IAC Driver Bus 1', 'APC40 mk2', 'APC40 LIGHT'];
+  check('input switch: the LEDs go to the first APC40 when nothing is off', choosePort(names, APC40_MK2.matches, []) === 1);
+  check('input switch: and to the other one when the first is Resolume\'s', choosePort(names, APC40_MK2.matches, ['APC40 mk2']) === 2);
+  check('input switch: to none when both are off', choosePort(names, APC40_MK2.matches, ['APC40 mk2', 'APC40 LIGHT']) === -1);
+  check('input switch: a name that is not this surface is never chosen', choosePort(names, APC_MINI_MK2.matches, []) === -1);
+  check('input switch: two units with one name cannot be told apart, so off is off for both',
+    choosePort(['APC40 mk2', 'APC40 mk2'], APC40_MK2.matches, ['APC40 mk2']) === -1);
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

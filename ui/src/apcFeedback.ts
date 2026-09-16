@@ -12,6 +12,7 @@ import { SURFACES, clearAddresses, computeLeds, ledNote, type Surface } from './
 
 // Re-exported so callers keep one import for "the surface": the grid shape is
 // a contract the on-screen look grid keeps with the hardware.
+import { choosePort } from '../../shared/midiInputs.ts';
 export { APC_COLS, APC_LAYER_ROWS, APC_ROWS, APC_KNOB_BANKS, SURFACES } from './surfaces.ts';
 
 /** One attached surface, with the diff cache that belongs to it. Two surfaces
@@ -22,15 +23,23 @@ type Attached = { surface: Surface; out: MIDIOutput; lastSent: Map<number, [numb
 
 let attached: Attached[] = [];
 
-export function attachApcOutput(access: MIDIAccess): void {
+export function attachApcOutput(access: MIDIAccess, off: string[] = []): void {
+  // Whatever was attached before is let go first, blanked: a surface switched
+  // off in Sync · MIDI is another app's now, and one that is chosen again is
+  // repainted from an empty cache anyway. A port that has been unplugged
+  // refuses the send; that is fine, there is nothing left to blank.
+  for (const a of attached) {
+    for (const [ch, n] of clearAddresses(a.surface)) {
+      try { a.out.send([0x90 | ch, n, 0]); } catch { /* unplugged */ }
+    }
+  }
   attached = [];
   const outputs = [...access.outputs.values()];
+  const names = outputs.map((o) => o.name ?? '');
   for (const surface of SURFACES) {
-    const out = outputs.find((o) => {
-      const n = (o.name ?? '').toLowerCase();
-      return surface.matches.some((m) => n.includes(m));
-    });
-    if (!out) continue;
+    const i = choosePort(names, surface.matches, off);
+    if (i < 0) continue;
+    const out = outputs[i]!;
     // Blank the whole surface once on attach. This has to cover every button
     // the map can produce, including ones it only ever INSERTS: computeLeds
     // adds the blackout LED when blackout is armed and never sets it to zero,

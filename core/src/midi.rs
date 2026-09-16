@@ -147,6 +147,8 @@ fn handler(tx: &Sender<EngineMsg>, name: &str) -> impl FnMut(u64, &[u8], &mut ()
             status,
             message.get(1).copied().unwrap_or(0),
             message.get(2).copied().unwrap_or(0),
+            // the engine decides by name whether it is listening to this port
+            port_name.clone(),
         ));
     }
 }
@@ -213,7 +215,7 @@ mod handler_tests {
     /// should not become Debug for a test's convenience. This says enough.
     fn describe(m: &EngineMsg) -> String {
         match m {
-            EngineMsg::Midi(a, b, c) => format!("Midi({a:#x},{b},{c})"),
+            EngineMsg::Midi(a, b, c, p) => format!("Midi({a:#x},{b},{c},{p})"),
             EngineMsg::MidiClock(s, at, port) => format!("MidiClock({s:#x},{at},{port})"),
             _ => "other".into(),
         }
@@ -239,7 +241,8 @@ mod handler_tests {
     #[test]
     fn a_note_arrives_as_a_note() {
         let out = feed(&[(0, &[0x90, 0x3c, 0x64])]);
-        assert!(matches!(out[..], [EngineMsg::Midi(0x90, 0x3c, 0x64)]), "{}", shown(&out));
+        // and it says which port, so the engine can decline to listen to it
+        assert!(matches!(out[..], [EngineMsg::Midi(0x90, 0x3c, 0x64, ref p)] if &**p == "Deck"), "{}", shown(&out));
     }
 
     #[test]
@@ -247,7 +250,7 @@ mod handler_tests {
         // Some controllers send running-status-ish two-byte messages; the
         // engine's actions read a velocity, so it has to be something.
         let out = feed(&[(0, &[0xb0, 0x07])]);
-        assert!(matches!(out[..], [EngineMsg::Midi(0xb0, 0x07, 0)]), "{}", shown(&out));
+        assert!(matches!(out[..], [EngineMsg::Midi(0xb0, 0x07, 0, _)]), "{}", shown(&out));
     }
 
     #[test]

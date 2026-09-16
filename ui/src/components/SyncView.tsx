@@ -11,6 +11,7 @@ import type { MidiMapping, Project } from '../../../shared/types.ts';
 import { useStore } from '../store.ts';
 import { NumInput } from './inputs.tsx';
 import { CONTROLLER_PRESETS, controllerPreset, type ControllerPresetName } from '../controllerPresets.ts';
+import { midiInputOn } from '../../../shared/midiInputs.ts';
 import { describeMidiAction, describeMidiSource } from '../labels.ts';
 import '../styles/setup.css';
 
@@ -101,6 +102,17 @@ function MidiSummary(): React.ReactElement {
   // lands a new project.
   const preset = useMemo(() => loadedPreset(project), [project]);
   const n = project.midi.length;
+  // The inputs as keys, one per name with a count, so two units that macOS
+  // gave the same name show as one key ×2 rather than two keys that switch
+  // together. An input switched off and since unplugged stays listed, or
+  // there would be no way to switch it back on.
+  const off = project.sync.midiInputsOff ?? [];
+  const inputKeys = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const name of midiInputs) counts.set(name, (counts.get(name) ?? 0) + 1);
+    for (const name of off) if (!counts.has(name)) counts.set(name, 0);
+    return [...counts].map(([name, count]) => ({ name, count }));
+  }, [midiInputs, off]);
 
   return (
     <>
@@ -128,14 +140,47 @@ function MidiSummary(): React.ReactElement {
       </div>
       <div className="row" style={{ flexWrap: 'wrap' }}>
         <span className="label">inputs</span>
-        {midiInputs.length === 0 ? (
+        {inputKeys.length === 0 ? (
           <span className="label" style={{ color: 'var(--text-faint)' }}>none detected (browser needs MIDI permission)</span>
         ) : (
-          midiInputs.map((name) => (
-            <span key={name} className="chip" title={`${name} — an input LIGHT is listening on`}>{name}</span>
-          ))
+          inputKeys.map(({ name, count }) => {
+            const on = midiInputOn(project.sync, name);
+            return (
+              <button
+                key={name}
+                className={`btn small ${on ? 'on' : 'ghost'}`}
+                aria-pressed={on}
+                title={
+                  on
+                    ? `${name} — LIGHT is listening to it. Switch it off when it belongs to another app on this Mac (Resolume's own APC): its pads send the same notes, and would fire LIGHT's cues too`
+                    : count === 0
+                      ? `${name} — switched off, and not plugged in right now. Click to listen to it again when it is`
+                      : `${name} — switched off: LIGHT ignores what it sends, learn does not hear it, and its LEDs are left to the app that owns it. Click to listen again`
+                }
+                onClick={() => mutate((p) => {
+                  const cur = p.sync.midiInputsOff ?? [];
+                  const next = on ? [...cur, name] : cur.filter((x) => x !== name);
+                  if (next.length > 0) p.sync.midiInputsOff = next;
+                  else delete p.sync.midiInputsOff;
+                }, `${on ? 'switch off' : 'listen to'} MIDI input \u201c${name}\u201d`)}
+              >
+                {name}{count > 1 ? ` \u00d7${count}` : ''}
+              </button>
+            );
+          })
         )}
       </div>
+      {inputKeys.some((k) => k.count > 1) && (
+        <div className="prose">
+          Two inputs share a name, and LIGHT cannot tell them apart — switching one off switches both off.
+          Rename one in Audio MIDI Setup (open the device, then edit its name) and it appears here under its own.
+        </div>
+      )}
+      {off.length > 0 && (
+        <div className="prose">
+          Switched off: LIGHT ignores what {off.join(', ')} sends, learn does not hear it, and its LEDs are left to the app that owns it.
+        </div>
+      )}
       {learnMode && (
         <div className="prose">Learn is armed — click a pad, column or fader, then press or move the control on your device.</div>
       )}

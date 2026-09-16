@@ -1111,6 +1111,13 @@ pub struct SyncCfg {
     /// engine only). Mutually exclusive with Link — see `midi_clock.rs`.
     #[serde(default)]
     pub midi_clock_enabled: bool,
+    /// MIDI inputs LIGHT does not listen to, by port name: a controller that
+    /// belongs to another app on this Mac (Resolume's own APC), whose pads
+    /// send the same notes and would fire LIGHT's cues too. Its LEDs are left
+    /// to that app. Empty — and absent from the file — when every input is
+    /// listened to. Mirrors `midiInputsOff` in shared/types.ts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub midi_inputs_off: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1388,6 +1395,7 @@ impl Default for SyncCfg {
             osc_enabled: true,
             link_enabled: false,
             midi_clock_enabled: false,
+            midi_inputs_off: Vec::new(),
             osc_port: 7700,
             follow_columns: true,
             bpm_from_osc: true,

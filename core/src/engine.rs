@@ -25,7 +25,9 @@ pub enum EngineMsg {
     Shutdown,
     Cmd(Command, Option<ClientId>),
     Osc(OscMessage),
-    Midi(u8, u8, u8),
+    /// a note or CC, and the input it came from — a switched-off input's
+    /// messages are dropped at the door (Sync · MIDI)
+    Midi(u8, u8, u8, std::sync::Arc<str>),
     /// A system-realtime byte with midir's timestamp and the port it came from
     /// — clock, start, continue, stop. Kept apart from `Midi` because it is a
     /// different question (what time is it) asked 48 times a second.
@@ -1114,7 +1116,12 @@ fn handle_msg(
             handle_osc_sync(&m, state, t);
             return align;
         }
-        EngineMsg::Midi(status, d1, d2) => {
+        EngineMsg::Midi(status, d1, d2, port) => {
+            // A switched-off input is another app's controller: nothing it
+            // sends fires here, and learn does not hear it either.
+            if !state.midi_input_on(&port) {
+                return None;
+            }
             let out = state.apply_midi(status, d1, d2, t);
             // A mapped SYNC asks for the bar as well as the clock, exactly as
             // the Resync command does two arms up. This arm used to drop it.
@@ -1127,7 +1134,12 @@ fn handle_msg(
         // follower is allowed to DRIVE the clock is decided on the tick, not
         // here: it keeps reading the room either way, so switching it on is
         // instant rather than a beat and a half of silence.
-        EngineMsg::MidiClock(status, stamp, port) => midi_clock.on_message(status, stamp, &port),
+        // A switched-off input's clock is dropped with the rest of it.
+        EngineMsg::MidiClock(status, stamp, port) => {
+            if state.midi_input_on(&port) {
+                midi_clock.on_message(status, stamp, &port);
+            }
+        }
         EngineMsg::MidiOwnPort(name) => *own_midi_port = Some(name),
         EngineMsg::MidiPorts(names) => {
             *midi_names = names;

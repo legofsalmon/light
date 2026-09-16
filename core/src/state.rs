@@ -430,6 +430,14 @@ pub struct EngineState {
 }
 
 impl EngineState {
+    /// Whether LIGHT listens to this MIDI input. A controller that belongs to
+    /// another app on this Mac — Resolume's own APC — is switched off by name
+    /// in Sync · MIDI, or its pads fire the same cues here. Mirrors
+    /// `midiInputOn` in shared/midiInputs.ts.
+    pub fn midi_input_on(&self, port: &str) -> bool {
+        !self.project.sync.midi_inputs_off.iter().any(|n| n == port)
+    }
+
     pub fn new(project: Project, now: f64) -> Self {
         let mut st = EngineState {
             project,

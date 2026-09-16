@@ -360,6 +360,8 @@ fn compute_leds(state: &EngineState, s: &Surface, beat: f64) -> HashMap<(u8, u8)
 /// plugged in at once must not share a cache — they paint different notes.
 struct Attached {
     surface: &'static Surface,
+    /// the port's name, which is how a switch-off in Sync · MIDI finds it
+    port: String,
     conn: MidiOutputConnection,
     /// Keyed the way compute_leds is keyed: by the button's (channel, note)
     /// address, because on the APC40 eight buttons share note 52.
@@ -378,9 +380,20 @@ struct Attached {
 pub struct ApcOut {
     attached: Vec<Attached>,
     /// a scan in flight; nothing else may start one while it is
-    pending: Option<std::sync::mpsc::Receiver<Vec<(&'static Surface, MidiOutputConnection)>>>,
+    pending: Option<std::sync::mpsc::Receiver<Vec<(&'static Surface, String, MidiOutputConnection)>>>,
     last_update: Instant,
     last_scan: Instant,
+}
+
+/// Which output a surface's LEDs go to: the first port whose name says it is
+/// this surface and that is not switched off in Sync · MIDI. Two APC40s on one
+/// Mac — one for LIGHT, one for Resolume — differ only by name, so the name is
+/// the whole choice. Mirrors `choosePort` in shared/midiInputs.ts.
+pub fn choose_port(names: &[String], surface: &Surface, off: &[String]) -> Option<usize> {
+    names.iter().position(|n| {
+        let lower = n.to_lowercase();
+        surface.matches.iter().any(|m| lower.contains(m)) && !off.iter().any(|o| o == n)
+    })
 }
 
 impl ApcOut {
@@ -395,20 +408,18 @@ impl ApcOut {
     }
 
     /// Everything a scan does, off the tick thread.
-    fn scan(want: Vec<&'static Surface>) -> Vec<(&'static Surface, MidiOutputConnection)> {
+    fn scan(
+        want: Vec<&'static Surface>,
+        off: Vec<String>,
+    ) -> Vec<(&'static Surface, String, MidiOutputConnection)> {
         let mut found = Vec::new();
         let Ok(out) = MidiOutput::new("LIGHT") else { return found };
         let ports = out.ports();
+        let names: Vec<String> = ports.iter().map(|p| out.port_name(p).unwrap_or_default()).collect();
         for surface in want {
-            let port = ports.iter().find(|p| {
-                out.port_name(p)
-                    .map(|n| {
-                        let n = n.to_lowercase();
-                        surface.matches.iter().any(|m| n.contains(m))
-                    })
-                    .unwrap_or(false)
-            });
-            let Some(port) = port else { continue };
+            let Some(i) = choose_port(&names, surface, &off) else { continue };
+            let port = &ports[i];
+            let name = names[i].clone();
             // one MidiOutput per connection: connect() consumes it
             let Ok(client) = MidiOutput::new("LIGHT") else { continue };
             match client.connect(port, "light-surface-leds") {
@@ -420,8 +431,8 @@ impl ApcOut {
                     for (ch, n) in surface.clear_addresses() {
                         let _ = conn.send(&[0x90 | ch, n, 0]);
                     }
-                    println!("[surface] {} LED feedback attached", surface.name);
-                    found.push((surface, conn));
+                    println!("[surface] {} LED feedback attached ({name})", surface.name);
+                    found.push((surface, name, conn));
                 }
                 Err(e) => eprintln!("[surface] {} connect failed: {e}", surface.name),
             }
@@ -429,14 +440,30 @@ impl ApcOut {
         found
     }
 
-    fn ensure_connections(&mut self) {
+    fn ensure_connections(&mut self, off: &[String]) {
+        // A surface whose port was switched off since it attached is another
+        // app's now: blank what this one painted on it, and let it go.
+        self.attached.retain_mut(|a| {
+            if !off.iter().any(|o| *o == a.port) {
+                return true;
+            }
+            for (ch, n) in a.surface.clear_addresses() {
+                let _ = a.conn.send(&[0x90 | ch, n, 0]);
+            }
+            println!("[surface] {} switched off — its LEDs are left to the app that owns it", a.port);
+            false
+        });
         // collect a finished scan first, so a surface found last time is in
         // hand before we decide whether another scan is worth starting
         if let Some(rx) = &self.pending {
             match rx.try_recv() {
                 Ok(found) => {
-                    for (surface, conn) in found {
-                        self.attached.push(Attached { surface, conn, last_sent: HashMap::new() });
+                    for (surface, port, conn) in found {
+                        // switched off while the scan was out: not ours after all
+                        if off.iter().any(|o| *o == port) {
+                            continue;
+                        }
+                        self.attached.push(Attached { surface, port, conn, last_sent: HashMap::new() });
                     }
                     self.pending = None;
                 }
@@ -454,10 +481,11 @@ impl ApcOut {
         }
         self.last_scan = Instant::now();
         let (tx, rx) = std::sync::mpsc::channel();
+        let off = off.to_vec();
         if std::thread::Builder::new()
             .name("light-surface-scan".into())
             .spawn(move || {
-                let _ = tx.send(Self::scan(want));
+                let _ = tx.send(Self::scan(want, off));
             })
             .is_ok()
         {
@@ -471,7 +499,7 @@ impl ApcOut {
             return;
         }
         self.last_update = Instant::now();
-        self.ensure_connections();
+        self.ensure_connections(&state.project.sync.midi_inputs_off);
 
         self.attached.retain_mut(|a| {
             let leds = compute_leds(state, a.surface, beat);
@@ -518,6 +546,20 @@ impl ApcOut {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Two APC40s on one Mac differ only by name. The LEDs go to the first
+    /// matching port that is not switched off — never to the other app's.
+    #[test]
+    fn the_leds_go_to_the_apc_that_is_switched_on() {
+        let names: Vec<String> = ["IAC Driver Bus 1", "APC40 mk2", "APC40 LIGHT"].map(String::from).to_vec();
+        assert_eq!(choose_port(&names, &APC40_MK2, &[]), Some(1), "nothing off: the first APC40");
+        assert_eq!(choose_port(&names, &APC40_MK2, &["APC40 mk2".into()]), Some(2), "the first is Resolume's");
+        assert_eq!(choose_port(&names, &APC40_MK2, &["APC40 mk2".into(), "APC40 LIGHT".into()]), None, "both off");
+        assert_eq!(choose_port(&names, &APC_MINI_MK2, &[]), None, "a name that is not this surface is never chosen");
+        // the same name twice cannot be told apart: off is off for both
+        let twins: Vec<String> = ["APC40 mk2", "APC40 mk2"].map(String::from).to_vec();
+        assert_eq!(choose_port(&twins, &APC40_MK2, &["APC40 mk2".into()]), None);
+    }
     use crate::defaults::default_project;
 
     /// Off-beat, so the tap pulse is not in the way of a note-table assertion.
