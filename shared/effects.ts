@@ -112,6 +112,54 @@ export function modWave(wave: Wave, phase: number, seedIdx: number): number {
  *  field — the same defaults the soft layer and effects use. Effect fields
  *  never need this: an effect always carries its knobs.
  *  Mirrors soft_base in core/src/effects.rs. */
+/** How much of the soft layer still reaches the rig: 1 while nothing is being
+ *  released, falling to 0 across a timed Discard. Mirrors
+ *  `soft_release_weight` in core/src/state.rs. */
+export function softReleaseWeight(release: { start: number; dur: number } | null, t: number): number {
+  if (!release) return 1;
+  if (release.dur <= 0) return 0;
+  return 1 - Math.min(1, Math.max(0, (t - release.start) / release.dur));
+}
+
+/** A soft value part of the way back to the stored one. Hue goes the short way
+ *  round the wheel: from 0.95 to 0.05 is a tenth of a turn through red, not
+ *  nine tenths the long way through every other colour. Mirrors `blend_soft`
+ *  in core/src/state.rs — identical arithmetic or the engines diverge
+ *  mid-release. `rem` is Rust's `rem_euclid`, which JavaScript's `%` is not
+ *  for a negative left side. */
+export function blendSoft(field: SoftField, stored: number, soft: number, w: number): number {
+  if (w >= 1) return soft;
+  // Exactly Rust's `rem_euclid` for a positive divisor — the same two
+  // operations in the same order. The familiar `((a % b) + b) % b` is NOT the
+  // same: adding 1 and taking it away again drops the low bits of a small
+  // remainder, and the engines would disagree in the last place.
+  const rem = (a: number, b: number): number => {
+    const r = a % b;
+    return r < 0 ? r + b : r;
+  };
+  if (field === 'hue') {
+    const d = rem(soft - stored + 0.5, 1) - 0.5;
+    const h = rem(stored + d * w, 1);
+    // a hue a hair below zero wraps to exactly 1.0; the wheel is [0, 1)
+    return h >= 1 ? 0 : h;
+  }
+  return stored + (soft - stored) * w;
+}
+
+/** The stored value of an effect's soft-addressable field, or undefined for a
+ *  part field. Mirrors `effect_field_value` in core/src/effects.rs. */
+export function effectFieldValue(e: Effect, field: SoftField): number | undefined {
+  switch (field) {
+    case 'rate': return e.rate;
+    case 'size': return e.size;
+    case 'spread': return e.spread;
+    case 'width': return e.width;
+    case 'phase': return e.phase;
+    case 'mix': return e.mix;
+    default: return undefined;
+  }
+}
+
 export function softBase(params: PartParams, field: SoftField): number {
   switch (field) {
     case 'dimmer':

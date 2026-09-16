@@ -134,6 +134,10 @@ export class EngineState {
    *  position — reaches the AUDITION and not the rig. Runtime only, off at boot,
    *  cleared by ALL STOP and a project switch exactly as the nudges are. */
   blind = false;
+  /** A timed Discard in progress, in ms on the tick clock. While it runs every
+   *  soft value travels back toward the stored one; when it ends the soft layer
+   *  is emptied exactly as an instant Discard. Mirrors `soft_release`. */
+  softRelease: { start: number; dur: number } | null = null;
   learnTarget: MidiAction | null = null;
   /** Monotonic project generation. Bumped once per project-changing command by
    *  the transport layer (engine/index.ts) — matching the per-command bump in
@@ -625,6 +629,7 @@ export class EngineState {
     this.frozen = false;
     this.frozenBy = null;
     this.blind = false; // blind belongs to the show it was armed in
+    this.softRelease = null;
     this.project.settings.haze = 0;
     this.project.settings.hazeFan = 0;
     this.onChange?.();
@@ -657,6 +662,10 @@ export class EngineState {
     }
     const v = softClamp(field, value);
     if (v === null) return false;
+    // Riding again during a timed Discard means the operator wants the nudge
+    // back: the release stops and the new value stands. Only here — an accepted
+    // new value — so a rejected write never cancels it. Mirrors set_soft.
+    this.softRelease = null;
     let patch = this.soft.get(key);
     if (!patch) {
       patch = { lookId, partId, params: new Map(), effects: new Map() };
@@ -693,6 +702,7 @@ export class EngineState {
    *  soft_commit in core/src/state.rs — the two engines must apply the
    *  identical field routing or their stored shows diverge. */
   softCommit(): boolean {
+    this.softRelease = null;
     const before = this.snapshot();
     let changed = false;
     for (const patch of this.soft.values()) {

@@ -18,6 +18,35 @@ pub struct SoftPatch {
 /// components, creating the colour with the other component at its default
 /// (s 1 / h 0) when the look never set one. Mirrors applySoftParam in
 /// engine/state.ts — identical routing or stored shows diverge.
+/// How much of the soft layer still reaches the rig: 1 while nothing is being
+/// released, falling to 0 across a timed Discard. Read once per tick.
+pub fn soft_release_weight(release: Option<(f64, f64)>, t: f64) -> f64 {
+    match release {
+        None => 1.0,
+        Some((_, dur)) if dur <= 0.0 => 0.0,
+        Some((start, dur)) => 1.0 - crate::types::clamp01((t - start) / dur),
+    }
+}
+
+/// A soft value part of the way back to the stored one. Hue goes the short way
+/// round the wheel: from 0.95 to 0.05 is a tenth of a turn through red, not
+/// nine tenths the long way through every other colour. Mirrors `blendSoft` in
+/// shared/effects.ts — identical arithmetic or the engines diverge mid-release.
+pub fn blend_soft(field: SoftField, stored: f64, soft: f64, w: f64) -> f64 {
+    if w >= 1.0 {
+        return soft;
+    }
+    if field == SoftField::Hue {
+        let d = (soft - stored + 0.5).rem_euclid(1.0) - 0.5;
+        let h = (stored + d * w).rem_euclid(1.0);
+        // A hue a hair below zero wraps to EXACTLY 1.0 here, which is the same
+        // colour as 0.0 but not the same number — and the Node twin must land
+        // on the same number, byte for byte. The wheel is [0, 1).
+        return if h >= 1.0 { 0.0 } else { h };
+    }
+    stored + (soft - stored) * w
+}
+
 pub fn apply_soft_param(params: &mut crate::types::PartParams, field: SoftField, v: f64) {
     match field {
         SoftField::Hue => {
@@ -357,6 +386,10 @@ pub struct EngineState {
     /// room watching you do it. Runtime only, off at boot, and cleared by ALL
     /// STOP and a project switch exactly as the nudges themselves are.
     pub blind: bool,
+    /// A timed Discard in progress: (start, duration), both in ms on the tick
+    /// clock. While it runs every soft value travels back toward the stored one;
+    /// when it ends the soft layer is emptied exactly as an instant Discard.
+    pub soft_release: Option<(f64, f64)>,
     pub learn_target: Option<MidiAction>,
     /// TEST ONLY — a pending effect-clock pin (LIGHT_TEST_CLOCK gated), consumed
     /// by the engine loop before the next tick. Not show state; never persisted.
@@ -397,6 +430,7 @@ impl EngineState {
             control_live: HashMap::new(),
             midi_cc: HashMap::new(),
             blind: false,
+            soft_release: None,
             learn_target: None,
             gen: 1,
             pending_pin: None,
@@ -1047,6 +1081,11 @@ impl EngineState {
             }
             Some(raw) => {
                 let Some(v) = soft_clamp(field, raw) else { return false };
+                // Riding again during a timed Discard means the operator wants
+                // the nudge back: the release stops and the new value stands.
+                // Only here — an accepted new value — so a rejected write or a
+                // single field being cleared never cancels it. Mirrors setSoft.
+                self.soft_release = None;
                 let patch = self.soft.entry(key).or_default();
                 if let Some(eid) = effect_id {
                     patch.effects.entry(eid.to_string()).or_default().insert(field, v);
@@ -1236,6 +1275,7 @@ impl EngineState {
         self.frozen = false;
         self.frozen_by = None;
         self.blind = false; // blind belongs to the show it was armed in
+        self.soft_release = None;
         self.project.settings.haze = 0.0;
         self.project.settings.haze_fan = 0.0;
         // A wholesale swap is the biggest project change there is — advance the
@@ -1465,6 +1505,7 @@ impl EngineState {
                 self.soft.clear(); // rides are transient state; panic drops them too
                 self.control_live.clear();
                 self.blind = false; // the panic leaves nothing programmed in secret
+                self.soft_release = None; // the panic is instant, never a fade
                 // Levels are transient too. A fixture that must stay out of
                 // the show is MUTED, and mutes deliberately survive this.
                 self.submasters.clear();
@@ -1476,6 +1517,7 @@ impl EngineState {
                 self.set_soft(&look_id, &part_id, effect_id.as_deref(), field, value);
             }
             Command::SoftCommit => {
+                self.soft_release = None;
                 let before = self.snapshot();
                 if self.soft_commit() {
                     self.push_entry(before, "keep the nudged values");
@@ -1486,10 +1528,18 @@ impl EngineState {
                 self.control_live.clear(); // the fan-out is baked; position spent
             }
             Command::SetBlind { v } => self.blind = v,
-            Command::SoftClear => {
-                self.soft.clear();
-                self.control_live.clear(); // a discarded fan-out has no live position
-            }
+            Command::SoftClear { fade_s } => match fade_s.filter(|f| f.is_finite() && *f > 0.0) {
+                // Instant, as it always was.
+                None => {
+                    self.soft.clear();
+                    self.control_live.clear(); // a discarded fan-out has no live position
+                    self.soft_release = None;
+                }
+                // Timed: the values travel back over the tick; `finish_soft_release`
+                // empties the layer when they arrive.
+                Some(f) if !self.soft.is_empty() => self.soft_release = Some((t, f * 1000.0)),
+                Some(_) => {}
+            },
             Command::SetControl { control_id, value } => {
                 self.set_control(&control_id, value);
             }

@@ -422,6 +422,16 @@ impl Renderer {
             }
         }
 
+        // A timed Discard (design #50) that has run its course empties the soft
+        // layer exactly as an instant one does; one that is still running gives
+        // every soft value a weight back toward the stored show. Read once.
+        let release_w = crate::state::soft_release_weight(st.soft_release, t);
+        if st.soft_release.is_some() && release_w <= 0.0 {
+            st.soft.clear();
+            st.control_live.clear();
+            st.soft_release = None;
+        }
+
         // --- layer stack (index 0 = bottom) ---
         let mut layer_snaps: Vec<LayerSnap> = Vec::new();
         let active_deck_id = st.project.active_deck_id.clone();
@@ -499,7 +509,8 @@ impl Renderer {
                         Some(p2) if !p2.params.is_empty() => {
                             let mut p = part.params.clone();
                             for (f, v) in &p2.params {
-                                crate::state::apply_soft_param(&mut p, *f, *v);
+                                let v = crate::state::blend_soft(*f, soft_base(&part.params, *f), *v, release_w);
+                                crate::state::apply_soft_param(&mut p, *f, v);
                             }
                             owned_params = p;
                             &owned_params
@@ -513,7 +524,11 @@ impl Renderer {
                             for e in &mut es {
                                 if let Some(fields) = p2.effects.get(&e.id) {
                                     for (f, v) in fields {
-                                        crate::state::apply_soft_effect(e, *f, *v);
+                                        let v = match effect_field_value(e, *f) {
+                                            Some(stored) => crate::state::blend_soft(*f, stored, *v, release_w),
+                                            None => *v,
+                                        };
+                                        crate::state::apply_soft_effect(e, *f, v);
                                     }
                                 }
                             }

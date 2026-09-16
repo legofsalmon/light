@@ -3,7 +3,7 @@ import { clamp, lerp } from '../shared/types.ts';
 import type { HeadKind, ResolvedParams } from '../shared/profiles.ts';
 import { PROFILES, defaultResolved } from '../shared/profiles.ts';
 import { renderImported } from './wasmProfiles.ts';
-import { applyEffects, modWave, softBase } from '../shared/effects.ts';
+import { applyEffects, blendSoft, effectFieldValue, modWave, softBase, softReleaseWeight } from '../shared/effects.ts';
 import { aimIsIdentity, applyAim } from '../shared/aim.ts';
 import { NO_EXTENTS, NO_GEOM, buildGeometry, buildGroupExtents, type GroupExtents, type HeadGeom } from '../shared/geometry.ts';
 import { DERBY_MACROS, derbyMacroForValue, derbyQuantize, hsvToRgb, rgbToHsv } from '../shared/color.ts';
@@ -266,6 +266,16 @@ export class Renderer {
     const groupHeads = new Map<string, HeadRef[]>(p.groups.map((g) => [g.id, g.heads]));
 
     // --- layer stack (index 0 = bottom) ---
+    // A timed Discard (design #50) that has run its course empties the soft
+    // layer exactly as an instant one does; one still running gives every soft
+    // value a weight back toward the stored show. Read once. Mirrors the Rust twin.
+    const releaseW = softReleaseWeight(st.softRelease, t);
+    if (st.softRelease && releaseW <= 0) {
+      st.soft.clear();
+      st.controlLive.clear();
+      st.softRelease = null;
+    }
+
     const layerSnaps: LayerSnap[] = [];
     const activeDeckId = st.project.activeDeckId ?? null;
     for (const layer of p.layers) {
@@ -309,7 +319,7 @@ export class Renderer {
           let effParams = part.params;
           if (patch && patch.params.size > 0) {
             effParams = { ...part.params, color: part.params.color ? { ...part.params.color } : undefined };
-            for (const [field, v] of patch.params) applySoftParam(effParams, field, v);
+            for (const [field, v] of patch.params) applySoftParam(effParams, field, blendSoft(field, softBase(part.params, field), v, releaseW));
           }
           let effEffects = part.effects;
           if (patch && patch.effects.size > 0) {
@@ -317,7 +327,11 @@ export class Renderer {
               const fields = patch.effects.get(e.id);
               if (!fields) return e;
               const c = { ...e };
-              for (const [field, v] of fields) applySoftEffect(c, field, v);
+              for (const [field, v] of fields) {
+                // the stored value, read before the write replaces it
+                const stored = effectFieldValue(c, field);
+                applySoftEffect(c, field, stored === undefined ? v : blendSoft(field, stored, v, releaseW));
+              }
               return c;
             });
           }

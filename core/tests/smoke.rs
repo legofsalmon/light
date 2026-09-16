@@ -846,3 +846,40 @@ fn blind_is_cleared_by_all_stop_and_a_project_switch() {
     st.replace_project(demo_project());
     assert!(!st.blind, "blind belongs to the show it was armed in");
 }
+
+/// A timed Discard travels each nudge back to the stored value (design #50).
+/// The Node twin (`blendSoft` in shared/effects.ts) is held to the SAME table,
+/// compared by bit pattern: a hue that lands a hair below zero wraps to exactly
+/// 1.0 under `rem_euclid` and to 0.0 under the usual JavaScript idiom, which is
+/// the same colour and a different byte on the wire.
+#[test]
+fn a_timed_discard_blends_by_the_same_bits_as_the_node_twin() {
+    use light_core::state::blend_soft;
+    use light_core::types::SoftField as F;
+    let table: &[(F, f64, f64, f64, u64)] = &[
+        (F::Hue, 0.95, 0.05, 0.5, 0x0000000000000000), // across red, the short way
+        (F::Hue, 0.05, 0.95, 0.5, 0x0000000000000000), // the other way: wraps to 0, never 1.0
+        (F::Hue, 0.20, 0.60, 0.25, 0x3fd3333333333333),
+        (F::Hue, 0.90, 0.10, 0.0, 0x3feccccccccccccd), // fully released = stored
+        (F::Hue, 0.30, 0.30, 0.7, 0x3fd3333333333333),
+        (F::Dimmer, 1.0, 0.2, 0.5, 0x3fe3333333333333),
+        (F::Dimmer, 0.4, 0.9, 0.0, 0x3fd999999999999a),
+        (F::Rate, 1.0, 4.0, 0.75, 0x400a000000000000),
+    ];
+    for &(f, stored, soft, w, bits) in table {
+        let got = blend_soft(f, stored, soft, w);
+        assert_eq!(got.to_bits(), bits, "{f:?} {stored}→{soft} at w={w}: got {got}");
+    }
+    // no release running: the nudge stands untouched
+    assert_eq!(blend_soft(F::Hue, 0.1, 0.9, 1.0), 0.9);
+}
+
+#[test]
+fn a_timed_discard_empties_the_layer_when_it_arrives() {
+    use light_core::state::soft_release_weight;
+    assert_eq!(soft_release_weight(None, 5.0), 1.0, "no release: the nudges stand");
+    assert_eq!(soft_release_weight(Some((0.0, 1000.0)), 0.0), 1.0);
+    assert_eq!(soft_release_weight(Some((0.0, 1000.0)), 250.0), 0.75);
+    assert_eq!(soft_release_weight(Some((0.0, 1000.0)), 1000.0), 0.0);
+    assert_eq!(soft_release_weight(Some((0.0, 1000.0)), 5000.0), 0.0, "past the end stays at the stored show");
+}

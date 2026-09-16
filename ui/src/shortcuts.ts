@@ -13,6 +13,7 @@
 // for word. Adding a shortcut without documenting it fails the build.
 
 import type { Command } from '../../shared/types.ts';
+import { discardFade } from './discardFade.ts';
 
 /** Actions the UI owns and this table only names.
  *
@@ -68,11 +69,18 @@ export type KeyPress = {
  *  that where it is handed over in App.tsx, so a mismatch is caught there
  *  rather than assumed away here. */
 export type State = {
-  project: { columns: unknown[]; decks?: { id: string }[]; activeDeckId?: string } | null;
+  project: {
+    columns: unknown[];
+    decks?: { id: string }[];
+    activeDeckId?: string;
+    /** read by Discard, which travels back over the nudged look's own fade */
+    looks: Record<string, { id: string; fade?: number }>;
+    layers: { fade: number; cells: (string | null)[] }[];
+  } | null;
   snap: {
     blackout: boolean;
     frozen?: boolean;
-    soft?: unknown[];
+    soft?: { lookId: string }[];
     layers?: { id: string; lookId?: string | null; col?: number | null }[];
   } | null;
   send: (cmd: Command) => void;
@@ -193,7 +201,11 @@ export const SHORTCUTS: Shortcut[] = [
     label: 'discard the live nudges',
     group: 'Cues and tempo',
     match: (e) => e.key.toLowerCase() === 'd',
-    run: (st) => { if ((st.snap?.soft?.length ?? 0) > 0) st.send({ type: 'softClear' }); },
+    run: (st) => {
+      if ((st.snap?.soft?.length ?? 0) === 0) return;
+      const fadeS = discardFade(st.project, st.snap);
+      st.send(fadeS ? { type: 'softClear', fadeS } : { type: 'softClear' });
+    },
   },
   {
     keys: '`A`',

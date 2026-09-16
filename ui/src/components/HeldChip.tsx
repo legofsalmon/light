@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { discardFade } from '../discardFade.ts';
 import { useStore } from '../store.ts';
 
 /** One thing standing between the show and the room, and the verb that ends it.
@@ -70,8 +71,11 @@ export function HeldChip() {
         },
         {
           label: 'Discard',
-          title: 'throw the live values away and snap back to what the looks have stored',
-          run: () => send({ type: 'softClear' }),
+          title: 'throw the live values away — each one travels back to what the look has stored, over that look\u2019s own fade',
+          run: () => {
+            const fadeS = discardFade(useStore.getState().project, useStore.getState().snap);
+            send(fadeS ? { type: 'softClear', fadeS } : { type: 'softClear' });
+          },
         },
       ],
     });

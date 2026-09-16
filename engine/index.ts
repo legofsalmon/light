@@ -546,6 +546,7 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       state.soft.clear(); // rides are transient state; panic drops them too
       state.controlLive.clear();
       state.blind = false; // the panic leaves nothing programmed in secret
+      state.softRelease = null; // the panic is instant, never a fade
       // Levels are transient too. A fixture that must stay out of the show is
       // MUTED, and mutes deliberately survive this.
       state.submasters.clear();
@@ -572,10 +573,19 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
     case 'setBlind':
       state.blind = !!cmd.v;
       break;
-    case 'softClear':
-      state.soft.clear();
-      state.controlLive.clear(); // a discarded fan-out has no live position
+    case 'softClear': {
+      // With a time, each value travels back to what the show stores rather
+      // than snapping (design #50, Eos's sneak). Mirrors Command::SoftClear.
+      const f = typeof cmd.fadeS === 'number' && Number.isFinite(cmd.fadeS) && cmd.fadeS > 0 ? cmd.fadeS : null;
+      if (f === null) {
+        state.soft.clear();
+        state.controlLive.clear(); // a discarded fan-out has no live position
+        state.softRelease = null;
+      } else if (state.soft.size > 0) {
+        state.softRelease = { start: performance.now(), dur: f * 1000 };
+      }
       break;
+    }
     case 'setControl':
       if (typeof cmd.controlId === 'string' && typeof cmd.value === 'number') {
         state.setControl(cmd.controlId, cmd.value);

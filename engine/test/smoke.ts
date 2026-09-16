@@ -8,7 +8,8 @@ import { EngineState, HISTORY_CAP } from '../state.ts';
 import { Renderer } from '../renderer.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Project } from '../../shared/types.ts';
+import type { Project, SoftField } from '../../shared/types.ts';
+import { discardFade } from '../../ui/src/discardFade.ts';
 import { sanitizeProject, sanitizeStage } from '../../shared/types.ts';
 import { stageExtent } from '../../shared/stageExtent.ts';
 import type { ShareList } from '../../shared/gdtfShare.ts';
@@ -30,7 +31,7 @@ import { readFileSync } from 'node:fs';
 import { MAX_THROW, buildOccluders, hitsPropFootprint, standingHeightAt, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
 import { FreezeHold, GO_DARK_FRAMES, OutputGate } from '../output.ts';
 import { aimIsIdentity, applyAim } from '../../shared/aim.ts';
-import { shapeAmps, shapeAt } from '../../shared/effects.ts';
+import { blendSoft, shapeAmps, shapeAt, softReleaseWeight } from '../../shared/effects.ts';
 import { BUILTIN_PROFILE_IDS, SHAPE_KINDS } from '../../shared/types.ts';
 import { PROFILES } from '../../shared/profiles.ts';
 import { FX_CATEGORIES, FX_LIBRARY, fxSearch, unusable } from '../../ui/src/fxLibrary.ts';
@@ -2284,6 +2285,57 @@ await new Promise<void>((resolve) => {
   // it was just assigned — the whole point is that replaceProject changed it
   const blindNow = (): boolean => st.blind;
   check('blind: a project switch clears it', !blindNow());
+}
+
+// --- a timed Discard blends by the same bits as the Rust twin (design #50) ---
+// Held to the table in core/tests/smoke.rs, compared by bit pattern: a hue that
+// lands a hair below zero is 1.0 under rem_euclid and 0.0 under the usual
+// JavaScript idiom — the same colour, a different byte on the wire.
+{
+  const bitsOf = (x: number): string => {
+    const b = new DataView(new ArrayBuffer(8));
+    b.setFloat64(0, x);
+    return [...new Uint8Array(b.buffer)].map((v) => v.toString(16).padStart(2, '0')).join('');
+  };
+  const table: [SoftField, number, number, number, string][] = [
+    ['hue', 0.95, 0.05, 0.5, '0000000000000000'],
+    ['hue', 0.05, 0.95, 0.5, '0000000000000000'],
+    ['hue', 0.2, 0.6, 0.25, '3fd3333333333333'],
+    ['hue', 0.9, 0.1, 0.0, '3feccccccccccccd'],
+    ['hue', 0.3, 0.3, 0.7, '3fd3333333333333'],
+    ['dimmer', 1.0, 0.2, 0.5, '3fe3333333333333'],
+    ['dimmer', 0.4, 0.9, 0.0, '3fd999999999999a'],
+    ['rate', 1.0, 4.0, 0.75, '400a000000000000'],
+  ];
+  let same = true;
+  for (const [f, stored, soft, w, bits] of table) {
+    const got = blendSoft(f, stored, soft, w);
+    if (bitsOf(got) !== bits) {
+      same = false;
+      check(`discard: ${f} ${stored}→${soft} at ${w} matches the Rust bits`, false, `got ${got} (${bitsOf(got)}), want ${bits}`);
+    }
+  }
+  check('discard: every blend lands on the Rust twin\'s exact bits', same);
+  check('discard: a hue never wraps to 1.0', blendSoft('hue', 0.05, 0.95, 0.5) === 0);
+  check('discard: no release leaves the nudge untouched', blendSoft('hue', 0.1, 0.9, 1) === 0.9);
+  check(
+    'discard: the weight falls from 1 to 0 and stays there',
+    softReleaseWeight(null, 5) === 1 && softReleaseWeight({ start: 0, dur: 1000 }, 250) === 0.75
+      && softReleaseWeight({ start: 0, dur: 1000 }, 1000) === 0 && softReleaseWeight({ start: 0, dur: 1000 }, 5000) === 0,
+  );
+}
+
+// --- Discard travels back over the nudged look's own fade (design #50) --------
+{
+  const proj = {
+    looks: { a: { id: 'a', fade: 1.5 }, b: { id: 'b', fade: 0 }, c: { id: 'c' } },
+    layers: [{ fade: 0.4, cells: ['c', null] }],
+  };
+  check('discard fade: the look\'s own fade', discardFade(proj, { soft: [{ lookId: 'a' }] }) === 1.5);
+  check('discard fade: a look set to snap discards instantly', discardFade(proj, { soft: [{ lookId: 'b' }] }) === undefined);
+  check('discard fade: a look with none uses its layer\'s', discardFade(proj, { soft: [{ lookId: 'c' }] }) === 0.4);
+  check('discard fade: nothing nudged, nothing to time', discardFade(proj, { soft: [] }) === undefined);
+  check('discard fade: a look that has gone is not guessed at', discardFade(proj, { soft: [{ lookId: 'gone' }] }) === undefined);
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

@@ -1307,6 +1307,33 @@ async function main(): Promise<void> {
     both({ type: 'softClear' });
     await sleep(400);
 
+    // A timed Discard (design #50) at the design's three durations. 0 s is the
+    // instant Discard asserted above. For a release, both engines must still be
+    // holding the nudge the moment it starts — no snap — and both must land on
+    // the stored bytes once it has run. Mid-release bytes are sampled on each
+    // engine's own clock, so the comparison waits for the output to settle, the
+    // way every crossfade comparison here does.
+    for (const fadeS of [0.3, 2]) {
+      both({ type: 'soft', lookId: 'wash-rainbow', partId, field: 'sat', value: 0.25 });
+      await sleep(400);
+      both({ type: 'softClear', fadeS });
+      await sleep(60);
+      check(
+        `discard ${fadeS} s: neither engine snaps — the nudge is still held as it starts`,
+        (node.snap?.soft?.length ?? 0) > 0 && (rust.snap?.soft?.length ?? 0) > 0 && frameOf(node) !== stored,
+        `node soft=${node.snap?.soft?.length} rust soft=${rust.snap?.soft?.length}`,
+      );
+      await sleep(fadeS * 1000 + 300);
+      await settle(node, rust);
+      compareDmx(`discard ${fadeS} s: parity once it has run`, node, rust);
+      check(`discard ${fadeS} s: lands on the stored bytes`, frameOf(node) === stored, 'the release did not arrive at the stored show');
+      check(
+        `discard ${fadeS} s: the soft layer is empty on both`,
+        (node.snap?.soft?.length ?? 0) === 0 && (rust.snap?.soft?.length ?? 0) === 0,
+        `node=${node.snap?.soft?.length} rust=${rust.snap?.soft?.length}`,
+      );
+    }
+
     // ride again, then Store: one gen bump, stored looks updated identically
     both({ type: 'soft', lookId: 'wash-rainbow', partId, field: 'sat', value: 0.25 });
     await sleep(300);

@@ -1475,7 +1475,13 @@ pub enum Command {
     /// Discard: drop every soft value, stored data untouched.
     /// Blind (design #48): the soft layer reaches the audition and not the rig.
     SetBlind { v: bool },
-    SoftClear,
+    /// Discard every nudge. With `fade_s`, over that many seconds — each value
+    /// travels back to what the show stores rather than snapping (design #50,
+    /// Eos's sneak). Absent or 0: instant, as it always was.
+    SoftClear {
+        #[serde(default)]
+        fade_s: Option<f64>,
+    },
     /// Move a Named Control: resolves through the soft layer per link.
     #[serde(rename_all = "camelCase")]
     SetControl { control_id: String, value: f64 },

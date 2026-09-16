@@ -947,7 +947,9 @@ export type Command =
   /** Store: write every soft value into the project (one gen bump), clear */
   | { type: 'softCommit' }
   /** Discard: drop every soft value, stored data untouched */
-  | { type: 'softClear' }
+  /** Discard every nudge. With `fadeS`, over that many seconds — each value
+   *  travels back to what the show stores (design #50). Absent: instant. */
+  | { type: 'softClear'; fadeS?: number }
   /** Blind (design #48): nudges and dials reach the audition, not the rig. */
   | { type: 'setBlind'; v: boolean }
   /** move a Named Control: resolves through the soft layer per link */
