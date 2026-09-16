@@ -4,6 +4,10 @@
 // packet over loopback.
 
 import dgram from 'node:dgram';
+import { spawn } from 'node:child_process';
+import { createServer, type AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import WebSocket from 'ws';
 import { EngineState, HISTORY_CAP } from '../state.ts';
 import { Renderer } from '../renderer.ts';
 import fs from 'node:fs';
@@ -2390,6 +2394,135 @@ await new Promise<void>((resolve) => {
 
   const reach = playingColourParts(project, ['bed', 'nocolour', 'bed', null, 'gone']);
   check('palettes: a tap reaches the coloured parts of what is playing, once each', reach.length === 1 && reach[0]!.lookId === 'bed');
+}
+
+// --- Boot warns about a show it could not read, never about a first run --------
+//
+// loadProject comes back empty-handed two ways, and boot answered both with
+// "saved project could not be read … (your file was left untouched)". On a first
+// run — a fresh install, an empty LIGHT_PROJECT_DIR — that told every client
+// about a file that had never existed. The warning is decided at boot and heard
+// on connect, so each case boots a real engine: its own scratch directory and
+// port, ArtPoll off, and outputs are off at every boot.
+{
+  type Notice = { ok: boolean; message: string };
+
+  /** The notices a first client is greeted with, or null while nothing is
+   *  listening yet. The greeting is project, history, any boot notice, then
+   *  midiInputs, in that order on one socket, so reading up to midiInputs has
+   *  seen every notice there is without a sleep. Listening starts before the
+   *  socket opens, not after: frames that arrive in the handshake's own read are
+   *  replayed ahead of any promise continuation, and would be missed there. */
+  const greeting = (port: number, ms: number): Promise<Notice[] | null> =>
+    new Promise((resolve, reject) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      const notices: Notice[] = [];
+      let open = false;
+      const timer = setTimeout(() => {
+        reject(new Error(`no greeting within ${ms} ms`));
+        ws.terminate();
+      }, ms);
+      ws.on('open', () => (open = true));
+      ws.on('error', () => {}); // 'close' always follows, and decides
+      ws.on('close', () => {
+        clearTimeout(timer);
+        if (open) reject(new Error('the socket closed before the greeting ended'));
+        else resolve(null);
+      });
+      ws.on('message', (data) => {
+        const ev = JSON.parse(String(data));
+        if (ev.type === 'toast') notices.push({ ok: ev.ok, message: ev.message });
+        if (ev.type === 'midiInputs') {
+          clearTimeout(timer);
+          resolve(notices);
+          ws.close();
+        }
+      });
+    });
+
+  const bootNotices = async (dir: string): Promise<Notice[]> => {
+    const port = await new Promise<number>((resolve, reject) => {
+      const probe = createServer();
+      probe.once('error', reject);
+      probe.listen(0, '127.0.0.1', () => {
+        const { port } = probe.address() as AddressInfo;
+        probe.close(() => resolve(port));
+      });
+    });
+    const engine = spawn(process.execPath, ['engine/index.ts'], {
+      env: { ...process.env, LIGHT_PORT: String(port), LIGHT_PROJECT_DIR: dir, LIGHT_NO_ARTPOLL: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let log = '';
+    engine.stdout.on('data', (d) => (log += d));
+    engine.stderr.on('data', (d) => (log += d));
+    const gone = () => engine.exitCode !== null || engine.signalCode !== null;
+    const kill = () => engine.kill('SIGKILL');
+    process.once('exit', kill); // an engine must never outlive the suite
+    try {
+      const deadline = Date.now() + 15_000;
+      for (;;) {
+        if (gone()) throw new Error(`engine exited during boot: ${log}`);
+        const left = deadline - Date.now();
+        if (left <= 0) throw new Error(`no engine on :${port} after 15 s: ${log}`);
+        const notices = await greeting(port, left).catch((err: Error) => {
+          throw new Error(`${err.message}: ${log}`);
+        });
+        if (notices) return notices;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    } finally {
+      process.removeListener('exit', kill);
+      if (!gone()) {
+        const exited = new Promise((r) => engine.once('exit', r));
+        kill();
+        await exited;
+      }
+    }
+  };
+
+  const torn = '{ "version": 1, "name": "Friday", "fixtures": ['; // a write cut short
+  const rows: { name: string; files: Record<string, string>; warns: boolean }[] = [
+    { name: 'an empty directory (a first run)', files: {}, warns: false },
+    { name: 'a corrupt show with no backups', files: { 'default.project.json': torn }, warns: true },
+    { name: 'a missing show whose backups will not parse', files: { 'default.project.json.bak1': torn }, warns: true },
+    { name: 'a pointer to a show with nothing saved anywhere', files: { '.current': 'friday' }, warns: false },
+    { name: 'a pointer to a show that left only unreadable backups', files: { '.current': 'friday', 'friday.project.json.bak1': torn }, warns: true },
+  ];
+  const root = fs.mkdtempSync(path.join(tmpdir(), 'light-boot-'));
+  try {
+    for (const [i, row] of rows.entries()) {
+      const dir = path.join(root, String(i));
+      fs.mkdirSync(dir);
+      for (const [file, body] of Object.entries(row.files)) fs.writeFileSync(path.join(dir, file), body);
+      let notices: Notice[];
+      try {
+        notices = await bootNotices(dir);
+      } catch (err) {
+        check(`boot: ${row.name}`, false, (err as Error).message);
+        continue;
+      }
+      if (row.warns) {
+        check(
+          `boot: ${row.name} warns that the saved show could not be read`,
+          notices.length === 1 && !notices[0]!.ok && notices[0]!.message.includes('could not be read'),
+          JSON.stringify(notices),
+        );
+        // ...and the warning promises the file was left alone: its bytes are
+        // still on disk, wherever the recovery ladder moved them
+        const files = fs.readdirSync(dir);
+        check(
+          `boot: ${row.name} keeps the unreadable bytes`,
+          files.some((f) => fs.readFileSync(path.join(dir, f), 'utf8') === torn),
+          files.join(', '),
+        );
+      } else {
+        check(`boot: ${row.name} gives no warning`, notices.length === 0, JSON.stringify(notices));
+      }
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

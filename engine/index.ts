@@ -187,10 +187,16 @@ const TICK_MS = 25; // 40 Hz DMX refresh
 const PORT = Number(process.env.LIGHT_PORT ?? WS_PORT);
 
 // --- boot ---
-let project = persist.loadProject();
-if (!project) {
+const loaded = persist.loadProject();
+let project: Project;
+if (loaded.project) {
+  project = loaded.project;
+} else {
   project = sanitizeProject(defaultProject())!;
-  bootWarning = 'saved project could not be read — started from the demo show (your file was left untouched)';
+  // Only when there was a show to lose. A first run has no file to warn about.
+  if (loaded.unreadable) {
+    bootWarning = 'saved project could not be read — started from the demo show (your file was left untouched)';
+  }
   try {
     persist.saveProjectNow(project);
     console.log(`[light] created default project at ${persist.projectPath()}`);
