@@ -1169,7 +1169,12 @@ table.tbl tr.rowsel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 /* ---------- the project menu (Figma: Popover menu) ---------- */
 .popover {
   position: fixed;
-  z-index: 60;
+  /* Above the catcher that closes it. Six popovers (add heads, add fixture,
+     re-address, the colour disc, the editor's menus, the field pickers) close
+     on a transparent .modalveil at 200; at 60 the popover sat UNDER it, so
+     every click landed on the catcher and only ever closed the list. The
+     anchored menus already sit at 201 for the same reason. */
+  z-index: 201; /* not a token: one above the veil and the catcher, theme.css */
   min-width: var(--size-menu-w);
   display: flex;
   flex-direction: column;
