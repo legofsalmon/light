@@ -1288,6 +1288,25 @@ async function main(): Promise<void> {
     compareDmx('soft: discard parity', node, rust);
     check('soft: discard restores the stored bytes', frameOf(node) === stored, 'discard did not restore');
 
+    // Blind (design #48): the same ride that just moved the rig must move NO
+    // byte while blind is on — the room keeps the stored look — and both
+    // engines must agree on that. Turning blind off lets the ride through.
+    both({ type: 'setBlind', v: true });
+    both({ type: 'soft', lookId: 'wash-rainbow', partId, field: 'sat', value: 0.25 });
+    await sleep(400);
+    compareDmx('blind: a blind ride parity', node, rust);
+    check('blind: a ride moves no byte on the rig', frameOf(node) === stored, 'the blind ride reached the rig');
+    check('blind: both engines report it', node.snap?.blind === true && rust.snap?.blind === true, `node=${node.snap?.blind} rust=${rust.snap?.blind}`);
+    both({ type: 'setBlind', v: false });
+    await sleep(400);
+    compareDmx('blind: off lets the ride through, parity', node, rust);
+    check('blind: turning it off lets the same ride reach the rig', frameOf(node) === ridden, 'blind off did not restore the ride');
+    // back to the stored show for the rest of this block (ALL STOP clearing
+    // blind is asserted in both unit suites, where it cannot disturb the
+    // pinned sequence here)
+    both({ type: 'softClear' });
+    await sleep(400);
+
     // ride again, then Store: one gen bump, stored looks updated identically
     both({ type: 'soft', lookId: 'wash-rainbow', partId, field: 'sat', value: 0.25 });
     await sleep(300);

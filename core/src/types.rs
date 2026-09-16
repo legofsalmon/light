@@ -1312,6 +1312,10 @@ pub struct Snapshot {
     /// the value is, because the next touch of an absolute fader jumps there.
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub midi_cc: std::collections::HashMap<String, u8>,
+    /// Blind is on: nudges and dials reach the audition, not the rig. Absent
+    /// while off, so it only appears while it matters.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub blind: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artnet_nodes: Option<Vec<ArtnetNodeSnap>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1469,6 +1473,8 @@ pub enum Command {
     /// Store: write every soft value into the project (one gen bump), clear.
     SoftCommit,
     /// Discard: drop every soft value, stored data untouched.
+    /// Blind (design #48): the soft layer reaches the audition and not the rig.
+    SetBlind { v: bool },
     SoftClear,
     /// Move a Named Control: resolves through the soft layer per link.
     #[serde(rename_all = "camelCase")]

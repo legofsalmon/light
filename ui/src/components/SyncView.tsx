@@ -163,7 +163,7 @@ function MidiSummary(): React.ReactElement {
           title="load a whole controller layout at once — hover one for the map it will lay down"
           onClick={() => setPick(!pick)}
         >
-          {pick ? '▾' : '▸'} load a layout
+          <Glyph name="chevron" className={pick ? '' : 'shut'} /> load a layout
         </button>
         <button
           className="btn small ghost"
@@ -171,7 +171,7 @@ function MidiSummary(): React.ReactElement {
           title={n === 0 ? 'nothing is mapped yet' : 'every mapping, source and target'}
           onClick={() => setTable(!table)}
         >
-          {table ? '▾' : '▸'} mappings
+          <Glyph name="chevron" className={table ? '' : 'shut'} /> mappings
         </button>
       </div>
       {pick && (

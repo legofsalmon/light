@@ -486,7 +486,10 @@ impl Renderer {
                     // keyed by the RESOLVED look (a cue list renders its
                     // step's look, and the ride addresses the look being
                     // edited - the step)
-                    let patch = if st.soft.is_empty() {
+                    // Blind: the main pass renders the rig as STORED, and the
+                    // soft layer shows only in the audition (design #48). One
+                    // boolean, read once per part — the tick does no more work.
+                    let patch = if st.soft.is_empty() || st.blind {
                         None
                     } else {
                         st.soft.get(&(look.id.clone(), part.id.clone()))

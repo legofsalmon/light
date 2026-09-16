@@ -227,7 +227,7 @@ export function CalControls({ fixture }: { fixture: Fixture }): React.ReactEleme
             else c[k] = true;
           }, `${cal?.[k] ? 'clear' : 'set'} ${fixture.name} ${label}`)}
         >
-          {cal?.[k] ? '✓ ' : ''}{label}
+          {cal?.[k] ? <Glyph name="tick" /> : null}{label}
         </button>
       ))}
       {([

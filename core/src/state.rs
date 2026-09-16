@@ -352,6 +352,11 @@ pub struct EngineState {
     /// Where each CC last sat, keyed (channel, number). Runtime only: where a
     /// knob physically is belongs to the room, not to the show.
     pub midi_cc: HashMap<(u8, u8), u8>,
+    /// Blind (design #48, A10): the soft layer — every nudge and every dial
+    /// position — reaches the AUDITION and not the rig. Programming without the
+    /// room watching you do it. Runtime only, off at boot, and cleared by ALL
+    /// STOP and a project switch exactly as the nudges themselves are.
+    pub blind: bool,
     pub learn_target: Option<MidiAction>,
     /// TEST ONLY — a pending effect-clock pin (LIGHT_TEST_CLOCK gated), consumed
     /// by the engine loop before the next tick. Not show state; never persisted.
@@ -391,6 +396,7 @@ impl EngineState {
             soft: HashMap::new(),
             control_live: HashMap::new(),
             midi_cc: HashMap::new(),
+            blind: false,
             learn_target: None,
             gen: 1,
             pending_pin: None,
@@ -1229,6 +1235,7 @@ impl EngineState {
         // frame over the new one would be nobody's idea of frozen.
         self.frozen = false;
         self.frozen_by = None;
+        self.blind = false; // blind belongs to the show it was armed in
         self.project.settings.haze = 0.0;
         self.project.settings.haze_fan = 0.0;
         // A wholesale swap is the biggest project change there is — advance the
@@ -1457,6 +1464,7 @@ impl EngineState {
                 self.overrides.clear();
                 self.soft.clear(); // rides are transient state; panic drops them too
                 self.control_live.clear();
+                self.blind = false; // the panic leaves nothing programmed in secret
                 // Levels are transient too. A fixture that must stay out of
                 // the show is MUTED, and mutes deliberately survive this.
                 self.submasters.clear();
@@ -1477,6 +1485,7 @@ impl EngineState {
                 }
                 self.control_live.clear(); // the fan-out is baked; position spent
             }
+            Command::SetBlind { v } => self.blind = v,
             Command::SoftClear => {
                 self.soft.clear();
                 self.control_live.clear(); // a discarded fan-out has no live position

@@ -46,6 +46,11 @@ export type GlyphName =
   | 'sort-down'
   | 'tick'
   | 'warn'
+  | 'mirror'
+  | 'fold-centre'
+  | 'rotate-cw'
+  | 'rotate-ccw'
+  | 'save'
   | 'spread-order'
   | 'spread-x'
   | 'spread-y'
@@ -84,6 +89,11 @@ const NAMES: Record<GlyphName, string> = {
   'sort-down': 'sorted down',
   tick: 'this one',
   warn: 'needs attention',
+  mirror: 'mirrored — the ends in step, meeting in the middle',
+  'fold-centre': 'the middle leads',
+  'rotate-cw': 'clockwise',
+  'rotate-ccw': 'anticlockwise',
+  save: 'keep it for reuse',
   'spread-order': 'in patch order',
   'spread-x': 'left to right',
   'spread-y': 'bottom to top',
@@ -207,6 +217,40 @@ const SHAPES: Record<GlyphName, React.ReactNode> = {
       <path d="M6 8.9v.05" />
     </>,
   ),
+  // Spread folds. Mirror: the two ends move in step and meet in the middle —
+  // two arrows converging on a centre line.
+  mirror: S(
+    <>
+      <path d="M6 2.4v7.2" />
+      <path d="M1.4 6h3M3.2 4.4 4.8 6 3.2 7.6" />
+      <path d="M10.6 6h-3M8.8 4.4 7.2 6l1.6 1.6" />
+    </>,
+  ),
+  // Centre: the middle leads and the ends trail — a filled middle between two
+  // lighter wings.
+  'fold-centre': F(
+    <>
+      <path d="M6 2.6 9.4 6 6 9.4 2.6 6 6 2.6z" />
+      <rect x="0.8" y="5.3" width="1.3" height="1.4" rx="0.4" opacity="0.45" />
+      <rect x="9.9" y="5.3" width="1.3" height="1.4" rx="0.4" opacity="0.45" />
+    </>,
+  ),
+  // Rotation. One arc and its head; the other direction is the same drawing
+  // mirrored, so the two never disagree about their weight.
+  'rotate-cw': S(
+    <>
+      <path d="M9.6 6.4A3.7 3.7 0 1 1 7.9 2.9" />
+      <path d="M7.4 1.4 9.3 3 7.5 4.7" />
+    </>,
+  ),
+  'rotate-ccw': S(
+    <>
+      <path d="M2.4 6.4A3.7 3.7 0 1 0 4.1 2.9" />
+      <path d="M4.6 1.4 2.7 3 4.5 4.7" />
+    </>,
+  ),
+  // Keep for reuse: a bookmark ribbon — kept, not favourited.
+  save: S(<path d="M3.4 1.8h5.2v8.4L6 8.2l-2.6 2V1.8z" />),
   'sort-up': F(<path d="M6 3.2 9.2 8H2.8L6 3.2z" />),
   'sort-down': F(<path d="M6 8.8 2.8 4h6.4L6 8.8z" />),
   // the desk's pull-out, not a hamburger: a drawer with a handle

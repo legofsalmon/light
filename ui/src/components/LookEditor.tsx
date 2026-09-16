@@ -59,6 +59,7 @@ export function LookEditor() {
   const mutate = useStore((s) => s.mutate);
   const send = useStore((s) => s.send);
   const ride = useStore((s) => s.ride);
+  const blind = useStore((s) => !!s.snap?.blind);
   const setRide = useStore((s) => s.setRide);
   const setView = useStore((s) => s.setView);
   const liveLayers = useStore((s) => s.snap?.layers);
@@ -142,7 +143,7 @@ export function LookEditor() {
             <option value="">use existing look…</option>
             {pool.map((l) => (
               <option key={l.id} value={l.id}>
-                {l.steps?.length ? '⛓ ' : ''}{l.name}
+                {l.steps?.length ? <Glyph name="chain" /> : null}{l.name}
               </option>
             ))}
           </select>
@@ -220,7 +221,7 @@ export function LookEditor() {
           title={`this look sits on ${count.pads} pad${count.pads === 1 ? '' : 's'} across ${count.songs} song${count.songs === 1 ? '' : 's'} — every edit here reaches all of them. Click for a copy of its own`}
           onClick={() => openAt(sharedBtn, setShared)}
         >
-          on {count.pads} pad{count.pads === 1 ? '' : 's'} · {count.songs} song{count.songs === 1 ? '' : 's'} ▾
+          on {count.pads} pad{count.pads === 1 ? '' : 's'} · {count.songs} song{count.songs === 1 ? '' : 's'} <Glyph name="chevron" />
         </button>
 
         <button
@@ -237,6 +238,23 @@ export function LookEditor() {
         >
           nudge
         </button>
+        {/* Blind (design #48, A10): the nudges show in the audition and not on
+            the rig, so a look can be worked on while the room keeps the stored
+            one. Beside nudge because it is nudge's other half — it changes
+            where a nudge goes, not what it is. Not a global mode you switch
+            into: it lives on the nudge, and ALL STOP ends it. */}
+        <button
+          className={`btn small warn ${blind ? 'on' : ''}`}
+          title={
+            blind
+              ? 'BLIND — nudges and dials show in the audition only; the rig keeps the stored look. Click to let them through. ALL STOP ends it.'
+              : 'work blind — nudges and dials show in the audition and not on the rig, so the room keeps the stored look while you shape this one'
+          }
+          aria-pressed={blind}
+          onClick={() => send({ type: 'setBlind', v: !blind })}
+        >
+          blind
+        </button>
 
         <div className="grow" />
         <button
@@ -246,7 +264,7 @@ export function LookEditor() {
           aria-label="more"
           onClick={() => openAt(moreBtn, setMore)}
         >
-          ⋯
+          <Glyph name="more" alone />
         </button>
       </div>
 
@@ -314,7 +332,7 @@ export function LookEditor() {
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .map((l) => (
                   <option key={l.id} value={l.id}>
-                    {l.steps?.length ? '⛓ ' : ''}{l.name}
+                    {l.steps?.length ? <Glyph name="chain" /> : null}{l.name}
                   </option>
                 ))}
             </select>

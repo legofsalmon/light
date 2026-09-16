@@ -110,7 +110,10 @@ function collect(file) {
   const out = [];
   // `ctx` is the surrounding paragraph for a JSX text node — a <b>OSC Output</b>
   // inside "Arena ▸ Preferences ▸ OSC → enable …" is judged with its sentence.
-  const add = (kind, s, node, ctx = '') => { const v = s.replace(/\s+/g, ' ').trim(); if (v.length > 1) out.push({ kind, text: v, ctx, line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1 }); };
+  // Every string, however short. A lone typed icon is ONE character — `✕`, `⋯`
+  // — and a filter of `length > 1` here hid exactly the case the icon rule
+  // exists for. The retired-word rules keep their own length floor below.
+  const add = (kind, s, node, ctx = '') => { const v = s.replace(/\s+/g, ' ').trim(); if (v.length > 0) out.push({ kind, text: v, ctx, line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1 }); };
   const visit = (node) => {
     if (ts.isJsxText(node)) { add('label', node.text, node, node.parent && node.parent.parent ? node.parent.parent.getText(sf) : ''); }
     else if (ts.isJsxAttribute(node) && node.initializer) {
@@ -149,7 +152,7 @@ function collect(file) {
 // A native <option> cannot hold an SVG, so if one ever genuinely needs a mark,
 // say the word instead — that is what `imported · ` does in the rig's profile
 // lists.
-const TYPED_ICON = /[◀▶◁▷▴▵▾▿◂◃■□●○◆◇★☆⚡⛓⚙⚠◎⤨↺↻⇄⇅⇆⇇⇈⇉⇊⇋⇌⇐⇑⇒⇓⇔⇕⇖⇗⇘⇙⇚⇛⇜⇝⇞⇟⇠⇡⇢⇣⇩⇪▲▼✕✖✓✔⏸⏹⏺⏻]|[\u{1F000}-\u{1FAFF}]|[\u{2600}-\u{27BF}]/u;
+const TYPED_ICON = /[◀▶◁▷▴▵▾▿◂◃■□●○◆◇★☆⚡⛓⚙⚠◎⤨↺↻⇄⇅⇆⇇⇈⇉⇊⇋⇌⇐⇑⇒⇓⇔⇕⇖⇗⇘⇙⇚⇛⇜⇝⇞⇟⇠⇡⇢⇣⇩⇪▲▼✕✖✓✔⏸⏹⏺⏻⋯⋮]|[\u{1F000}-\u{1FAFF}]|[\u{2600}-\u{27BF}]/u;
 
 const list = process.argv.includes('--list');
 let hits = 0, seen = 0;
@@ -158,7 +161,8 @@ for (const file of walkFiles(SRC)) {
   for (const { kind, text, ctx, line } of collect(file)) {
     seen++;
     if (list) console.log(`${rel}:${line} [${kind}] ${text}`);
-    const rules = kind === 'tooltip' ? RETIRED : [...RETIRED, ...TOOLTIP_ONLY];
+    // no single character is a retired word; the length floor lives here now
+    const rules = text.length < 2 ? [] : kind === 'tooltip' ? RETIRED : [...RETIRED, ...TOOLTIP_ONLY];
     for (const r of rules) {
       const m = text.match(r.re);
       if (m && !(r.unless && (r.unless.test(text) || r.unless.test(ctx)))) { hits++; console.log(`${rel}:${line} [${kind}] "${text}"\n    ↳ retired "${m[0]}" — say ${r.say}`); }

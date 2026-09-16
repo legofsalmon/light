@@ -69,7 +69,7 @@ function LinkRow({ link, onEdit, onRemove }: {
     <div className="row" style={{ marginBottom: 4, paddingLeft: 16 }}>
       {dangling && (
         <span className="label" title="this link's look, part or effect no longer exists — it is skipped when the control moves" style={{ color: 'var(--color-status-nudge)' }}>
-          ⚠
+          <Glyph name="warn" alone />
         </span>
       )}
       <select
@@ -174,7 +174,7 @@ function BindingRow({ b, onEdit, onRemove }: {
     <div className="row" style={{ marginBottom: 4, paddingLeft: 16 }}>
       {dangling && (
         <span className="label" title="this binding's look, part or effect no longer exists — the pulse skips it" style={{ color: 'var(--color-status-nudge)' }}>
-          ⚠
+          <Glyph name="warn" alone />
         </span>
       )}
       <select
@@ -382,7 +382,7 @@ export function ControlsView(): React.ReactElement {
                 : 'stopped — parameters sit at their base'}
               onClick={() => editMod(m.id, (x) => (x.on = !x.on))}
             >
-              {m.on ? '▶' : '◼'}
+              <Glyph name={m.on ? 'play' : 'stop'} alone />
             </button>
             <TextField
               className="text"

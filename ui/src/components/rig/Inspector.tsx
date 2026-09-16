@@ -250,7 +250,7 @@ export function Inspector(): React.ReactElement {
             title="which way this head's axes actually run, and how far it may swing. Nothing to do with where it points."
             onClick={() => setShowCal((v) => !v)}
           >
-            {showCal ? '▾' : '▸'} calibration{lead.cal ? ' ·' : ''}
+            <Glyph name="chevron" className={showCal ? '' : 'shut'} /> calibration{lead.cal ? ' ·' : ''}
           </button>
         )}
       </div>

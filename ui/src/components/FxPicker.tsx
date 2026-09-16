@@ -8,6 +8,7 @@
 // either way and no new wire state exists to go stale.
 
 import React, { useEffect, useRef, useState } from 'react';
+import { Glyph } from '../glyphs.tsx';
 import type { EffectTarget } from '../../../shared/types.ts';
 import { FX_CATEGORIES, FX_LIBRARY, type FxCategory, type FxFactoryPreset, fxSearch, unusable } from '../fxLibrary.ts';
 import { TARGET_LABEL, WAVE_LABEL } from '../labels.ts';
@@ -106,7 +107,7 @@ export function FxPicker({ capable, anchor, onPreview, onKeep, onCancel }: {
             >
               <span className="fxname">
                 {p.name}
-                {cannot && <span className="label" style={{ color: 'var(--color-status-nudge)' }}> ⚠</span>}
+                {cannot && <span className="label" style={{ color: 'var(--color-status-nudge)' }}> <Glyph name="warn" alone /></span>}
               </span>
               <span className="label">{summarise(p)}</span>
               <span className="prose">{p.description}</span>

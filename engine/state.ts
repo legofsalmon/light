@@ -130,6 +130,10 @@ export class EngineState {
   /** Where each CC last sat, keyed "<channel>:<number>". Runtime only: where a
    *  knob physically is belongs to the room, not to the show. */
   midiCc = new Map<string, number>();
+  /** Blind (design #48, A10): the soft layer — every nudge and every dial
+   *  position — reaches the AUDITION and not the rig. Runtime only, off at boot,
+   *  cleared by ALL STOP and a project switch exactly as the nudges are. */
+  blind = false;
   learnTarget: MidiAction | null = null;
   /** Monotonic project generation. Bumped once per project-changing command by
    *  the transport layer (engine/index.ts) — matching the per-command bump in
@@ -620,6 +624,7 @@ export class EngineState {
     // frame over the new one would be nobody's idea of frozen.
     this.frozen = false;
     this.frozenBy = null;
+    this.blind = false; // blind belongs to the show it was armed in
     this.project.settings.haze = 0;
     this.project.settings.hazeFan = 0;
     this.onChange?.();

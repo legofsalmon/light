@@ -639,7 +639,7 @@ function RowMenu({ fixtureId, name }: { fixtureId: string; name: string }): Reac
   const mutate = useStore((s) => s.mutate);
   return (
     <>
-      <button ref={pop.btnRef} className="livebtn" title={`what else can be done to ${name}`} onClick={pop.toggle}>⋯</button>
+      <button ref={pop.btnRef} className="livebtn" title={`what else can be done to ${name}`} onClick={pop.toggle}><Glyph name="more" alone /></button>
       {pop.open && (
         <>
           <div className="modalveil" style={{ background: 'transparent' }} onPointerDown={() => pop.setOpen(false)} />

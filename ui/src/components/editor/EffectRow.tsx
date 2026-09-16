@@ -159,7 +159,7 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
       </select>
       {targetInactive && (
         <span className="label" title="nothing in this group takes this parameter — it does nothing here until the effect is retargeted or dropped on a group that has it" style={{ color: 'var(--color-status-nudge)' }}>
-          ⚠
+          <Glyph name="warn" alone />
         </span>
       )}
       {fx.target === 'shape' ? (
@@ -227,7 +227,7 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
             title={fx.shapeCcw ? 'tracing anticlockwise — click for clockwise' : 'tracing clockwise — click for anticlockwise'}
             onClick={() => onEdit((x) => (x.shapeCcw = !x.shapeCcw))}
           >
-            {fx.shapeCcw ? '↺' : '↻'}
+            <Glyph name={fx.shapeCcw ? 'rotate-ccw' : 'rotate-cw'} alone />
           </button>
         </>
       )}
@@ -235,7 +235,7 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
       {/* wet/dry: how much of the effect lands. 100% is full effect. */}
       <Fader label="mix" width={104} value={soft('mix') ?? fx.mix} nudged={soft('mix') !== undefined} def={1} onChange={(v) => onField('mix', v, (x) => (x.mix = v))} fmt={fmtPct} variant="dim" />
       <DialMenu lookId={lookId} partId={partId} effectId={fx.id} fields={rowFields} />
-      <button className="btn small ghost" title="save this effect to the FX pool as a reusable preset" onClick={onSaveToPool}>☆</button>
+      <button className="btn small ghost" title="save this effect to the FX pool as a reusable preset" onClick={onSaveToPool}><Glyph name="save" alone /></button>
       <button title="remove this effect" className="btn small ghost" onClick={onRemove}><Glyph name="clear" alone /></button>
     </div>
 
@@ -255,7 +255,7 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
       }}
       onClick={() => toggleSpread(fx.id)}
     >
-      <span className="caret">{open ? '▾' : '▸'}</span>
+      <span className="caret"><Glyph name="chevron" className={open ? '' : 'shut'} /></span>
       {spreadWords(fx)}
     </button>
 
@@ -278,21 +278,21 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
           title="mirror — ends in phase, sweeping toward the centre; a folded pan sweep counter-rotates"
           onClick={() => onEdit((x) => (x.fold = x.fold === 'mirror' ? 'none' : 'mirror'))}
         >
-          ⟷
+          <Glyph name="mirror" alone />
         </button>
         <button
           className={`btn small ${fx.fold === 'centre' ? 'on' : 'ghost'}`}
           title="centre — the middle leads, the ends trail"
           onClick={() => onEdit((x) => (x.fold = x.fold === 'centre' ? 'none' : 'centre'))}
         >
-          ◇
+          <Glyph name="fold-centre" alone />
         </button>
         <button
           className={`btn small ${fx.reverse ? 'on' : 'ghost'}`}
           title="run the spread backwards"
           onClick={() => onEdit((x) => (x.reverse = !x.reverse))}
         >
-          ⇄
+          <Glyph name="swap" alone />
         </button>
         <span className="label">tile</span>
         <IntInput
@@ -353,7 +353,7 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
             title={`re-roll the scatter (seed ${fx.seed})`}
             onClick={() => onEdit((x) => (x.seed = Math.floor(Math.random() * 0x7fffffff)))}
           >
-            ↻
+            <Glyph name="rotate-cw" alone />
           </button>
         )}
       </div>

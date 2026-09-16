@@ -8,6 +8,7 @@
 // it: what is folded away still says it is there.
 
 import React, { useState } from 'react';
+import { Glyph } from '../../glyphs.tsx';
 import type { Effect, LookPart, SoftField, StrobeMode } from '../../../../shared/types.ts';
 import { uid } from '../../../../shared/types.ts';
 import { DERBY_MACROS, hsvToRgb, rgbHex } from '../../../../shared/color.ts';
@@ -454,7 +455,7 @@ export function PartEditor({ lookId, part, ride }: { lookId: string; part: LookP
                 like it forgot zoom, which is exactly how it was reported. */}
             {BEAM_PARAMS.every((k) => !beamCaps[k]) && caps.deadBeam && (
               <div className="row">
-                <span className="label" style={{ color: 'var(--warn)' }}>⚠</span>
+                <span className="label" style={{ color: 'var(--warn)' }}><Glyph name="warn" alone /></span>
                 <span className="prose">
                   This group's fixtures list zoom, focus, beam size, soften or warmth channels that their
                   profile does not drive — re-import their GDTF in the Fixtures tab to get

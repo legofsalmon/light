@@ -1264,8 +1264,12 @@ fn preview_heads(
     let saved_live = std::mem::take(&mut st.live);
     let saved_master = st.master;
     let saved_blackout = st.blackout;
+    // The audition is where blind nudges ARE seen, so it renders them whatever
+    // the flag says; the main pass is the one that skips them.
+    let saved_blind = st.blind;
     st.master = 1.0;
     st.blackout = false;
+    st.blind = false;
     st.live.insert(
         layer_id,
         crate::state::LayerLive {
@@ -1283,6 +1287,7 @@ fn preview_heads(
     st.live = saved_live;
     st.master = saved_master;
     st.blackout = saved_blackout;
+    st.blind = saved_blind;
     Some(res.heads)
 }
 
@@ -1318,6 +1323,7 @@ fn build_snapshot(
         }),
         midi_port: own_midi_port.map(str::to_string),
         // Keyed the way the browser keys its own: "<channel>:<number>".
+        blind: state.blind,
         midi_cc: state
             .midi_cc
             .iter()

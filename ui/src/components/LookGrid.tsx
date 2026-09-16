@@ -1432,7 +1432,7 @@ function ControlRow() {
             }
           >
             <div className="ctlname">
-              {(dangling || deadLinks > 0) && <span className="ctlwarn">⚠ </span>}
+              {(dangling || deadLinks > 0) && <span className="ctlwarn"><Glyph name="warn" alone /> </span>}
               {c.name}
             </div>
             <Fader

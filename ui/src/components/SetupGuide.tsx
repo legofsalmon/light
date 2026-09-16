@@ -136,7 +136,7 @@ export function SetupGuide(): React.ReactElement | null {
             title={`${step.blurb}${done ? ' — done: this is read off the show, not something you tick.' : ''}`}
             onClick={step.go}
           >
-            {done ? '✓' : i + 1} {step.title}
+            {done ? <Glyph name="tick" alone /> : i + 1} {step.title}
           </button>
         ))}
       </div>

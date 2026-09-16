@@ -56,7 +56,7 @@ function TransmitBanner() {
   if (!configured) {
     return (
       <div className="row" style={{ gap: 8 }}>
-        <span className="label" style={{ color: 'var(--warn)' }}>⚠</span>
+        <span className="label" style={{ color: 'var(--warn)' }}><Glyph name="warn" alone /></span>
         <span className="prose">
           No universe is set up to send, so nothing can reach the rig. Turn on Art-Net or
           sACN below for the universes your nodes are listening to, then go live.

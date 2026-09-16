@@ -631,7 +631,7 @@ function BottomBar({ locked }: { locked: boolean }) {
               }
               onClick={() => toggleLatch()}
             >
-              edit {latched ? '●' : '○'}
+              edit <i className={`lamp toggle ${latched ? 'lit' : ''}`} />
             </button>
           )}
           <button

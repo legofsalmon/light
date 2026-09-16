@@ -2274,5 +2274,17 @@ await new Promise<void>((resolve) => {
   check('knob: a note leaves nothing behind', st.midiCc.size === 1);
 }
 
+// --- blind is cleared by what ends a programming session (design #48) --------
+// The Rust twin is `blind_is_cleared_by_all_stop_and_a_project_switch`.
+{
+  const st = new EngineState(sanitizeProject(demoProject())!);
+  st.blind = true;
+  st.replaceProject(sanitizeProject(demoProject())!);
+  // read through a function so TypeScript does not narrow it to the `true`
+  // it was just assigned — the whole point is that replaceProject changed it
+  const blindNow = (): boolean => st.blind;
+  check('blind: a project switch clears it', !blindNow());
+}
+
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

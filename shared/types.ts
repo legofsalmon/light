@@ -830,6 +830,9 @@ export type Snapshot = {
    *  0-based as it arrives on the wire (design #52, A35). Absent until a knob
    *  moves. */
   midiCc?: Record<string, number>;
+  /** Blind is on: nudges and dials reach the audition, not the rig. Absent
+   *  while off. */
+  blind?: boolean;
 };
 
 // The snapshot is IDENTICAL for every client, so the engine serialises it once
@@ -945,6 +948,8 @@ export type Command =
   | { type: 'softCommit' }
   /** Discard: drop every soft value, stored data untouched */
   | { type: 'softClear' }
+  /** Blind (design #48): nudges and dials reach the audition, not the rig. */
+  | { type: 'setBlind'; v: boolean }
   /** move a Named Control: resolves through the soft layer per link */
   | { type: 'setControl'; controlId: string; value: number }
   | { type: 'midi'; status: number; d1: number; d2: number }

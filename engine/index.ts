@@ -229,9 +229,13 @@ function previewHeads(t: number): { previewHeads: HeadSnap[] } | null {
   const savedLive = state.live;
   const savedMaster = state.master;
   const savedBlackout = state.blackout;
+  // The audition is where blind nudges ARE seen, so it renders them whatever
+  // the flag says; the main pass is the one that skips them.
+  const savedBlind = state.blind;
   state.live = new Map();
   state.master = 1;
   state.blackout = false;
+  state.blind = false;
   state.live.set(layer.id, {
     lookId,
     prevId: null,
@@ -248,6 +252,7 @@ function previewHeads(t: number): { previewHeads: HeadSnap[] } | null {
     state.live = savedLive;
     state.master = savedMaster;
     state.blackout = savedBlackout;
+    state.blind = savedBlind;
   }
 }
 const artnet = new ArtnetOut();
@@ -540,6 +545,7 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       state.overrides.clear();
       state.soft.clear(); // rides are transient state; panic drops them too
       state.controlLive.clear();
+      state.blind = false; // the panic leaves nothing programmed in secret
       // Levels are transient too. A fixture that must stay out of the show is
       // MUTED, and mutes deliberately survive this.
       state.submasters.clear();
@@ -562,6 +568,9 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
     case 'softCommit':
       state.softCommit(); // onChange fires inside when anything was written
       state.controlLive.clear(); // the fan-out is baked; the position is spent
+      break;
+    case 'setBlind':
+      state.blind = !!cmd.v;
       break;
     case 'softClear':
       state.soft.clear();
@@ -889,6 +898,7 @@ function loopBody(): void {
       layers: res.layers,
       ...(state.muted.size > 0 ? { muted: [...state.muted] } : {}),
       ...(state.midiCc.size > 0 ? { midiCc: Object.fromEntries(state.midiCc) } : {}),
+      ...(state.blind ? { blind: true } : {}),
       ...(state.soft.size > 0 ? { soft: state.softEntries() } : {}),
       ...(state.controlLive.size > 0 ? { controls: state.controlEntries() } : {}),
       ...(state.submasters.size > 0 ? { submasters: state.submasterEntries() } : {}),

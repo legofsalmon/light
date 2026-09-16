@@ -1974,3 +1974,11 @@ button.warnchip { background: none; cursor: pointer; }
   max-width: 45%;
 }
 .lookgrid.narrow .fromsong, .app.remote .fromsong { display: none; }
+/* A disclosure that is shut points sideways: the same chevron, a quarter turn,
+   so open and shut are one drawing and never two weights. */
+.glyph.shut { transform: rotate(-90deg); }
+/* A lamp that says on or off by itself (the remote's edit latch) dims when off.
+   Scoped to `.toggle`: every other lamp — a node's health, a muted fixture —
+   is lit by the colour it carries and must not be dimmed by this. */
+.lamp.toggle { opacity: var(--opacity-disabled); }
+.lamp.toggle.lit { opacity: 1; }

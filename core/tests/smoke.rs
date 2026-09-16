@@ -831,3 +831,18 @@ fn every_cc_leaves_its_position_behind_mapped_or_not() {
     st.apply_midi(0x90, 7, 127, 2.0);
     assert_eq!(st.midi_cc.len(), 1, "notes leave nothing behind");
 }
+
+/// Blind (design #48): nudges reach the audition, not the rig. The flag is
+/// runtime only and must not outlive the thing that ends a programming session.
+#[test]
+fn blind_is_cleared_by_all_stop_and_a_project_switch() {
+    let mut st = EngineState::new(demo_project(), 0.0);
+    st.handle_command(Command::SetBlind { v: true }, 0.0, None);
+    assert!(st.blind);
+    st.handle_command(Command::AllStop, 1.0, None);
+    assert!(!st.blind, "the panic leaves nothing programmed in secret");
+
+    st.handle_command(Command::SetBlind { v: true }, 2.0, None);
+    st.replace_project(demo_project());
+    assert!(!st.blind, "blind belongs to the show it was armed in");
+}
