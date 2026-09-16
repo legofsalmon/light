@@ -214,6 +214,12 @@ export function PrevizPanel({ preview = true }: { preview?: boolean }) {
     const layer = s.project.layers.find((l) => l.id === s.sel!.layerId);
     const selLook = layer?.cells[s.sel!.col] ?? null;
     if (!selLook) return false; // an empty pad has nothing to audition
+    // A flash look is on the rig only while the pad is held, so following the
+    // live state would mount the pane on every release and unmount it on every
+    // press — the band expanding and contracting with each hit. A momentary
+    // look is one the stage does NOT show the rest of the time: audition it
+    // throughout, and put up with the duplicate for the length of a press.
+    if (Object.hasOwn(s.project.looks, selLook) && s.project.looks[selLook]!.flash) return true;
     const live = s.snap?.layers.find((l) => l.id === s.sel!.layerId);
     return (live?.lookId ?? null) !== selLook;
   });
