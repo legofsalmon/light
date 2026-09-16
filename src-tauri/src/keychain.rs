@@ -243,21 +243,49 @@ fn forget_with(modern: Option<&dyn Store>, legacy: &dyn Store, service: &str, ac
     }
 }
 
+/// `Err` in a test build unless `LIGHT_KEYCHAIN_LIVE` is set — the same opt-in
+/// [`tests::live_round_trip`] takes, and the seal every other test runs behind.
+///
+/// Not squeamishness about the developer's keychain. The login keychain scopes
+/// an item to the exact binary that wrote it (see the module note above), and
+/// a rebuilt test binary is a different binary: the read stops on an "allow
+/// access" dialog and the suite blocks behind it at zero CPU, forever, until
+/// somebody clicks. A suite that can hang on a dialog is a suite that stops
+/// being run. Everything worth asserting about this module is the policy in
+/// `load_with`/`store_with`/`forget_with`, which the tests drive through
+/// [`Store`] fakes; only the backend probe needs a real keychain, and only
+/// `live_round_trip` exercises it.
+#[cfg(test)]
+fn sealed() -> Result<(), Error> {
+    match std::env::var_os("LIGHT_KEYCHAIN_LIVE") {
+        Some(_) => Ok(()),
+        None => Err("the keychain is sealed in tests — set LIGHT_KEYCHAIN_LIVE=1 for the real one".into()),
+    }
+}
+
+#[cfg(not(test))]
+fn sealed() -> Result<(), Error> {
+    Ok(())
+}
+
 /// Read a secret. `None` for "nothing stored" and for a keychain that would
 /// not answer — the caller cannot tell the two apart, and should not try.
 pub fn load(service: &str, account: &str) -> Option<String> {
+    sealed().ok()?;
     let (modern, legacy) = stores();
     load_with(modern.as_deref(), legacy.as_ref(), service, account)
 }
 
 /// Write a secret, creating or replacing.
 pub fn store(service: &str, account: &str, value: &str) -> Result<(), Error> {
+    sealed()?;
     let (modern, legacy) = stores();
     store_with(modern.as_deref(), legacy.as_ref(), service, account, value)
 }
 
 /// Remove a secret from wherever it is; absent is fine.
 pub fn forget(service: &str, account: &str) -> Result<(), Error> {
+    sealed()?;
     let (modern, legacy) = stores();
     forget_with(modern.as_deref(), legacy.as_ref(), service, account)
 }
@@ -390,6 +418,21 @@ mod tests {
         for key in ["com.apple.security.cs.allow-jit"] {
             assert!(base.contains(key) && with_group.contains(key), "{key} must be in both");
         }
+    }
+
+    /// The seal holds unless the live test was asked for. Without this, an
+    /// edit could quietly put the suite back on the real keychain, where it
+    /// does not fail — it stops, on a dialog, until somebody clicks.
+    #[test]
+    fn the_real_keychain_is_sealed_unless_it_is_asked_for() {
+        let live = std::env::var_os("LIGHT_KEYCHAIN_LIVE").is_some();
+        assert_eq!(sealed().is_ok(), live, "the seal disagrees with LIGHT_KEYCHAIN_LIVE");
+        if live {
+            return; // live_round_trip is the test for that case
+        }
+        assert_eq!(load(S, "sealed"), None, "a sealed read must not reach the keychain");
+        assert!(store(S, "sealed", "v").is_err(), "a sealed write must fail loudly, not pretend");
+        assert!(forget(S, "sealed").is_err());
     }
 
     /// The real keychain on this Mac, whichever backend the probe picks —
