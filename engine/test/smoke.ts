@@ -15,7 +15,7 @@ import type { ShareList } from '../../shared/gdtfShare.ts';
 import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, isStaleProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
 import { COMPILER_VERSION } from '../../shared/types.ts';
 import type { EffectTarget, MidiMapping, Snapshot } from '../../shared/types.ts';
-import { APC40_MK2, APC_COLS, APC_LAYER_ROWS, APC_MINI_MK2, SURFACES, computeLeds, nearest } from '../../ui/src/surfaces.ts';
+import { APC40_COLUMN_ROW, APC40_MK2, APC_COLS, APC_LAYER_ROWS, APC_MINI_MK2, SURFACES, clearAddresses, computeLeds, ledChannel, ledKey, ledNote, nearest } from '../../ui/src/surfaces.ts';
 import { CONTROLLER_PRESETS, apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
 import { lookFace, lookSwatch } from '../../ui/src/lookColors.ts';
 import { describeLearned } from '../../ui/src/labels.ts';
@@ -242,66 +242,91 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
   // idle: no layer buttons, no blackout blink, everything on channel 0 for the
   // APC40, every velocity a legal palette index
   const big = computeLeds(p, idle, APC40_MK2);
-  check('surface: no layer button lit while idle', ![82, 83, 84, 85, 86].some((n) => big.has(n)));
+  check('surface: no layer button lit while idle',
+    ![82, 83, 84, 85, 86].some((n) => big.has(ledKey(0, n))));
+  // The APC40 paints the GRID on channel 0 — but not the CLIP STOP row, where
+  // the channel is the track, so "everything on channel 0" is no longer the
+  // whole truth and saying it that way would have meant lighting the cue row on
+  // the wrong buttons. What still holds: a button is sent on the channel it is
+  // addressed by, with a legal velocity.
   check(
-    'surface: APC40 paints everything on channel 0 with a legal velocity',
-    [...big.values()].every(([ch, v]) => ch === 0 && v > 0 && v < 128),
+    'surface: the APC40 paints the grid on channel 0 and CLIP STOP on its track channel',
+    [...big.entries()].every(([key, [ch, v]]) => {
+      if (v <= 0 || v >= 128) return false;
+      if (ch !== ledChannel(key)) return false; // sent on the channel it is addressed by
+      return ledNote(key) === APC40_COLUMN_ROW.note
+        ? APC40_COLUMN_ROW.channels.includes(ledChannel(key))
+        : ledChannel(key) === 0;
+    }),
   );
 
   // the same decision, two encodings
   const bigLive = computeLeds(p, playing, APC40_MK2);
   const miniLive = computeLeds(p, playing, APC_MINI_MK2);
+  const bigPad = (n: number) => bigLive.get(ledKey(0, n))!;
+  const miniPad = (n: number) => miniLive.get(ledKey(0, n))!;
   check('surface: APC40 separates playing from available by palette index',
-    bigLive.get(32)![0] === 0 && bigLive.get(33)![0] === 0 && bigLive.get(32)![1] !== bigLive.get(33)![1],
-    JSON.stringify([bigLive.get(32), bigLive.get(33)]));
+    bigPad(32)[0] === 0 && bigPad(33)[0] === 0 && bigPad(32)[1] !== bigPad(33)[1],
+    JSON.stringify([bigPad(32), bigPad(33)]));
   check('surface: the mini separates them by channel, not colour',
-    miniLive.get(56)![1] === miniLive.get(57)![1] && miniLive.get(56)![0] === 6 && miniLive.get(57)![0] === 1,
-    JSON.stringify([miniLive.get(56), miniLive.get(57)]));
-  check('surface: the mini uses the full-brightness hue', miniLive.get(56)![1] === bigLive.get(32)![1]);
+    miniPad(56)[1] === miniPad(57)[1] && miniPad(56)[0] === 6 && miniPad(57)[0] === 1,
+    JSON.stringify([miniPad(56), miniPad(57)]));
+  check('surface: the mini uses the full-brightness hue', miniPad(56)[1] === bigPad(32)[1]);
 
   // the channel alone can be the whole change, which is why the diff holds it
   const miniIdle = computeLeds(p, idle, APC_MINI_MK2);
+  // ...and it stays ONE key while it does: the address identifies the button,
+  // the brightness channel rides in the value.
   check('surface: playing changes only the channel on the mini',
-    miniIdle.get(56)![1] === miniLive.get(56)![1] && miniIdle.get(56)![0] !== miniLive.get(56)![0],
-    JSON.stringify([miniIdle.get(56), miniLive.get(56)]));
+    miniIdle.get(ledKey(0, 56))![1] === miniPad(56)[1]
+      && miniIdle.get(ledKey(0, 56))![0] !== miniPad(56)[0],
+    JSON.stringify([miniIdle.get(ledKey(0, 56)), miniPad(56)]));
 
   // a live column holding a different look still reports the stage
   const other = Object.keys(p.looks)[1];
   const repointed = surfaceProject();
   repointed.layers[repointed.layers.length - 1].cells[0] = other;
-  const stale = computeLeds(repointed, playing, APC40_MK2).get(32);
+  const stale = computeLeds(repointed, playing, APC40_MK2).get(ledKey(0, 32));
   check('surface: a re-pointed live pad still reports what is on stage',
-    JSON.stringify(stale) === JSON.stringify(bigLive.get(32)), JSON.stringify(stale));
+    JSON.stringify(stale) === JSON.stringify(bigPad(32)), JSON.stringify(stale));
 
   // the APC40's bottom row belongs to the control row
   const fifth = surfaceProject();
   fifth.layers.unshift({ ...fifth.layers[0], id: 'layer-fifth', cells: [lookId] } as never);
   const capped = computeLeds(fifth, idle, APC40_MK2);
   check('surface: a fifth layer never steals the control row',
-    ![0, 1, 2, 3, 4, 5, 6, 7].some((n) => capped.has(n)));
+    ![0, 1, 2, 3, 4, 5, 6, 7].some((n) => capped.has(ledKey(0, n))));
 
-  // the column row reports the whole column (mini only)
+  // The column row reports the whole column. BOTH surfaces have one now — the
+  // mini's bottom pad row and the APC40's CLIP STOP row — addressed differently
+  // and encoded differently, from one rule.
   const colProject = surfaceProject();
   for (const l of colProject.layers) l.cells[0] = lookId;
-  const held = computeLeds(colProject, idle, APC_MINI_MK2).get(0);
-  const allUp = computeLeds(
-    colProject,
-    snapOf(colProject.layers.map((l) => ({ id: l.id, lookId, col: 0 }))),
-    APC_MINI_MK2,
-  ).get(0);
-  const partial = computeLeds(
-    colProject,
-    snapOf(colProject.layers.slice(1).map((l) => ({ id: l.id, lookId, col: 0 }))),
-    APC_MINI_MK2,
-  ).get(0);
+  const colSnap = (n: number) =>
+    snapOf(colProject.layers.slice(colProject.layers.length - n).map((l) => ({ id: l.id, lookId, col: 0 })));
+  const miniCol = (snap: Snapshot) => computeLeds(colProject, snap, APC_MINI_MK2).get(ledKey(0, 0));
+  const clipStop = (snap: Snapshot, col: number) =>
+    computeLeds(colProject, snap, APC40_MK2).get(ledKey(APC40_COLUMN_ROW.channels[col], APC40_COLUMN_ROW.note));
+  const up = colSnap(colProject.layers.length);
+  const held = miniCol(idle);
   check('surface: a column holding content reads dim', JSON.stringify(held) === JSON.stringify([1, 3]), JSON.stringify(held));
-  check('surface: the whole column up reads bright', JSON.stringify(allUp) === JSON.stringify([6, 3]), JSON.stringify(allUp));
-  check('surface: a partly-up column reads as not up', JSON.stringify(partial) === JSON.stringify(held), JSON.stringify(partial));
-  check('surface: the APC40 has no column row', !computeLeds(colProject, idle, APC40_MK2).has(0));
+  check('surface: the whole column up reads bright',
+    JSON.stringify(miniCol(up)) === JSON.stringify([6, 3]), JSON.stringify(miniCol(up)));
+  check('surface: a partly-up column reads as not up',
+    JSON.stringify(miniCol(colSnap(colProject.layers.length - 1))) === JSON.stringify(held));
+  // the APC40's row is single-colour, so the same rule says the half it can:
+  // lit while the column is on stage, dark otherwise
+  check('surface: CLIP STOP is dark until the column is on stage', clipStop(idle, 0) === undefined);
+  check('surface: CLIP STOP lights on the column that is up',
+    JSON.stringify(clipStop(up, 0)) === JSON.stringify([0, 1]), JSON.stringify(clipStop(up, 0)));
+  check('surface: and only that column — the eight buttons differ by channel, not note',
+    [1, 2, 3, 4, 5, 6, 7].every((col) => clipStop(up, col) === undefined));
+  check('surface: a partly-up column leaves CLIP STOP dark',
+    clipStop(colSnap(colProject.layers.length - 1), 0) === undefined);
 
   // tap pulses once a beat and is never skipped
   for (const surface of SURFACES) {
-    const lit = (beat: number) => computeLeds(p, snapOf([], { beat }), surface).has(surface.tap);
+    const lit = (beat: number) => computeLeds(p, snapOf([], { beat }), surface).has(ledKey(0, surface.tap));
     check(`surface: ${surface.name} tap lights on the beat`, lit(0) && lit(4.05));
     check(`surface: ${surface.name} tap is dark between beats`, !lit(0.5) && !lit(0.99));
   }
@@ -472,9 +497,14 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
   const loud = snapOf(busy.layers.map((l) => ({ id: l.id, lookId, col: 0 })), { beat: 0, blackout: true });
   for (const surface of SURFACES) {
     const leds = computeLeds(busy, loud, surface);
-    check(`surface: ${surface.name} exercises tap and blackout`, leds.has(surface.tap) && leds.has(surface.blackout));
-    const stray = [...leds.keys()].filter((n) => !surface.clear.some(([a, b]) => n >= a && n <= b));
-    check(`surface: ${surface.name} lights only notes it blanks on attach`, stray.length === 0, `stray ${stray.join(',')}`);
+    check(`surface: ${surface.name} exercises tap and blackout`,
+      leds.has(ledKey(0, surface.tap)) && leds.has(ledKey(0, surface.blackout)));
+    // by ADDRESS, not by note: the CLIP STOP row is eight buttons the old
+    // channel-0 note ranges could not have reached at all
+    const blanked = new Set(clearAddresses(surface).map(([ch, n]) => ledKey(ch, n)));
+    const stray = [...leds.keys()].filter((key) => !blanked.has(key));
+    check(`surface: ${surface.name} lights only buttons it blanks on attach`, stray.length === 0,
+      `stray ${stray.map((k) => `ch${ledChannel(k)} note${ledNote(k)}`).join(',')}`);
   }
 }
 

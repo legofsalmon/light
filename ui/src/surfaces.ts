@@ -1,6 +1,7 @@
 // What the LEDs on an Akai control surface should say, with no connection and
 // no store: the surface table, the palette, and the map from engine state to
-// note → (channel, velocity). Split out of apcFeedback.ts so the Node suite can
+// (channel, note) → (channel, velocity). Split out of apcFeedback.ts so the
+// Node suite can
 // test the same function the browser runs and hold it against the Rust mirror
 // (core/src/apc.rs) — the two have to paint the same picture, and until this
 // split nothing checked that.
@@ -20,9 +21,10 @@
 // The APC40's grid is 5 x 8 and the screen is laid out to match it exactly:
 // FOUR layer rows plus the control row underneath them. That is why the layer
 // cap below is 4 and not 5 — the fifth row belongs to the controls, and a fifth
-// layer would silently steal it. The mini's 8 x 8 has room for the column row
-// as well. (An even earlier layout put cue columns on the APC40's bottom row;
-// don't "restore" either of those here.)
+// layer would silently steal it. The column row lives OUTSIDE that grid on this
+// surface: the CLIP STOP buttons underneath it, one note on eight channels. The
+// mini's 8 x 8 has room for its column row inside the grid. (An even earlier
+// layout put cue columns on the APC40's bottom PAD row; don't "restore" that.)
 //
 // Single-colour buttons are velocity 0 off / 1 on / 2 blink on both. Velocity 2
 // is the HARDWARE blink at a fixed rate, which is why the tap pulse is driven
@@ -158,7 +160,36 @@ export function nearest(hex: string): { bright: number; dim: number } {
   return best;
 }
 
-/** note → [channel, velocity]; everything not present = off.
+/** One button's ADDRESS as a single map key. The APC40's eight CLIP STOP
+ *  buttons all carry note 52 and differ only by channel, so the note alone
+ *  stopped being an identity the moment that row was lit. Mirrors the
+ *  `(u8, u8)` key in core/src/apc.rs. */
+export const ledKey = (channel: number, note: number): number => channel * 128 + note;
+export const ledChannel = (key: number): number => Math.floor(key / 128);
+export const ledNote = (key: number): number => key % 128;
+
+/** Every (channel, note) the attach has to blank, so that nothing the map can
+ *  light is left burning after LIGHT quits. The ranges are channel 0 — a
+ *  velocity-0 note clears a pad whatever channel lit it — plus the column row,
+ *  whose channel IS its address and which no channel-0 message would reach.
+ *  Mirror of `clear_addresses` in core/src/apc.rs. */
+export function clearAddresses(s: Surface): [number, number][] {
+  const out: [number, number][] = [];
+  for (const [from, to] of s.clear) for (let n = from; n <= to; n++) out.push([0, n]);
+  if (s.columnRow) for (const ch of s.columnRow.channels) out.push([ch, s.columnRow.note]);
+  return out;
+}
+
+/** (channel, note) → [channel, velocity]; everything not present = off.
+ *
+ *  The KEY is the button's address; the VALUE still carries the channel the
+ *  message goes out on, and the two are not always the same number. On the mini
+ *  the channel is the BRIGHTNESS, so one button changes channel while staying
+ *  one button — folding that into the key would turn every brightness change
+ *  into an off on the old channel and an on on the new one. On the APC40's
+ *  CLIP STOP row the channel is the TRACK, so there the address and the send
+ *  channel are the same thing.
+ *
  *  Mirror of `compute_leds` in core/src/apc.rs. */
 export function computeLeds(project: Project, snap: Snapshot | null, s: Surface): Map<number, [number, number]> {
   const leds = new Map<number, [number, number]>();
@@ -188,24 +219,31 @@ export function computeLeds(project: Project, snap: Snapshot | null, s: Surface)
           ? project.looks[live.lookId] ?? null
           : null;
       leds.set(
-        base + col,
+        ledKey(0, base + col),
         stalePlaying
           ? pad(s, nearest(lookSwatch(stalePlaying, project.looks)[0] ?? '#666666'), true)
           : pad(s, pal, active),
       );
     }
     // layer button (single-colour): on when the layer has something to clear
-    if (live?.lookId) leds.set(s.sceneBase + row, [0, 1]);
+    if (live?.lookId) leds.set(ledKey(0, s.sceneBase + row), [0, 1]);
   });
 
   // The column row, where the surface has one. A column button fires every
-  // layer at once, so it reports the same thing back: lit dim while the column
-  // holds anything, bright while every layer holding something there is
-  // actually playing it — the whole column up, which is exactly what pressing
-  // it does. Change one pad afterwards and it drops to dim, which is true: the
-  // column is no longer what is on stage. White rather than a look colour,
-  // because a column holds one look per layer.
-  if (s.columnBase !== undefined) {
+  // layer at once, so it reports the same thing back: it is bright while every
+  // layer holding something there is actually playing it — the whole column up,
+  // which is exactly what pressing it does. Change one pad afterwards and it
+  // drops, which is true: the column is no longer what is on stage.
+  //
+  // One rule, two encodings, as everywhere else on these surfaces. The mini's
+  // column row is eight RGB PADS, so it can say both halves: dim while the
+  // column merely holds something, bright while it is up — white rather than a
+  // look colour, because a column holds one look per layer. The APC40's CLIP
+  // STOP row is eight SINGLE-COLOUR buttons (0 off / 1 on / 2 blink), so it
+  // says the half that matters with the house lights down: lit while the column
+  // is on stage. The grid above it already shows which columns hold content,
+  // and a blink means "armed" on this surface — blackout owns that.
+  if (s.columnBase !== undefined || s.columnRow) {
     for (let col = 0; col < Math.min(APC_COLS, project.columns.length); col++) {
       const holders = project.layers.filter((l) => l.cells[col]);
       if (holders.length === 0) continue;
@@ -213,19 +251,24 @@ export function computeLeds(project: Project, snap: Snapshot | null, s: Surface)
         const live = liveOf(l.id);
         return live?.col === col && live?.lookId === l.cells[col];
       });
-      leds.set(s.columnBase + col, pad(s, WHITE, allUp));
+      if (s.columnRow) {
+        const ch = s.columnRow.channels[col];
+        if (ch !== undefined && allUp) leds.set(ledKey(ch, s.columnRow.note), [ch, 1]);
+      } else if (s.columnBase !== undefined) {
+        leds.set(ledKey(0, s.columnBase + col), pad(s, WHITE, allUp));
+      }
     }
   }
 
   // stop-all-clips = blackout: blink while armed
-  if (snap?.blackout) leds.set(s.blackout, [0, 2]);
+  if (snap?.blackout) leds.set(ledKey(0, s.blackout), [0, 2]);
 
   // Tap pulses on the beat rather than using the hardware blink, which runs at
   // its own fixed rate and would sit there contradicting the tempo. A quarter
   // of a beat is longer than the 66 ms update period at any tempo a rig runs
   // at, so no beat is skipped.
   const beat = snap?.beat ?? 0;
-  if (beat - Math.floor(beat) < 0.25) leds.set(s.tap, [0, 1]);
+  if (beat - Math.floor(beat) < 0.25) leds.set(ledKey(0, s.tap), [0, 1]);
 
   return leds;
 }
