@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import WebSocket from 'ws';
 import { defaultProject } from '../defaultProject.ts';
+import { BOOT_CASES, bootNotices } from './boot.ts';
 import type { Command, ControlLink, Effect, FxPreset, PartParams, Project, Snapshot } from '../../shared/types.ts';
 import { COMPILER_VERSION } from '../../shared/types.ts';
 
@@ -201,6 +202,30 @@ async function main(): Promise<void> {
   if (!fs.existsSync(RUST_BIN)) {
     console.error('rust engine not built — run: cargo build -p light-core');
     process.exit(1);
+  }
+
+  // --- Boot: both engines warn about a show they could not read, and neither
+  // about a first run. The warning is decided at boot and heard on connect, so
+  // each case boots a fresh engine of each kind on its own scratch directory and
+  // compares the greetings whole — before the main pair starts, so nothing here
+  // runs beside the timed checks. Left out on purpose: a corrupt NAMED show
+  // beside a readable default, where the engines' slug fallbacks differ (see
+  // load_project in core/src/persist.rs) and Rust opens the default instead.
+  for (const [i, row] of BOOT_CASES.entries()) {
+    const greet = async (engine: 'node' | 'rust') => {
+      const dir = path.join(TMP, `boot-${i}-${engine}`);
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.mkdirSync(dir, { recursive: true });
+      for (const [file, body] of Object.entries(row.files)) fs.writeFileSync(path.join(dir, file), body);
+      return bootNotices(engine, dir).catch((err: Error) => err.message);
+    };
+    const n = await greet('node');
+    const r = await greet('rust');
+    check(
+      `boot: ${row.name} — ${row.warns ? 'both warn' : 'neither warns'}, in the same words`,
+      typeof n !== 'string' && JSON.stringify(n) === JSON.stringify(r) && n.length === (row.warns ? 1 : 0),
+      `node=${JSON.stringify(n)} rust=${JSON.stringify(r)}`,
+    );
   }
 
   const procs: ChildProcess[] = [];

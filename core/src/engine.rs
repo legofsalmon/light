@@ -16,6 +16,13 @@ use crate::types::{Command, EngineStats, Snapshot};
 
 const TICK_MS: u64 = 25; // 40 Hz DMX refresh
 
+/// Said to every client that connects when boot could not read the saved show
+/// and started from the demo instead — never on a first run, which has no file
+/// to warn about (see persist::Loaded). Word for word the Node engine's
+/// `bootWarning`: the parity harness compares the greetings.
+const BOOT_WARNING: &str =
+    "saved project could not be read — started from the demo show (your file was left untouched)";
+
 /// The frame sent on the way offline, so a node holding its last look lets go
 /// of it before LIGHT stops talking. See crate::output.
 static ZERO_FRAME: [u8; 512] = [0u8; 512];
@@ -262,14 +269,18 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
     let now_ms = move || epoch.elapsed().as_secs_f64() * 1000.0;
 
     let dir = persist::project_dir();
-    let project = persist::load_project(&dir).unwrap_or_else(|| {
-        let p = default_project();
-        match persist::save_project(&dir, &p) {
-            Ok(path) => println!("[light] created default project at {}", path.display()),
-            Err(e) => eprintln!("[light] could not write default project: {e}"),
+    let (project, boot_warning) = match persist::load_project(&dir) {
+        persist::Loaded::Project(p) => (p, None),
+        persist::Loaded::Nothing { unreadable } => {
+            let p = default_project();
+            match persist::save_project(&dir, &p) {
+                Ok(path) => println!("[light] created default project at {}", path.display()),
+                Err(e) => eprintln!("[light] could not write default project: {e}"),
+            }
+            // Only when there was a show to lose. A first run has no file to warn about.
+            (p, unreadable.then_some(BOOT_WARNING))
         }
-        p
-    });
+    };
 
     let (tx, rx) = mpsc::channel::<EngineMsg>();
     ENGINE_PORT.store(cfg.port, std::sync::atomic::Ordering::Relaxed);
@@ -404,7 +415,7 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
                     let align = handle_msg(
                         msg, &mut state, &bc, &mut osc, &tx, &dir, &mut dirty_at, &mut midi_names,
                         &mut osc_log, now_ms(), &mut project_echo, &mut subs, &mut midi_clock,
-                        &mut own_midi_port,
+                        &mut own_midi_port, boot_warning,
                     );
                     if let Some(grid) = align {
                         renderer.align_phase(grid);
@@ -906,6 +917,7 @@ fn handle_msg(
     subs: &mut Subs,
     midi_clock: &mut crate::midi_clock::MidiClock,
     own_midi_port: &mut Option<String>,
+    boot_warning: Option<&str>,
 ) -> Option<f64> {
     match msg {
         // handled by the drain loop before it reaches here
@@ -1136,6 +1148,10 @@ fn handle_msg(
         EngineMsg::ClientConnected(id) => {
             bc.send_to(id, project_event(state));
             bc.send_to(id, history_event(state));
+            // same place in the greeting as the Node engine's, before midiInputs
+            if let Some(message) = boot_warning {
+                bc.send_to(id, json!({ "type": "toast", "ok": false, "message": message }).to_string());
+            }
             bc.send_to(id, json!({ "type": "midiInputs", "names": midi_names }).to_string());
         }
         EngineMsg::ClientDisconnected(gone) => {

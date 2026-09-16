@@ -250,17 +250,34 @@ fn try_load(path: &std::path::Path) -> Option<Project> {
     }
 }
 
+/// What `load_project` opened, or why it opened nothing. Mirrors `Loaded` in
+/// engine/persist.ts.
+///
+/// Coming back empty-handed happens two ways, and only one is news to the
+/// operator. `unreadable` means a show was saved here and neither its file nor
+/// any backup would parse. Otherwise nothing was ever saved — a fresh install,
+/// an empty LIGHT_PROJECT_DIR — which is a first run.
+pub enum Loaded {
+    Project(Project),
+    Nothing { unreadable: bool },
+}
+
 /// Load the current project, falling back through its rotating backups —
 /// a missing or corrupt main file must never cost the show (mirrors the
 /// Node reference, including the fall-back to the 'default' slug when a
-/// dead .current pointer has neither file nor backups).
-pub fn load_project(dir: &PathBuf) -> Option<Project> {
+/// dead .current pointer has neither file nor backups). One difference: a
+/// show whose file is there but corrupt, with no readable backup, falls back
+/// to 'default' here too, where Node starts the demo under that show's slug.
+pub fn load_project(dir: &PathBuf) -> Loaded {
     let slug = current_slug(dir);
     let file = file_for(dir, &slug);
     if let Some(p) = try_load(&file) {
-        return Some(p);
+        return Loaded::Project(p);
     }
+    // a file or backup that is there and would not parse
+    let mut unreadable = false;
     if file.exists() {
+        unreadable = true;
         eprintln!("[persist] project file is corrupt — trying backups");
         let _ = fs::rename(
             &file,
@@ -278,15 +295,23 @@ pub fn load_project(dir: &PathBuf) -> Option<Project> {
         if let Some(p) = try_load(&bak) {
             eprintln!("[persist] recovered {slug} from .bak{i}");
             let _ = save_slug_now(dir, &slug, &p);
-            return Some(p);
+            return Loaded::Project(p);
+        }
+        if bak.exists() {
+            unreadable = true;
         }
     }
     if slug != "default" {
         eprintln!("[persist] project \"{slug}\" has no file or backups — falling back to default");
         set_current_slug(dir, "default");
-        return load_project(dir);
+        return match load_project(dir) {
+            // the default having nothing to read does not make this show's
+            // unreadable file a first run
+            Loaded::Nothing { unreadable: fell } => Loaded::Nothing { unreadable: unreadable || fell },
+            opened => opened,
+        };
     }
-    None
+    Loaded::Nothing { unreadable }
 }
 
 fn rotate_backups(dir: &PathBuf) {

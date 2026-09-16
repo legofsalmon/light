@@ -18,7 +18,9 @@ import fs from 'node:fs';
 import type { MvrBundle, Project } from '../shared/types.ts';
 import { uid } from '../shared/types.ts';
 
-/** set when the saved project could not be read, shown to the first client */
+/** Set when boot could not read the saved show and started from the demo, and
+ *  said to every client that connects. Mirrors BOOT_WARNING in
+ *  core/src/engine.rs, word for word — the parity harness compares greetings. */
 let bootWarning: string | null = null;
 
 /** Mirror of the Rust engine's apply_mvr — keep them in step. */
