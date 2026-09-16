@@ -817,6 +817,22 @@ fn broadcast_projects(bc: &Broadcaster, dir: &PathBuf) {
 }
 
 #[allow(clippy::too_many_arguments)]
+/// A notice about the SHOW FILE, sent to whoever asked for it.
+///
+/// "opened Electronic Set" is news to the person who opened it and noise to the
+/// tablet at front of house, which had its grid replaced under it and now gets
+/// a line about a file it did not touch. A command with no client behind it
+/// (MIDI, OSC, the shell) has nobody to answer, so that one still goes to
+/// everybody — there is no requester to single out. Mirrors `toastTo` in
+/// engine/index.ts.
+fn toast_to(bc: &Broadcaster, owner: Option<ClientId>, ok: bool, message: String) {
+    let ev = json!({ "type": "toast", "ok": ok, "message": message }).to_string();
+    match owner {
+        Some(id) => bc.send_to(id, ev),
+        None => bc.broadcast(&ev),
+    }
+}
+
 fn apply_outcome(
     out: Outcome,
     state: &mut EngineState,
@@ -990,14 +1006,14 @@ fn handle_msg(
                     let _ = persist::save_project(dir, &state.project);
                     *dirty_at = None;
                     if let Err(e) = persist::save_slug_now(dir, &slug, &fresh) {
-                        bc.broadcast(&json!({"type":"toast","ok":false,"message":format!("cannot create: {e}")}).to_string());
+                        toast_to(bc, owner, false, format!("cannot create: {e}"));
                         return None;
                     }
                     persist::set_current_slug(dir, &slug);
                     state.replace_project(fresh);
                     bc.broadcast(&project_event(state));
                     bc.broadcast(&history_event(state)); // cleared with the show
-                    bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("created \"{name}\"")}).to_string());
+                    toast_to(bc, owner, true, format!("created \"{name}\""));
                     broadcast_projects(bc, dir);
                     ensure_osc(osc, state, tx);
                     return None;
@@ -1008,12 +1024,12 @@ fn handle_msg(
                     let cur = persist::current_slug(dir);
                     let _ = persist::save_project_slug(dir, &cur, &state.project);
                     *dirty_at = None;
-                    bc.broadcast(&json!({"type":"toast","ok":true,"message":"already open"}).to_string());
+                    toast_to(bc, owner, true, "already open".to_string());
                     return None;
                 }
                 Command::OpenProject { slug } => {
                     let Some(p) = persist::load_slug(dir, slug) else {
-                        bc.broadcast(&json!({"type":"toast","ok":false,"message":format!("cannot open \"{slug}\"")}).to_string());
+                        toast_to(bc, owner, false, format!("cannot open \"{slug}\""));
                         return None;
                     };
                     let _ = persist::save_project(dir, &state.project); // flush pending edits, old slug
@@ -1023,7 +1039,7 @@ fn handle_msg(
                     state.replace_project(p);
                     bc.broadcast(&project_event(state));
                     bc.broadcast(&history_event(state)); // cleared with the show
-                    bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("opened \"{pname}\"")}).to_string());
+                    toast_to(bc, owner, true, format!("opened \"{pname}\""));
                     broadcast_projects(bc, dir);
                     ensure_osc(osc, state, tx);
                     return None;
@@ -1033,13 +1049,13 @@ fn handle_msg(
                     let slug = persist::slugify(name);
                     state.project.name = name.to_string();
                     if let Err(e) = persist::save_slug_now(dir, &slug, &state.project) {
-                        bc.broadcast(&json!({"type":"toast","ok":false,"message":format!("cannot save: {e}")}).to_string());
+                        toast_to(bc, owner, false, format!("cannot save: {e}"));
                         return None;
                     }
                     persist::set_current_slug(dir, &slug);
                     state.bump_gen(); // the name changed — new authoritative gen
                     bc.broadcast(&project_event(state));
-                    bc.broadcast(&json!({"type":"toast","ok":true,"message":format!("saved as \"{name}\"")}).to_string());
+                    toast_to(bc, owner, true, format!("saved as \"{name}\""));
                     broadcast_projects(bc, dir);
                     return None;
                 }

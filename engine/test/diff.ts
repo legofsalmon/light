@@ -37,6 +37,11 @@ class Client {
   previewHeads: unknown = null;
   /** The engine's undo history as the buttons see it — one per engine. */
   history: { undo: string | null; redo: string | null; undoDepth: number; redoDepth: number } | null = null;
+  /** Every notice this client was sent. A notice about the show FILE should
+   *  reach the client that asked and nobody else (design #56). */
+  toasts: string[] = [];
+  /** The engine's own view of which show is open, from a `projects` event. */
+  currentSlug: string | null = null;
 
   async connect(port: number): Promise<void> {
     for (let i = 0; i < 50; i++) {
@@ -61,6 +66,8 @@ class Client {
           if (ev.type === 'history') {
             this.history = { undo: ev.undo, redo: ev.redo, undoDepth: ev.undoDepth, redoDepth: ev.redoDepth };
           }
+          if (ev.type === 'toast') this.toasts.push(String(ev.message));
+          if (ev.type === 'projects') this.currentSlug = ev.current;
         });
         return;
       } catch {
@@ -1979,6 +1986,40 @@ async function main(): Promise<void> {
       both({ type: 'switchDeck', deckId: deckA });
       both({ type: 'allStop' });
       await sleep(300);
+    }
+  }
+
+  // --- A notice about the show file answers the one who asked (design #56).
+  //
+  // "opened Electronic Set" went to every client. The tablet at front of house
+  // had its grid replaced under it and got a line about a file it did not
+  // touch; worse, the line it got named a show it had not chosen. Reopening the
+  // show that is already open produces a notice and changes nothing, which
+  // makes it the safe probe for who hears it.
+  {
+    node.send({ type: 'projects' });
+    rust.send({ type: 'projects' });
+    await sleep(300);
+    const slugN = node.currentSlug;
+    const slugR = rust.currentSlug;
+    if (slugN && slugR) {
+      node.toasts.length = 0;
+      rust.toasts.length = 0;
+      nodeObs.toasts.length = 0;
+      rustObs.toasts.length = 0;
+      node.send({ type: 'openProject', slug: slugN });
+      rust.send({ type: 'openProject', slug: slugR });
+      await sleep(500);
+      check(
+        'toast: the client that asked is told, on both',
+        node.toasts.length === 1 && rust.toasts.length === 1 && node.toasts[0] === rust.toasts[0],
+        `node=${JSON.stringify(node.toasts)} rust=${JSON.stringify(rust.toasts)}`,
+      );
+      check(
+        'toast: a client that did not ask hears nothing, on both',
+        nodeObs.toasts.length === 0 && rustObs.toasts.length === 0,
+        `node=${JSON.stringify(nodeObs.toasts)} rust=${JSON.stringify(rustObs.toasts)}`,
+      );
     }
   }
 

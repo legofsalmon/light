@@ -25,6 +25,9 @@ export class Server {
    *  subscriptions, which are keyed by socket because that is what `send`
    *  takes). Mirrors Subs::forget in core/src/engine.rs. */
   onDisconnect: ((clientId: number, ws: WebSocket) => void) | null = null;
+  /** Which socket each client id belongs to, so a notice can answer the one
+   *  that asked. Mirrors `Broadcaster::send_to` in core/src/server.rs. */
+  private byId = new Map<number, WebSocket>();
   private nextClientId = 1;
 
   constructor(port: number, distDir: string, onCommand: (cmd: Command, ws: WebSocket, clientId: number) => void) {
@@ -58,8 +61,12 @@ export class Server {
     this.wss.on('connection', (ws) => {
       // holds are attributed to this id so a disconnect releases only its own
       const clientId = this.nextClientId++;
+      this.byId.set(clientId, ws);
       this.onConnect?.(ws);
-      ws.on('close', () => this.onDisconnect?.(clientId, ws));
+      ws.on('close', () => {
+        this.byId.delete(clientId);
+        this.onDisconnect?.(clientId, ws);
+      });
       ws.on('message', (data) => {
         let cmd: Command;
         try {
@@ -117,6 +124,13 @@ export class Server {
     if (ws.readyState !== WebSocket.OPEN) return; // gone — drop it
     if (ws.bufferedAmount < 1_000_000) ws.send(JSON.stringify(ev));
     else this.missed.add(ws);
+  }
+
+  /** Send to one client by id. Silent when that client has gone — a notice for
+   *  somebody who has closed the tab is not an error. */
+  sendTo(clientId: number, ev: ServerEvent): void {
+    const ws = this.byId.get(clientId);
+    if (ws) this.send(ws, ev);
   }
 
   send(ws: WebSocket, ev: ServerEvent): void {

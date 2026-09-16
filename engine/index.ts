@@ -438,6 +438,20 @@ function handleCommand(cmd: Command, _ws?: unknown, clientId: number = LOCAL_CLI
   }
 }
 
+/** A notice about the SHOW FILE, sent to whoever asked for it.
+ *
+ *  "opened Electronic Set" is news to the person who opened it and noise to the
+ *  tablet at front of house, which had its grid replaced under it and now gets
+ *  a line about a file it did not touch. A command with no client behind it
+ *  (MIDI, OSC, the shell) has nobody to answer, so that one still goes to
+ *  everybody — there is no requester to single out. Mirrors `toast_to` in
+ *  core/src/engine.rs. */
+function toastTo(clientId: number, ok: boolean, message: string): void {
+  const ev = { type: 'toast', ok, message } as const;
+  if (clientId === LOCAL_CLIENT) server.broadcast(ev);
+  else server.sendTo(clientId, ev);
+}
+
 function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void {
   switch (cmd.type) {
     case 'hello':
@@ -625,7 +639,7 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       persist.saveSlugNow(slug, fresh);
       persist.setCurrentSlug(slug);
       state.replaceProject(fresh);
-      server.broadcast({ type: 'toast', ok: true, message: `created "${name}"` });
+      toastTo(clientId, true, `created "${name}"`);
       broadcastProjects();
       break;
     }
@@ -635,19 +649,19 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
         // possibly-stale disk copy
         persist.cancelPendingSave();
         persist.saveProjectNow(state.project);
-        server.broadcast({ type: 'toast', ok: true, message: 'already open' });
+        toastTo(clientId, true, 'already open');
         break;
       }
       const p = persist.loadSlug(cmd.slug);
       if (!p) {
-        server.broadcast({ type: 'toast', ok: false, message: `cannot open "${cmd.slug}"` });
+        toastTo(clientId, false, `cannot open "${cmd.slug}"`);
         break;
       }
       persist.cancelPendingSave();
       persist.saveProjectNow(state.project); // flush pending edits, old slug
       persist.setCurrentSlug(cmd.slug);
       state.replaceProject(p);
-      server.broadcast({ type: 'toast', ok: true, message: `opened "${p.name}"` });
+      toastTo(clientId, true, `opened "${p.name}"`);
       broadcastProjects();
       break;
     }
@@ -658,7 +672,7 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       persist.saveSlugNow(slug, state.project);
       persist.setCurrentSlug(slug);
       state.onChange?.(); // name changed — echo + autosave under the new slug
-      server.broadcast({ type: 'toast', ok: true, message: `saved as "${name}"` });
+      toastTo(clientId, true, `saved as "${name}"`);
       broadcastProjects();
       break;
     }
