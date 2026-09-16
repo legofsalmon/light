@@ -265,9 +265,12 @@ pub enum Loaded {
 /// Load the current project, falling back through its rotating backups —
 /// a missing or corrupt main file must never cost the show (mirrors the
 /// Node reference, including the fall-back to the 'default' slug when a
-/// dead .current pointer has neither file nor backups). One difference: a
-/// show whose file is there but corrupt, with no readable backup, falls back
-/// to 'default' here too, where Node starts the demo under that show's slug.
+/// dead .current pointer has neither file nor backups).
+///
+/// Only a dead pointer falls back. A show whose file is there and will not
+/// parse is the show that failed: boot starts the demo under its name and says
+/// so. This used to fall back as well, and with a readable default beside it
+/// the app opened a different show without a word.
 pub fn load_project(dir: &PathBuf) -> Loaded {
     let slug = current_slug(dir);
     let file = file_for(dir, &slug);
@@ -276,7 +279,8 @@ pub fn load_project(dir: &PathBuf) -> Loaded {
     }
     // a file or backup that is there and would not parse
     let mut unreadable = false;
-    if file.exists() {
+    let corrupt = file.exists();
+    if corrupt {
         unreadable = true;
         eprintln!("[persist] project file is corrupt — trying backups");
         let _ = fs::rename(
@@ -301,12 +305,12 @@ pub fn load_project(dir: &PathBuf) -> Loaded {
             unreadable = true;
         }
     }
-    if slug != "default" {
+    if slug != "default" && !corrupt {
         eprintln!("[persist] project \"{slug}\" has no file or backups — falling back to default");
         set_current_slug(dir, "default");
         return match load_project(dir) {
             // the default having nothing to read does not make this show's
-            // unreadable file a first run
+            // unreadable backups a first run
             Loaded::Nothing { unreadable: fell } => Loaded::Nothing { unreadable: unreadable || fell },
             opened => opened,
         };

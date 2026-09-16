@@ -4,6 +4,7 @@
 // through the same harness.
 
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import { createServer, type AddressInfo } from 'node:net';
 import path from 'node:path';
 import WebSocket from 'ws';
@@ -13,17 +14,38 @@ export type Notice = { ok: boolean; message: string };
 /** A write cut short. */
 export const TORN = '{ "version": 1, "name": "Friday", "fixtures": [';
 
-/** What is on disk at boot, and whether the engine should warn that a saved show
- *  could not be read. Only a show that was there and would not parse warns; a
- *  first run has no file to warn about. The Rust twin of these five is
+/** A show that opens. */
+const READABLE = fs.readFileSync(path.join(process.cwd(), 'core', 'tests', 'data', 'demo_project.json'), 'utf8');
+
+/** What is on disk at boot; whether the engine should warn that a saved show
+ *  could not be read; and which show `.current` names afterwards (absent: no
+ *  pointer was written). Only a show that was there and would not parse warns —
+ *  a first run has no file to warn about — and only a dead pointer falls back to
+ *  the default: a corrupt show is the show that failed, and the demo starts
+ *  under its name. The Rust twin of these is
  *  a_first_run_is_not_a_show_that_could_not_be_read in core/tests/smoke.rs. */
-export const BOOT_CASES: { name: string; files: Record<string, string>; warns: boolean }[] = [
+export const BOOT_CASES: { name: string; files: Record<string, string>; warns: boolean; current?: string }[] = [
   { name: 'an empty directory (a first run)', files: {}, warns: false },
   { name: 'a corrupt show with no backups', files: { 'default.project.json': TORN }, warns: true },
   { name: 'a missing show whose backups will not parse', files: { 'default.project.json.bak1': TORN }, warns: true },
-  { name: 'a pointer to a show with nothing saved anywhere', files: { '.current': 'friday' }, warns: false },
-  { name: 'a pointer to a show that left only unreadable backups', files: { '.current': 'friday', 'friday.project.json.bak1': TORN }, warns: true },
+  { name: 'a pointer to a show with nothing saved anywhere', files: { '.current': 'friday' }, warns: false, current: 'default' },
+  { name: 'a pointer to a show that left only unreadable backups', files: { '.current': 'friday', 'friday.project.json.bak1': TORN }, warns: true, current: 'default' },
+  {
+    name: 'a corrupt named show beside a readable default',
+    files: { '.current': 'friday', 'friday.project.json': TORN, 'default.project.json': READABLE },
+    warns: true,
+    current: 'friday',
+  },
 ];
+
+/** The show `.current` names in `dir`, or undefined when there is no pointer. */
+export function pointer(dir: string): string | undefined {
+  try {
+    return fs.readFileSync(path.join(dir, '.current'), 'utf8').trim();
+  } catch {
+    return undefined;
+  }
+}
 
 /** The notices a first client is greeted with, or null while nothing is
  *  listening yet. The greeting is project, history, any boot notice, then

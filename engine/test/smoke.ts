@@ -5,7 +5,7 @@
 
 import dgram from 'node:dgram';
 import { tmpdir } from 'node:os';
-import { BOOT_CASES, TORN, bootNotices, type Notice } from './boot.ts';
+import { BOOT_CASES, TORN, bootNotices, pointer, type Notice } from './boot.ts';
 import { EngineState, HISTORY_CAP } from '../state.ts';
 import { Renderer } from '../renderer.ts';
 import fs from 'node:fs';
@@ -2434,6 +2434,7 @@ await new Promise<void>((resolve) => {
       } else {
         check(`boot: ${row.name} gives no warning`, notices.length === 0, JSON.stringify(notices));
       }
+      check(`boot: ${row.name} leaves .current naming ${row.current ?? 'nothing'}`, pointer(dir) === row.current, `${pointer(dir)}`);
     }
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
