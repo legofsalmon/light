@@ -8,6 +8,8 @@
 * { box-sizing: border-box; }
 
 html, body, #root { height: 100%; }
+/* the desk's colours are dark unless a screen says otherwise (tokens.css, Light mode) */
+:root { color-scheme: dark; }
 
 body {
   margin: 0;

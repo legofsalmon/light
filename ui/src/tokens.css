@@ -4,8 +4,15 @@
 :root {
   /* primitives — the raw values; components use the semantic names below */
   --grey-0: #000000;
+  --grey-25: #fbfbfc;
+  --grey-50: #f5f5f7;
+  --grey-75: #ececef;
   --grey-100: #d2d2d8;
+  --grey-150: #e2e2e7;
+  --grey-200: #d6d6dc;
+  --grey-250: #c4c4cc;
   --grey-300: #8c8c96;
+  --grey-350: #66666f;
   --grey-400: #5c5c66;
   --grey-500: #4a4a52;
   --grey-600: #3c3c44;
@@ -18,19 +25,27 @@
   --grey-950: #101012;
   --grey-white: #ffffff;
   --cyan-500: #39c2ff;
+  --cyan-700: #0b6fa8;
   --tungsten-100: #f3ebd7;
   --tungsten-300: #c9bd9e;
+  --tungsten-450: #a8875a;
+  --tungsten-500: #c98108;
+  --tungsten-600: #9c6300;
   --amber-400: #ffb347;
   --amber-500: #f0a63e;
+  --amber-600: #a85700;
   --amber-700: #6e5423;
   --orange-500: #ff8a3d;
   --red-400: #ff5252;
   --red-450: #ff2d2d;
   --red-500: #ff4d4d;
   --red-600: #d84040;
+  --red-700: #c62828;
   --red-800: #7a2424;
   --red-900: #4a1f1f;
   --red-950: #2a0d0d;
+  --rose-50: #fbeaea;
+  --rose-100: #f6d6d6;
   --rose-200: #ffb5b5;
   --rose-300: #ff9d9d;
   --rose-600: #9a4a4a;
@@ -86,6 +101,21 @@
   --alpha-tungsten-20: #f3ebd733;
   --alpha-blind-6: #5c7cff0f;
   --alpha-accent-8: var(--alpha-cyan-8);
+  --alpha-black-2: #00000005;
+  --alpha-black-6: #0000000f;
+  --alpha-black-7: #00000012;
+  --alpha-black-9: #00000017;
+  --alpha-black-12: #0000001f;
+  --alpha-black-14: #00000024;
+  --alpha-black-15: #00000026;
+  --alpha-black-20: #00000033;
+  --alpha-black-30: #0000004d;
+  --alpha-cyan-deep-8: #0b6fa814;
+  --alpha-cyan-deep-16: #0b6fa829;
+  --alpha-cyan-deep-18: #0b6fa82e;
+  --alpha-cyan-deep-32: #0b6fa852;
+  --alpha-cyan-deep-70: #0b6fa8b3;
+  --alpha-tungsten-deep-25: #9c630040;
   /* semantic colour (Figma: Color) */
   --bg: var(--grey-900);
   --panel: var(--grey-850);
@@ -362,4 +392,62 @@
   --size-enable: 18px;
   --size-swatch: 24px;
   --size-blend-chip-w: 72px;
+}
+
+/* Color collection, Light mode — a screen in daylight (Display → colours).
+   Only the semantic names change; theme.css reads the same names and the rest
+   follows. The stage and the meters stay dark: a stage is dark. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --alpha-tungsten-20: var(--alpha-tungsten-deep-25);
+  --bg: var(--grey-75);
+  --panel: var(--grey-50);
+  --panel2: var(--grey-150);
+  --raise: var(--grey-25);
+  --raise2: var(--grey-200);
+  --color-bg-seam: var(--grey-250);
+  --color-bg-wash-empty: var(--alpha-black-2);
+  --color-bg-wash-selected: var(--alpha-black-6);
+  --color-bg-wash-hover: var(--alpha-black-9);
+  --color-bg-wash-learn: var(--alpha-cyan-deep-8);
+  --line: var(--grey-250);
+  --line2: var(--grey-300);
+  --color-border-selected: var(--grey-500);
+  --color-border-focus: var(--cyan-700);
+  --text: var(--grey-850);
+  --text-dim: var(--grey-350);
+  --text-faint: var(--grey-300);
+  --color-text-inverse: var(--grey-white);
+  --accent: var(--cyan-700);
+  --accent-soft: var(--alpha-cyan-deep-16);
+  --color-accent-fill-hi: var(--alpha-cyan-deep-32);
+  --color-accent-fill-lo: var(--alpha-cyan-deep-18);
+  --color-accent-marquee: var(--alpha-cyan-deep-8);
+  --color-accent-marquee-edge: var(--alpha-cyan-deep-70);
+  --color-live: var(--tungsten-600);
+  --color-live-dim: var(--tungsten-450);
+  --color-lamp: var(--tungsten-500);
+  --color-key-fill: var(--grey-25);
+  --color-key-edge-hi: var(--alpha-black-6);
+  --color-key-edge-hi-hover: var(--alpha-black-12);
+  --color-key-edge-lo: var(--alpha-black-15);
+  --color-fader-fill-rest: var(--alpha-black-7);
+  --color-fader-down: var(--amber-600);
+  --color-status-ok: var(--grey-600);
+  --warn: var(--amber-600);
+  --hot: var(--red-700);
+  --color-danger-text: var(--rose-700);
+  --color-danger-text-hover: var(--red-700);
+  --color-danger-border: var(--rose-600);
+  --color-danger-border-hover: var(--rose-700);
+  --color-danger-bg-hover: var(--rose-50);
+  --color-danger-bg-deep: var(--rose-100);
+  --color-danger-border-deep: var(--rose-600);
+  --color-blackout-text: var(--red-700);
+  --color-blackout-border: var(--red-600);
+  --color-blackout-armed-text: var(--red-600);
+  --color-overlay-fader-dim-hi: var(--alpha-black-14);
+  --color-overlay-fader-dim-lo: var(--alpha-black-7);
+  --color-elevation-shadow-menu: var(--alpha-black-20);
+  --color-elevation-shadow-modal: var(--alpha-black-30);
 }

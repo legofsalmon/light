@@ -24,7 +24,7 @@ import { SyncView, PresetUndoChip } from './SyncView.tsx';
 import { LockBar } from './setup/LockBar.tsx';
 import { licenceAvailable } from '../licence.ts';
 import { updateAvailable, enginePort } from '../update.ts';
-import { useStore, type TouchPref } from '../store.ts';
+import { useStore, type ThemePref, type TouchPref } from '../store.ts';
 import { useLock, onEngineHost, lockedByDefault } from '../lockStore.ts';
 import { askPrompt } from '../dialog.tsx';
 import { openExternal } from '../shell.ts';
@@ -68,6 +68,37 @@ function engineAddress(): string {
     if (location.protocol.startsWith('http')) return `${location.protocol}//${location.host}`;
   } catch { /* fall through */ }
   return `http://localhost:${enginePort()}`;
+}
+
+/** The desk's colours: dark, or light for a screen in daylight. Per screen,
+ *  like touch sizing — the phone outside at a festival and the laptop in the
+ *  booth are different rooms, and the show file says nothing about either. */
+function ThemeSetting(): React.ReactElement {
+  const pref = useStore((s) => s.themePref);
+  const setThemePref = useStore((s) => s.setThemePref);
+  const options: { v: ThemePref; label: string; title: string }[] = [
+    { v: 'dark', label: 'dark', title: 'the desk in the dark: what is playing glows tungsten, the cursor is cyan' },
+    { v: 'light', label: 'light', title: 'a screen in daylight: a light ground, dark text, the same meanings in deeper colours' },
+  ];
+  return (
+    <div className="col" style={{ gap: 'var(--space-8)' }}>
+      <div className="row">
+        <span className="label" style={{ width: 'var(--size-master-w-narrow)' }}>colours</span>
+        <div className="seg" role="group" aria-label="colours">
+          {options.map((o) => (
+            <button key={o.v} className={pref === o.v ? 'on' : ''} title={o.title} onClick={() => setThemePref(o.v)}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="prose">
+        Light is for a screen in daylight — a laptop outside, a phone at a festival. What is playing, the
+        cursor and every warning keep their meaning in deeper colours; the stage stays dark, because a
+        stage is. Saved on this screen only.
+      </div>
+    </div>
+  );
 }
 
 /** Touch sizing (review M14/M15). Auto follows what the browser says the
@@ -219,6 +250,7 @@ function Sheet({ onClose, onOpenShortcuts }: {
     { id: 'sync', label: 'Sync · MIDI', tag: project ? String(project.midi.length) : undefined, body: () => <SyncView /> },
     { id: 'display', label: 'Display', body: () => (
       <div className="col" style={{ gap: 'var(--space-14)' }}>
+        <ThemeSetting />
         <TouchSetting />
         {!onEngineHost() && <AddressBlock />}
       </div>

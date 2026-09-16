@@ -29,6 +29,10 @@ export type Sel = { layerId: string; col: number; deckId: string | null } | null
  *  forced either way, because a touchscreen laptop or a tablet with a trackpad
  *  reports whichever it feels like. */
 export type TouchPref = 'auto' | 'on' | 'off';
+/** The desk's colours: dark for the desk in the dark, light for a screen in
+ *  daylight. Per screen, never in the show — the phone outside and the laptop
+ *  in the booth are different rooms. */
+export type ThemePref = 'dark' | 'light';
 /** What a drag does in the 2D plan on a tablet, where ⌥ and ⇧ do not exist. */
 export type PlanTool = 'move' | 'rotate' | 'select';
 
@@ -137,6 +141,7 @@ type Store = {
    *  levels. */
   previzAutoExposure: boolean;
   touchPref: TouchPref;
+  themePref: ThemePref;
   /** Touch mode is on: 24px targets, hold-to-edit, the ? help button. Derived
    *  from touchPref and the pointer the browser reports. */
   touch: boolean;
@@ -231,6 +236,7 @@ type Store = {
   togglePreviewPane: () => void;
   togglePrevizAutoExposure: () => void;
   setTouchPref: (p: TouchPref) => void;
+  setThemePref: (p: ThemePref) => void;
   setHelpMode: (v: boolean) => void;
   setPreviz2dTool: (t: PlanTool) => void;
   setPrevizMode: (m: '3d' | '2d') => void;
@@ -315,6 +321,22 @@ const loadTouchPref = (): TouchPref => {
   } catch { return 'auto'; }
 };
 const touchFor = (pref: TouchPref): boolean => (pref === 'auto' ? coarsePointer() : pref === 'on');
+
+function loadThemePref(): ThemePref {
+  try {
+    return localStorage.getItem('themePref') === 'light' ? 'light' : 'dark';
+  } catch {
+    return 'dark';
+  }
+}
+/** The attribute tokens.css switches its Light mode on. index.html sets it
+ *  before the first paint from the same key; this keeps it true afterwards. */
+function applyTheme(pref: ThemePref): void {
+  if (typeof document === 'undefined') return;
+  if (pref === 'light') document.documentElement.dataset.theme = 'light';
+  else delete document.documentElement.dataset.theme;
+}
+applyTheme(loadThemePref());
 
 export type Toast = { id: number; ok: boolean; text: string; at: number; sticky: boolean };
 
@@ -467,6 +489,7 @@ export const useStore = create<Store>()((set, get) => ({
   previzAutoExposure: loadFlag('previzAutoExposure', true),
   touchPref: loadTouchPref(),
   touch: touchFor(loadTouchPref()),
+  themePref: loadThemePref(),
   helpMode: false,
   setupGuide: false,
   setupDismissed: false,
@@ -622,6 +645,11 @@ export const useStore = create<Store>()((set, get) => ({
       saveFlag('previzAutoExposure', previzAutoExposure);
       return { previzAutoExposure };
     }),
+  setThemePref: (themePref) => {
+    try { localStorage.setItem('themePref', themePref); } catch { /* non-essential */ }
+    applyTheme(themePref);
+    set({ themePref });
+  },
   setTouchPref: (touchPref) =>
     set(() => {
       try { localStorage.setItem('touchPref', touchPref); } catch { /* non-essential */ }
