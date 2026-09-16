@@ -2288,9 +2288,8 @@ await new Promise<void>((resolve) => {
 }
 
 // --- a timed Discard blends by the same bits as the Rust twin (design #50) ---
-// Held to the table in core/tests/smoke.rs, compared by bit pattern: a hue that
-// lands a hair below zero is 1.0 under rem_euclid and 0.0 under the usual
-// JavaScript idiom — the same colour, a different byte on the wire.
+// Held to the table in core/tests/smoke.rs, compared by bit pattern. Hue is
+// DEGREES — an earlier draft wrapped at 1.0 and passed on hues that never occur.
 {
   const bitsOf = (x: number): string => {
     const b = new DataView(new ArrayBuffer(8));
@@ -2298,13 +2297,14 @@ await new Promise<void>((resolve) => {
     return [...new Uint8Array(b.buffer)].map((v) => v.toString(16).padStart(2, '0')).join('');
   };
   const table: [SoftField, number, number, number, string][] = [
-    ['hue', 0.95, 0.05, 0.5, '0000000000000000'],
-    ['hue', 0.05, 0.95, 0.5, '0000000000000000'],
-    ['hue', 0.2, 0.6, 0.25, '3fd3333333333333'],
-    ['hue', 0.9, 0.1, 0.0, '3feccccccccccccd'],
-    ['hue', 0.3, 0.3, 0.7, '3fd3333333333333'],
+    ['hue', 350.0, 10.0, 0.5, '0000000000000000'],
+    ['hue', 30.0, 330.0, 0.5, '0000000000000000'],
+    ['hue', 72.0, 216.0, 0.25, '405b000000000000'],
+    ['hue', 350.0, 10.0, 0.3, '4076400000000000'],
+    ['hue', 0.1, 359.9, 0.5, '0000000000000000'],
+    ['hue', 195.5, 12.25, 0.4, '4070a33333333333'],
+    ['hue', 324.0, 36.0, 0.0, '4074400000000000'],
     ['dimmer', 1.0, 0.2, 0.5, '3fe3333333333333'],
-    ['dimmer', 0.4, 0.9, 0.0, '3fd999999999999a'],
     ['rate', 1.0, 4.0, 0.75, '400a000000000000'],
   ];
   let same = true;
@@ -2316,8 +2316,8 @@ await new Promise<void>((resolve) => {
     }
   }
   check('discard: every blend lands on the Rust twin\'s exact bits', same);
-  check('discard: a hue never wraps to 1.0', blendSoft('hue', 0.05, 0.95, 0.5) === 0);
-  check('discard: no release leaves the nudge untouched', blendSoft('hue', 0.1, 0.9, 1) === 0.9);
+  check('discard: a hue never wraps to 360', blendSoft('hue', 0.1, 359.9, 0.5) === 0);
+  check('discard: no release leaves the nudge untouched', blendSoft('hue', 10, 200, 1) === 200);
   check(
     'discard: the weight falls from 1 to 0 and stays there',
     softReleaseWeight(null, 5) === 1 && softReleaseWeight({ start: 0, dur: 1000 }, 250) === 0.75

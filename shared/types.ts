@@ -423,7 +423,7 @@ export type Deck = {
 export type Palette = {
   id: string;
   name: string;
-  /** 0..1 around the wheel, matching PartParams.color */
+  /** degrees, 0..360 — the same unit as PartParams.color */
   h: number;
   /** 0..1 */
   s: number;

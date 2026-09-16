@@ -1313,22 +1313,26 @@ async function main(): Promise<void> {
     // the stored bytes once it has run. Mid-release bytes are sampled on each
     // engine's own clock, so the comparison waits for the output to settle, the
     // way every crossfade comparison here does.
-    for (const fadeS of [0.3, 2]) {
-      both({ type: 'soft', lookId: 'wash-rainbow', partId, field: 'sat', value: 0.25 });
+    // Hue as well as saturation: hue is the one field that wraps, and a release
+    // that only ever rode saturation is how a hue blend in the wrong unit
+    // passed. 30° on a look that stores something far round the wheel sends the
+    // release the short way, through the wrap.
+    for (const [field, value, fadeS] of [['sat', 0.25, 0.3], ['sat', 0.25, 2], ['hue', 30, 0.6]] as const) {
+      both({ type: 'soft', lookId: 'wash-rainbow', partId, field, value });
       await sleep(400);
       both({ type: 'softClear', fadeS });
       await sleep(60);
       check(
-        `discard ${fadeS} s: neither engine snaps — the nudge is still held as it starts`,
+        `discard ${field} ${fadeS} s: neither engine snaps — the nudge is still held as it starts`,
         (node.snap?.soft?.length ?? 0) > 0 && (rust.snap?.soft?.length ?? 0) > 0 && frameOf(node) !== stored,
         `node soft=${node.snap?.soft?.length} rust soft=${rust.snap?.soft?.length}`,
       );
       await sleep(fadeS * 1000 + 300);
       await settle(node, rust);
-      compareDmx(`discard ${fadeS} s: parity once it has run`, node, rust);
-      check(`discard ${fadeS} s: lands on the stored bytes`, frameOf(node) === stored, 'the release did not arrive at the stored show');
+      compareDmx(`discard ${field} ${fadeS} s: parity once it has run`, node, rust);
+      check(`discard ${field} ${fadeS} s: lands on the stored bytes`, frameOf(node) === stored, 'the release did not arrive at the stored show');
       check(
-        `discard ${fadeS} s: the soft layer is empty on both`,
+        `discard ${field} ${fadeS} s: the soft layer is empty on both`,
         (node.snap?.soft?.length ?? 0) === 0 && (rust.snap?.soft?.length ?? 0) === 0,
         `node=${node.snap?.soft?.length} rust=${rust.snap?.soft?.length}`,
       );

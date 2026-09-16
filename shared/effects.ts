@@ -122,8 +122,8 @@ export function softReleaseWeight(release: { start: number; dur: number } | null
 }
 
 /** A soft value part of the way back to the stored one. Hue goes the short way
- *  round the wheel: from 0.95 to 0.05 is a tenth of a turn through red, not
- *  nine tenths the long way through every other colour. Mirrors `blend_soft`
+ *  round the wheel: from 350° to 10° is twenty degrees through red, not three
+ *  hundred and forty the long way through every other colour. Mirrors `blend_soft`
  *  in core/src/state.rs — identical arithmetic or the engines diverge
  *  mid-release. `rem` is Rust's `rem_euclid`, which JavaScript's `%` is not
  *  for a negative left side. */
@@ -138,10 +138,11 @@ export function blendSoft(field: SoftField, stored: number, soft: number, w: num
     return r < 0 ? r + b : r;
   };
   if (field === 'hue') {
-    const d = rem(soft - stored + 0.5, 1) - 0.5;
-    const h = rem(stored + d * w, 1);
-    // a hue a hair below zero wraps to exactly 1.0; the wheel is [0, 1)
-    return h >= 1 ? 0 : h;
+    // hue is DEGREES, 0..360 (ColorHS)
+    const d = rem(soft - stored + 180, 360) - 180;
+    const h = rem(stored + d * w, 360);
+    // a hue a hair below zero wraps to exactly 360; the wheel is [0, 360)
+    return h >= 360 ? 0 : h;
   }
   return stored + (soft - stored) * w;
 }

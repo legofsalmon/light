@@ -29,20 +29,22 @@ pub fn soft_release_weight(release: Option<(f64, f64)>, t: f64) -> f64 {
 }
 
 /// A soft value part of the way back to the stored one. Hue goes the short way
-/// round the wheel: from 0.95 to 0.05 is a tenth of a turn through red, not
-/// nine tenths the long way through every other colour. Mirrors `blendSoft` in
+/// round the wheel: from 350° to 10° is twenty degrees through red, not three
+/// hundred and forty the long way through every other colour. Mirrors `blendSoft` in
 /// shared/effects.ts — identical arithmetic or the engines diverge mid-release.
 pub fn blend_soft(field: SoftField, stored: f64, soft: f64, w: f64) -> f64 {
     if w >= 1.0 {
         return soft;
     }
     if field == SoftField::Hue {
-        let d = (soft - stored + 0.5).rem_euclid(1.0) - 0.5;
-        let h = (stored + d * w).rem_euclid(1.0);
-        // A hue a hair below zero wraps to EXACTLY 1.0 here, which is the same
+        // Hue is DEGREES, 0..360 (ColorHS). From 350° to 10° is twenty degrees
+        // through red, not three hundred and forty the long way round.
+        let d = (soft - stored + 180.0).rem_euclid(360.0) - 180.0;
+        let h = (stored + d * w).rem_euclid(360.0);
+        // A hue a hair below zero wraps to EXACTLY 360.0 here, which is the same
         // colour as 0.0 but not the same number — and the Node twin must land
-        // on the same number, byte for byte. The wheel is [0, 1).
-        return if h >= 1.0 { 0.0 } else { h };
+        // on the same number, byte for byte. The wheel is [0, 360).
+        return if h >= 360.0 { 0.0 } else { h };
     }
     stored + (soft - stored) * w
 }

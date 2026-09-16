@@ -849,21 +849,23 @@ fn blind_is_cleared_by_all_stop_and_a_project_switch() {
 
 /// A timed Discard travels each nudge back to the stored value (design #50).
 /// The Node twin (`blendSoft` in shared/effects.ts) is held to the SAME table,
-/// compared by bit pattern: a hue that lands a hair below zero wraps to exactly
-/// 1.0 under `rem_euclid` and to 0.0 under the usual JavaScript idiom, which is
-/// the same colour and a different byte on the wire.
+/// compared by bit pattern. Hue is DEGREES: an earlier draft wrapped at 1.0 and
+/// passed a table of 0..1 hues that never occur, while a real release from 30°
+/// to 330° sat on red for the whole fade. A hue that lands on exactly 360 is
+/// normalised to 0 in both — the same colour, and it must be the same number.
 #[test]
 fn a_timed_discard_blends_by_the_same_bits_as_the_node_twin() {
     use light_core::state::blend_soft;
     use light_core::types::SoftField as F;
     let table: &[(F, f64, f64, f64, u64)] = &[
-        (F::Hue, 0.95, 0.05, 0.5, 0x0000000000000000), // across red, the short way
-        (F::Hue, 0.05, 0.95, 0.5, 0x0000000000000000), // the other way: wraps to 0, never 1.0
-        (F::Hue, 0.20, 0.60, 0.25, 0x3fd3333333333333),
-        (F::Hue, 0.90, 0.10, 0.0, 0x3feccccccccccccd), // fully released = stored
-        (F::Hue, 0.30, 0.30, 0.7, 0x3fd3333333333333),
+        (F::Hue, 350.0, 10.0, 0.5, 0x0000000000000000),   // twenty degrees through red, not 340 the long way
+        (F::Hue, 30.0, 330.0, 0.5, 0x0000000000000000),   // the other way round
+        (F::Hue, 72.0, 216.0, 0.25, 0x405b000000000000),  // 108°
+        (F::Hue, 350.0, 10.0, 0.3, 0x4076400000000000),   // 356°, still short of red
+        (F::Hue, 0.1, 359.9, 0.5, 0x0000000000000000),    // lands on exactly 360 → normalised to 0
+        (F::Hue, 195.5, 12.25, 0.4, 0x4070a33333333333),  // 266.2°, a fraction that is not tidy
+        (F::Hue, 324.0, 36.0, 0.0, 0x4074400000000000),   // fully released = stored
         (F::Dimmer, 1.0, 0.2, 0.5, 0x3fe3333333333333),
-        (F::Dimmer, 0.4, 0.9, 0.0, 0x3fd999999999999a),
         (F::Rate, 1.0, 4.0, 0.75, 0x400a000000000000),
     ];
     for &(f, stored, soft, w, bits) in table {
@@ -871,7 +873,7 @@ fn a_timed_discard_blends_by_the_same_bits_as_the_node_twin() {
         assert_eq!(got.to_bits(), bits, "{f:?} {stored}→{soft} at w={w}: got {got}");
     }
     // no release running: the nudge stands untouched
-    assert_eq!(blend_soft(F::Hue, 0.1, 0.9, 1.0), 0.9);
+    assert_eq!(blend_soft(F::Hue, 10.0, 200.0, 1.0), 200.0);
 }
 
 #[test]
