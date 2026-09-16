@@ -109,7 +109,7 @@ is why the OSC path above is the one with the sequencing in it.
 
 ### The APC40 mk2 layout
 
-Load it from **Sync · MIDI**, or from `controller ▾` on the dial row. What the
+Load it from **Sync · MIDI** (settings → Sync · MIDI → load a layout). What the
 surface does then:
 
 | Control | Does |
@@ -130,6 +130,23 @@ CLIP STOP reads as *stop* beside Arena, and here it starts a section instead.
 That is deliberate: it is one note (52) on eight MIDI channels, one per track,
 which is what makes it the only row on the surface that can carry eight cues
 without taking the dial row. Its LED lights while the whole column is on stage.
+
+### The busk layout
+
+**APC40 mk2 · busk** is the same layout with the four right-hand track faders
+given to groups: pull the strips down under a drop without reaching for the
+mouse.
+
+| Control | Does |
+|---|---|
+| Track faders 1–4 | Layer masters, as in the APC40 mk2 layout |
+| Track faders 5–8 | The level of the first four groups on the GROUPS row |
+| Haze, effect speed | On screen only — they give up their faders |
+
+Choose the four by pinning them: click **GROUPS** at the head of the group row,
+and pin the ones you want in the order you want them. Pinned groups come first
+on the row, and the rest follow in the show's order. The faders take the row as
+it is when the layout loads, so after changing the pins, load it again.
 
 ### Suggested starter layout (pad + fader controller)
 

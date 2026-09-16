@@ -26,6 +26,8 @@ import { Face } from './library/face.tsx';
 import { placeArmed, useEditingDeckId, useLibraryStore } from '../libraryStore.ts';
 import { REMOTE_PAGE_COLS, useRemote } from '../remoteStore.ts';
 import { useLocked } from '../lockStore.ts';
+import { groupsInRowOrder } from '../groupOrder.ts';
+import { GroupPins } from './GroupPins.tsx';
 import { HeldChip } from './HeldChip.tsx';
 import { openSetup } from './AdminModal.tsx';
 import { APC_COLS, APC_KNOB_BANKS, APC_LAYER_ROWS } from '../apcFeedback.ts';
@@ -1218,7 +1220,10 @@ function SubmasterRow() {
   const remote = useRemote((s) => s.remote);
   const send = useStore((s) => s.send);
   const subs = useStore((s) => s.snap?.submasters);
-  const allGroups = project.groups;
+  const locked = useLocked();
+  // pinned groups first, in the order they were pinned (groupOrder.ts) — the
+  // same order the busk layout hands them to the APC's faders
+  const allGroups = groupsInRowOrder(project);
   // Four under four pads on the remote, paging with the columns — the same
   // arithmetic the dial row uses. Eight group faders across four pad widths
   // gave every one of them a label too narrow to read, which is worse than
@@ -1237,7 +1242,9 @@ function SubmasterRow() {
         <div className="row">
           {/* 48px of head holds one short word, which is the word the design
               draws there (2.11); the desk keeps the whole one. */}
-          <div className="name grow">{remote ? 'GRPS' : 'GROUPS'}</div>
+          {remote || locked
+            ? <div className="name grow">{remote ? 'GRPS' : 'GROUPS'}</div>
+            : <GroupPins label="GROUPS" />}
           {anyDown && (
             <button
               className="btn small ghost"

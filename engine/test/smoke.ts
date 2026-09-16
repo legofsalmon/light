@@ -18,7 +18,8 @@ import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, isStal
 import { COMPILER_VERSION, fadeScaleAt } from '../../shared/types.ts';
 import type { EffectTarget, MidiMapping, Snapshot } from '../../shared/types.ts';
 import { APC40_COLUMN_ROW, APC40_MK2, APC_COLS, APC_LAYER_ROWS, APC_MINI_MK2, SURFACES, clearAddresses, computeLeds, ledChannel, ledKey, ledNote, nearest } from '../../ui/src/surfaces.ts';
-import { CONTROLLER_PRESETS, apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
+import { CONTROLLER_PRESETS, apc40Mk2BuskMappings, apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
+import { groupsInRowOrder, livePins, togglePin } from '../../ui/src/groupOrder.ts';
 import { lookFace, lookSwatch } from '../../ui/src/lookColors.ts';
 import { describeLearned } from '../../ui/src/labels.ts';
 
@@ -377,6 +378,8 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
     const presets: [string, MidiMapping[], typeof APC40_MK2][] = [
       ['APC40 mk2', apc40Mk2Mappings(p), APC40_MK2],
       ['APC mini mk2', apcMiniMk2Mappings(p), APC_MINI_MK2],
+      // the busk layout lights the same surface, so it answers to the same map
+      ['APC40 mk2 · busk', apc40Mk2BuskMappings(p), APC40_MK2],
     ];
     for (const [name, maps, surface] of presets) {
       // The channel is part of the address now, not just the number: the
@@ -452,6 +455,40 @@ function oscBuf(addr: string, tags: string, args: number[]): Buffer {
       CONTROLLER_PRESETS.map((c) => c.label).join('|'));
     check('preset: each entry builds the mappings its own function builds',
       CONTROLLER_PRESETS.every((c, i) => sig(c.build(p)) === sig(presets[i][1])));
+
+    // The busk layout (design decision 2): the default APC40 layout with the
+    // four right-hand track faders on the first four groups of the GROUPS row.
+    {
+      const fader = (maps: MidiMapping[], track: number) =>
+        maps.filter((m) => m.type === 'cc' && m.number === 7 && m.channel === track - 1).map((m) => m.action);
+      const plain = apc40Mk2Mappings(p);
+      const busk = apc40Mk2BuskMappings(p);
+      const notFaders = (maps: MidiMapping[]) => sig(maps.filter((m) => !(m.type === 'cc' && m.number === 7 && m.channel >= 4)));
+      check('busk: everything but faders 5–8 is the APC40 mk2 layout', notFaders(busk) === notFaders(plain));
+      check('busk: faders 1–4 are still the layer masters',
+        [1, 2, 3, 4].every((t) => JSON.stringify(fader(busk, t)) === JSON.stringify(fader(plain, t))));
+      const rowIds = groupsInRowOrder(p).slice(0, 4).map((g) => g.id);
+      check('busk: faders 5–8 are the first four groups on the row, one each',
+        [5, 6, 7, 8].every((t, i) => {
+          const a = fader(busk, t);
+          return a.length === 1 && a[0]!.kind === 'submaster' && a[0]!.groupId === rowIds[i];
+        }), JSON.stringify([5, 6, 7, 8].map((t) => fader(busk, t))));
+      check('busk: haze and speed have no fader', !busk.some((m) => m.action.kind === 'haze' || m.action.kind === 'speed'));
+
+      // with pins: the pinned ones first, in pin order, then the show's order
+      const pinnedShow = structuredClone(p);
+      pinnedShow.pinnedGroups = ['g-bar2', 'gone', 'g-derbies', 'g-bar2'];
+      const pinnedFaders = [5, 6, 7, 8].map((t) => (fader(apc40Mk2BuskMappings(pinnedShow), t)[0] as { groupId?: string } | undefined)?.groupId);
+      check('busk: pinned groups take the first faders, a stale or repeated pin is skipped',
+        JSON.stringify(pinnedFaders) === JSON.stringify(['g-bar2', 'g-derbies', 'g-all', 'g-pars']), JSON.stringify(pinnedFaders));
+
+      // a show with fewer than four groups binds only what it has
+      const small = structuredClone(p);
+      small.groups = small.groups.slice(0, 2);
+      delete small.pinnedGroups;
+      const bound = [5, 6, 7, 8].map((t) => fader(apc40Mk2BuskMappings(small), t).length);
+      check('busk: two groups, two faders, and 7 and 8 left alone', JSON.stringify(bound) === '[1,1,0,0]', JSON.stringify(bound));
+    }
 
     // A learn says what it bound, in the words the rest of the app uses for the
     // same thing (design 2.10) — not "mapped".
@@ -2454,6 +2491,23 @@ await new Promise<void>((resolve) => {
   st.applyMidi(0x80, 60, 0);
   st.applyMidi(0x90, 60, 0);
   check('fade master: and letting the pad go leaves it where it is', bitsOf(st.fadeScale) === '4003d70cd729487d', `${st.fadeScale}`);
+}
+
+// --- the order of the GROUPS row, and pinning (design A14, decision 2) ------
+{
+  const show = sanitizeProject(demoProject())!;
+  const names = (p: Pick<Project, 'groups' | 'pinnedGroups'>) => groupsInRowOrder(p).map((g) => g.id).join(',');
+  check('pins: a show with none keeps its own order', names(show) === show.groups.map((g) => g.id).join(','));
+  togglePin(show, 'g-bar1');
+  togglePin(show, 'g-hazer');
+  check('pins: pinned groups come first, in the order they were pinned', names(show).startsWith('g-bar1,g-hazer,g-all'), names(show));
+  togglePin(show, 'g-bar1');
+  check('pins: unpinning puts a group back in the show\'s order', names(show) === 'g-hazer,g-all,g-derbies,g-pars,g-bar1,g-bar2', names(show));
+  togglePin(show, 'no-such-group');
+  check('pins: a group the show does not have cannot be pinned', JSON.stringify(show.pinnedGroups) === '["g-hazer"]', JSON.stringify(show.pinnedGroups));
+  togglePin(show, 'g-hazer');
+  check('pins: the last unpin leaves no list behind', show.pinnedGroups === undefined);
+  check('pins: a pin to a deleted group means nothing', livePins({ groups: show.groups, pinnedGroups: ['gone'] }).length === 0);
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

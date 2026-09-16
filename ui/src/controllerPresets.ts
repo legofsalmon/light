@@ -6,6 +6,7 @@
 import type { MidiAction, MidiMapping, Project } from '../../shared/types.ts';
 import { uid } from '../../shared/types.ts';
 import { APC40_COLUMN_ROW, APC_COLS, APC_KNOB_BANKS, APC_LAYER_ROWS } from './surfaces.ts';
+import { groupsInRowOrder } from './groupOrder.ts';
 
 /** METRONOME, the APC40 mk2's own "now is the top of the bar" key (0x5A). Not
  *  in the surface table because nothing lights it — it is an input only. */
@@ -111,6 +112,37 @@ export function apc40Mk2Mappings(p: Project): MidiMapping[] {
   return maps;
 }
 
+/** The APC40 mk2's track faders are CC 7, one channel per track. */
+const APC40_TRACK_FADER = 7;
+
+/**
+ * The APC40 mk2 as a busking desk (design decision 2, A28). Everything the
+ * default layout does, except the four right-hand track faders: those ride the
+ * level of the first four groups on the GROUPS row — pinned groups first — so a
+ * hand can pull the strips down under a drop without reaching for the mouse.
+ * Haze and effect speed give up their faders and stay on the screen.
+ *
+ * A second layout rather than a change to the default, because a hand that
+ * already knows fader 6 is haze should not find it has become a group. The
+ * groups are the row's at the moment the layout is loaded: pin different ones
+ * and load it again to move the faders.
+ */
+export function apc40Mk2BuskMappings(p: Project): MidiMapping[] {
+  const busk = (m: MidiMapping) =>
+    m.type === 'cc' && m.number === APC40_TRACK_FADER && m.channel >= APC_LAYER_ROWS && m.channel < APC_COLS;
+  const maps = apc40Mk2Mappings(p).filter((m) => !busk(m));
+  groupsInRowOrder(p)
+    .slice(0, APC_COLS - APC_LAYER_ROWS)
+    .forEach((g, i) => maps.push({
+      id: uid('midi'),
+      type: 'cc',
+      channel: APC_LAYER_ROWS + i, // track faders 5–8
+      number: APC40_TRACK_FADER,
+      action: { kind: 'submaster', groupId: g.id },
+    }));
+  return maps;
+}
+
 /**
  * Akai APC mini mk2 factory layout (channel 0):
  * pads 0–63 (bottom-left = 0, rows ascend), scene column 112–119,
@@ -147,9 +179,9 @@ export function apcMiniMk2Mappings(p: Project): MidiMapping[] {
 }
 
 
-/** The layouts the desk can load, as a table rather than two buttons wired by
- *  hand: the Sync section lists it, the DIALS head's `controller ▾` menu lists
- *  it, and the smoke suite walks it. `help` is the map itself — hovering a
+/** The layouts the desk can load, as a table rather than buttons wired by
+ *  hand: the Sync section lists it, and the smoke suite walks it and holds
+ *  every entry against the LED map it lights. `help` is the map itself — hovering a
  *  preset is how you find out what it will do to your controller before you
  *  ask for it. */
 export const CONTROLLER_PRESETS = [
@@ -164,6 +196,12 @@ export const CONTROLLER_PRESETS = [
     label: 'APC mini mk2',
     help: '4 grid rows → layers · bottom row → column cues · round buttons → layer clears · TAP + blackout keys · faders → 4 layer masters, haze, speed, grand',
     build: apcMiniMk2Mappings,
+  },
+  {
+    name: 'apc40mk2busk',
+    label: 'APC40 mk2 · busk',
+    help: 'the APC40 mk2 layout, with track faders 5–8 → the first four groups on the GROUPS row (pin groups from its head to choose them, then load this again) · haze and speed stay on screen · track faders 1–4 → layer masters · master → grand',
+    build: apc40Mk2BuskMappings,
   },
 ] as const;
 

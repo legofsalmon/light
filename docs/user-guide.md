@@ -91,7 +91,9 @@ Layers apply bottom-to-top. Each has a **master** (scales that layer's intensity
 down without touching a look. The lowest level over a head wins rather than
 multiplying, because auto-groups put most heads in two groups. They are never
 saved and ALL STOP clears them — a fixture that must stay out of the show is a
-mute instead.
+mute instead. Click **GROUPS** at the head of the row to pin groups: pinned
+groups come first, in the order you pin them, and the **APC40 mk2 · busk**
+controller layout puts the first four on its track faders 5–8.
 
 The **grand master** (top bar) scales all dimmer/white output. **Blackout** (top bar or `B`) zeroes intensity and strobing instantly — it always wins.
 

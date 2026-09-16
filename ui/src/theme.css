@@ -789,7 +789,8 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
    (heads + song row + five 72px rows + groups + gaps + padding). */
 .app.view-pads .controlrow { margin-top: 0; padding-top: 0; border-top: none; }
 .app.view-pads .groupsrow .layerhead { height: auto; min-height: 0; }
-.app.view-pads .groupsrow .prose { display: none; }
+/* the head's own line only: the pin menu opens from inside this row and its sentence must stay */
+.app.view-pads .groupsrow .layerhead > .prose { display: none; }
 /* the dial cells flex between the pad track's floor and ceiling, and the row
    ends in the add column's width, so eight dials sit under eight pads exactly */
 .controlrow .ctlcell { flex: 1 1 0; min-width: var(--size-pad-w-min); max-width: var(--size-pad-w-max); }
@@ -1691,6 +1692,31 @@ button.warnchip { background: none; cursor: pointer; }
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
+/* The GROUPS head's name is the key to its pin menu: it keeps the label's
+   look, and the chevron says there is more behind it. */
+.controlhead .namekey {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.controlhead .namekey:hover { color: var(--text); }
+/* opens upward from the head: the row is the foot of the grid */
+.popover.grouppins {
+  position: fixed;
+  z-index: 201; /* not a token: one above the menu catcher, as the tint strip */
+  transform: translateY(calc(-100% - var(--space-4)));
+  max-width: var(--size-picker-w);
+  padding: var(--space-4) var(--space-6);
+}
+.popover.grouppins .pinlist { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
+.popover.grouppins .pinslot { margin-right: var(--space-3); color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
 /* pulled down: the one state worth spotting from across a room */
 .subcell.down { border-color: var(--color-status-nudge); }
 .subcell.down .fader .val { color: var(--color-status-nudge); }
