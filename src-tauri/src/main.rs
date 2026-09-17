@@ -179,6 +179,7 @@ fn main() {
             update_install::update_download,
             update_install::update_install,
             update_install::update_cancel,
+            update_install::update_outcome,
             licence_net::licence_status,
             licence_net::licence_relaunch,
             licence_net::licence_start_trial,

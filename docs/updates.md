@@ -136,9 +136,33 @@ from an external SSD — `mv` would degrade to copy-then-unlink, which is neithe
 atomic nor safe to interrupt, so the install refuses and points at the manual
 download instead of shipping an untested path.
 
-Three tests run the real script through `sh` with `open`, `lsof` and `xattr`
-stubbed: the happy path, the rollback, and a target path containing a space, a
-quote and a semicolon.
+**What the operator sees.** The panel polls from the moment download is
+pressed — not from the moment it hears "downloading", which only arrived after
+the download had finished, so the bar never appeared. While the zip comes down
+it shows a filling bar, megabytes done of the total, the speed over the last
+two seconds and roughly how long is left; unpacking and the signature check get
+a band that keeps moving, because neither has a length to show. After the
+second install press it says it is quitting and will reopen by itself, and
+waits a moment so that can be read before the window goes.
+
+**The reopened copy says what happened.** The swap script writes a short
+outcome file in the per-user temp directory (`light-update-outcome`): `ok`,
+the two versions, or `failed`, the versions and a sentence of why. The copy
+that opens reads it once the engine answers, shows it as a notice — "LIGHT
+updated to 1.6.1 (from 1.6.0)" — and deletes it. If the swap fails at either
+rename, the old bundle is put back (as before) and now also *opened*, with a
+notice saying the update did not install and why; before, a failed swap exited
+with no LIGHT running and nothing on screen. A copy that says it installed
+1.6.1 but opens as something else says that instead of claiming success.
+
+These run in the copy doing the updating, so each version's install shows what
+that version knew: the first update to show any of this is the one made FROM
+the release that contains it.
+
+Five tests run the real script through `sh` with `open`, `lsof` and `xattr`
+stubbed: the happy path and its outcome, the rollback (which reopens and
+explains), a target that cannot be moved aside at all, a stray outcome file,
+and a target path containing a space, a quote and a semicolon.
 
 ## What is deliberately not here
 

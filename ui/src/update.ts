@@ -6,6 +6,9 @@
 // install — that would quit the machine running the show from a device that
 // isn't it.
 
+import type { InstallOutcome } from './installWords.ts';
+export type { InstallOutcome } from './installWords.ts';
+
 type Invoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 
 function bridge(): Invoke | null {
@@ -66,6 +69,8 @@ export const updateCheckNow = () => call<UpdateStatus>('update_check_now');
 export const updateProgress = () => call<InstallProgress>('update_progress');
 export const updateDownload = () => call<InstallProgress>('update_download');
 export const updateCancel = () => call<InstallProgress>('update_cancel');
+
+export const updateOutcome = () => call<InstallOutcome | null>('update_outcome');
 
 /** Arms the swap and quits. Nothing after this call runs. */
 export const updateInstall = (port: number) => call<void>('update_install', { port });

@@ -1428,6 +1428,10 @@ table.tbl th { color: var(--text-dim); }
 .patchsec { margin-top: var(--space-18); }
 .progress { height: var(--size-progress-h); background: var(--panel2); border-radius: var(--radius-sm); overflow: hidden; }
 .progress .fill { height: 100%; background: var(--text-dim); border-radius: var(--radius-sm); transition: width var(--motion-fast) linear; }
+/* a step with no length to show (unpacking, checking a signature, the swap): a
+   band that keeps moving, so a panel that is working never looks stuck */
+.progress.busy .fill { width: 30%; animation: progress-sweep var(--motion-pulse-find) ease-in-out infinite; }
+@keyframes progress-sweep { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 
 /* ---------- prose: help copy reads as sentences, not as a tracked caption ---------- */
 .prose {
@@ -1794,6 +1798,7 @@ button.warnchip { background: none; cursor: pointer; }
    glows — they simply arrive at once. */
 @media (prefers-reduced-motion: reduce) {
   .identifychip, .btn.blackout.hot, .offlinebar, .splash .dot { animation: none; }
+  .progress.busy .fill { animation: none; width: 100%; opacity: var(--opacity-disabled); }
   .cell, .cell .swatch, .cell .face, .btn, .fold { transition: none; }
 }
 

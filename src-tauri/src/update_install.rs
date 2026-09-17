@@ -99,6 +99,14 @@ fn staging() -> PathBuf {
     std::env::temp_dir().join("light-update")
 }
 
+/// What the swap script leaves behind for the copy it opens: whether the swap
+/// happened, from which version to which, and why not if it did not. Beside the
+/// script, in the per-user temp dir, and read once — by the relaunched copy on
+/// its first look, which deletes it.
+fn outcome_path() -> PathBuf {
+    std::env::temp_dir().join("light-update-outcome")
+}
+
 fn script_path() -> PathBuf {
     // Deliberately NOT inside staging(): the script deletes that directory, and
     // a script deleting the directory it is being read from finishes or does not
@@ -506,8 +514,16 @@ pub async fn stage(install: &Install, release: &Release) -> Result<(), String> {
 
 /// Write the script that does the replacing. It is not run here — `main.rs`
 /// spawns it from `ExitRequested`, after the engine has flushed the project.
-pub fn write_swap_script(staged: &Path, target: &Path, port: u16) -> Result<PathBuf, String> {
-    write_swap_script_as(staged, target, port, std::process::id(), &script_path())
+pub fn write_swap_script(staged: &Path, target: &Path, port: u16, to: &str) -> Result<PathBuf, String> {
+    let versions = Versions { from: env!("LIGHT_VERSION"), to };
+    write_swap_script_as(staged, target, port, std::process::id(), &script_path(), &outcome_path(), versions)
+}
+
+/// The two versions a swap is between, for the outcome it reports.
+#[derive(Clone, Copy)]
+pub struct Versions<'a> {
+    pub from: &'a str,
+    pub to: &'a str,
 }
 
 /// The body, with the pid and the destination injectable so the script can be
@@ -519,6 +535,8 @@ fn write_swap_script_as(
     port: u16,
     pid: u32,
     path: &Path,
+    outcome: &Path,
+    versions: Versions<'_>,
 ) -> Result<PathBuf, String> {
     let same_volume = same_device(staged.parent().unwrap_or(staged), target.parent().unwrap_or(target));
     if !same_volume {
@@ -539,6 +557,18 @@ NEW={new}
 TARGET={target}
 BAK={bak}
 PORT={port}
+OUTCOME={outcome}
+FROM={from}
+TO={to}
+
+# What the copy that opens next is told. A failed swap used to exit here with
+# no LIGHT running and no word about why; now it puts the old copy back, says
+# what happened, and opens it.
+fail() {{
+  printf 'failed\n%s\n%s\n%s\n' "$FROM" "$TO" "$1" > "$OUTCOME"
+  [ -d "$TARGET" ] && open "$TARGET"
+  exit 1
+}}
 
 # 1. wait for LIGHT to actually be gone (60 s cap)
 i=0
@@ -553,12 +583,13 @@ while lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1 && [ $i -lt 50 ]; do s
 #    two renames is the only moment there is no LIGHT on this machine, and both
 #    are same-volume renames.
 rm -rf "$BAK"
-mv "$TARGET" "$BAK" || exit 1
+mv "$TARGET" "$BAK" || fail "LIGHT could not move itself aside to make room, so nothing was changed"
 if ! mv "$NEW" "$TARGET"; then
   mv "$BAK" "$TARGET"
-  exit 1
+  fail "the new copy could not be moved into place, so the one you had was put back"
 fi
 rm -rf "$BAK"
+printf 'ok\n%s\n%s\n' "$FROM" "$TO" > "$OUTCOME"
 
 # 4. only now, and only if one is present: it was verified before it got here.
 xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null
@@ -573,6 +604,9 @@ rm -f "$0"
         bak = shell_quote(&format!("{}.old", target.to_string_lossy())),
         staging = shell_quote(&staging().to_string_lossy()),
         port = port,
+        outcome = shell_quote(&outcome.to_string_lossy()),
+        from = shell_quote(versions.from),
+        to = shell_quote(versions.to),
     );
     std::fs::write(path, script).map_err(|e| e.to_string())?;
     #[cfg(unix)]
@@ -604,19 +638,49 @@ pub fn arm(install: &Install, port: u16) -> Result<PathBuf, String> {
     if let Some(why) = refusal() {
         return Err(why);
     }
-    let (staged, _v) = install
+    let (staged, to) = install
         .staged
         .lock()
         .ok()
         .and_then(|s| s.clone())
         .ok_or("nothing has been downloaded yet")?;
     let target = running_bundle().ok_or("this copy is not running from an app bundle")?;
-    let script = write_swap_script(&staged, &target, port)?;
+    let script = write_swap_script(&staged, &target, port, &to)?;
     if let Ok(mut slot) = install.armed.lock() {
         *slot = Some(script.clone());
     }
     install.set_stage("armed");
     Ok(script)
+}
+
+// ------------------------------------------------------------- The outcome
+
+/// What the last install did, as the copy that opens after it reads it.
+#[derive(Serialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Outcome {
+    pub ok: bool,
+    pub from: String,
+    pub to: String,
+    /// why it did not install, in words for the operator
+    pub reason: Option<String>,
+}
+
+/// Read the outcome the swap script left, and remove it: it is said once. A
+/// file that is not one of ours says nothing rather than something wrong.
+pub fn take_outcome(path: &Path) -> Option<Outcome> {
+    let body = std::fs::read_to_string(path).ok()?;
+    let _ = std::fs::remove_file(path);
+    let mut lines = body.lines();
+    let ok = match lines.next()? {
+        "ok" => true,
+        "failed" => false,
+        _ => return None,
+    };
+    let from = lines.next()?.to_string();
+    let to = lines.next()?.to_string();
+    let reason = if ok { None } else { Some(lines.next()?.to_string()) };
+    Some(Outcome { ok, from, to, reason })
 }
 
 #[cfg(test)]
@@ -864,6 +928,8 @@ mod tests {
         pid
     }
 
+    const VERSIONS: Versions<'static> = Versions { from: "1.6.0", to: "1.6.1" };
+
     fn run_script(script: &Path, bin: &Path) -> std::process::Output {
         Command::new("/bin/sh")
             .arg(script)
@@ -886,7 +952,7 @@ mod tests {
         std::fs::write(staged.join("Contents/marker"), "NEW").expect("new");
 
         let script = dir.join("swap.sh");
-        write_swap_script_as(&staged, &target, 9900, dead_pid(), &script).expect("script");
+        write_swap_script_as(&staged, &target, 9900, dead_pid(), &script, &dir.join("outcome"), VERSIONS).expect("script");
         let out = run_script(&script, &bin);
         assert!(out.status.success(), "script failed: {}", String::from_utf8_lossy(&out.stderr));
 
@@ -899,10 +965,19 @@ mod tests {
         assert!(!staged.exists(), "the staged copy was left behind");
         assert!(!script.exists(), "the script did not remove itself");
         assert!(dir.join("opened").is_file(), "LIGHT was not reopened");
+        assert_eq!(
+            take_outcome(&dir.join("outcome")),
+            Some(Outcome { ok: true, from: "1.6.0".into(), to: "1.6.1".into(), reason: None }),
+            "the copy that opens is not told it was updated"
+        );
+        assert!(!dir.join("outcome").exists(), "the outcome is said once, then gone");
     }
 
     /// The case that matters most: if moving the new one in fails, the old one
-    /// comes back. The alternative is a machine with no LIGHT on it.
+    /// comes back. The alternative is a machine with no LIGHT on it. And it is
+    /// OPENED, with a sentence saying what happened: this used to exit with no
+    /// LIGHT running and nothing on screen, so the operator saw it quit for an
+    /// update and simply never return.
     #[test]
     fn a_failed_swap_puts_the_old_bundle_back() {
         let dir = sandbox("rollback");
@@ -915,7 +990,7 @@ mod tests {
         std::fs::create_dir_all(dir.join("staged")).expect("staging dir");
 
         let script = dir.join("swap.sh");
-        write_swap_script_as(&staged, &target, 9900, dead_pid(), &script).expect("script");
+        write_swap_script_as(&staged, &target, 9900, dead_pid(), &script, &dir.join("outcome"), VERSIONS).expect("script");
         let out = run_script(&script, &bin);
 
         assert!(!out.status.success(), "a swap that could not happen reported success");
@@ -924,7 +999,55 @@ mod tests {
             "OLD",
             "the old bundle was not restored — this machine would have no LIGHT on it"
         );
-        assert!(!dir.join("opened").exists(), "a failed swap should not reopen anything");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("opened")).map(|s| s.trim().to_string()).ok(),
+            Some(target.to_string_lossy().to_string()),
+            "the unchanged copy was not reopened — the operator is left with no LIGHT"
+        );
+        let said = take_outcome(&dir.join("outcome")).expect("a failed swap says so");
+        assert!(!said.ok && said.from == "1.6.0" && said.to == "1.6.1", "{said:?}");
+        assert!(said.reason.as_deref().is_some_and(|r| r.contains("put back")), "{said:?}");
+    }
+
+    /// If LIGHT cannot even move itself aside (a folder it may not write), nothing
+    /// is changed — and it still comes back and says so.
+    #[test]
+    fn a_swap_that_cannot_start_reopens_the_copy_it_left() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = sandbox("locked");
+        let bin = stub_path(&dir);
+        let apps = dir.join("Applications");
+        let target = apps.join("LIGHT.app");
+        std::fs::create_dir_all(target.join("Contents")).expect("target");
+        std::fs::write(target.join("Contents/marker"), "OLD").expect("old");
+        let staged = dir.join("staged").join("LIGHT.app");
+        std::fs::create_dir_all(staged.join("Contents")).expect("staged");
+        // a folder whose entries cannot be renamed: the first mv fails
+        std::fs::set_permissions(&apps, std::fs::Permissions::from_mode(0o555)).expect("lock");
+
+        let script = dir.join("swap.sh");
+        write_swap_script_as(&staged, &target, 9900, dead_pid(), &script, &dir.join("outcome"), VERSIONS)
+            .expect("script");
+        let out = run_script(&script, &bin);
+        std::fs::set_permissions(&apps, std::fs::Permissions::from_mode(0o755)).expect("unlock");
+
+        assert!(!out.status.success(), "a swap that could not start reported success");
+        assert_eq!(std::fs::read_to_string(target.join("Contents/marker")).unwrap(), "OLD");
+        assert!(dir.join("opened").is_file(), "the copy it left was not reopened");
+        let said = take_outcome(&dir.join("outcome")).expect("says so");
+        assert!(!said.ok && said.reason.as_deref().is_some_and(|r| r.contains("nothing was changed")), "{said:?}");
+    }
+
+    /// An outcome file that is not one of ours says nothing.
+    #[test]
+    fn a_stray_outcome_file_says_nothing() {
+        let dir = sandbox("stray");
+        let p = dir.join("outcome");
+        std::fs::write(&p, "hello\n").unwrap();
+        assert_eq!(take_outcome(&p), None);
+        std::fs::write(&p, "failed\n1.6.0\n").unwrap();
+        assert_eq!(take_outcome(&p), None, "a truncated report is not a report");
+        assert_eq!(take_outcome(&dir.join("absent")), None);
     }
 
     /// A path with a space and a quote in it must survive into the script.
@@ -942,7 +1065,7 @@ mod tests {
         std::fs::write(staged.join("Contents/marker"), "NEW").expect("new");
 
         let script = dir.join("swap.sh");
-        write_swap_script_as(&staged, &target, 9900, dead_pid(), &script).expect("script");
+        write_swap_script_as(&staged, &target, 9900, dead_pid(), &script, &dir.join("outcome"), VERSIONS).expect("script");
         let out = run_script(&script, &bin);
         assert!(out.status.success(), "script failed: {}", String::from_utf8_lossy(&out.stderr));
         assert_eq!(std::fs::read_to_string(target.join("Contents/marker")).unwrap(), "NEW");
@@ -1012,6 +1135,13 @@ pub fn update_install(
     arm(&install, port)?;
     app.exit(0);
     Ok(())
+}
+
+/// What the last install did, said once: the copy that just opened reads it on
+/// its first look and the file is gone after.
+#[tauri::command]
+pub fn update_outcome() -> Option<Outcome> {
+    take_outcome(&outcome_path())
 }
 
 #[tauri::command]

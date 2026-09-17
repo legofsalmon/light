@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { WS_PORT } from '../../shared/types.ts';
-import { useStore, BUILD_OPENS, PADS_OPENS, type BandView, type ViewMode } from './store.ts';
+import { useStore, pushToast, BUILD_OPENS, PADS_OPENS, type BandView, type ViewMode } from './store.ts';
 import { runShortcut } from './shortcuts.ts';
 import { DialogHost } from './dialog.tsx';
 import { TopBar } from './components/TopBar.tsx';
@@ -18,7 +18,8 @@ import { HelpOverlay } from './components/HelpMode.tsx';
 import { SetupGuide } from './components/SetupGuide.tsx';
 import { ShortcutSheet } from './components/ShortcutSheet.tsx';
 import { WelcomeCard, welcomeSeen } from './components/WelcomeCard.tsx';
-import { updateAvailable, updateStatus } from './update.ts';
+import { updateAvailable, updateOutcome, updateStatus } from './update.ts';
+import { outcomeNotice } from './installWords.ts';
 import { size, sizeTouch, space } from './tokens.ts';
 import { Glyph } from './glyphs.tsx';
 import { APC_LAYER_ROWS } from './apcFeedback.ts';
@@ -185,6 +186,19 @@ export function App() {
   // to end, and an update waiting (review M5). The top bar shows a chip and a
   // dot; both are shell-only, so a browser or the tablet never asks.
   const [updateWaiting, setUpdateWaiting] = useState(false);
+  // What the install that opened this copy did, said once — and only once the
+  // engine answers, so the notice is not spent behind the splash.
+  const outcomeSaid = useRef(false);
+  useEffect(() => {
+    if (!connected || outcomeSaid.current || !updateAvailable()) return;
+    outcomeSaid.current = true;
+    updateOutcome()
+      .then((o) => {
+        const n = outcomeNotice(o, __APP_VERSION__);
+        if (n) pushToast(n.text, n.ok);
+      })
+      .catch(() => {});
+  }, [connected]);
   useEffect(() => {
     if (!updateAvailable()) return;
     let stop = false;

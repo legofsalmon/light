@@ -29,12 +29,13 @@ import {
   type InstallProgress,
   type UpdateStatus,
 } from '../update.ts';
+import { speedWords, timeLeftWords, transferRate, type Reading } from '../installWords.ts';
 import { openExternal } from '../shell.ts';
 
 const STAGE_SAYS: Record<string, string> = {
   downloading: 'Downloading',
   unpacking: 'Unpacking',
-  verifying: 'Checking the signature',
+  verifying: 'Checking the signature and Apple’s notarisation',
   ready: 'Ready to install',
   armed: 'Installing…',
   failed: 'Download failed',
@@ -46,7 +47,11 @@ export function UpdatePanel(): React.ReactElement | null {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [armed, setArmed] = useState(false);
+  /** the second press has landed: say it is coming back before the window goes */
+  const [installing, setInstalling] = useState(false);
   const disarm = useRef<number | null>(null);
+  /** recent looks at the download, for its speed and time left */
+  const readings = useRef<Reading[]>([]);
 
   useEffect(() => {
     if (!updateAvailable()) return;
@@ -57,13 +62,29 @@ export function UpdatePanel(): React.ReactElement | null {
   // Only while something is actually moving. A panel that polls forever forks
   // codesign on the other side of the bridge.
   const running = prog?.stage === 'downloading' || prog?.stage === 'unpacking' || prog?.stage === 'verifying';
+  // AND from the press itself. The download command answers only once the
+  // download, the unpack and the check are all done, so waiting to hear
+  // "downloading" before polling meant the bar could never appear: the panel
+  // sat on a greyed-out button for the whole download, and the first thing it
+  // ever heard was "ready".
+  const watching = running || busy === 'download';
   useEffect(() => {
-    if (!running) return;
-    const t = window.setInterval(() => {
-      updateProgress().then(setProg).catch(() => {});
-    }, 200);
+    if (!watching) return;
+    const look = () =>
+      updateProgress()
+        .then((p) => {
+          if (p.stage === 'downloading') {
+            const r = readings.current;
+            r.push({ at: performance.now(), got: p.got });
+            while (r.length > 2 && r[r.length - 1]!.at - r[0]!.at > 4000) r.shift();
+          }
+          setProg(p);
+        })
+        .catch(() => {});
+    void look();
+    const t = window.setInterval(look, 250);
     return () => window.clearInterval(t);
-  }, [running]);
+  }, [watching]);
 
   useEffect(() => () => {
     if (disarm.current) window.clearTimeout(disarm.current);
@@ -100,13 +121,26 @@ export function UpdatePanel(): React.ReactElement | null {
     }
     setArmed(false);
     setError('');
-    updateInstall(enginePort()).catch((e) => {
-      setError(e instanceof Error ? e.message : String(e));
-      updateProgress().then(setProg).catch(() => {});
-    });
+    setInstalling(true);
+    // A moment to read that it is coming back before the window goes: without
+    // it LIGHT simply vanished, and the seconds until it reopened looked like
+    // a crash.
+    window.setTimeout(() => {
+      updateInstall(enginePort()).catch((e) => {
+        setInstalling(false);
+        setError(e instanceof Error ? e.message : String(e));
+        updateProgress().then(setProg).catch(() => {});
+      });
+    }, 1200);
   };
 
   const pct = prog && prog.total > 0 ? Math.min(100, (prog.got / prog.total) * 100) : 0;
+  const downloading = prog?.stage === 'downloading';
+  const rate = downloading ? transferRate(readings.current) : null;
+  const left = downloading && prog ? timeLeftWords(prog.total - prog.got, rate) : null;
+  // a step with no length to show — unpacking, checking, a download whose size
+  // the server did not say — gets a band that moves instead of a bar that sits
+  const measured = downloading && !!prog && prog.total > 0;
 
   return (
     <div className="col" style={{ gap: 10, maxWidth: 620 }}>
@@ -162,26 +196,40 @@ export function UpdatePanel(): React.ReactElement | null {
             </div>
           ) : (
             <>
-              {prog && prog.stage && prog.stage !== 'ready' && prog.stage !== '' && (
+              {prog && prog.stage && prog.stage !== 'ready' && prog.stage !== '' && !installing && (
                 <div className="col" style={{ gap: 4 }}>
                   <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>
-                    {STAGE_SAYS[prog.stage] ?? prog.stage}
-                    {prog.stage === 'downloading' && prog.total > 0 && (
+                    {downloading ? `Downloading ${found.version.raw}` : (STAGE_SAYS[prog.stage] ?? prog.stage)}
+                    {measured && (
                       <span style={{ fontFamily: 'var(--mono)' }}>
-                        {' '}
-                        {mb(prog.got)} / {mb(prog.total)}
+                        {' — '}
+                        {(prog.got / 1_000_000).toFixed(0)} of {mb(prog.total)}
+                        {rate !== null && ` · ${speedWords(rate)}`}
+                        {left && ` · ${left}`}
                       </span>
                     )}
                   </div>
                   {running && (
-                    <div className="progress">
-                      <div className="fill" style={{ width: `${pct}%` }} />
+                    <div className={`progress ${measured ? '' : 'busy'}`} role="progressbar" aria-valuenow={measured ? Math.round(pct) : undefined} aria-valuemin={0} aria-valuemax={100}>
+                      <div className="fill" style={measured ? { width: `${pct}%` } : undefined} />
                     </div>
                   )}
                 </div>
               )}
 
-              {staged ? (
+              {installing && staged ? (
+                <div className="col" style={{ gap: 6 }}>
+                  <div style={{ color: 'var(--text)', lineHeight: 1.5 }}>
+                    Installing {staged} — LIGHT quits now and reopens by itself in a few seconds.
+                  </div>
+                  <div className="progress busy" role="progressbar">
+                    <div className="fill" />
+                  </div>
+                  <div style={{ color: 'var(--text-dim)', fontSize: 12, lineHeight: 1.5 }}>
+                    The output stops until it is back. When it opens it says whether the update went in.
+                  </div>
+                </div>
+              ) : staged ? (
                 <>
                   <div style={{ color: 'var(--text-dim)', lineHeight: 1.5 }}>
                     {staged} is downloaded and its signature checked. Installing quits LIGHT,
@@ -207,8 +255,15 @@ export function UpdatePanel(): React.ReactElement | null {
                 </>
               ) : (
                 <div className="row" style={{ gap: 6 }}>
-                  <button className="btn on" disabled={busy !== '' || running} onClick={() => run('download', updateDownload)}>
-                    {running ? 'Working…' : `Download ${found.version.raw}`}
+                  <button
+                    className="btn on"
+                    disabled={busy !== '' || running}
+                    onClick={() => {
+                      readings.current = [];
+                      void run('download', updateDownload);
+                    }}
+                  >
+                    {downloading || (busy === 'download' && !running) ? 'Downloading…' : running ? 'Checking…' : `Download ${found.version.raw}`}
                   </button>
                   <button className="btn small ghost" onClick={() => openExternal(found.pageUrl || status?.releasesUrl)}>
                     or get it manually
@@ -225,7 +280,7 @@ export function UpdatePanel(): React.ReactElement | null {
       <div className="row" style={{ gap: 6 }}>
         <button
           className="btn small ghost"
-          disabled={busy !== '' || running}
+          disabled={busy !== '' || running || installing}
           onClick={() => run('check', async () => setStatus(await updateCheckNow()))}
         >
           {busy === 'check' ? 'Checking…' : 'Check now'}

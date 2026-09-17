@@ -23,6 +23,7 @@ import { APC40_COLUMN_ROW, APC40_MK2, APC_COLS, APC_LAYER_ROWS, APC_MINI_MK2, SU
 import { CONTROLLER_PRESETS, apc40Mk2BuskMappings, apc40Mk2Mappings, apcMiniMk2Mappings } from '../../ui/src/controllerPresets.ts';
 import { groupsInRowOrder, livePins, togglePin } from '../../ui/src/groupOrder.ts';
 import { choosePort, midiInputOn } from '../../shared/midiInputs.ts';
+import { outcomeNotice, speedWords, timeLeftWords, transferRate } from '../../ui/src/installWords.ts';
 import { REST_DIR, RIG_HEIGHT_M, restDir, restTiltX } from '../../ui/src/restAim.ts';
 import { lookFace, lookSwatch } from '../../ui/src/lookColors.ts';
 import { describeLearned } from '../../ui/src/labels.ts';
@@ -2631,6 +2632,31 @@ await new Promise<void>((resolve) => {
   // three angles are what the old per-beam tips were, and the one that was not
   const deg = (d: readonly number[]) => Math.round(Math.abs(restTiltX(d as never)) * 180 / Math.PI);
   check('rest aim: rigged is the 22° tip the web always drew, derby 31°, floor 6°', deg(REST_DIR.rigged) === 22 && deg(REST_DIR.derby) === 31 && deg(REST_DIR.floor) === 6, [REST_DIR.rigged, REST_DIR.derby, REST_DIR.floor].map(deg).join(','));
+}
+
+// --- the in-app install says what it is doing ---------------------------------
+// The panel's words are pure so they can be held here: the speed over the last
+// couple of seconds, the time left, and what the reopened copy says. The swap
+// script that writes the outcome is run for real in src-tauri's own tests.
+{
+  check('install: no rate from one reading', transferRate([{ at: 0, got: 0 }]) === null);
+  check('install: no rate from readings too close together', transferRate([{ at: 0, got: 0 }, { at: 200, got: 1e6 }]) === null);
+  const steady = [0, 250, 500, 750, 1000, 1250, 1500].map((at) => ({ at, got: at * 4000 })); // 4 MB/s
+  check('install: a steady download reads its speed', Math.abs(transferRate(steady)! - 4e6) < 1, String(transferRate(steady)));
+  const stalled = [...steady, ...[3750, 4000, 4250].map((at) => ({ at, got: 6e6 }))];
+  check('install: a stall shows within the window, not after the whole download', transferRate(stalled) === 0, String(transferRate(stalled)));
+  check('install: speed reads as an operator says it', speedWords(3.14e6) === '3.1 MB/s' && speedWords(12.6e6) === '13 MB/s');
+  check('install: time left in seconds, then minutes, then almost done',
+    timeLeftWords(20e6, 4e6) === 'about 5 s left' && timeLeftWords(600e6, 4e6) === 'about 3 min left' && timeLeftWords(4e6, 4e6) === 'almost done');
+  check('install: no time left without a rate', timeLeftWords(20e6, null) === null && timeLeftWords(20e6, 0) === null);
+  check('install: nothing to say without an install', outcomeNotice(null, '1.6.1') === null);
+  const ok = outcomeNotice({ ok: true, from: '1.6.0', to: '1.6.1', reason: null }, '1.6.1');
+  check('install: the reopened copy says it was updated', ok?.ok === true && ok.text === 'LIGHT updated to 1.6.1 (from 1.6.0).', JSON.stringify(ok));
+  check('install: a leading v is the same version', outcomeNotice({ ok: true, from: 'v1.6.0', to: 'v1.6.1', reason: null }, '1.6.1')?.ok === true);
+  const failed = outcomeNotice({ ok: false, from: '1.6.0', to: '1.6.1', reason: 'the new copy could not be moved into place, so the one you had was put back' }, '1.6.0');
+  check('install: a failed install says why and what is still there', failed?.ok === false && /did not install — the new copy could not be moved/.test(failed.text) && /1\.6\.0 is still here and unchanged/.test(failed.text), JSON.stringify(failed));
+  const wrong = outcomeNotice({ ok: true, from: '1.6.0', to: '1.6.1', reason: null }, '1.6.0');
+  check('install: a swap that reopened the old version does not claim success', wrong?.ok === false, JSON.stringify(wrong));
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);
