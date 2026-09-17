@@ -410,8 +410,16 @@ pub struct MoverHead {
 /// movers, so it was also the most common thing on screen.
 ///
 /// The aim quaternion splits onto the two joints with no maths change at all.
-/// `MoverHead::rest` is `looking_to(beam_dir, Y)` and every `beam_dir` has a
-/// zero X component, so `rest` is a pure pitch about X and carries no yaw:
+/// `MoverHead::rest` is `looking_to(beam_dir, -Z)`: every `beam_dir` has a
+/// zero X component, so this rest is a pure pitch that keeps its local X on
+/// the rig's own +X — the frame the web previz tilts and pans in. The `-Z`
+/// up hint, rather than `Y`, is what makes the two windows agree on which way
+/// a head swings: with `Y` the rest frame's X came out negated and this
+/// window mirrored the main one on BOTH pan and tilt (a Spiider aimed
+/// stage-left here where the main window aimed stage-right, and tilted up
+/// where it tilted down). Paired with the web's pan sign in `update.rs`, the
+/// beam vector now matches the main window across flat, mounting-tilted and
+/// rigged fixtures alike. So:
 ///
 ///   yoke  = from_rotation_y(pan)
 ///   shell = rest * from_rotation_x(tilt)
@@ -1250,7 +1258,7 @@ pub fn rebuild_fixtures(
                     MoverPart::Yoke,
                     MoverHead {
                         aim_head: prof.aim_head.unwrap_or(0),
-                        rest: Transform::default().looking_to(rest_dir, Vec3::Y).rotation,
+                        rest: Transform::default().looking_to(rest_dir, Vec3::NEG_Z).rotation,
                         pan_range: (prof.pan_deg as f32).to_radians(),
                         tilt_range: (prof.tilt_deg as f32).to_radians(),
                         root_rot: root_tf.rotation,
@@ -1272,7 +1280,7 @@ pub fn rebuild_fixtures(
                     MoverPart::Shell,
                     MoverHead {
                         aim_head: prof.aim_head.unwrap_or(0),
-                        rest: Transform::default().looking_to(rest_dir, Vec3::Y).rotation,
+                        rest: Transform::default().looking_to(rest_dir, Vec3::NEG_Z).rotation,
                         pan_range: (prof.pan_deg as f32).to_radians(),
                         tilt_range: (prof.tilt_deg as f32).to_radians(),
                         root_rot: root_tf.rotation,
@@ -1639,13 +1647,36 @@ pub fn rebuild_fixtures(
                         // one RectLight for the fixture, spawned after this
                         // loop — not a cone per cell.
                         _ if prof.form == FixtureForm::Panel => {}
-                        _ if pixel_strip => {} // emissive glow only
+                        // A static pixel batten stays emissive-only: sixty
+                        // cones down a metre of truss is exactly the cost this
+                        // exclusion exists to avoid. But a pixel MOVER — a
+                        // Spiider, whose pan/tilt makes `form == Mover` even
+                        // though its emitters are an all-RGB face — is a moving
+                        // head and throws a beam. Give it ONE shaft, on the head
+                        // that carries the aim; its other pixels stay emissive so
+                        // the fixture reads as one cone rather than twenty stacked
+                        // on the same axis. The web previz draws the same beam,
+                        // which is why a Spiider lit here without one.
+                        _ if pixel_strip
+                            && (prof.form != FixtureForm::Mover
+                                || hi != prof.aim_head.unwrap_or(0)) => {}
                         _ => {
+                            // A fixture's declared flux is its whole output,
+                            // split between the heads that draw a beam. A pixel
+                            // mover draws exactly ONE (the aim head, above), so
+                            // that beam carries the whole fixture — at a
+                            // twenty-second share a Spiider's shaft was lit
+                            // like a torch and vanished behind its own glow.
+                            let beam_lumens = if pixel_strip {
+                                lumens_for(&prof, false)
+                            } else {
+                                lumens_for(&prof, true)
+                            } * q.lumen_scale;
                             h.spawn((
                                 tag.clone(),
                                 BeamLight {
                                     idx: 0,
-                                    lumens: lumens_for(&prof, true) * q.lumen_scale,
+                                    lumens: beam_lumens,
                                     base_outer: outer,
                                 },
                                 SpotLight {
@@ -1685,7 +1716,7 @@ pub fn rebuild_fixtures(
                                     tag.clone(),
                                     BeamLight {
                                         idx: 0,
-                                        lumens: lumens_for(&prof, true) * q.lumen_scale,
+                                        lumens: beam_lumens,
                                         base_outer: outer,
                                     },
                                     BeamCone {

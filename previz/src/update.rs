@@ -168,6 +168,30 @@ fn gate(now_s: f32, st: f32) -> f32 {
     }
 }
 
+/// The two joint rotations of a moving head at a live pan/tilt — the yoke,
+/// which swings about the rig vertical, and the shell, which carries the rest
+/// pose and the tilt. Their product applied to `-Z` is where the beam points.
+///
+/// This is the ONE place the pan/tilt sign convention lives, so the native and
+/// web previz cannot disagree about where a head aims — a divergence that has
+/// come back more than once. Pan is `0.5 - v`, matching the web
+/// (ui/src/components/Previz3D.tsx); tilt is `v - 0.5`; both are pinned to the
+/// web's own numbers by `a_mover_points_where_the_web_previz_points`.
+pub fn mover_joints(
+    rest: Quat,
+    pan01: f32,
+    tilt01: f32,
+    pan_range: f32,
+    tilt_range: f32,
+) -> (Quat, Quat) {
+    let pan = (0.5 - pan01) * pan_range;
+    let tilt = (tilt01 - 0.5) * tilt_range;
+    (
+        Quat::from_rotation_y(pan),
+        rest * Quat::from_rotation_x(tilt),
+    )
+}
+
 /// Apply the latest snapshot to lights, glows, rings, fans, and fog —
 /// smoothing intensities at render rate between 20 fps snapshots.
 #[allow(clippy::too_many_arguments)]
@@ -427,25 +451,22 @@ pub fn apply_live(
         // Steer by the head that CARRIES the aim channels, which for a pixel
         // mover is not this beam's own head (see MoverHead::aim_head).
         let Some(h) = heads.get(&(tag.fixture.clone(), mv.aim_head)) else { continue };
-        let pan = (h.pan - 0.5) * mv.pan_range;
-        let tilt = (h.tilt - 0.5) * mv.tilt_range;
-        // The full aim, built here rather than read back off the transform.
+        // The aim, split onto the two joints exactly as they compose. The one
+        // place the pan/tilt sign convention lives is `mover_joints`, so this
+        // window's beams cannot drift from the main one's again — a golden test
+        // pins that function to the web previz's own numbers.
         //
-        // It used to be read back — `tf.rotation * Vec3::NEG_Z` — which worked
-        // when one entity held the whole rotation. Split across two ancestors,
-        // the shell's local rotation is only half of it and the yoke's is the
-        // other half, so reading either alone gives the rest-pose direction and
-        // every shaft freezes at its resting length. That is precisely the bug
-        // parked-work section 5 records as already fixed once, and it would
-        // have come straight back.
-        //
-        // Reading the propagated GlobalTransform instead is not the answer
-        // either: propagation runs in PostUpdate, so it describes the PREVIOUS
-        // frame and the shaft would lag the head by one frame while sweeping.
-        let aim = Quat::from_rotation_y(pan) * mv.rest * Quat::from_rotation_x(tilt);
+        // Built here rather than read back off the transform: split across two
+        // ancestors, the shell's local rotation is only half of it, so reading
+        // either alone gives the rest-pose direction and every shaft freezes at
+        // its resting length (the bug parked-work section 5 records as fixed
+        // once). Reading the propagated GlobalTransform is no better — it runs
+        // in PostUpdate, a frame late, so the shaft would lag a sweeping head.
+        let (yoke_rot, shell_rot) =
+            mover_joints(mv.rest, h.pan, h.tilt, mv.pan_range, mv.tilt_range);
         let want = match part {
-            MoverPart::Yoke => Quat::from_rotation_y(pan),
-            MoverPart::Shell => mv.rest * Quat::from_rotation_x(tilt),
+            MoverPart::Yoke => yoke_rot,
+            MoverPart::Shell => shell_rot,
         };
         if tf.rotation.angle_between(want) > 1e-5 {
             tf.rotation = want;
@@ -453,7 +474,7 @@ pub fn apply_live(
         if *part == MoverPart::Yoke {
             // One fixture, one throw — computed on the yoke so it is not done
             // twice per mover.
-            let dir = (mv.root_rot * (aim * Vec3::NEG_Z)).normalize_or_zero();
+            let dir = (mv.root_rot * (yoke_rot * shell_rot * Vec3::NEG_Z)).normalize_or_zero();
             let throw = if dir.y < -0.01 {
                 (mv.height / -dir.y).clamp(1.0, mv.max_throw) // hits the floor
             } else {
@@ -952,5 +973,58 @@ mod sig_tests {
     #[test]
     fn an_unchanged_patch_does_not_rebuild() {
         assert_eq!(patch_signature(&with_x(1.5)), patch_signature(&with_x(1.5)));
+    }
+}
+
+#[cfg(test)]
+mod aim_tests {
+    use super::mover_joints;
+    use bevy::prelude::*;
+
+    /// The web previz (ui/src/components/Previz3D.tsx) is the frame a rig is
+    /// focused against, so this window has to point a moving head exactly where
+    /// the main one does. The two have drifted apart more than once — pan and
+    /// tilt each silently mirrored — so the agreement is pinned here.
+    ///
+    /// Each expected vector was measured by composing the main window's own
+    /// three.js scene graph (fixture → pan → rest → tilt, beam down local -Y)
+    /// for the same inputs. If a row fails, this window has diverged from the
+    /// main one again; fix `mover_joints` or the rest frame, not the numbers.
+    #[test]
+    fn a_mover_points_where_the_web_previz_points() {
+        // (rot_x, rot_y, height, pan01, tilt01, pan_deg, tilt_deg) -> [x, y, z]
+        let rows: [(f32, f32, f32, f32, f32, f32, f32, [f32; 3]); 10] = [
+            (0.0, 0.0, 0.3, 0.5, 0.5, 540.0, 270.0, [0.0, -0.995, 0.0998]),
+            (0.0, 0.0, 0.3, 0.5, 0.75, 540.0, 270.0, [0.0, -0.473, -0.8811]),
+            (0.0, 0.0, 0.3, 0.5, 0.25, 540.0, 270.0, [0.0, -0.2886, 0.9575]),
+            (0.0, 0.0, 0.3, 0.75, 0.5, 540.0, 270.0, [-0.0706, -0.995, -0.0706]),
+            (0.0, 0.0, 0.3, 0.25, 0.5, 540.0, 270.0, [0.0706, -0.995, -0.0706]),
+            (0.0, 0.0, 0.3, 0.75, 0.75, 540.0, 270.0, [0.623, -0.473, 0.623]),
+            // a Spiider's real tilt travel is 220, not the old assumed 270
+            (0.0, 0.0, 0.3, 0.5, 0.75, 540.0, 220.0, [0.0, -0.6525, -0.7578]),
+            // a fixture hung with a mounting tilt, then panned and swung off it
+            (-1.4, 0.0, 0.3, 0.6, 0.6, 540.0, 270.0, [0.2935, -0.3685, 0.8821]),
+            (-1.4, 0.5, 0.3, 0.6, 0.6, 540.0, 270.0, [0.6805, -0.3685, 0.6334]),
+            // and one hung above the rig height, so it rests on the rigged row
+            (-1.4, 0.5, 4.0, 0.6, 0.6, 540.0, 270.0, [0.5316, -0.2228, 0.8171]),
+        ];
+        for (rx, ry, y, pan, tilt, pd, td, expected) in rows {
+            // the rest table, shared with the web (ui/src/restAim.ts)
+            let rest_dir = if y > 1.2 {
+                Vec3::new(0.0, -0.93, 0.37)
+            } else {
+                Vec3::new(0.0, -0.995, 0.0998)
+            };
+            let rest = Transform::default().looking_to(rest_dir, Vec3::NEG_Z).rotation;
+            let root = Quat::from_euler(EulerRot::YXZ, ry, rx, 0.0);
+            let (yoke, shell) =
+                mover_joints(rest, pan, tilt, pd.to_radians(), td.to_radians());
+            let dir = (root * (yoke * shell * Vec3::NEG_Z)).normalize();
+            let want = Vec3::from_array(expected);
+            assert!(
+                dir.abs_diff_eq(want, 2e-3),
+                "pan {pan} tilt {tilt} rx {rx} ry {ry} y {y}: this window aims {dir:?}, the web aims {want:?}"
+            );
+        }
     }
 }
