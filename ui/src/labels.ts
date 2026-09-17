@@ -13,6 +13,7 @@ export const WAVE_LABEL: Record<Wave, string> = {
   square: 'square',
   chase: 'chase',
   random: 'random',
+  curve: 'curve',
 };
 
 /** The stage props by the name a person would say — the plan's remove dialog

@@ -14,6 +14,8 @@ import { DialMenu, IntInput } from './fields.tsx';
 import { capableTargets } from './groups.ts';
 import { type SpreadPreview, useEditorStore } from '../../editorStore.ts';
 import { useStore } from '../../store.ts';
+import { WaveStrip } from './WaveStrip.tsx';
+import { DEFAULT_CURVE } from '../../../../shared/types.ts';
 
 /** Beats per cycle, by the musical length an operator would say. */
 export const RATES: { v: number; label: string }[] = [
@@ -27,7 +29,7 @@ export const RATES: { v: number; label: string }[] = [
   { v: 0.25, label: '1/4' },
 ];
 
-const WAVES: Wave[] = ['sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random'];
+const WAVES: Wave[] = ['sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random', 'curve'];
 
 /** Spread bases in display order, with the labels the operators know. */
 /** Spread bases in display order. The picture is the label here — these are
@@ -174,11 +176,30 @@ export function EffectRow({ fx, kinds, canAim, beamCaps, headsPerFixture, lookId
           ))}
         </select>
       ) : (
-        <select className="sel" title="the wave shape — chase runs one head at a time and forces a full spread" value={fx.wave} onChange={(e) => onEdit((x) => (x.wave = e.target.value as Wave))}>
+        <select
+          className="sel"
+          title="the wave shape — chase runs one head at a time and forces a full spread; curve is one you draw in the strip beside it"
+          value={fx.wave}
+          onChange={(e) => onEdit((x) => {
+            x.wave = e.target.value as Wave;
+            // a drawn wave starts from the default ramp, here and not only on
+            // the engine's echo, so the strip draws what the rig will play
+            if (x.wave === 'curve' && !x.curve) x.curve = DEFAULT_CURVE.map((p) => ({ ...p }));
+          })}
+        >
           {WAVES.map((w) => (
             <option key={w} value={w}>{WAVE_LABEL[w]}</option>
           ))}
         </select>
+      )}
+      {fx.target !== 'shape' && (
+        <WaveStrip
+          fx={fx}
+          rate={rate}
+          width={fx.wave === 'curve' ? 200 : 96}
+          height={fx.wave === 'curve' ? 56 : 24}
+          onCurve={fx.wave === 'curve' ? (points) => onEdit((x) => { x.curve = points; }) : undefined}
+        />
       )}
       <select
         className="sel"

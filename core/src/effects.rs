@@ -57,6 +57,33 @@ pub fn shape_amps(size: f64, aspect: f64) -> (f64, f64) {
     )
 }
 
+/// How a drawn segment gets from its start to its end: a one-dimensional
+/// quadratic Bézier whose middle control sits at `bend`. Plain multiplications
+/// and additions only — no powf(), whose last bit libm and V8 need not agree
+/// on. Mirrors curveEase in shared/effects.ts, in the same order of operations.
+pub fn curve_ease(u: f64, bend: f64) -> f64 {
+    let k = 0.5 + bend * 0.5;
+    2.0 * (1.0 - u) * u * k + u * u
+}
+
+/// A drawn wave's value at `p` in 0..1: holds the first value before the first
+/// point and the last after the last. Mirrors curveValue in shared/effects.ts.
+pub fn curve_value(points: &[crate::types::CurvePoint], p: f64) -> f64 {
+    let Some(first) = points.first() else { return 0.0 };
+    if p <= first.t {
+        return first.v;
+    }
+    for w in points.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        if p < b.t {
+            let span = b.t - a.t;
+            let u = if span > 0.0 { (p - a.t) / span } else { 1.0 };
+            return a.v + (b.v - a.v) * curve_ease(u, a.bend);
+        }
+    }
+    points[points.len() - 1].v
+}
+
 pub fn wave_value(e: &Effect, phase: f64, head_idx: usize) -> f64 {
     let p = ((phase % 1.0) + 1.0) % 1.0;
     match e.wave {
@@ -78,6 +105,12 @@ pub fn wave_value(e: &Effect, phase: f64, head_idx: usize) -> f64 {
             }
         }
         Wave::Random => hash01(phase.floor().clamp(-2147483648.0, 2147483647.0) as i32, head_idx as i32 * 7919 + 13),
+        // repair always gives a curve wave its points; the default is what it
+        // would have given one that somehow arrived without them
+        Wave::Curve => match &e.curve {
+            Some(pts) => curve_value(pts, p),
+            None => curve_value(&crate::types::default_curve(), p),
+        },
     }
 }
 
@@ -106,6 +139,8 @@ pub fn mod_wave(wave: Wave, phase: f64, seed_idx: usize) -> f64 {
             }
         }
         Wave::Random => hash01(phase.floor().clamp(-2147483648.0, 2147483647.0) as i32, seed_idx as i32 * 7919 + 13),
+        // a modulator has no points to draw, and repair never lets one be a curve
+        Wave::Curve => 0.0,
     }
 }
 
@@ -540,6 +575,7 @@ mod fan_tests {
             shape_aspect: None,
             shape_rotate: None,
             shape_ccw: false,
+            curve: None,
         }
     }
 

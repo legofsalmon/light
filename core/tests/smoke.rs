@@ -1062,3 +1062,78 @@ fn letting_go_of_a_pad_on_a_group_level_leaves_the_group_lit() {
     st.apply_midi(0xb0, 20, 0, 3.0);
     assert_eq!(st.submasters.get("g-pars").copied(), Some(0.0), "a fader at the bottom takes the group out");
 }
+
+/// A drawn wave gives the same bits on both engines. The Node twin holds the
+/// SAME table (engine/test/smoke.ts, "curve: every row of the table"); the
+/// ease is plain arithmetic, so the rows are exact rather than near.
+#[test]
+fn a_drawn_wave_reads_the_same_bits_as_the_node_twin() {
+    use light_core::effects::curve_value;
+    use light_core::types::CurvePoint as P;
+    let pt = |t: f64, v: f64, bend: f64| P { t, v, bend };
+    let def = vec![pt(0.0, 0.0, 0.0), pt(0.25, 1.0, 0.0)];
+    let hit = vec![pt(0.0, 0.0, 0.6), pt(0.15, 1.0, 0.0)];
+    let three = vec![pt(0.1, 0.2, -0.7), pt(0.5, 0.9, 0.3), pt(0.7, 0.4, 0.0)];
+    let one = vec![pt(0.5, 0.7, 0.0)];
+    let twin = vec![pt(0.3, 0.1, 0.0), pt(0.3, 0.9, 0.0)];
+    let table: Vec<(&Vec<P>, f64, u64)> = vec![
+        (&def, 0.1, 0x3fd999999999999a), // the default ramp, mid-way: linear,
+        (&def, 0.5, 0x3ff0000000000000), // past the last point: the value holds,
+        (&def, 0.0, 0x0000000000000000), // the very start,
+        (&hit, 0.05, 0x3fdddddddddddde0), // a bend of 0.6: fast start,
+        (&hit, 0.15, 0x3ff0000000000000), // the top of the ramp exactly,
+        (&three, 0.05, 0x3fc999999999999a), // before the first point: holds its value,
+        (&three, 0.33, 0x3fdee57a786c2267), // a bend of -0.7: slow start,
+        (&three, 0.65, 0x3fdfccccccccccca), // the third segment, bend 0.3,
+        (&three, 0.9, 0x3fd999999999999a), // after the last point,
+        (&one, 0.2, 0x3fe6666666666666), // one point: constant, before it,
+        (&one, 0.9, 0x3fe6666666666666), // one point: constant, after it,
+        (&twin, 0.3, 0x3fb999999999999a), // two points at one t: the later one wins from there,
+        (&twin, 0.29, 0x3fb999999999999a), // and the earlier one before it
+    ];
+    for (pts, p, bits) in table {
+        let got = curve_value(pts, p);
+        assert_eq!(got.to_bits(), bits, "p={p}: got {got}");
+    }
+    assert_eq!(curve_value(&[], 0.5), 0.0, "no points is no wave");
+}
+
+/// The repair of a drawn wave mirrors the Node sanitizer: finite only, clamped,
+/// sorted stably, capped at 32, the default ramp when nothing is left — and
+/// only a curve wave carries points at all.
+#[test]
+fn a_drawn_wave_is_repaired_like_the_node_twin() {
+    use light_core::types::{default_curve, repair_curve, CurvePoint, Look, Wave};
+    let fixed = repair_curve(Some(&serde_json::json!([
+        {"t": 0.9, "v": 2, "bend": 5}, {"t": -1, "v": 0.5}, {"t": "x", "v": 1}, null, {"t": 0.5, "v": 0.25, "bend": -3}
+    ])));
+    assert_eq!(
+        fixed,
+        vec![CurvePoint { t: 0.0, v: 0.5, bend: 0.0 }, CurvePoint { t: 0.5, v: 0.25, bend: -1.0 }, CurvePoint { t: 0.9, v: 1.0, bend: 1.0 }]
+    );
+    assert_eq!(repair_curve(Some(&serde_json::json!([{"t": "a"}]))), default_curve(), "nothing usable becomes the default ramp");
+    assert_eq!(repair_curve(None), default_curve());
+    let many: Vec<serde_json::Value> = (0..50).map(|i| serde_json::json!({"t": i as f64 / 50.0, "v": 0.5})).collect();
+    assert_eq!(repair_curve(Some(&serde_json::Value::Array(many))).len(), 32, "at most 32 points");
+    let twins = repair_curve(Some(&serde_json::json!([{"t": 0.3, "v": 0.1}, {"t": 0.3, "v": 0.9}])));
+    assert!(twins[0].v == 0.1 && twins[1].v == 0.9, "two points at one t keep the order they were drawn in");
+
+    // through a look, the way a show arrives
+    let look: Look = serde_json::from_str(r#"{"id":"l","name":"l","parts":[{"id":"p","groupId":"g","params":{},"effects":[
+        {"id":"a","target":"dimmer","wave":"curve","rate":4,"size":1,"spread":0,"width":0.5,"phase":0},
+        {"id":"b","target":"dimmer","wave":"sawUp","rate":4,"size":1,"spread":0,"width":0.5,"phase":0,"curve":[{"t":0,"v":0}]}
+    ]}]}"#).expect("look");
+    let fx = &look.parts[0].effects;
+    assert_eq!(fx[0].wave, Wave::Curve);
+    assert_eq!(fx[0].curve.as_deref(), Some(default_curve().as_slice()), "a curve wave without points gets the default ramp");
+    assert!(fx[1].curve.is_none(), "a wave that is not drawn carries no points");
+    let json = serde_json::to_string(&fx[1]).unwrap();
+    assert!(!json.contains("curve"), "and none is written for it: {json}");
+
+    // a modulator has no points to draw
+    let mut p = demo_project();
+    let mut v = serde_json::to_value(&p).unwrap();
+    v["modulators"] = serde_json::json!([{"id":"m","name":"","wave":"curve","rate":4,"phase":0,"on":true,"bindings":[]}]);
+    p = serde_json::from_value(v).unwrap();
+    assert!(p.modulators.is_empty(), "a modulator that claims to be a curve is dropped");
+}

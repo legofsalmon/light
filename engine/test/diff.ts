@@ -1094,6 +1094,49 @@ async function main(): Promise<void> {
     await settle(node, rust);
   }
 
+  // --- a drawn wave: the same points, the same bends, the same bytes ----------
+  // The ease is plain arithmetic in both engines, so this pins the ramp, a
+  // bend each way, the hold after the last point and the wrap at the cycle's
+  // end, on a lit and saturated part so both dimmer and hue reach the bytes.
+  {
+    const p = structuredClone(await currentProject(node));
+    const part = structuredClone(p.looks['wash-rainbow'].parts[0]);
+    const knobs = { rate: 4, size: 1, spread: 0, width: 0.5, phase: 0, bypass: false, mix: 1, distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0 } as const;
+    part.effects = [
+      { ...knobs, id: 'fx-curve-dim', target: 'dimmer', wave: 'curve', curve: [{ t: 0, v: 0, bend: 0.6 }, { t: 0.15, v: 1, bend: 0 }] },
+      { ...knobs, id: 'fx-curve-hue', target: 'hue', wave: 'curve', size: 0.5, phase: 0.1, curve: [{ t: 0.1, v: 0.2, bend: -0.7 }, { t: 0.5, v: 0.9, bend: 0.3 }, { t: 0.7, v: 0.4, bend: 0 }] },
+    ];
+    p.looks['look-curve-test'] = { id: 'look-curve-test', name: 'Curve Test', parts: [part] };
+    const wash = p.layers.find((l) => l.id === 'layer-wash');
+    if (wash) wash.cells[6] = 'look-curve-test';
+    both({ type: 'updateProject', project: p });
+    await sleep(300);
+    both({ type: '_pinClock', effBeat: 0 });
+    both({ type: 'trigger', layerId: 'layer-wash', col: 6 });
+    await settle(node, rust);
+    compareDmx('curve: pinned beat 0.000 (the ramp starts)', node, rust);
+    for (const beat of [0.3, 0.6, 1.0, 2.0, 2.8, 3.9]) {
+      both({ type: '_pinClock', effBeat: beat });
+      await settle(node, rust);
+      compareDmx(`curve: pinned beat ${beat.toFixed(3)}`, node, rust);
+    }
+    // the hold is a hold: two beats inside it (both effects past their last
+    // point, neither wrapped) give one frame
+    both({ type: '_pinClock', effBeat: 2.5 });
+    await settle(node, rust);
+    const held = frameOf(node);
+    both({ type: '_pinClock', effBeat: 3.4 });
+    await settle(node, rust);
+    check('curve: the value holds after the last point', frameOf(node) === held, 'the frame moved inside the hold');
+    // and it is a wave: the ramp's foot and the hold differ
+    both({ type: '_pinClock', effBeat: 0 });
+    await settle(node, rust);
+    check('curve: the ramp and the hold are different frames', frameOf(node) !== held, 'a drawn wave that did nothing');
+    both({ type: 'allStop' });
+    both({ type: 'setBlackout', v: false });
+    await settle(node, rust);
+  }
+
   // --- a mapped SYNC moves the effects, and by the same amount as the SYNC key
   // (design #45a). Both MIDI entry points used to drop the alignment the
   // `resync` command applies — the Rust `EngineMsg::Midi` arm discarded

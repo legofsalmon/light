@@ -84,6 +84,20 @@ const fx = (over: Partial<Omit<Effect, 'id'>>): Omit<Effect, 'id'> => ({ ...BASE
 export const FX_LIBRARY: FxFactoryPreset[] = [
   // ---------------------------------------------------------------- intensity
   {
+    id: 'hit-and-hold',
+    name: 'Hit and hold',
+    category: 'intensity',
+    description: 'Up fast at the top of every bar and held there until the next — a drawn wave, so drag its points in the row to change the attack.',
+    effect: fx({ wave: 'curve', rate: 4, curve: [{ t: 0, v: 0, bend: 0.6 }, { t: 0.12, v: 1, bend: 0 }] }),
+  },
+  {
+    id: 'fall-and-rest',
+    name: 'Fall and rest',
+    category: 'intensity',
+    description: 'Full on the beat, dying away over the first half and resting dark until the next — the hit that lands and leaves.',
+    effect: fx({ wave: 'curve', rate: 1, curve: [{ t: 0, v: 1, bend: -0.6 }, { t: 0.5, v: 0, bend: 0 }] }),
+  },
+  {
     id: 'pulse-bar',
     name: 'Pulse',
     category: 'intensity',

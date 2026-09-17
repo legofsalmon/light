@@ -960,6 +960,20 @@ tr.rowbeamless td:first-child { box-shadow: inset 2px 0 0 var(--line2); }
 }
 .swatches i:hover { transform: scale(1.12); }
 
+/* ---------- the wave strip: one cycle of an effect, drawn, with where it is
+   now — and for a drawn wave, the place it is drawn (WaveStrip.tsx) ---------- */
+.wavestrip { display: block; flex: 0 0 auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.wavestrip.editable { cursor: crosshair; }
+.wavestrip .trace { fill: none; stroke: var(--text-dim); stroke-width: 1.5; }
+/* the hold after the last point: "and it stays there" */
+.wavestrip .hold { stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 3 3; }
+/* where the rig is in the cycle: the live colour, because it is what is playing */
+.wavestrip .playhead { stroke: var(--color-live); stroke-width: 1; }
+.wavestrip .now { fill: var(--color-live); }
+/* the points are the cursor's: cyan, the one colour for what is being edited */
+.wavestrip .pt { fill: var(--accent); stroke: var(--panel); stroke-width: 1; cursor: grab; }
+.wavestrip .bend { fill: var(--panel); stroke: var(--accent); stroke-width: 1; cursor: ns-resize; }
+
 .fxrow {
   display: flex;
   align-items: center;

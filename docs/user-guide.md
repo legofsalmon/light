@@ -125,6 +125,9 @@ Each part can stack effects. **browse…** opens a catalogue of ready-made ones 
 | square | on/off gate (set *width* for duty) |
 | chase | one-at-a-time run across the group (*width* = how many are lit) |
 | random | sample-and-hold flicker |
+| curve | one you draw: drag its points, bend a segment by its middle, and the value holds after the last point until the cycle restarts — a fast ramp then a level held to the end, which no fixed wave can do |
+
+Every effect row draws one cycle of its wave in a strip beside the wave picker, with a mark in the live colour riding along it as the rig plays — the picture is computed the same way the engine computes the output, so the two cannot disagree. For a curve the strip is where you draw: double-click to add a point, right-click (or alt-click) to remove one, and the dashed run after the last point is the hold.
 
 - **rate** is musical: 1/4 beat up to 8 bars.
 - **size** is depth.

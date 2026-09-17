@@ -232,7 +232,22 @@ export type EffectTarget =
  *  itself, and a square has corners you can see the heads hit. */
 export type ShapeKind = 'circle' | 'figure8' | 'square';
 export const SHAPE_KINDS: readonly ShapeKind[] = ['circle', 'figure8', 'square'];
-export type Wave = 'sine' | 'triangle' | 'sawUp' | 'sawDown' | 'square' | 'chase' | 'random';
+export type Wave = 'sine' | 'triangle' | 'sawUp' | 'sawDown' | 'square' | 'chase' | 'random' | 'curve';
+
+/** One point of a drawn wave: where in the cycle (0..1), what value (0..1),
+ *  and how the segment AFTER it bends toward the next point — -1 starts slow,
+ *  0 is a straight line, 1 starts fast. Before the first point the wave holds
+ *  the first value; after the last it holds the last, until the cycle
+ *  restarts. That hold is the whole reason a drawn wave exists: a ramp at the
+ *  top of the cycle and a level held to the end is a shape no fixed wave has.
+ *  Mirrors CurvePoint in core/src/types.rs. */
+export type CurvePoint = { t: number; v: number; bend: number };
+export const CURVE_MAX_POINTS = 32;
+/** What a drawn wave starts as: up over the first quarter, then held. */
+export const DEFAULT_CURVE: readonly CurvePoint[] = [
+  { t: 0, v: 0, bend: 0 },
+  { t: 0.25, v: 1, bend: 0 },
+];
 /** How an effect's phase fans across the group: patch order (the legacy
  *  behaviour), a world-position sweep, a ripple from the group's centre, a
  *  seeded scatter, or the fixture's own pixel grid (row/col fan WITHIN each
@@ -250,6 +265,10 @@ export const EFFECT_TARGETS: ReadonlySet<EffectTarget> = new Set<EffectTarget>([
   'goboRotate', 'prismRotate', 'flower', 'shape',
 ]);
 export const WAVES: ReadonlySet<Wave> = new Set<Wave>([
+  'sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random', 'curve',
+]);
+/** A modulator has no points to draw, so it cannot be a curve. */
+export const MOD_WAVES: ReadonlySet<Wave> = new Set<Wave>([
   'sine', 'triangle', 'sawUp', 'sawDown', 'square', 'chase', 'random',
 ]);
 export const DISTRIBUTES: ReadonlySet<Distribute> = new Set<Distribute>([
@@ -332,6 +351,10 @@ export type Effect = {
   shapeRotate?: number;
   /** trace it the other way round (default: false) */
   shapeCcw?: boolean;
+  // --- `curve` wave only. Absent on every other wave, so an effect that is
+  // --- not drawn comes out of repair exactly as it went in.
+  /** the drawn wave's points, in cycle order */
+  curve?: CurvePoint[];
 };
 
 /** Per-fixture pan and tilt calibration.
@@ -1053,6 +1076,28 @@ export function lerp(a: number, b: number, t: number): number {
  *  field finite (a NaN rate/size otherwise reaches the hue-wrap maths), coerce
  *  bypass and clamp mix. Extra fields survive via the spread, keeping
  *  forward-compatibility as the motion engine adds fields. */
+/** A drawn wave's points, made safe: finite numbers only, clamped, in cycle
+ *  order, at most CURVE_MAX_POINTS — and the default ramp when nothing usable
+ *  is left, because a curve wave with no points is no wave at all. Mirrors
+ *  repair_curve in core/src/types.rs, in the same order, so both engines keep
+ *  the same points. */
+export function repairCurve(raw: unknown): CurvePoint[] {
+  const pts: CurvePoint[] = [];
+  if (Array.isArray(raw)) {
+    for (const q of raw) {
+      if (!q || typeof q !== 'object') continue;
+      const o = q as { t?: unknown; v?: unknown; bend?: unknown };
+      if (typeof o.t !== 'number' || !Number.isFinite(o.t) || typeof o.v !== 'number' || !Number.isFinite(o.v)) continue;
+      const bend = typeof o.bend === 'number' && Number.isFinite(o.bend) ? clamp(o.bend, -1, 1) : 0;
+      pts.push({ t: clamp(o.t), v: clamp(o.v), bend });
+      if (pts.length >= CURVE_MAX_POINTS) break;
+    }
+  }
+  // stable, so two points at one t keep the order they were drawn in
+  pts.sort((a, b) => a.t - b.t);
+  return pts.length > 0 ? pts : DEFAULT_CURVE.map((p) => ({ ...p }));
+}
+
 export function repairEffect(e: unknown): Effect | null {
   if (!e || typeof e !== 'object') return null;
   const x = e as Effect;
@@ -1087,6 +1132,8 @@ export function repairEffect(e: unknown): Effect | null {
     shapeAspect: Number.isFinite(x.shapeAspect) ? clamp(x.shapeAspect as number) : undefined,
     shapeRotate: Number.isFinite(x.shapeRotate) ? clamp(x.shapeRotate as number) : undefined,
     shapeCcw: x.shapeCcw === true ? true : undefined,
+    // A drawn wave always carries its points; every other wave never does.
+    ...(x.wave === 'curve' ? { curve: repairCurve(x.curve) } : { curve: undefined }),
   };
 }
 
@@ -1394,7 +1441,7 @@ export function sanitizeProject(p: Project): Project | null {
     p.modulators = Array.isArray(p.modulators)
       ? p.modulators
           .map((m): Modulator | null => {
-            if (!m || typeof m !== 'object' || typeof m.id !== 'string' || !WAVES.has(m.wave)) return null;
+            if (!m || typeof m !== 'object' || typeof m.id !== 'string' || !MOD_WAVES.has(m.wave)) return null;
             const bindings = Array.isArray(m.bindings)
               ? m.bindings
                   .filter(

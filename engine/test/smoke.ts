@@ -38,7 +38,8 @@ import { readFileSync } from 'node:fs';
 import { MAX_THROW, buildOccluders, hitsPropFootprint, standingHeightAt, throwDistance, type Occluder } from '../../shared/beamThrow.ts';
 import { FreezeHold, GO_DARK_FRAMES, OutputGate } from '../output.ts';
 import { aimIsIdentity, applyAim } from '../../shared/aim.ts';
-import { blendSoft, shapeAmps, shapeAt, softReleaseWeight } from '../../shared/effects.ts';
+import { blendSoft, curveValue, shapeAmps, shapeAt, softReleaseWeight } from '../../shared/effects.ts';
+import { DEFAULT_CURVE, MOD_WAVES, repairCurve } from '../../shared/types.ts';
 import { BUILTIN_PROFILE_IDS, SHAPE_KINDS } from '../../shared/types.ts';
 import { PROFILES } from '../../shared/profiles.ts';
 import { FX_CATEGORIES, FX_LIBRARY, fxSearch, unusable } from '../../ui/src/fxLibrary.ts';
@@ -2657,6 +2658,63 @@ await new Promise<void>((resolve) => {
   check('install: a failed install says why and what is still there', failed?.ok === false && /did not install — the new copy could not be moved/.test(failed.text) && /1\.6\.0 is still here and unchanged/.test(failed.text), JSON.stringify(failed));
   const wrong = outcomeNotice({ ok: true, from: '1.6.0', to: '1.6.1', reason: null }, '1.6.0');
   check('install: a swap that reopened the old version does not claim success', wrong?.ok === false, JSON.stringify(wrong));
+}
+
+// --- a drawn wave: the same points give the same bits on both engines ---------
+// The Rust twin is `a_drawn_wave_reads_the_same_bits_as_the_node_twin` in
+// core/tests/smoke.rs, held to this table. The ease is plain arithmetic, so
+// the table is exact rather than near.
+{
+  const bitsOf = (x: number): string => {
+    const b = new DataView(new ArrayBuffer(8));
+    b.setFloat64(0, x);
+    return [...new Uint8Array(b.buffer)].map((v) => v.toString(16).padStart(2, '0')).join('');
+  };
+  type Pt = { t: number; v: number; bend: number };
+  const pt = (t: number, v: number, bend: number): Pt => ({ t, v, bend });
+  const DEF: Pt[] = [pt(0, 0, 0), pt(0.25, 1, 0)];
+  const HIT: Pt[] = [pt(0, 0, 0.6), pt(0.15, 1, 0)];
+  const THREE: Pt[] = [pt(0.1, 0.2, -0.7), pt(0.5, 0.9, 0.3), pt(0.7, 0.4, 0)];
+  const ONE: Pt[] = [pt(0.5, 0.7, 0)];
+  const TWIN: Pt[] = [pt(0.3, 0.1, 0), pt(0.3, 0.9, 0)];
+  const table: [Pt[], number, string][] = [
+    [DEF, 0.1, '3fd999999999999a'], // the default ramp, mid-way: linear,
+    [DEF, 0.5, '3ff0000000000000'], // past the last point: the value holds,
+    [DEF, 0.0, '0000000000000000'], // the very start,
+    [HIT, 0.05, '3fdddddddddddde0'], // a bend of 0.6: fast start,
+    [HIT, 0.15, '3ff0000000000000'], // the top of the ramp exactly,
+    [THREE, 0.05, '3fc999999999999a'], // before the first point: holds its value,
+    [THREE, 0.33, '3fdee57a786c2267'], // a bend of -0.7: slow start,
+    [THREE, 0.65, '3fdfccccccccccca'], // the third segment, bend 0.3,
+    [THREE, 0.9, '3fd999999999999a'], // after the last point,
+    [ONE, 0.2, '3fe6666666666666'], // one point: constant, before it,
+    [ONE, 0.9, '3fe6666666666666'], // one point: constant, after it,
+    [TWIN, 0.3, '3fb999999999999a'], // two points at one t: the later one wins from there,
+    [TWIN, 0.29, '3fb999999999999a'], // and the earlier one before it
+  ];
+  const drift = table.filter(([pts, p, b]) => bitsOf(curveValue(pts, p)) !== b);
+  check('curve: every row of the table matches the Rust twin to the bit', drift.length === 0,
+    drift.map(([, p, b]) => `p=${p} want ${b} got ${bitsOf(curveValue(table.find((r) => r[1] === p && r[2] === b)![0], p))}`).join(' '));
+  check('curve: no points is no wave', curveValue([], 0.5) === 0);
+  check('curve: the default is the ramp the editor starts from', JSON.stringify(DEFAULT_CURVE) === '[{"t":0,"v":0,"bend":0},{"t":0.25,"v":1,"bend":0}]');
+
+  // repair, mirrored in Rust: finite only, clamped, sorted (stably), capped, defaulted
+  const fixed = repairCurve([{ t: 0.9, v: 2, bend: 5 }, { t: -1, v: 0.5 }, { t: 'x', v: 1 }, null, { t: 0.5, v: NaN }, { t: 0.5, v: 0.25, bend: -3 }]);
+  check('curve repair: keeps the finite, clamps, sorts, and a missing bend is straight',
+    JSON.stringify(fixed) === '[{"t":0,"v":0.5,"bend":0},{"t":0.5,"v":0.25,"bend":-1},{"t":0.9,"v":1,"bend":1}]', JSON.stringify(fixed));
+  check('curve repair: nothing usable becomes the default ramp', JSON.stringify(repairCurve([{ t: 'a' }])) === JSON.stringify(DEFAULT_CURVE) && JSON.stringify(repairCurve(undefined)) === JSON.stringify(DEFAULT_CURVE));
+  check('curve repair: at most 32 points', repairCurve(Array.from({ length: 50 }, (_, i) => ({ t: i / 50, v: 0.5 }))).length === 32);
+  const twins = repairCurve([{ t: 0.3, v: 0.1 }, { t: 0.3, v: 0.9 }]);
+  check('curve repair: two points at one t keep the order they were drawn in', twins[0]!.v === 0.1 && twins[1]!.v === 0.9);
+
+  const base = { id: 'e', target: 'dimmer', rate: 4, size: 1, spread: 0, width: 0.5, phase: 0, bypass: false, mix: 1, distribute: 'index', fold: 'none', reverse: false, parts: 1, buddy: 1, seed: 0 };
+  const drawn = repairEffect({ ...base, wave: 'curve' })!;
+  check('curve repair: a curve wave without points gets the default ramp', JSON.stringify(drawn.curve) === JSON.stringify(DEFAULT_CURVE));
+  const notDrawn = repairEffect({ ...base, wave: 'sawUp', curve: [{ t: 0, v: 0, bend: 0 }] })!;
+  check('curve repair: a wave that is not drawn carries no points', notDrawn.curve === undefined && !('curve' in JSON.parse(JSON.stringify(notDrawn))));
+  check('curve: a modulator cannot be one', !MOD_WAVES.has('curve') && MOD_WAVES.size === 7);
+  const dropped = sanitizeProject({ ...demoProject(), modulators: [{ id: 'm', name: '', wave: 'curve', rate: 4, phase: 0, on: true, bindings: [] }] } as never)!;
+  check('curve: a modulator that claims to be one is dropped', (dropped.modulators ?? []).length === 0);
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

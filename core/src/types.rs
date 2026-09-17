@@ -439,6 +439,56 @@ pub enum Wave {
     Square,
     Chase,
     Random,
+    /// drawn: the effect carries its points
+    Curve,
+}
+
+/// One point of a drawn wave: where in the cycle (0..1), what value (0..1),
+/// and how the segment AFTER it bends toward the next point (-1 starts slow, 0
+/// straight, 1 starts fast). Before the first point the wave holds the first
+/// value; after the last it holds the last, until the cycle restarts. Mirrors
+/// CurvePoint in shared/types.ts.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CurvePoint {
+    pub t: f64,
+    pub v: f64,
+    #[serde(default)]
+    pub bend: f64,
+}
+
+pub const CURVE_MAX_POINTS: usize = 32;
+
+/// What a drawn wave starts as: up over the first quarter, then held.
+pub fn default_curve() -> Vec<CurvePoint> {
+    vec![CurvePoint { t: 0.0, v: 0.0, bend: 0.0 }, CurvePoint { t: 0.25, v: 1.0, bend: 0.0 }]
+}
+
+/// A drawn wave's points, made safe: finite numbers only, clamped, in cycle
+/// order, at most CURVE_MAX_POINTS — and the default ramp when nothing usable
+/// is left. Mirrors repairCurve in shared/types.ts, in the same order, so both
+/// engines keep the same points.
+pub fn repair_curve(raw: Option<&serde_json::Value>) -> Vec<CurvePoint> {
+    let mut pts: Vec<CurvePoint> = Vec::new();
+    if let Some(serde_json::Value::Array(items)) = raw {
+        for q in items {
+            let Some(o) = q.as_object() else { continue };
+            let (Some(t), Some(v)) = (o.get("t").and_then(|x| x.as_f64()), o.get("v").and_then(|x| x.as_f64())) else { continue };
+            if !t.is_finite() || !v.is_finite() {
+                continue;
+            }
+            let bend = match o.get("bend").and_then(|x| x.as_f64()) {
+                Some(b) if b.is_finite() => clamp(b, -1.0, 1.0),
+                _ => 0.0,
+            };
+            pts.push(CurvePoint { t: clamp01(t), v: clamp01(v), bend });
+            if pts.len() >= CURVE_MAX_POINTS {
+                break;
+            }
+        }
+    }
+    // stable, so two points at one t keep the order they were drawn in
+    pts.sort_by(|a, b| a.t.partial_cmp(&b.t).unwrap_or(std::cmp::Ordering::Equal));
+    if pts.is_empty() { default_curve() } else { pts }
 }
 
 /// How an effect's phase fans across the group: patch order (the legacy
@@ -567,6 +617,11 @@ pub struct Effect {
     /// Trace it the other way round.
     #[serde(default, skip_serializing_if = "is_false")]
     pub shape_ccw: bool,
+    // --- `Curve` wave only. None on every other wave, so an effect that is not
+    // --- drawn comes out of repair exactly as it went in.
+    /// the drawn wave's points, in cycle order
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub curve: Option<Vec<CurvePoint>>,
 }
 
 /// The figures a `Shape` effect can trace. Mirrors ShapeKind in
@@ -719,6 +774,10 @@ fn de_modulators<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Modulator
             let obj = item.as_object()?;
             let id = obj.get("id")?.as_str()?.to_string();
             let wave = serde_json::from_value::<Wave>(obj.get("wave")?.clone()).ok()?;
+            // a modulator has no points to draw: the Node sanitizer's MOD_WAVES
+            if wave == Wave::Curve {
+                return None;
+            }
             let name = obj.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
             let rate = match obj.get("rate").and_then(|x| x.as_f64()) {
                 Some(n) if n.is_finite() && n > 0.0 => n.min(512.0),
@@ -900,6 +959,8 @@ fn repair_effect(obj: &serde_json::Map<String, serde_json::Value>) -> Option<Eff
         shape_aspect: unit("shapeAspect"),
         shape_rotate: unit("shapeRotate"),
         shape_ccw: obj.get("shapeCcw").and_then(|x| x.as_bool()).unwrap_or(false),
+        // A drawn wave always carries its points; every other wave never does.
+        curve: if wave == Wave::Curve { Some(repair_curve(obj.get("curve"))) } else { None },
     })
 }
 

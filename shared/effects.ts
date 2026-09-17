@@ -1,6 +1,36 @@
-import type { Effect, PartParams, SoftField, Wave, ShapeKind } from './types.ts';
+import type { CurvePoint, Effect, PartParams, SoftField, Wave, ShapeKind } from './types.ts';
 import type { GroupExtents, HeadGeom } from './geometry.ts';
-import { clamp } from './types.ts';
+import { DEFAULT_CURVE, clamp } from './types.ts';
+
+/** How a drawn segment gets from its start to its end: a one-dimensional
+ *  quadratic Bézier whose middle control sits at `bend`. 0 is a straight line;
+ *  1 leaves fast and arrives slowly; -1 the reverse. Plain multiplications and
+ *  additions only — no pow(), whose last bit V8 and libm need not agree on —
+ *  so the two engines produce the same bytes. Mirrors curve_ease in
+ *  core/src/effects.rs, in the same order of operations. */
+export function curveEase(u: number, bend: number): number {
+  const k = 0.5 + bend * 0.5;
+  return 2 * (1 - u) * u * k + u * u;
+}
+
+/** A drawn wave's value at `p` in 0..1. Holds the first value before the first
+ *  point and the last after the last, so a ramp at the top of the cycle stays
+ *  where it landed until the cycle restarts. Mirrors curve_value in
+ *  core/src/effects.rs. */
+export function curveValue(points: readonly CurvePoint[], p: number): number {
+  if (points.length === 0) return 0;
+  if (p <= points[0].t) return points[0].v;
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    if (p < b.t) {
+      const span = b.t - a.t;
+      const u = span > 0 ? (p - a.t) / span : 1;
+      return a.v + (b.v - a.v) * curveEase(u, a.bend);
+    }
+  }
+  return points[points.length - 1].v;
+}
 
 /** Deterministic 0..1 hash for sample-and-hold randomness. */
 function hash01(a: number, b: number): number {
@@ -76,6 +106,10 @@ export function waveValue(e: Effect, phase: number, headIdx: number): number {
     case 'random':
       // clamped for the same wrap-vs-saturate reason as modWave
       return hash01(clamp(Math.floor(phase), -2147483648, 2147483647), headIdx * 7919 + 13);
+    case 'curve':
+      // repair always gives a curve wave its points; the default is for the
+      // editor's own unsanitised copy, and is what repair would give it
+      return curveValue(e.curve ?? DEFAULT_CURVE, p);
     default:
       return 0;
   }
@@ -103,6 +137,9 @@ export function modWave(wave: Wave, phase: number, seedIdx: number): number {
       // clamp before the 32-bit hash: JS ToInt32 wraps where Rust's cast
       // saturates, so beyond ±2^31 the engines would hash different keys
       return hash01(clamp(Math.floor(phase), -2147483648, 2147483647), seedIdx * 7919 + 13);
+    case 'curve':
+      // a modulator has no points to draw, and repair never lets one be a curve
+      return 0;
     default:
       return 0;
   }
