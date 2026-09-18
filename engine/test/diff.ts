@@ -590,8 +590,11 @@ async function main(): Promise<void> {
   compareDmx('imported GDTF fixture (wasm vs native)', node, rust);
   const spot = node.dmx['u1']?.slice(199, 210);
   check(
+    // wheel byte is 7 (open), not the red slot: an RGB fixture's colour wheel
+    // opens so the RGB carries the colour — see open_wheel_slot in cprofile.rs
+    // (the Robe Spiider green-flower fix). Both engines render it identically.
     'imported fixture bytes correct',
-    JSON.stringify(spot) === JSON.stringify([128, 0, 255, 255, 255, 8, 255, 0, 0, 128, 23]),
+    JSON.stringify(spot) === JSON.stringify([128, 0, 255, 255, 255, 8, 255, 0, 0, 128, 7]),
     `got ${JSON.stringify(spot)}`
   );
 
@@ -609,7 +612,7 @@ async function main(): Promise<void> {
     const same = node.dmx['u1']?.slice(199, 210);
     check(
       'focus: base 0.5 leaves output unchanged',
-      JSON.stringify(same) === JSON.stringify([128, 0, 255, 255, 255, 8, 255, 0, 0, 128, 23]),
+      JSON.stringify(same) === JSON.stringify([128, 0, 255, 255, 255, 8, 255, 0, 0, 128, 7]),
       `got ${JSON.stringify(same)}`,
     );
     compareDmx('focus: base 0.5 parity', node, rust);

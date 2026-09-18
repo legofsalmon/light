@@ -553,7 +553,20 @@ fn wheel_quantize(sets: &[WheelSet], p: &ResolvedParams) -> u16 {
     best.map(|(w, _)| w.value as u16).unwrap_or(0)
 }
 
-fn eval_case(case: &FuncCase, p: &ResolvedParams, virtual_dimmer: bool) -> u16 {
+/// The neutral / open slot of an auto colour wheel — the [255,255,255] slot a
+/// desaturated colour picks. On a fixture that mixes colour through RGB, its
+/// gel and macro wheels sit here so the RGB carries the colour. Without it a
+/// nearest-colour match drives every "Color…" attribute from the look colour,
+/// and a Robe Spiider's ColorMixMode and Flower-Effect macro are "Color…"
+/// attributes — so a red look picked a flower macro and the fixture bloomed
+/// green. Returns None when the wheel has no open slot (leave it to the match).
+fn open_wheel_slot(sets: &[WheelSet]) -> Option<u16> {
+    sets.iter()
+        .find(|w| w.auto && w.comps.as_slice() == [[255u8, 255, 255]])
+        .map(|w| w.value as u16)
+}
+
+fn eval_case(case: &FuncCase, p: &ResolvedParams, virtual_dimmer: bool, mixes_rgb: bool) -> u16 {
     match &case.func {
         Func::Fixed { value } => *value,
         Func::Linear { source } => {
@@ -568,6 +581,16 @@ fn eval_case(case: &FuncCase, p: &ResolvedParams, virtual_dimmer: bool) -> u16 {
             if *allow_explicit {
                 if let Some(m) = p.macro_ {
                     return m.clamp(0.0, 255.0).round() as u16;
+                }
+            }
+            // On an RGB-mixing fixture the RGB channels carry the colour, so an
+            // auto colour wheel stays open rather than nearest-colour matching
+            // — otherwise mode and effect wheels named "Color…" follow the look
+            // colour (see open_wheel_slot). Pure colour-wheel fixtures (derbies,
+            // scanners: no RGB) keep matching, which is how they get colour.
+            if mixes_rgb {
+                if let Some(v) = open_wheel_slot(sets) {
+                    return v;
                 }
             }
             wheel_quantize(sets, p)
@@ -585,12 +608,20 @@ fn eval_case(case: &FuncCase, p: &ResolvedParams, virtual_dimmer: bool) -> u16 {
 
 /// Render one fixture's heads through a compiled profile into a DMX buffer.
 pub fn render_compiled(cp: &CompiledProfile, heads: &[&ResolvedParams], buf: &mut [u8], base: usize) {
+    // Does this fixture deliver colour through RGB? Then its colour wheels stay
+    // open (see the Wheel arm of eval_case). Computed once per fixture render.
+    let mixes_rgb = cp.channels.iter().any(|ch| {
+        ch.cases.iter().any(|c| {
+            matches!(&c.func, Func::Linear { source }
+                if matches!(source, Source::ColorR | Source::ColorG | Source::ColorB))
+        })
+    });
     for ch in &cp.channels {
         let Some(p) = heads.get(ch.head) else { continue };
         let mut out = ch.default;
         for case in &ch.cases {
             if cond_matches(&case.cond, p, cp.virtual_dimmer) {
-                out = eval_case(case, p, cp.virtual_dimmer);
+                out = eval_case(case, p, cp.virtual_dimmer, mixes_rgb);
                 break;
             }
         }

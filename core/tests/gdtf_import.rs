@@ -64,8 +64,13 @@ fn renders_expected_bytes() {
     assert_eq!(buf[5], 8, "shutter holds its open default when not strobing");
     assert_eq!([buf[6], buf[7], buf[8]], [255, 0, 0], "rgb");
     assert_eq!(buf[9], 128, "a look that says nothing about zoom leaves it parked");
-    // colour wheel: red look → Red band (16..31), midpoint 23
-    assert_eq!(buf[10], 23, "wheel quantises to the red slot");
+    // colour wheel on an RGB fixture: it OPENS, it does not match the look
+    // colour. The RGB channels above already carry the red; a nearest-colour
+    // match here would also drive mode and effect wheels whose attribute is
+    // named "Color…" (a Robe Spiider's ColorMixMode and Flower-Effect macro),
+    // and a red look picked a flower macro so the fixture bloomed green. Open
+    // slot = the D65 "Open" set (band 0..15, midpoint 7).
+    assert_eq!(buf[10], 7, "an RGB fixture's colour wheel opens, not matches red");
 
     // strobing writes into the strobe function's band (16..199)
     let mut strobing = params();
@@ -78,12 +83,26 @@ fn renders_expected_bytes() {
     render_compiled(p, &refs, &mut buf, 0);
     assert_eq!(buf[5], 16 + 92, "mid strobe maps linearly across the band");
 
-    // explicit wheel override wins
+    // explicit wheel override still wins — picking a gel/gobo by hand bypasses
+    // both the open-on-RGB rule and the nearest-colour match
     let mut explicit = params();
     explicit.macro_ = Some(40.0);
     let refs = vec![&explicit];
     render_compiled(p, &refs, &mut buf, 0);
     assert_eq!(buf[10], 40, "explicit macro value passes through");
+
+    // and a pure colour-wheel fixture (no RGB) still matches by colour, which
+    // is how a scanner or a derby gets its colour at all: drop the RGB channels
+    // from the compiled profile and the same red look quantises to the red slot
+    let mut no_rgb = p.clone();
+    no_rgb
+        .channels
+        .retain(|c| !c.name.starts_with("ColorAdd") && !c.name.starts_with("ColorRGB"));
+    let prm = params();
+    let refs = vec![&prm];
+    let mut buf2 = [0u8; 16];
+    render_compiled(&no_rgb, &refs, &mut buf2, 0);
+    assert_eq!(buf2[10], 23, "without RGB, the wheel is the colour: red matches red");
 }
 
 #[test]
@@ -175,7 +194,7 @@ fn zoom_is_parked_until_a_look_asks_for_it() {
 
     // and the channels around it are untouched either way
     assert_eq!(buf[4], 255, "dimmer unaffected by zoom");
-    assert_eq!(buf[10], 23, "colour wheel unaffected by zoom");
+    assert_eq!(buf[10], 7, "colour wheel opens on an RGB fixture, unaffected by zoom");
 }
 
 // ---------------------------------------------------------------------------
