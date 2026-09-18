@@ -36,6 +36,8 @@ pub mod renderer;
 #[cfg(feature = "engine")]
 pub mod sacn;
 #[cfg(feature = "engine")]
+pub mod send_health;
+#[cfg(feature = "engine")]
 pub mod server;
 #[cfg(feature = "engine")]
 pub mod state;

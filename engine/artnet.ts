@@ -1,6 +1,8 @@
 import dgram from 'node:dgram';
 import net from 'node:net';
 
+import { SendHealth } from './sendHealth.ts';
+
 const ARTNET_PORT = 6454;
 
 /**
@@ -15,6 +17,8 @@ export class ArtnetOut {
   private seq = new Map<number, number>();
   private ready = false;
   packets = 0;
+  /** whether the OS is taking our packets — see sendHealth.ts */
+  private health = new SendHealth();
   private nodes = new Map<string, DiscoveredNode>();
   private pollSock: dgram.Socket | null = null;
   private pollState: 'off' | 'on' | 'failed' = 'off';
@@ -24,6 +28,7 @@ export class ArtnetOut {
     this.sock = dgram.createSocket('udp4');
     this.sock.on('error', (err) => {
       console.error('[artnet] socket error:', err.message);
+      this.health.notePermanent(`no socket: ${err.message}`);
     });
     this.sock.bind(() => {
       try {
@@ -57,9 +62,21 @@ export class ArtnetOut {
     // 40 Hz output path. Anything else falls back to broadcast so the rig
     // keeps receiving while the user is mid-typing an address.
     const dest = unicast && net.isIP(unicast) ? unicast : '255.255.255.255';
+    // A refusal is remembered, not dropped: the kernel saying no is the one
+    // thing the output dot must never hide behind "live".
     this.sock.send(pkt, ARTNET_PORT, dest, (err) => {
-      if (!err) this.packets++;
+      if (!err) {
+        this.packets++;
+      } else {
+        this.health.noteErr(`${dest}: ${(err as NodeJS.ErrnoException).code ?? err.message}`, Date.now());
+      }
     });
+  }
+
+  /** The OS error from a send refused within the last second, if any —
+   *  nothing is reaching the wire while this is set, whatever the gate says. */
+  sendError(): string | null {
+    return this.health.current(Date.now());
   }
 
   /** Send an ArtPoll every ~3 s while any universe outputs Art-Net, and

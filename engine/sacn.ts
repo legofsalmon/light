@@ -1,5 +1,7 @@
 import dgram from 'node:dgram';
 import net from 'node:net';
+
+import { SendHealth } from './sendHealth.ts';
 import { randomBytes } from 'node:crypto';
 
 const SACN_PORT = 5568;
@@ -15,6 +17,8 @@ export class SacnOut {
   private seq = new Map<number, number>();
   private ready = false;
   packets = 0;
+  /** whether the OS is taking our packets — see sendHealth.ts */
+  private health = new SendHealth();
 
   private sourceName: string;
 
@@ -23,6 +27,7 @@ export class SacnOut {
     this.sock = dgram.createSocket('udp4');
     this.sock.on('error', (err) => {
       console.error('[sacn] socket error:', err.message);
+      this.health.notePermanent(`no socket: ${err.message}`);
     });
     this.sock.bind(() => {
       try {
@@ -73,8 +78,17 @@ export class SacnOut {
       ? unicast
       : `239.255.${(universe >> 8) & 0xff}.${universe & 0xff}`;
     this.sock.send(p, SACN_PORT, dest, (err) => {
-      if (!err) this.packets++;
+      if (!err) {
+        this.packets++;
+      } else {
+        this.health.noteErr(`${dest}: ${(err as NodeJS.ErrnoException).code ?? err.message}`, Date.now());
+      }
     });
+  }
+
+  /** The OS error from a send refused within the last second, if any. */
+  sendError(): string | null {
+    return this.health.current(Date.now());
   }
 
   close(): void {

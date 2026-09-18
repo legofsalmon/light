@@ -15,6 +15,7 @@ import { discardFade } from '../../ui/src/discardFade.ts';
 import { applyRetune, onPalette, palettesOf, playingColourParts, retunePlan } from '../../ui/src/palettes.ts';
 import { sanitizeProject, sanitizeStage } from '../../shared/types.ts';
 import { stageExtent } from '../../shared/stageExtent.ts';
+import { SendHealth } from '../sendHealth.ts';
 import type { ShareList } from '../../shared/gdtfShare.ts';
 import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, isStaleProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
 import { COMPILER_VERSION, fadeScaleAt } from '../../shared/types.ts';
@@ -2715,6 +2716,28 @@ await new Promise<void>((resolve) => {
   check('curve: a modulator cannot be one', !MOD_WAVES.has('curve') && MOD_WAVES.size === 7);
   const dropped = sanitizeProject({ ...demoProject(), modulators: [{ id: 'm', name: '', wave: 'curve', rate: 4, phase: 0, on: true, bindings: [] }] } as never)!;
   check('curve: a modulator that claims to be one is dropped', (dropped.modulators ?? []).length === 0);
+}
+
+// --- send health: the kernel refusing our packets must never hide behind "live"
+// (twin of the tests in core/src/send_health.rs)
+{
+  const t0 = 1_000_000;
+  const h = new SendHealth();
+  check('send health: nothing has failed yet', h.current(t0) === null);
+  h.noteErr('192.168.200.107: EHOSTUNREACH', t0);
+  check('send health: a refused send is reported for a second', h.current(t0 + 900) === '192.168.200.107: EHOSTUNREACH');
+  check('send health: then forgotten — silence is not failure', h.current(t0 + 1100) === null);
+  let held = true;
+  for (let i = 1; i < 80; i++) {
+    const now = t0 + i * 25;
+    if (i % 2 === 1) h.noteErr('255.255.255.255: EHOSTUNREACH', now);
+    if (h.current(now) === null) held = false;
+  }
+  check('send health: one failing universe among good ones keeps it visible at 40 fps', held);
+  check('send health: a second after the last refusal, with only successes since, it is gone', h.current(t0 + 79 * 25 + 1001) === null);
+  const p = new SendHealth();
+  p.notePermanent('no socket: EAFNOSUPPORT');
+  check('send health: no socket is a refusal that never retires', p.current(t0 + 60_000) === 'no socket: EAFNOSUPPORT');
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

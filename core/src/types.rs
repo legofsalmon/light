@@ -1393,6 +1393,14 @@ pub struct Snapshot {
     pub artnet_nodes: Option<Vec<ArtnetNodeSnap>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artnet_poll: Option<&'static str>,
+    /// The OS error from an Art-Net send refused within the last second: the
+    /// kernel would not take the packet, so nothing reached the wire whatever
+    /// the gate says. Absent while sends succeed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artnet_error: Option<String>,
+    /// the same for sACN
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sacn_error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub osc_in: Option<&'static str>,
     #[serde(skip_serializing_if = "Vec::is_empty")]

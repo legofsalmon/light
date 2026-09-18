@@ -843,6 +843,12 @@ export type Snapshot = {
   artnetNodes?: { ip: string; name: string; ageMs: number }[];
   /** 'failed' = reply port 6454 is held by another app — discovery unavailable */
   artnetPoll?: 'on' | 'failed';
+  /** The OS error from an Art-Net send refused within the last second: the
+   *  kernel would not take the packet, so nothing reached the wire whatever
+   *  the gate says. Absent while sends succeed. */
+  artnetError?: string;
+  /** the same for sACN */
+  sacnError?: string;
   /** OSC input socket: 'failed' = the port is held by another app (a second
    *  engine? QLC+?) so nothing from Resolume will ever arrive. Absent = off. */
   oscIn?: 'on' | 'failed';

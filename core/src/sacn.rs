@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 use std::net::UdpSocket;
+use std::time::Instant;
+
+use crate::send_health::SendHealth;
 
 const SACN_PORT: u16 = 5568;
 const PACKET_LEN: usize = 638;
@@ -12,21 +15,27 @@ pub struct SacnOut {
     seq: HashMap<u16, u8>,
     source_name: String,
     pub packets: u64,
+    /// whether the OS is taking our packets — see send_health.rs
+    health: SendHealth,
 }
 
 impl SacnOut {
     pub fn new() -> Self {
+        let mut health = SendHealth::default();
         let sock = UdpSocket::bind("0.0.0.0:0")
             .and_then(|s| {
                 s.set_multicast_ttl_v4(4).ok();
                 s.set_nonblocking(true)?;
                 Ok(s)
             })
-            .map_err(|e| eprintln!("[sacn] socket error: {e}"))
+            .map_err(|e| {
+                eprintln!("[sacn] socket error: {e}");
+                health.note_permanent(format!("no socket: {e}"));
+            })
             .ok();
         let mut cid = [0u8; 16];
         let _ = getrandom::getrandom(&mut cid);
-        SacnOut { sock, cid, seq: HashMap::new(), source_name: "LIGHT look engine".into(), packets: 0 }
+        SacnOut { sock, cid, seq: HashMap::new(), source_name: "LIGHT look engine".into(), packets: 0, health }
     }
 
     pub fn send(&mut self, universe: u16, data: &[u8; 512], unicast: Option<&str>) {
@@ -70,8 +79,14 @@ impl SacnOut {
             Some(ip) => ip,
             None => std::net::Ipv4Addr::new(239, 255, ((universe >> 8) & 0xff) as u8, (universe & 0xff) as u8),
         };
-        if sock.send_to(&p, (dest, SACN_PORT)).is_ok() {
-            self.packets += 1;
+        match sock.send_to(&p, (dest, SACN_PORT)) {
+            Ok(_) => self.packets += 1,
+            Err(e) => self.health.note_err(format!("{dest}: {e}"), Instant::now()),
         }
+    }
+
+    /// The OS error from a send refused within the last second, if any.
+    pub fn send_error(&self) -> Option<String> {
+        self.health.current(Instant::now()).map(str::to_string)
     }
 }

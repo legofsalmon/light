@@ -287,7 +287,12 @@ angle can be pointed where it actually points — visible in both stage views.
 
 **Art-Net node health.** The `art-net` dot goes green only when a node has
 answered an ArtPoll, with its name in the tooltip; amber means LIGHT is sending
-but nothing is answering. The Output tab lists the nodes it found.
+but nothing is answering. The Output tab lists the nodes it found. Red and
+`sends failing` means the operating system itself refused the packets — the
+tooltip carries its error — so nothing is reaching the rig however live the
+app looks. On a Mac that is almost always the Local Network permission: allow
+LIGHT under System Settings, Privacy & Security, Local Network, then quit and
+reopen it (the permission is only read when the app starts).
 
 **Ableton Link.** `link` in the top bar joins a Link session (native engine
 only) and shows the peer count. Tapping tempo in LIGHT leads the session.

@@ -3,6 +3,8 @@ use std::net::UdpSocket;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::send_health::SendHealth;
+
 const ARTNET_PORT: u16 = 6454;
 
 #[derive(Clone)]
@@ -25,6 +27,8 @@ pub struct ArtnetOut {
     sock: Option<UdpSocket>,
     seq: HashMap<u16, u8>,
     pub packets: u64,
+    /// whether the OS is taking our packets — see send_health.rs
+    health: SendHealth,
     nodes: Arc<Mutex<HashMap<String, DiscoveredNode>>>,
     poll_state: PollState,
     last_poll: Option<Instant>,
@@ -32,18 +36,23 @@ pub struct ArtnetOut {
 
 impl ArtnetOut {
     pub fn new() -> Self {
+        let mut health = SendHealth::default();
         let sock = UdpSocket::bind("0.0.0.0:0")
             .and_then(|s| {
                 s.set_broadcast(true)?;
                 s.set_nonblocking(true)?;
                 Ok(s)
             })
-            .map_err(|e| eprintln!("[artnet] socket error: {e}"))
+            .map_err(|e| {
+                eprintln!("[artnet] socket error: {e}");
+                health.note_permanent(format!("no socket: {e}"));
+            })
             .ok();
         ArtnetOut {
             sock,
             seq: HashMap::new(),
             packets: 0,
+            health,
             nodes: Arc::new(Mutex::new(HashMap::new())),
             poll_state: PollState::Off,
             last_poll: None,
@@ -186,8 +195,17 @@ impl ArtnetOut {
         let dest: std::net::Ipv4Addr = unicast
             .and_then(|s| s.parse().ok())
             .unwrap_or(std::net::Ipv4Addr::BROADCAST);
-        if sock.send_to(&pkt, (dest, ARTNET_PORT)).is_ok() {
-            self.packets += 1;
+        // A refusal is remembered, not dropped: the kernel saying no is the
+        // one thing the output dot must never hide behind "live".
+        match sock.send_to(&pkt, (dest, ARTNET_PORT)) {
+            Ok(_) => self.packets += 1,
+            Err(e) => self.health.note_err(format!("{dest}: {e}"), Instant::now()),
         }
+    }
+
+    /// The OS error from a send refused within the last second, if any —
+    /// nothing is reaching the wire while this is set, whatever the gate says.
+    pub fn send_error(&self) -> Option<String> {
+        self.health.current(Instant::now()).map(str::to_string)
     }
 }

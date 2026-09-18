@@ -329,6 +329,21 @@ function ChannelCheck({
   );
 }
 
+/** The kernel refusing our packets is the first thing to say here, whatever
+ *  the node list shows: a node that answered a poll a second ago may not be
+ *  receiving a single frame. */
+function SendErrorLine() {
+  const artnetError = useStore((s) => s.snap?.artnetError);
+  const sacnError = useStore((s) => s.snap?.sacnError);
+  const err = artnetError ?? sacnError;
+  if (!err) return null;
+  return (
+    <span className="label" style={{ color: 'var(--hot)' }}>
+      {`sends failing — the operating system is refusing ${artnetError ? 'Art-Net' : 'sACN'} packets: ${err}. On a Mac, allow LIGHT under System Settings, Privacy & Security, Local Network, then quit and reopen it.`}
+    </span>
+  );
+}
+
 function PollStatusLine({ artnetOn }: { artnetOn: boolean }) {
   const nodes = useStore((s) => s.snap?.artnetNodes);
   const poll = useStore((s) => s.snap?.artnetPoll);
@@ -516,6 +531,7 @@ export function OutputView() {
 
       <div>
         <div className="sectionhead">Art-Net nodes</div>
+        <SendErrorLine />
         <PollStatusLine artnetOn={project.universes.some((u) => u.artnet)} />
         <NodeList />
       </div>

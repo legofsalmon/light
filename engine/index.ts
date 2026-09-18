@@ -942,6 +942,10 @@ function loopBody(): void {
         };
       })(),
       ...(osc.status() ? { oscIn: osc.status() as 'on' | 'failed' } : {}),
+      // Refusals are reported whether or not the gate is open: a dark frame
+      // the kernel would not take is still a send that failed.
+      ...((() => { const e = artnet.sendError(); return e ? { artnetError: e } : {}; })()),
+      ...((() => { const e = sacn.sendError(); return e ? { sacnError: e } : {}; })()),
       ...((() => {
         // a fixture pointing at a profile that no longer exists renders as
         // nothing at all — surface it rather than leaving an operator hunting

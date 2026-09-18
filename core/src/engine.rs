@@ -573,7 +573,7 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
             // once and broadcast as one string.
             let snap =
                 build_snapshot(&state, &res, t, &stats, &link, &midi_clock,
-                    own_midi_port.as_deref(), &artnet, osc.status());
+                    own_midi_port.as_deref(), &artnet, &sacn, osc.status());
             if let Ok(s) = serde_json::to_string(&snap) {
                 bc.broadcast(&s);
             }
@@ -1328,6 +1328,7 @@ fn build_snapshot(
     midi_clock: &crate::midi_clock::MidiClock,
     own_midi_port: Option<&str>,
     artnet: &crate::artnet::ArtnetOut,
+    sacn: &crate::sacn::SacnOut,
     osc_status: Option<&'static str>,
 ) -> Snapshot {
     Snapshot {
@@ -1396,6 +1397,10 @@ fn build_snapshot(
             }
             s => Some(if s == "failed" { "failed" } else { "on" }),
         },
+        // Refusals are reported whether or not the gate is open: a dark
+        // frame the kernel would not take is still a send that failed.
+        artnet_error: artnet.send_error(),
+        sacn_error: sacn.send_error(),
         blackout: state.blackout,
         transmit: state.transmit,
         frozen: state.frozen,

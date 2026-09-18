@@ -713,6 +713,22 @@ export function TopBar({ onOpenAdmin, updateWaiting = false, trialDaysLeft = nul
                   />
                 );
               }
+              // Next, the kernel: a send it refused never reached the wire, and
+              // this is exactly the state that read "live" for an evening while
+              // a rig sat dark. The error itself goes in the tooltip, with the
+              // usual cause on a Mac.
+              const sendError = snap?.artnetError ?? snap?.sacnError;
+              if ((artnetOn || sacnOn) && sendError) {
+                return (
+                  <StatusDot
+                    bare={bareLamps}
+                    ok={false}
+                    bad
+                    label="sends failing"
+                    title={`the operating system is refusing LIGHT's ${snap?.artnetError ? 'Art-Net' : 'sACN'} packets: ${sendError}. Nothing is reaching the rig. On a Mac this is usually the Local Network permission (System Settings, Privacy & Security, Local Network): allow LIGHT, then quit and reopen it. A phone or VPN that has taken over the network can do it too.`}
+                  />
+                );
+              }
               const label = !artnetOn && !sacnOn
                 ? 'output off'
                 : fresh.length > 0
