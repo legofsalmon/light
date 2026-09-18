@@ -887,6 +887,11 @@ function loopBody(): void {
       if (u.sacn) sacn.send(u.sacnUniverse, frame, u.unicast);
     }
   }
+  // If the OS is refusing our packets — the classic macOS "changed the network
+  // under a running app" — rebuild the send sockets so the rig comes back
+  // without a relaunch. A no-op unless sends are actually failing.
+  artnet.recoverIfFailing();
+  sacn.recoverIfFailing();
 
   tickCount++;
   if (now - windowStart >= 2000) {

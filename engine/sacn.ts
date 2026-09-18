@@ -5,6 +5,8 @@ import { SendHealth } from './sendHealth.ts';
 import { randomBytes } from 'node:crypto';
 
 const SACN_PORT = 5568;
+/** How often, at most, to rebuild a refused send socket. */
+const REBIND_EVERY_MS = 2000;
 const PACKET_LEN = 638; // root(38) + framing(77) + dmp(10+1+512)
 
 /**
@@ -19,24 +21,44 @@ export class SacnOut {
   packets = 0;
   /** whether the OS is taking our packets — see sendHealth.ts */
   private health = new SendHealth();
+  private lastRebind: number | null = null;
 
   private sourceName: string;
 
   constructor(sourceName = 'LIGHT look engine') {
     this.sourceName = sourceName;
-    this.sock = dgram.createSocket('udp4');
-    this.sock.on('error', (err) => {
+    this.sock = this.openSocket();
+  }
+
+  /** A fresh multicast-capable send socket, ready once bound. */
+  private openSocket(): dgram.Socket {
+    const sock = dgram.createSocket('udp4');
+    sock.on('error', (err) => {
       console.error('[sacn] socket error:', err.message);
       this.health.notePermanent(`no socket: ${err.message}`);
     });
-    this.sock.bind(() => {
+    sock.bind(() => {
       try {
-        this.sock.setMulticastTTL(4);
+        sock.setMulticastTTL(4);
       } catch {
         // fine on loopback-only setups
       }
       this.ready = true;
     });
+    return sock;
+  }
+
+  /** Rebuild the send socket when the OS is refusing our packets — the same
+   *  macOS Local Network recovery as the Art-Net sender (see artnet.ts). */
+  recoverIfFailing(): void {
+    const now = Date.now();
+    if (this.health.current(now) === null) return;
+    if (this.lastRebind !== null && now - this.lastRebind < REBIND_EVERY_MS) return;
+    this.lastRebind = now;
+    console.error('[sacn] rebuilding the send socket to recover from a refused send');
+    this.ready = false;
+    try { this.sock.close(); } catch { /* already gone */ }
+    this.sock = this.openSocket();
   }
 
   send(universe: number, data: Uint8Array, unicast: string | null): void {

@@ -5,6 +5,8 @@ use std::time::Instant;
 use crate::send_health::SendHealth;
 
 const SACN_PORT: u16 = 5568;
+/// How often, at most, to rebuild a refused send socket.
+const REBIND_EVERY: std::time::Duration = std::time::Duration::from_secs(2);
 const PACKET_LEN: usize = 638;
 
 /// sACN (E1.31) sender — root/framing/DMP layers with start code 0, multicast
@@ -17,17 +19,22 @@ pub struct SacnOut {
     pub packets: u64,
     /// whether the OS is taking our packets — see send_health.rs
     health: SendHealth,
+    /// last time we rebuilt the send socket to recover from a refusal
+    last_rebind: Option<Instant>,
 }
 
 impl SacnOut {
+    /// A fresh multicast-capable send socket, or the error that stopped it.
+    fn open_socket() -> std::io::Result<UdpSocket> {
+        let s = UdpSocket::bind("0.0.0.0:0")?;
+        s.set_multicast_ttl_v4(4).ok();
+        s.set_nonblocking(true)?;
+        Ok(s)
+    }
+
     pub fn new() -> Self {
         let mut health = SendHealth::default();
-        let sock = UdpSocket::bind("0.0.0.0:0")
-            .and_then(|s| {
-                s.set_multicast_ttl_v4(4).ok();
-                s.set_nonblocking(true)?;
-                Ok(s)
-            })
+        let sock = Self::open_socket()
             .map_err(|e| {
                 eprintln!("[sacn] socket error: {e}");
                 health.note_permanent(format!("no socket: {e}"));
@@ -35,7 +42,26 @@ impl SacnOut {
             .ok();
         let mut cid = [0u8; 16];
         let _ = getrandom::getrandom(&mut cid);
-        SacnOut { sock, cid, seq: HashMap::new(), source_name: "LIGHT look engine".into(), packets: 0, health }
+        SacnOut { sock, cid, seq: HashMap::new(), source_name: "LIGHT look engine".into(), packets: 0, health, last_rebind: None }
+    }
+
+    /// Rebuild the send socket when the OS is refusing our packets — the same
+    /// macOS Local Network recovery as the Art-Net sender (see artnet.rs).
+    pub fn recover_if_failing(&mut self, now: Instant) {
+        if self.health.current(now).is_none() {
+            return;
+        }
+        if self.last_rebind.is_some_and(|t| now.duration_since(t) < REBIND_EVERY) {
+            return;
+        }
+        self.last_rebind = Some(now);
+        match Self::open_socket() {
+            Ok(s) => {
+                eprintln!("[sacn] rebuilt the send socket to recover from a refused send");
+                self.sock = Some(s);
+            }
+            Err(e) => self.health.note_permanent(format!("no socket: {e}")),
+        }
     }
 
     pub fn send(&mut self, universe: u16, data: &[u8; 512], unicast: Option<&str>) {

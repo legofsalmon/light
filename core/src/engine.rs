@@ -539,6 +539,15 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
                 }
             }
         }
+        // If the OS is refusing our packets — the classic macOS "changed the
+        // network under a running app" — rebuild the send sockets so the rig
+        // comes back without a relaunch. A no-op unless sends are actually
+        // failing, and self-throttled.
+        {
+            let now = std::time::Instant::now();
+            artnet.recover_if_failing(now);
+            sacn.recover_if_failing(now);
+        }
 
         // Is anything actually lit? `i` is resolved intensity, already computed
         // for this tick, so this is a scan of a vec that is in cache and one

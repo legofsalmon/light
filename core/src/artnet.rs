@@ -6,6 +6,8 @@ use std::time::{Duration, Instant};
 use crate::send_health::SendHealth;
 
 const ARTNET_PORT: u16 = 6454;
+/// How often, at most, to rebuild a refused send socket.
+const REBIND_EVERY: Duration = Duration::from_secs(2);
 
 #[derive(Clone)]
 pub struct DiscoveredNode {
@@ -32,17 +34,22 @@ pub struct ArtnetOut {
     nodes: Arc<Mutex<HashMap<String, DiscoveredNode>>>,
     poll_state: PollState,
     last_poll: Option<Instant>,
+    /// last time we rebuilt the send socket to recover from a refusal
+    last_rebind: Option<Instant>,
 }
 
 impl ArtnetOut {
+    /// A fresh broadcast-capable send socket, or the error that stopped it.
+    fn open_socket() -> std::io::Result<UdpSocket> {
+        let s = UdpSocket::bind("0.0.0.0:0")?;
+        s.set_broadcast(true)?;
+        s.set_nonblocking(true)?;
+        Ok(s)
+    }
+
     pub fn new() -> Self {
         let mut health = SendHealth::default();
-        let sock = UdpSocket::bind("0.0.0.0:0")
-            .and_then(|s| {
-                s.set_broadcast(true)?;
-                s.set_nonblocking(true)?;
-                Ok(s)
-            })
+        let sock = Self::open_socket()
             .map_err(|e| {
                 eprintln!("[artnet] socket error: {e}");
                 health.note_permanent(format!("no socket: {e}"));
@@ -56,6 +63,33 @@ impl ArtnetOut {
             nodes: Arc::new(Mutex::new(HashMap::new())),
             poll_state: PollState::Off,
             last_poll: None,
+            last_rebind: None,
+        }
+    }
+
+    /// Rebuild the send socket when the OS is refusing our packets. macOS pins
+    /// a process's Local Network grant to the sockets it opened, so a network
+    /// change — a swapped adapter, a phone tether, a VPN — silently breaks
+    /// every send until the app relaunches. A fresh socket re-triggers the
+    /// grant, so the rig comes back on its own in a second or two instead. Only
+    /// while actually failing, and at most every couple of seconds so a genuine
+    /// outage does not churn sockets at the frame rate. The 6454 reply listener
+    /// is left alone — it is a separate socket and discovery survives.
+    pub fn recover_if_failing(&mut self, now: Instant) {
+        if self.health.current(now).is_none() {
+            return;
+        }
+        if self.last_rebind.is_some_and(|t| now.duration_since(t) < REBIND_EVERY) {
+            return;
+        }
+        self.last_rebind = Some(now);
+        match Self::open_socket() {
+            Ok(s) => {
+                eprintln!("[artnet] rebuilt the send socket to recover from a refused send");
+                self.sock = Some(s);
+                // the next send's result speaks for itself; do not pre-clear
+            }
+            Err(e) => self.health.note_permanent(format!("no socket: {e}")),
         }
     }
 

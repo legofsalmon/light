@@ -4,6 +4,8 @@ import net from 'node:net';
 import { SendHealth } from './sendHealth.ts';
 
 const ARTNET_PORT = 6454;
+/** How often, at most, to rebuild a refused send socket. */
+const REBIND_EVERY_MS = 2000;
 
 /**
  * Art-Net ArtDmx sender. Packet layout (Art-Net 4 spec):
@@ -23,21 +25,46 @@ export class ArtnetOut {
   private pollSock: dgram.Socket | null = null;
   private pollState: 'off' | 'on' | 'failed' = 'off';
   private lastPoll = 0;
+  private lastRebind: number | null = null;
 
   constructor() {
-    this.sock = dgram.createSocket('udp4');
-    this.sock.on('error', (err) => {
+    this.sock = this.openSocket();
+  }
+
+  /** A fresh broadcast-capable send socket, ready once bound. */
+  private openSocket(): dgram.Socket {
+    const sock = dgram.createSocket('udp4');
+    sock.on('error', (err) => {
       console.error('[artnet] socket error:', err.message);
       this.health.notePermanent(`no socket: ${err.message}`);
     });
-    this.sock.bind(() => {
+    sock.bind(() => {
       try {
-        this.sock.setBroadcast(true);
+        sock.setBroadcast(true);
       } catch (err) {
         console.error('[artnet] setBroadcast failed:', (err as Error).message);
       }
       this.ready = true;
     });
+    return sock;
+  }
+
+  /** Rebuild the send socket when the OS is refusing our packets. macOS pins a
+   *  process's Local Network grant to the sockets it opened, so a network
+   *  change — a swapped adapter, a phone tether, a VPN — silently breaks every
+   *  send until the app relaunches. A fresh socket re-triggers the grant, so
+   *  the rig comes back on its own in a second or two. Only while actually
+   *  failing, and at most every couple of seconds. The 6454 reply listener is
+   *  a separate socket and is left alone. */
+  recoverIfFailing(): void {
+    const now = Date.now();
+    if (this.health.current(now) === null) return;
+    if (this.lastRebind !== null && now - this.lastRebind < REBIND_EVERY_MS) return;
+    this.lastRebind = now;
+    console.error('[artnet] rebuilding the send socket to recover from a refused send');
+    this.ready = false;
+    try { this.sock.close(); } catch { /* already gone */ }
+    this.sock = this.openSocket();
   }
 
   send(universe: number, data: Uint8Array, unicast: string | null): void {
