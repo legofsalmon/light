@@ -2,6 +2,7 @@ import dgram from 'node:dgram';
 import net from 'node:net';
 
 import { SendHealth } from './sendHealth.ts';
+import { resolve as resolveAdapter } from './netif.ts';
 
 const ARTNET_PORT = 6454;
 /** How often, at most, to rebuild a refused send socket. */
@@ -26,19 +27,24 @@ export class ArtnetOut {
   private pollState: 'off' | 'on' | 'failed' = 'off';
   private lastPoll = 0;
   private lastRebind: number | null = null;
+  /** the adapter the operator chose (null = automatic) — see netif.ts */
+  private iface: string | null = null;
+  /** the address the current socket is bound to (null = any) */
+  private bound: string | null = null;
+  private lastReconcile: number | null = null;
 
   constructor() {
-    this.sock = this.openSocket();
+    this.sock = this.openSocket(null);
   }
 
   /** A fresh broadcast-capable send socket, ready once bound. */
-  private openSocket(): dgram.Socket {
+  private openSocket(bind: string | null): dgram.Socket {
     const sock = dgram.createSocket('udp4');
     sock.on('error', (err) => {
       console.error('[artnet] socket error:', err.message);
       this.health.notePermanent(`no socket: ${err.message}`);
     });
-    sock.bind(() => {
+    sock.bind({ address: bind ?? '0.0.0.0', port: 0 }, () => {
       try {
         sock.setBroadcast(true);
       } catch (err) {
@@ -47,6 +53,42 @@ export class ArtnetOut {
       this.ready = true;
     });
     return sock;
+  }
+
+  /** Rebuild the send socket on whatever the chosen adapter resolves to right
+   *  now — the one place a socket is replaced. */
+  private rebind(why: string): void {
+    const want = resolveAdapter(this.iface);
+    console.error(`[artnet] send socket rebuilt (${why}) on ${want ?? 'any adapter'}`);
+    this.ready = false;
+    try { this.sock.close(); } catch { /* already gone */ }
+    this.sock = this.openSocket(want);
+    this.bound = want;
+  }
+
+  /** Choose the adapter to send from (null = automatic). Takes effect at
+   *  once; a no-op when unchanged, so it is safe to call every tick. */
+  setInterface(name: string | null): void {
+    if (this.iface === name) return;
+    this.iface = name;
+    this.rebind('adapter chosen');
+  }
+
+  /** The auto pick-up: every few seconds, if the chosen adapter now resolves
+   *  to a different address than the socket is bound to — it came back, its
+   *  lease changed, or it went away — rebuild the socket to match. */
+  reconcileInterface(): void {
+    if (this.iface === null) return;
+    const now = Date.now();
+    if (this.lastReconcile !== null && now - this.lastReconcile < 3000) return;
+    this.lastReconcile = now;
+    const want = resolveAdapter(this.iface);
+    if (want !== this.bound) this.rebind('adapter changed');
+  }
+
+  /** The adapter chosen and the address actually bound, for the snapshot. */
+  interface(): { chosen: string | null; bound: string | null } {
+    return { chosen: this.iface, bound: this.bound };
   }
 
   /** Rebuild the send socket when the OS is refusing our packets. macOS pins a
@@ -61,10 +103,9 @@ export class ArtnetOut {
     if (this.health.current(now) === null) return;
     if (this.lastRebind !== null && now - this.lastRebind < REBIND_EVERY_MS) return;
     this.lastRebind = now;
-    console.error('[artnet] rebuilding the send socket to recover from a refused send');
-    this.ready = false;
-    try { this.sock.close(); } catch { /* already gone */ }
-    this.sock = this.openSocket();
+    // re-resolves the chosen adapter too, so a lease change is picked up
+    // by the same rebuild; the next send's result speaks for itself
+    this.rebind('refused send');
   }
 
   send(universe: number, data: Uint8Array, unicast: string | null): void {

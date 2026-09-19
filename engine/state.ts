@@ -112,6 +112,10 @@ export class EngineState {
   /** Whether rendered frames reach the wire at all (engine/output.ts).
    *  Runtime-only and OFF at every boot, whatever the show says. */
   transmit = false;
+  /** The adapter output leaves on (null = automatic). Loaded from the
+   *  machine file at boot; the engine loop applies it to the senders and
+   *  writes it back when it changes. Never part of the show. */
+  outputAdapter: string | null = null;
   /** Group submasters, 0..1, keyed by group id. Only entries BELOW full are
    *  stored, so an empty map is the common case and the renderer's pass skips
    *  entirely.

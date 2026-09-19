@@ -314,6 +314,14 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
     let mut preview_renderer = Renderer::new();
     let mut artnet = ArtnetOut::new();
     let mut sacn = SacnOut::new();
+    // The output adapter is a property of this machine, not of the show.
+    state.output_adapter = persist::load_machine(&dir).output_adapter;
+    artnet.set_interface(state.output_adapter.as_deref());
+    sacn.set_interface(state.output_adapter.as_deref());
+    let mut applied_adapter: Option<String> = state.output_adapter.clone();
+    // the adapter list for the picker, refreshed every few seconds
+    let mut adapters_at: Option<std::time::Instant> = None;
+    let mut adapters: Vec<crate::netif::Adapter> = Vec::new();
     // Whether any of it reaches the wire. Off until an operator says otherwise,
     // every boot — crate::output.
     let mut gate = crate::output::OutputGate::new();
@@ -545,8 +553,22 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
         // failing, and self-throttled.
         {
             let now = std::time::Instant::now();
+            // an operator's new choice takes effect at once and is remembered
+            if state.output_adapter != applied_adapter {
+                applied_adapter = state.output_adapter.clone();
+                artnet.set_interface(applied_adapter.as_deref());
+                sacn.set_interface(applied_adapter.as_deref());
+                persist::save_machine(&dir, &persist::MachineConfig { output_adapter: applied_adapter.clone() });
+            }
+            // auto pick-up: the chosen adapter came back, changed address, or left
+            artnet.reconcile_interface(now);
+            sacn.reconcile_interface(now);
             artnet.recover_if_failing(now);
             sacn.recover_if_failing(now);
+            if adapters_at.map_or(true, |t| now.duration_since(t) >= std::time::Duration::from_secs(3)) {
+                adapters_at = Some(now);
+                adapters = crate::netif::adapters();
+            }
         }
 
         // Is anything actually lit? `i` is resolved intensity, already computed
@@ -582,7 +604,7 @@ pub fn run(mut cfg: EngineConfig) -> ExitReason {
             // once and broadcast as one string.
             let snap =
                 build_snapshot(&state, &res, t, &stats, &link, &midi_clock,
-                    own_midi_port.as_deref(), &artnet, &sacn, osc.status());
+                    own_midi_port.as_deref(), &artnet, &sacn, osc.status(), &adapters);
             if let Ok(s) = serde_json::to_string(&snap) {
                 bc.broadcast(&s);
             }
@@ -1339,6 +1361,7 @@ fn build_snapshot(
     artnet: &crate::artnet::ArtnetOut,
     sacn: &crate::sacn::SacnOut,
     osc_status: Option<&'static str>,
+    adapters: &[crate::netif::Adapter],
 ) -> Snapshot {
     Snapshot {
         typ: "snap",
@@ -1410,6 +1433,17 @@ fn build_snapshot(
         // frame the kernel would not take is still a send that failed.
         artnet_error: artnet.send_error(),
         sacn_error: sacn.send_error(),
+        output_adapter: {
+            let (chosen, bound) = artnet.interface();
+            Some(crate::types::OutputAdapterSnap {
+                chosen: chosen.map(str::to_string),
+                bound: bound.map(|ip| ip.to_string()),
+                adapters: adapters
+                    .iter()
+                    .map(|a| crate::types::AdapterSnap { name: a.name.clone(), ip: a.ip.to_string() })
+                    .collect(),
+            })
+        },
         blackout: state.blackout,
         transmit: state.transmit,
         frozen: state.frozen,

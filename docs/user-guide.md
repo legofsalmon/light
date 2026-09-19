@@ -285,6 +285,15 @@ sweeps the wrong way, reverse it here and the rig and the stage view agree.
 They compose on top of each fixture type's default aim, so a bar hung at an
 angle can be pointed where it actually points — visible in both stage views.
 
+**Output adapter.** The Output tab's `output adapter` picker says which network
+adapter Art-Net and sACN leave on. `automatic` lets the system choose a route
+per packet — and on a Mac with a phone tethered or a VPN up, a broadcast can go
+out the wrong one while the app still reads `live`. Choose the adapter your rig
+is on (shown with its current address) and every frame is pinned to it. LIGHT
+follows that adapter through a new DHCP lease or a cable swap and, if it is
+unplugged, sends from any adapter until it returns — the line beside the picker
+says which is happening. The choice is remembered on this Mac, not in the show.
+
 **Art-Net node health.** The `art-net` dot goes green only when a node has
 answered an ArtPoll, with its name in the tooltip; amber means LIGHT is sending
 but nothing is answering. The Output tab lists the nodes it found. Red and

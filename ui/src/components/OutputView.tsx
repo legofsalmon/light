@@ -344,6 +344,44 @@ function SendErrorLine() {
   );
 }
 
+/** Which network adapter output leaves on. A laptop at a gig is on more than
+ *  one network more often than not — a phone tethers, a VPN comes up — and
+ *  left to itself the OS sends a broadcast out whichever one holds the default
+ *  route, which one night was the phone. Choosing the adapter here pins every
+ *  frame to it; the engine follows the adapter through lease changes and
+ *  cable swaps, and falls back to "any" while it is unplugged. Machine-level:
+ *  the choice is remembered on this Mac, never written into the show. */
+function OutputAdapterPicker() {
+  const oa = useStore((s) => s.snap?.outputAdapter);
+  const send = useStore((s) => s.send);
+  if (!oa) return null;
+  const chosen = oa.chosen ?? '';
+  const listed = oa.adapters.some((a) => a.name === chosen);
+  const status = !oa.chosen
+    ? 'sending from any adapter — the system picks the route for each packet'
+    : oa.bound
+      ? `sending from ${oa.chosen} · ${oa.bound}`
+      : `${oa.chosen} is not connected — sending from any adapter until it returns`;
+  return (
+    <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span className="label">output adapter</span>
+      <select
+        className="sel"
+        title="the network adapter Art-Net and sACN leave on. Automatic lets the system pick per packet, which on a Mac with a phone or VPN attached can be the wrong one; choosing the adapter your rig is on pins every frame to it. Remembered on this Mac, not in the show."
+        value={chosen}
+        onChange={(e) => send({ type: 'setOutputAdapter', name: e.target.value || null })}
+      >
+        <option value="">automatic — any adapter</option>
+        {oa.adapters.map((a) => (
+          <option key={a.name} value={a.name}>{a.name} · {a.ip}</option>
+        ))}
+        {chosen && !listed && <option value={chosen}>{chosen} · not connected</option>}
+      </select>
+      <span className="label" style={oa.chosen && !oa.bound ? { color: 'var(--warn)' } : undefined}>{status}</span>
+    </div>
+  );
+}
+
 function PollStatusLine({ artnetOn }: { artnetOn: boolean }) {
   const nodes = useStore((s) => s.snap?.artnetNodes);
   const poll = useStore((s) => s.snap?.artnetPoll);
@@ -527,6 +565,11 @@ export function OutputView() {
             title="another DMX universe: 512 channels with its own Art-Net/sACN destination — off until you turn it on">
           + add universe
         </button>
+      </div>
+
+      <div>
+        <div className="sectionhead">Output adapter</div>
+        <OutputAdapterPicker />
       </div>
 
       <div>

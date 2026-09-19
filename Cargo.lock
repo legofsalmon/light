@@ -4668,6 +4668,7 @@ dependencies = [
  "dirs 5.0.1",
  "getrandom 0.2.17",
  "midir",
+ "nix",
  "roxmltree",
  "rusty_link",
  "serde",
@@ -4962,6 +4963,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+ "memoffset",
 ]
 
 [[package]]

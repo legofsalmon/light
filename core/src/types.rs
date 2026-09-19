@@ -1316,6 +1316,24 @@ pub struct MidiClockSnap {
     pub source: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AdapterSnap {
+    pub name: String,
+    pub ip: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputAdapterSnap {
+    /// the adapter name the operator chose; None = automatic
+    pub chosen: Option<String>,
+    /// the address the send sockets are bound to; None = any adapter
+    pub bound: Option<String>,
+    /// every adapter that could be chosen right now
+    pub adapters: Vec<AdapterSnap>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtnetNodeSnap {
@@ -1393,6 +1411,10 @@ pub struct Snapshot {
     pub artnet_nodes: Option<Vec<ArtnetNodeSnap>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artnet_poll: Option<&'static str>,
+    /// The output adapter picker's state: what was chosen, what the send
+    /// sockets are actually bound to right now, and what could be chosen.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_adapter: Option<OutputAdapterSnap>,
     /// The OS error from an Art-Net send refused within the last second: the
     /// kernel would not take the packet, so nothing reached the wire whatever
     /// the gate says. Absent while sends succeed.
@@ -1523,6 +1545,9 @@ pub enum Command {
     /// Open or close the transmit gate: whether rendered frames reach the wire
     /// at all. Runtime-only, off at every boot — crate::output.
     SetTransmit { v: bool },
+    /// Which adapter output leaves on: an adapter name, or None for
+    /// automatic. Machine-level — persisted beside the shows, never in one.
+    SetOutputAdapter { name: Option<String> },
     /// Hold the frame the rig is showing while the show carries on underneath.
     /// Runtime-only; blackout and ALL STOP release it — crate::output.
     SetFreeze {

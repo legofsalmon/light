@@ -81,6 +81,37 @@ pub fn current_slug(dir: &PathBuf) -> String {
     }
 }
 
+/// Settings that belong to this MACHINE rather than to a show — today, which
+/// network adapter output leaves on. A show file travels between laptops and
+/// is broadcast to every connected client, and "en7" on one Mac is not "en7"
+/// on another, so this lives in a dotfile beside `.current` instead.
+/// Mirrors `loadMachine`/`saveMachine` in engine/persist.ts.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MachineConfig {
+    /// adapter name to bind output to; None = automatic (any)
+    pub output_adapter: Option<String>,
+}
+
+pub fn load_machine(dir: &PathBuf) -> MachineConfig {
+    fs::read_to_string(dir.join(".machine.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_machine(dir: &PathBuf, m: &MachineConfig) {
+    let _ = fs::create_dir_all(dir);
+    match serde_json::to_string_pretty(m) {
+        Ok(json) => {
+            if let Err(e) = fs::write(dir.join(".machine.json"), json) {
+                eprintln!("[persist] cannot write .machine.json: {e}");
+            }
+        }
+        Err(e) => eprintln!("[persist] cannot encode .machine.json: {e}"),
+    }
+}
+
 pub fn set_current_slug(dir: &PathBuf, slug: &str) {
     let _ = fs::create_dir_all(dir);
     if let Err(e) = fs::write(dir.join(".current"), slug) {

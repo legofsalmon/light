@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::send_health::SendHealth;
+use std::net::Ipv4Addr;
 
 const ARTNET_PORT: u16 = 6454;
 /// How often, at most, to rebuild a refused send socket.
@@ -36,12 +37,18 @@ pub struct ArtnetOut {
     last_poll: Option<Instant>,
     /// last time we rebuilt the send socket to recover from a refusal
     last_rebind: Option<Instant>,
+    /// the adapter the operator chose (None = automatic) — see netif.rs
+    iface: Option<String>,
+    /// the address the current socket is bound to (None = any)
+    bound: Option<Ipv4Addr>,
+    last_reconcile: Option<Instant>,
 }
 
 impl ArtnetOut {
-    /// A fresh broadcast-capable send socket, or the error that stopped it.
-    fn open_socket() -> std::io::Result<UdpSocket> {
-        let s = UdpSocket::bind("0.0.0.0:0")?;
+    /// A fresh broadcast-capable send socket on the given adapter address
+    /// (any, when None), or the error that stopped it.
+    fn open_socket(bind: Option<Ipv4Addr>) -> std::io::Result<UdpSocket> {
+        let s = UdpSocket::bind((bind.unwrap_or(Ipv4Addr::UNSPECIFIED), 0))?;
         s.set_broadcast(true)?;
         s.set_nonblocking(true)?;
         Ok(s)
@@ -49,7 +56,7 @@ impl ArtnetOut {
 
     pub fn new() -> Self {
         let mut health = SendHealth::default();
-        let sock = Self::open_socket()
+        let sock = Self::open_socket(None)
             .map_err(|e| {
                 eprintln!("[artnet] socket error: {e}");
                 health.note_permanent(format!("no socket: {e}"));
@@ -64,7 +71,60 @@ impl ArtnetOut {
             poll_state: PollState::Off,
             last_poll: None,
             last_rebind: None,
+            iface: None,
+            bound: None,
+            last_reconcile: None,
         }
+    }
+
+    /// Rebuild the send socket on whatever the chosen adapter resolves to right
+    /// now. A permanent refusal only if no socket can be made at all.
+    fn rebind(&mut self, why: &str) {
+        let want = crate::netif::resolve(self.iface.as_deref());
+        match Self::open_socket(want) {
+            Ok(s) => {
+                eprintln!(
+                    "[artnet] send socket rebuilt ({why}) on {}",
+                    want.map_or("any adapter".to_string(), |ip| ip.to_string())
+                );
+                self.sock = Some(s);
+                self.bound = want;
+            }
+            Err(e) => self.health.note_permanent(format!("no socket: {e}")),
+        }
+    }
+
+    /// Choose the adapter to send from (None = automatic). Takes effect at
+    /// once; a no-op when unchanged, so it is safe to call every tick.
+    pub fn set_interface(&mut self, name: Option<&str>) {
+        if self.iface.as_deref() == name {
+            return;
+        }
+        self.iface = name.map(str::to_string);
+        self.rebind("adapter chosen");
+    }
+
+    /// The auto pick-up: every few seconds, if the chosen adapter now resolves
+    /// to a different address than the socket is bound to — it came back, its
+    /// lease changed, or it went away — rebuild the socket to match. Nothing to
+    /// do on automatic.
+    pub fn reconcile_interface(&mut self, now: Instant) {
+        if self.iface.is_none() {
+            return;
+        }
+        if self.last_reconcile.is_some_and(|t| now.duration_since(t) < Duration::from_secs(3)) {
+            return;
+        }
+        self.last_reconcile = Some(now);
+        let want = crate::netif::resolve(self.iface.as_deref());
+        if want != self.bound {
+            self.rebind("adapter changed");
+        }
+    }
+
+    /// The adapter chosen and the address actually bound, for the snapshot.
+    pub fn interface(&self) -> (Option<&str>, Option<Ipv4Addr>) {
+        (self.iface.as_deref(), self.bound)
     }
 
     /// Rebuild the send socket when the OS is refusing our packets. macOS pins
@@ -83,14 +143,9 @@ impl ArtnetOut {
             return;
         }
         self.last_rebind = Some(now);
-        match Self::open_socket() {
-            Ok(s) => {
-                eprintln!("[artnet] rebuilt the send socket to recover from a refused send");
-                self.sock = Some(s);
-                // the next send's result speaks for itself; do not pre-clear
-            }
-            Err(e) => self.health.note_permanent(format!("no socket: {e}")),
-        }
+        // re-resolves the chosen adapter too, so a lease change is picked up
+        // by the same rebuild; the next send's result speaks for itself
+        self.rebind("refused send");
     }
 
     /// Send an ArtPoll every ~3 s while any universe outputs Art-Net, and

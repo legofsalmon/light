@@ -12,6 +12,7 @@ import { Server } from './server.ts';
 import type { WebSocket } from 'ws';
 import { defaultProject, blankProject } from './defaultProject.ts';
 import * as persist from './persist.ts';
+import { adapters as listAdapters, type Adapter } from './netif.ts';
 import { parseGdtfBase64, parseMvrBase64 } from './wasmProfiles.ts';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -281,6 +282,14 @@ function broadcastProjects(): void {
   });
 }
 const sacn = new SacnOut();
+// The output adapter is a property of this machine, not of the show.
+state.outputAdapter = persist.loadMachine().outputAdapter;
+artnet.setInterface(state.outputAdapter);
+sacn.setInterface(state.outputAdapter);
+let appliedAdapter: string | null = state.outputAdapter;
+// the adapter list for the picker, refreshed every few seconds
+let adaptersAt = -Infinity; // refresh on the first tick
+let adapterList: Adapter[] = [];
 // Whether any of it reaches the wire. Off until an operator says otherwise,
 // every boot — engine/output.ts.
 const gate = new OutputGate();
@@ -516,6 +525,9 @@ function handleCommandInner(cmd: Command, clientId: number = LOCAL_CLIENT): void
       break;
     case 'setTransmit':
       state.transmit = !!cmd.v;
+      break;
+    case 'setOutputAdapter':
+      state.outputAdapter = typeof cmd.name === 'string' && cmd.name.trim() ? cmd.name : null;
       break;
     case 'setSubmaster':
       state.setSubmaster(cmd.groupId, cmd.v);
@@ -890,8 +902,22 @@ function loopBody(): void {
   // If the OS is refusing our packets — the classic macOS "changed the network
   // under a running app" — rebuild the send sockets so the rig comes back
   // without a relaunch. A no-op unless sends are actually failing.
+  // an operator's new choice takes effect at once and is remembered
+  if (state.outputAdapter !== appliedAdapter) {
+    appliedAdapter = state.outputAdapter;
+    artnet.setInterface(appliedAdapter);
+    sacn.setInterface(appliedAdapter);
+    persist.saveMachine({ outputAdapter: appliedAdapter });
+  }
+  // auto pick-up: the chosen adapter came back, changed address, or left
+  artnet.reconcileInterface();
+  sacn.reconcileInterface();
   artnet.recoverIfFailing();
   sacn.recoverIfFailing();
+  if (now - adaptersAt >= 3000) {
+    adaptersAt = now;
+    adapterList = listAdapters();
+  }
 
   tickCount++;
   if (now - windowStart >= 2000) {
@@ -950,6 +976,7 @@ function loopBody(): void {
       // Refusals are reported whether or not the gate is open: a dark frame
       // the kernel would not take is still a send that failed.
       ...((() => { const e = artnet.sendError(); return e ? { artnetError: e } : {}; })()),
+      outputAdapter: { ...artnet.interface(), adapters: adapterList },
       ...((() => { const e = sacn.sendError(); return e ? { sacnError: e } : {}; })()),
       ...((() => {
         // a fixture pointing at a profile that no longer exists renders as

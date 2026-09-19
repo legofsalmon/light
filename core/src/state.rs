@@ -378,6 +378,10 @@ pub struct EngineState {
     /// speaking to the network, which is a different question and the one an
     /// operator wants answered before a laptop joins a venue's LAN.
     pub transmit: bool,
+    /// The adapter output leaves on (None = automatic). Loaded from the
+    /// machine file at boot; the engine loop applies it to the senders and
+    /// writes it back when it changes. Never part of the show.
+    pub output_adapter: Option<String>,
     /// Silenced fixtures — a stuck or dead unit is taken out of the show
     /// without touching the patch (which would re-fan every chase).
     /// Transient: a mute is for tonight, not a property of the show.
@@ -451,6 +455,7 @@ impl EngineState {
             frozen: false,
             frozen_by: None,
             transmit: false,
+            output_adapter: None,
             muted: std::collections::HashSet::new(),
             identify: None,
             preview_look: None,
@@ -1500,6 +1505,9 @@ impl EngineState {
             }
             Command::SetBlackout { v } => self.set_blackout(v),
             Command::SetTransmit { v } => self.transmit = v,
+            Command::SetOutputAdapter { name } => {
+                self.output_adapter = name.filter(|n| !n.trim().is_empty());
+            }
             Command::SetSubmaster { group_id, v } => self.set_submaster(&group_id, v),
             Command::SetFreeze { v, momentary } => {
                 self.frozen = v;

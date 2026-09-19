@@ -54,6 +54,32 @@ export function projectPath(): string {
   return FILE();
 }
 
+/** Settings that belong to this MACHINE rather than to a show — today, which
+ *  network adapter output leaves on. A show file travels between laptops and
+ *  is broadcast to every client, and "en7" on one Mac is not "en7" on
+ *  another, so this lives in a dotfile beside `.current` instead.
+ *  Mirrors MachineConfig / load_machine / save_machine in core/src/persist.rs. */
+export type MachineConfig = { outputAdapter: string | null };
+const MACHINE = path.join(DIR, '.machine.json');
+
+export function loadMachine(): MachineConfig {
+  try {
+    const raw = JSON.parse(fs.readFileSync(MACHINE, 'utf8')) as { outputAdapter?: unknown };
+    return { outputAdapter: typeof raw.outputAdapter === 'string' && raw.outputAdapter.trim() ? raw.outputAdapter : null };
+  } catch {
+    return { outputAdapter: null };
+  }
+}
+
+export function saveMachine(m: MachineConfig): void {
+  try {
+    fs.mkdirSync(DIR, { recursive: true });
+    fs.writeFileSync(MACHINE, JSON.stringify(m, null, 2));
+  } catch (e) {
+    console.error('[persist] cannot write .machine.json:', (e as Error).message);
+  }
+}
+
 export function currentSlug(): string {
   return slug;
 }

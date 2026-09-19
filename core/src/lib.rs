@@ -24,6 +24,8 @@ pub mod link;
 #[cfg(feature = "engine")]
 pub mod midi;
 #[cfg(feature = "engine")]
+pub mod netif;
+#[cfg(feature = "engine")]
 pub mod midi_clock;
 #[cfg(feature = "engine")]
 pub mod osc;

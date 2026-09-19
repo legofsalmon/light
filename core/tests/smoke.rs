@@ -219,7 +219,9 @@ fn gdtf_import_end_to_end() {
     assert_eq!(u1[base + 5], 8, "shutter open default");
     assert_eq!([u1[base + 6], u1[base + 7], u1[base + 8]], [255, 0, 0], "rgb");
     assert_eq!(u1[base + 9], 128, "unmapped zoom default");
-    assert_eq!(u1[base + 10], 23, "wheel quantised to red");
+    // an RGB fixture's colour wheel opens (slot 0, midpoint 7) rather than
+    // matching the look colour — the RGB carries the red; see open_wheel_slot
+    assert_eq!(u1[base + 10], 7, "wheel open on an RGB fixture");
 }
 
 #[test]

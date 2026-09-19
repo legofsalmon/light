@@ -16,6 +16,7 @@ import { applyRetune, onPalette, palettesOf, playingColourParts, retunePlan } fr
 import { sanitizeProject, sanitizeStage } from '../../shared/types.ts';
 import { stageExtent } from '../../shared/stageExtent.ts';
 import { SendHealth } from '../sendHealth.ts';
+import { adapters as liveAdapters, pick } from '../netif.ts';
 import type { ShareList } from '../../shared/gdtfShare.ts';
 import { hasUndrivenBeamChannels, isAcceptableList, isPlaceholderProfile, isStaleProfile, parseGdtfSpec, rankMatches } from '../../shared/gdtfShare.ts';
 import { COMPILER_VERSION, fadeScaleAt } from '../../shared/types.ts';
@@ -2738,6 +2739,16 @@ await new Promise<void>((resolve) => {
   const p = new SendHealth();
   p.notePermanent('no socket: EAFNOSUPPORT');
   check('send health: no socket is a refusal that never retires', p.current(t0 + 60_000) === 'no socket: EAFNOSUPPORT');
+}
+
+// --- output adapter: which address a chosen adapter binds to
+// (twin of the tests in core/src/netif.rs)
+{
+  const list = [{ name: 'en0', ip: '10.0.0.5' }, { name: 'en7', ip: '192.168.200.44' }];
+  check('adapter: automatic binds to nothing in particular', pick(list, null) === null);
+  check('adapter: a chosen adapter resolves to its current address', pick(list, 'en7') === '192.168.200.44');
+  check('adapter: an adapter that is gone falls back to automatic', pick(list, 'en11') === null);
+  check('adapter: the live list never offers loopback', liveAdapters().every((a) => !a.ip.startsWith('127.')));
 }
 
 console.log(failures === 0 ? '\nAll engine smoke tests passed.' : `\n${failures} test(s) FAILED.`);

@@ -849,6 +849,11 @@ export type Snapshot = {
   artnetError?: string;
   /** the same for sACN */
   sacnError?: string;
+  /** The output adapter picker: what was chosen (null = automatic), the
+   *  address the send sockets are actually bound to right now (null = any —
+   *  either automatic, or the chosen adapter is not connected), and every
+   *  adapter that could be chosen. */
+  outputAdapter?: { chosen: string | null; bound: string | null; adapters: { name: string; ip: string }[] };
   /** OSC input socket: 'failed' = the port is held by another app (a second
    *  engine? QLC+?) so nothing from Resolume will ever arrive. Absent = off. */
   oscIn?: 'on' | 'failed';
@@ -945,6 +950,9 @@ export type Command =
    *  LIGHT not speaking to the network. Runtime-only and off at every boot,
    *  whatever the show says — engine/output.ts. */
   | { type: 'setTransmit'; v: boolean }
+  /** Which adapter output leaves on: an adapter name, or null for automatic.
+   *  Machine-level — persisted beside the shows, never in one. */
+  | { type: 'setOutputAdapter'; name: string | null }
   /** Hold the frame the rig is showing while the show carries on underneath,
    *  so a look can be edited live without the room watching it being built.
    *  Runtime-only; blackout and ALL STOP release it — engine/output.ts. */

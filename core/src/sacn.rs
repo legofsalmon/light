@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::net::UdpSocket;
+use std::net::Ipv4Addr;
 use std::time::Instant;
 
 use crate::send_health::SendHealth;
@@ -21,20 +22,28 @@ pub struct SacnOut {
     health: SendHealth,
     /// last time we rebuilt the send socket to recover from a refusal
     last_rebind: Option<Instant>,
+    /// the adapter the operator chose (None = automatic) — see netif.rs
+    iface: Option<String>,
+    /// the address the current socket is bound to (None = any)
+    bound: Option<Ipv4Addr>,
+    last_reconcile: Option<Instant>,
 }
 
 impl SacnOut {
-    /// A fresh multicast-capable send socket, or the error that stopped it.
-    fn open_socket() -> std::io::Result<UdpSocket> {
-        let s = UdpSocket::bind("0.0.0.0:0")?;
+    /// A fresh multicast-capable send socket on the given adapter address
+    /// (any, when None), or the error that stopped it.
+    fn open_socket(bind: Option<Ipv4Addr>) -> std::io::Result<UdpSocket> {
+        let s = UdpSocket::bind((bind.unwrap_or(Ipv4Addr::UNSPECIFIED), 0))?;
         s.set_multicast_ttl_v4(4).ok();
+        // a socket bound to an adapter's address sends its multicast on that
+        // adapter too — no separate interface option needed
         s.set_nonblocking(true)?;
         Ok(s)
     }
 
     pub fn new() -> Self {
         let mut health = SendHealth::default();
-        let sock = Self::open_socket()
+        let sock = Self::open_socket(None)
             .map_err(|e| {
                 eprintln!("[sacn] socket error: {e}");
                 health.note_permanent(format!("no socket: {e}"));
@@ -42,7 +51,47 @@ impl SacnOut {
             .ok();
         let mut cid = [0u8; 16];
         let _ = getrandom::getrandom(&mut cid);
-        SacnOut { sock, cid, seq: HashMap::new(), source_name: "LIGHT look engine".into(), packets: 0, health, last_rebind: None }
+        SacnOut { sock, cid, seq: HashMap::new(), source_name: "LIGHT look engine".into(), packets: 0, health, last_rebind: None, iface: None, bound: None, last_reconcile: None }
+    }
+
+    /// Rebuild the send socket on whatever the chosen adapter resolves to now.
+    fn rebind(&mut self, why: &str) {
+        let want = crate::netif::resolve(self.iface.as_deref());
+        match Self::open_socket(want) {
+            Ok(s) => {
+                eprintln!(
+                    "[sacn] send socket rebuilt ({why}) on {}",
+                    want.map_or("any adapter".to_string(), |ip| ip.to_string())
+                );
+                self.sock = Some(s);
+                self.bound = want;
+            }
+            Err(e) => self.health.note_permanent(format!("no socket: {e}")),
+        }
+    }
+
+    /// Choose the adapter to send from (None = automatic) — see artnet.rs.
+    pub fn set_interface(&mut self, name: Option<&str>) {
+        if self.iface.as_deref() == name {
+            return;
+        }
+        self.iface = name.map(str::to_string);
+        self.rebind("adapter chosen");
+    }
+
+    /// The auto pick-up — see artnet.rs.
+    pub fn reconcile_interface(&mut self, now: Instant) {
+        if self.iface.is_none() {
+            return;
+        }
+        if self.last_reconcile.is_some_and(|t| now.duration_since(t) < std::time::Duration::from_secs(3)) {
+            return;
+        }
+        self.last_reconcile = Some(now);
+        let want = crate::netif::resolve(self.iface.as_deref());
+        if want != self.bound {
+            self.rebind("adapter changed");
+        }
     }
 
     /// Rebuild the send socket when the OS is refusing our packets — the same
@@ -55,13 +104,7 @@ impl SacnOut {
             return;
         }
         self.last_rebind = Some(now);
-        match Self::open_socket() {
-            Ok(s) => {
-                eprintln!("[sacn] rebuilt the send socket to recover from a refused send");
-                self.sock = Some(s);
-            }
-            Err(e) => self.health.note_permanent(format!("no socket: {e}")),
-        }
+        self.rebind("refused send");
     }
 
     pub fn send(&mut self, universe: u16, data: &[u8; 512], unicast: Option<&str>) {
